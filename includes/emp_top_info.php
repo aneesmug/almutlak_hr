@@ -13,10 +13,13 @@ require_once __DIR__ . '/special_access_helper.php';
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
-// Calculate employee modification permission
+// Calculate employee modification permission - matches includes/employee_card.php's
+// $can_modify_employee (was missing the 'access_edit_employee' special access grant
+// here, so a granted employee still never saw Edit/Note in this "More Actions" menu).
 $can_modify_employee = (
-	$is_system_admin ||
-	$isDeptHr
+	($is_system_admin ?? false) ||
+	($isDeptHr ?? false) ||
+	user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
 
 // Effective request-block status for this employee (global block XOR employee override),
@@ -74,12 +77,13 @@ if ($emprow['status'] == 1) {
 			// Annual Vacation
 			if ($emprow['apd_status'] != 'approve' && !$isAllVacationBlocked /*&& $emprow["fly"] == 0*/ ) {
 				$allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
-				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
+				$allowVacSalaryBelowMinDays = ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') === '1') ? 1 : 0;
+				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-allow-vac-salary-below-min=\"{$allowVacSalaryBelowMinDays}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
 			}
 			
 			// Business Trip Request
 			$moreActionsHtml .= "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
-			
+		
 			// Excuse Leave
 			if (!$isExcuseLeaveBlocked) {
 				$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
@@ -115,19 +119,19 @@ if ($emprow['status'] == 1) {
 	}
 	
 	// ADMIN ACTIONS
-	if ($is_system_admin || $isDeptHr || $isHR) {
+	if ($is_system_admin || $isDeptHr || $isHR || $can_modify_employee) {
 		// Create Login
 		if ($is_system_admin && empty($emprow['av_dept'])) {
 			$moreActionsHtml .= "<div class=\"menu-item text-dark createUserDeptAjax\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-shield\"></i><span>" . __('create_login') . "</span></div>";
 		}
-		
-		// Edit Employee (only system admin and dept hr)
-		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee && ($is_system_admin || $isDeptHr)) {
+
+		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant)
+		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
 			$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
 		}
-		
-		// Add Note (only system admin and dept hr)
-		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee && ($is_system_admin || $isDeptHr)) {
+
+		// Add Note (system admin, dept hr, or 'access_edit_employee' special access grant)
+		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
 			$moreActionsHtml .= "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
 		}
 		
@@ -382,6 +386,12 @@ if ($isEmployee !== true) {
 					<i class="fa fa-calendar-check"></i>
 					<?= __('active_status', 'Active Member') ?>
 				</div>
+				<?php if (!empty($canViewEosValue) && !empty($eos_estimate['success'])): ?>
+				<div class="tenure-badge">
+					<i class="fa fa-hand-holding-dollar"></i>
+					<?= __('estimated_eos_value', 'Estimated EOS') ?>: <?= number_format($eos_estimate['eos_amount'], 2) ?> <?= __('sar', 'SAR') ?>
+				</div>
+				<?php endif; ?>
 			</div>
 		</div>
 	</div>

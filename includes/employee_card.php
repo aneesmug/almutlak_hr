@@ -16,12 +16,13 @@
 
             <!-- Quick Actions -->
             <div class="card-actions-modern">
-                <?php 
-                // Only system_admin, hr_operations, hr_recruitment can edit employees
+                <?php
+                require_once __DIR__ . '/special_access_helper.php';
+                // System admin, HR department, or anyone granted the 'access_edit_employee' special access
                 $can_modify_employee = (
-                    ($is_system_admin ?? false) || 
-                    ($user_type ?? '') === 'hr_operations' ||
-                    ($user_type ?? '') === 'hr_recruitment'
+                    ($is_system_admin ?? false) ||
+                    ($isDeptHr ?? false) ||
+                    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
                 );
                 ?>
                 <?php if ($emp_status == 1 && $can_modify_employee): ?>
@@ -96,12 +97,13 @@
     <div class="card card-employee shadow-sm h-100 <?= $status_class ?>">
         <div class="card-actions">
             <div class="btn-group" role="group">
-                <?php 
-                // Only system_admin, hr_operations, hr_recruitment can edit employees
+                <?php
+                require_once __DIR__ . '/special_access_helper.php';
+                // System admin, HR department, or anyone granted the 'access_edit_employee' special access
                 $can_modify_employee = (
-                    ($is_system_admin ?? false) || 
-                    ($user_type ?? '') === 'hr_operations' ||
-                    ($user_type ?? '') === 'hr_recruitment'
+                    ($is_system_admin ?? false) ||
+                    ($isDeptHr ?? false) ||
+                    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
                 );
                 ?>
                 <?php if ($emp_status == 1 && $can_modify_employee): ?>

@@ -459,11 +459,11 @@ if(isset($_POST['submit'])){
 											<div class="form-group col-md-2">
                                                 <label class="font-14 mt-3 mb-2"><?=__('gender') ?><span class="text-danger">*</span></label><br>
 												<div class="radio radio-info form-check-inline">
-                                                    <input type="radio" id="inlineRadio3" value="1" checked name="sex">
+                                                    <input type="radio" id="inlineRadio3" value="1" checked name="sex" required>
                                                     <label for="inlineRadio3" class="atch"><i class="mdi mdi-human-male"></i> <?=__('male') ?></label>
                                                 </div>
                                                 <div class="radio radio-info form-check-inline">
-                                                    <input type="radio" id="inlineRadio1" value="2" name="sex">
+                                                    <input type="radio" id="inlineRadio1" value="2" name="sex" required>
                                                     <label for="inlineRadio1" class="atch"><i class="mdi mdi-human-female"></i> <?=__('female') ?> </label>
                                                 </div>
                                             </div>

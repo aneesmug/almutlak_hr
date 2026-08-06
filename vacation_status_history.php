@@ -28,7 +28,7 @@ if ($request_inv_no === '') {
 // Vacation details
 $vacation = null;
 $sql = "SELECT v.*, 
-               e.name AS employee_name, e.avatar, e.dept, e.country AS country_id, e.passport_number, e.passport_exp,
+               e.name AS employee_name, e.avatar, e.dept, e.country AS country_id, e.allow_vacation_salary_below_min_days, e.passport_number, e.passport_exp,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
                b.remaining_balance, b.available_balance,
@@ -367,13 +367,15 @@ if ($vacation['fly_type'] === 'annual') {
                     $vacation_salary = 0;
                     $is_fly_annual = ($vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual');
                     $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
+                    $allow_vacation_salary_below_min_days = ((string)($vacation['allow_vacation_salary_below_min_days'] ?? '0') === '1');
                     $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                         $vacation['vac_type'] ?? '',
                         $vacation['fly_type'] ?? '',
                         $vacation['country_id'] ?? 0,
                         (float)($vacation['vacdays'] ?? 0),
                         $vacation['is_deductible'] ?? 0,
-                        $vacation_salary_type
+                        $vacation_salary_type,
+                        $allow_vacation_salary_below_min_days
                     );
                     $is_payable_vacation = ($is_fly_annual || $is_local_annual_removed_from_payroll);
                     $other_earnings = (float)($vacation['other_earnings'] ?? 0);

@@ -425,15 +425,29 @@ function updateScreenResolution($conDB) {
 
 /**
  * Auto-timeout stale sessions that are still marked as active
- * Sessions older than 10 hours (7am to 6pm) without logout are marked as timeout
+ * This is DB housekeeping only (so the activity dashboard doesn't show phantom
+ * "active" users forever after a browser was closed without logging out) - it must
+ * NOT enforce a shorter cutoff than the admin's configured "Set Session Timeout"
+ * value, or it will force-logout users who are still within their real, active
+ * session (session_check.php reads this same status and kills the session on
+ * next page load if it isn't 'active').
  */
 function autoTimeoutStaleSessions($conDB) {
-    $query = "UPDATE `user_activity_log` 
-              SET `status` = 'timeout', `logout_time` = DATE_ADD(`login_time`, INTERVAL 10 HOUR)
-              WHERE `status` = 'active' 
-              AND `login_time` < DATE_SUB(NOW(), INTERVAL 10 HOUR)
+    $timeout_seconds = intval(get_setting($conDB, 'session_timeout'));
+    // Never fire before PHP's own session actually could have expired.
+    $stale_hours = max(24, (int) ceil($timeout_seconds / 3600));
+
+    $query = "UPDATE `user_activity_log`
+              SET `status` = 'timeout', `logout_time` = DATE_ADD(`login_time`, INTERVAL ? HOUR)
+              WHERE `status` = 'active'
+              AND `login_time` < DATE_SUB(NOW(), INTERVAL ? HOUR)
               AND `logout_time` IS NULL";
-    mysqli_query($conDB, $query);
+    $stmt = mysqli_prepare($conDB, $query);
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, 'ii', $stale_hours, $stale_hours);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
 }
 
 /**

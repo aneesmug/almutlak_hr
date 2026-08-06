@@ -29,7 +29,7 @@ if ($request_inv_no === '') {
 // Settlement details
 $settlement = null;
 $sql = "SELECT s.*, 
-               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id,
+               e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id, e.allow_vacation_salary_below_min_days,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
                v.vac_type, v.fly_type, v.vacdays, v.start_date, v.vacation_salary_type, v.is_deductible, v.auto_gosi_deduction,
@@ -72,13 +72,15 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     
     $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
     $is_emergency = ($fly_type === 'emergency');
+    $allow_vacation_salary_below_min_days = ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
     $is_settlement_payable_vacation = isSettlementPayableVacation(
         $vac_type,
         $fly_type,
         $settlement['country_id'] ?? 0,
         $approved_days,
         $settlement['is_deductible'] ?? 0,
-        $vacation_salary_type
+        $vacation_salary_type,
+        $allow_vacation_salary_below_min_days
     );
     
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];

@@ -14,6 +14,7 @@
 
 // Start session if not already started
 if (session_status() == PHP_SESSION_NONE) {
+    require_once __DIR__ . '/session_bootstrap.php';
     // Drop malformed/spoofed session cookies before starting: an illegal session ID
     // makes PHP fail to read the session file and log a warning every time it's sent.
     $sessionCookieName = session_name();

@@ -242,41 +242,119 @@ $defaultTimezone = 'Asia/Riyadh';
 date_default_timezone_set($defaultTimezone);
 mysqli_query($conDB, "SET time_zone = '+03:00'");
 
+// Lazy PDO connection: most pages only ever use the mysqli $conDB above and never
+// touch $pdo/db(). Connecting PDO eagerly on every request doubled DB connection
+// usage app-wide and was a direct contributor to "Too many connections". This
+// subclass IS a real PDO (passes `instanceof PDO` and `PDO $pdo` type hints), it
+// just defers the actual connection until the first method call that needs it.
+if (!class_exists('LazyPdo')) {
+    class LazyPdo extends PDO {
+        private $lazyDsn;
+        private $lazyUser;
+        private $lazyPass;
+        private $lazyOptions;
+        private $lazyConnected = false;
+
+        public function __construct($dsn, $user, $pass, $options) {
+            $this->lazyDsn = $dsn;
+            $this->lazyUser = $user;
+            $this->lazyPass = $pass;
+            $this->lazyOptions = $options;
+        }
+
+        private function ensureConnected() {
+            if ($this->lazyConnected) {
+                return;
+            }
+
+            $maxAttempts = 3;
+            for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+                try {
+                    parent::__construct($this->lazyDsn, $this->lazyUser, $this->lazyPass, $this->lazyOptions);
+                    $this->lazyConnected = true;
+                    return;
+                } catch (PDOException $e) {
+                    $isTooManyConnections = (int)$e->getCode() === 1040 || stripos($e->getMessage(), 'too many connections') !== false;
+                    if (!$isTooManyConnections || $attempt === $maxAttempts) {
+                        app_render_runtime_error('The live server cannot connect to the database right now.', $e->getMessage(), 503);
+                        throw $e;
+                    }
+                    usleep(300000 * $attempt); // 300ms, then 600ms
+                }
+            }
+        }
+
+        public function prepare(string $query, array $options = []): PDOStatement|false {
+            $this->ensureConnected();
+            return parent::prepare($query, $options);
+        }
+
+        public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+            $this->ensureConnected();
+            return parent::query(...func_get_args());
+        }
+
+        public function exec(string $statement): int|false {
+            $this->ensureConnected();
+            return parent::exec($statement);
+        }
+
+        public function beginTransaction(): bool {
+            $this->ensureConnected();
+            return parent::beginTransaction();
+        }
+
+        public function commit(): bool {
+            $this->ensureConnected();
+            return parent::commit();
+        }
+
+        public function rollBack(): bool {
+            $this->ensureConnected();
+            return parent::rollBack();
+        }
+
+        public function inTransaction(): bool {
+            $this->ensureConnected();
+            return parent::inTransaction();
+        }
+
+        public function lastInsertId(?string $name = null): string|false {
+            $this->ensureConnected();
+            return parent::lastInsertId($name);
+        }
+
+        public function quote(string $string, int $type = PDO::PARAM_STR): string|false {
+            $this->ensureConnected();
+            return parent::quote($string, $type);
+        }
+
+        public function errorInfo(): array {
+            $this->ensureConnected();
+            return parent::errorInfo();
+        }
+    }
+}
+
 /** @var PDO|null $pdo */
 $pdo = null;
 
 function getDbConnection(): PDO {
     global $pdo;
 
-    if ($pdo instanceof PDO) {
-        return $pdo;
+    if (!($pdo instanceof PDO)) {
+        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+        $options = [
+            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4 COLLATE utf8mb4_general_ci',
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_TIMEOUT            => 10,
+        ];
+        $pdo = new LazyPdo($dsn, DB_USER, DB_PASS, $options);
     }
 
-    $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4';
-    $options = [
-        PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4 COLLATE utf8mb4_general_ci',
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-        PDO::ATTR_TIMEOUT            => 10,
-    ];
-
-    $maxAttempts = 3;
-    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-        try {
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-            return $pdo;
-        } catch (PDOException $e) {
-            $isTooManyConnections = (int)$e->getCode() === 1040 || stripos($e->getMessage(), 'too many connections') !== false;
-            if (!$isTooManyConnections || $attempt === $maxAttempts) {
-                app_render_runtime_error('The live server cannot connect to the database right now.', $e->getMessage(), 503);
-                throw $e;
-            }
-            usleep(300000 * $attempt); // 300ms, then 600ms
-        }
-    }
-
-    throw new PDOException('Unable to establish a database connection.');
+    return $pdo;
 }
 
 if (!function_exists('db')) {

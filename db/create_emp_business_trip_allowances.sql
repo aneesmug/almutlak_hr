@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS emp_business_trip_allowance_items (
     allowance_id INT NOT NULL,
     trip_id INT NOT NULL,
     allowance_type VARCHAR(50) NOT NULL,
+    description VARCHAR(255) DEFAULT NULL,
     unit_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     qty INT NOT NULL DEFAULT 1,
     line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,

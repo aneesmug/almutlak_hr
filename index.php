@@ -19,6 +19,7 @@ $sessionCookieName = session_name();
 if (isset($_COOKIE[$sessionCookieName]) && !preg_match('/^[A-Za-z0-9,\-]{1,128}$/', $_COOKIE[$sessionCookieName])) {
     unset($_COOKIE[$sessionCookieName]);
 }
+require_once __DIR__ . '/includes/session_bootstrap.php';
 session_start();
 // Security headers
 header("X-Frame-Options: DENY");

@@ -18,6 +18,8 @@ $can_cancel_business_trip_requests = (
 );
 $cancellable_business_trip_statuses = ['pending_approval', 'approved'];
 
+$can_add_business_trip_manual_allowance = user_has_special_access($conDB, $empid ?? '', 'add_business_trip_manual_allowance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
 // --- Get Request Type ID for 'business_trip' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'business_trip' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -27,6 +29,7 @@ $request_type_id = (int)mysqli_fetch_assoc($type_query)['id'];
 
 $all_statuses = [
     'my_pending' => __('my_pending_queue'),
+    'my_team' => (function_exists('__') ? __('my_team_requests') : 'My Team'),
     'my_dept' => __('my_department_requests'),
     'pending_approval' => __('all_pending'),
     'approved' => __('approved'),
@@ -76,6 +79,11 @@ if ($current_filter === 'my_pending') {
 
     $where_clauses[] = "ra.status = 'pending'";
     $where_clauses[] = "bt.current_status = 'pending_approval'";
+} elseif ($current_filter === 'my_team') {
+    // Assigned direct reports only (employees.supervisor_id) - not department-based.
+    $where_clauses[] = "e.supervisor_id = ?";
+    $params[] = $empid;
+    $types .= "i";
 } elseif ($current_filter === 'my_dept') {
     $where_clauses[] = "e.dept = ?";
     $params[] = $user_dept;
@@ -99,7 +107,7 @@ if (!empty($search_term)) {
     $types .= "ssss";
 }
 
-if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
+if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
     $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = bt.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
     array_push($params, $user_dept, $request_type_id, $empid);
     $types .= "iii";
@@ -114,7 +122,7 @@ if (!empty($where_clauses)) {
 $company_filter = getCompanyFilterSQL('e.comp_no', true);
 $department_filter = getDepartmentFilterSQL('e.dept', true);
 $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-if ($current_filter !== 'my_pending') {
+if ($current_filter !== 'my_pending' && $current_filter !== 'my_team') {
     if (strpos($where_sql, 'WHERE') === false) {
         $where_sql = " WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
     } else {
@@ -244,6 +252,7 @@ if ($can_see_all_depts) {
         .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
         .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
         .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
+        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
         .request-card .card-body { padding: 1.5rem; }
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
@@ -360,9 +369,11 @@ if ($can_see_all_depts) {
                                             ?>
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">
-                                                    <div class="card-header">
-                                                        <?= getDisplayName(parseName($trip['employee_name'])); ?>
-                                                        <span class="float-right"><?= __('emp_id') ?>: <?= htmlspecialchars((string)$trip['emp_id']); ?></span>
+                                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                                        <span><?= getDisplayName(parseName($trip['employee_name'])); ?></span>
+                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
+                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars((string)$trip['emp_id']); ?></span>
+                                                        </div>
                                                     </div>
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fa fa-hashtag"></i><strong><?= __('request_id') ?>:</strong> <?= htmlspecialchars((string)$trip['request_inv_no']); ?></div>
@@ -409,6 +420,12 @@ if ($can_see_all_depts) {
                                                                     <div class="dropdown-divider"></div>
                                                                     <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openHRPayrollTicketFareModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
                                                                         <i class="fa fa-ticket-alt text-primary"></i> <?= __('add_ticket_fare_only') ?: 'HR Payroll Ticket Fare' ?>
+                                                                    </button>
+                                                                <?php endif; ?>
+                                                                <?php if ($can_add_business_trip_manual_allowance): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openBusinessTripOtherAllowanceModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
+                                                                        <i class="fa fa-receipt text-warning"></i> <?= __('add_manual_allowance') ?: 'Add Manual Allowance' ?>
                                                                     </button>
                                                                 <?php endif; ?>
                                                                 <?php if ($can_take_action): ?>
@@ -471,6 +488,27 @@ if ($can_see_all_depts) {
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
     <script>
+        // Move each card's "Actions" dropdown from the footer into the header so the
+        // menu has room to open downward instead of getting clipped at the bottom of
+        // the page (was especially bad for the last row of cards on a page).
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.request-card').forEach(function(card) {
+                const footer = card.querySelector('.card-footer');
+                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
+                const headerSlot = card.querySelector('.card-header-actions');
+                if (!actionsGroup || !headerSlot) {
+                    return;
+                }
+                actionsGroup.classList.remove('flex-fill');
+                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
+                if (toggleBtn) {
+                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
+                    toggleBtn.classList.add('btn-sm', 'btn-light');
+                }
+                headerSlot.appendChild(actionsGroup);
+            });
+        });
+
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
             const limitElement = document.getElementById('limitFilter');

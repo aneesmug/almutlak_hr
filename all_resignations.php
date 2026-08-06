@@ -31,6 +31,7 @@ $request_type_id = (int)mysqli_fetch_assoc($type_query)['id'];
 
 $all_statuses = [
     'my_pending' => __('my_pending_queue'),
+    'my_team' => (function_exists('__') ? __('my_team_requests') : 'My Team'),
     'my_dept' => __('my_department_requests'),
     'pending' => __('all_pending'),
     'approved' => __('approved'),
@@ -92,6 +93,12 @@ if ($current_filter === 'my_pending') {
         // Treat both 'pending' (current level) and 'awaiting' (legacy/edge cases) as actionable
         $where_clauses[] = "ra.status IN ('pending','awaiting')";
     
+} elseif ($current_filter === 'my_team') {
+    // Assigned direct reports only (employees.supervisor_id) - not department-based.
+    $where_clauses[] = "e.supervisor_id = ?";
+    $params[] = $empid;
+    $types .= "i";
+
 } elseif ($current_filter === 'my_dept') {
     // Show all requests from the user's department
     $where_clauses[] = "e.dept = ?";
@@ -126,7 +133,7 @@ if (!empty($search_term)) {
 
 // Enforce department scoping: Only HR and System Admin can see all departments.
 // Everyone else is restricted to their own department for history views.
-if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
+if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
     // Restrict to user's department OR any request where current user is in approval chain
     $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = r.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
     array_push($params, $user_dept, $request_type_id, $empid);
@@ -139,10 +146,18 @@ if (!empty($where_clauses)) {
     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
 }
 
-// Add company filter to WHERE clause
-$company_filter = getCompanyFilterSQL('e.comp_no', true);
-$department_filter = getDepartmentFilterSQL('e.dept', true);
-$employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+// Add company/department/employee scoping filters, except for 'my_pending'/'my_team':
+// those are already scoped by explicit approver_id / supervisor_id assignment, so a
+// supervisor overseeing someone outside their own department/company must still see them.
+if ($current_filter === 'my_pending' || $current_filter === 'my_team') {
+    $company_filter = "";
+    $department_filter = "";
+    $employee_filter = "";
+} else {
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+}
 if (strpos($where_sql, 'WHERE') === false) {
     $where_sql = " WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
 } else {

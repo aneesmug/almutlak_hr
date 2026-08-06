@@ -11,7 +11,12 @@ include("./../../includes/validate_supervisor.php"); // --- Supervisor Validatio
 if (session_status() == PHP_SESSION_NONE) session_start(); // Ensure session is started
 $emp_id = $_SESSION['empid'] ?? 0;
 $userwel = $_SESSION['userwel'] ?? '';
-$user_type = $_SESSION['type'] ?? '';
+// NOTE: session_check.php (required above) already sets the correct $user_type from
+// the employees table. $_SESSION['type'] is never written anywhere in this codebase,
+// so this used to silently clobber $user_type with '' - which broke the "restrict to
+// non-employee users" check below (never matched 'employee', so it never blocked
+// anyone) and the admin check further down (always false, only saved by the separate
+// $is_system_admin flag). Do not reintroduce this reassignment.
 
 // Initialize response array
 $response = [

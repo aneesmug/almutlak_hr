@@ -439,12 +439,13 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                 `employees`.`dept`, 
                                                 `department`.`dep_nme`,
                                                 `department`.`dep_nme_ar`,
-                                                `dept_clr`.`color`
+                                                `department`.`dept_clr` AS `color`
                                                 FROM `employees` 
-                                                LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
-                                                LEFT JOIN `department` ON `department`.`id` = `dept_clr`.`dept_name`
+                                                -- LEFT JOIN `dept_clr` ON `dept_clr`.`dept_name` = `employees`.`dept`
+                                                LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
                                                 WHERE `employees`.`status` = 1" . $company_filter . $department_filter . $employee_filter . $fallback_dept_filter_employees . "
-                                                GROUP BY `employees`.`dept`");
+                                                GROUP BY `employees`.`dept`
+                                                ORDER BY `department`.`dep_nme` ASC");
                                             
                                             // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
                                             if ($querygrp) {

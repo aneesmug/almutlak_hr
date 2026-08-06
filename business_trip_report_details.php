@@ -111,7 +111,9 @@ if (mysqli_num_rows($query) == 1) {
 
     $calc_hotel_daily = (float)($matched_scale['hotel'] ?? 0);
     $calc_transport_daily = (float)($matched_scale['transport'] ?? 0);
-    $calc_hotel_total = $calc_hotel_daily * max(0, $trip_allowance_days);
+    // Hotel nights = trip days minus 1 (no overnight stay needed on the last day).
+    $hotel_allowance_days = max(0, $trip_allowance_days - 1);
+    $calc_hotel_total = $calc_hotel_daily * $hotel_allowance_days;
     $calc_transport_total = $calc_transport_daily * max(0, $trip_allowance_days);
 
     $week1_days = min(max($trip_allowance_days, 0), 7);
@@ -143,7 +145,7 @@ if (mysqli_num_rows($query) == 1) {
 
     if (!empty($allowance_summary['id'])) {
         $allowance_id = (int)$allowance_summary['id'];
-        $items_sql = "SELECT allowance_type, unit_amount, qty, line_total
+        $items_sql = "SELECT allowance_type, description, unit_amount, qty, line_total
                       FROM emp_business_trip_allowance_items
                       WHERE allowance_id = ?
                       ORDER BY line_order ASC, id ASC";
@@ -329,7 +331,14 @@ if (mysqli_num_rows($query) == 1) {
         [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
         [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
         [dir="rtl"] .timeline-item .icon { left: auto; right: -9px; }
-        
+
+        .approval-flat-list { padding: 0; }
+        .approval-flat-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }
+        .approval-flat-item i { width: 16px; text-align: center; font-size: 1rem; }
+        .approval-flat-item strong { font-size: 0.95rem; }
+        .approval-flat-note { flex-basis: 100%; margin-left: 24px; font-style: italic; color: var(--danger-color); font-size: 0.85rem; }
+        [dir="rtl"] .approval-flat-note { margin-left: 0; margin-right: 24px; }
+
         .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
         
         [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
@@ -532,6 +541,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <thead style="background-color: var(--background-light);">
                                                 <tr>
                                                     <th><?= __('allowance_type', 'Allowance Type') ?></th>
+                                                    <th><?= __('comment', 'Comment') ?></th>
                                                     <th class="text-center"><?= __('amount', 'Amount') ?></th>
                                                     <th class="text-center"><?= __('qty', 'Qty') ?></th>
                                                     <th class="text-center"><?= __('total', 'Total') ?></th>
@@ -548,12 +558,14 @@ if (mysqli_num_rows($query) == 1) {
                                                         'others' => __('other_allowance', 'Others')
                                                     ];
                                                     $line_type_label = $line_type_label_map[$line_type] ?? ucwords(str_replace('_', ' ', $line_type));
+                                                    $line_description = (string)($allowance_item['description'] ?? '');
                                                     $line_amount = (float)($allowance_item['unit_amount'] ?? 0);
                                                     $line_qty = (int)($allowance_item['qty'] ?? 0);
                                                     $line_total = (float)($allowance_item['line_total'] ?? 0);
                                                     ?>
                                                     <tr>
                                                         <td><?= htmlspecialchars((string)$line_type_label) ?></td>
+                                                        <td><?= $line_description !== '' ? htmlspecialchars($line_description) : '&mdash;' ?></td>
                                                         <td class="text-center"><?= number_format($line_amount, 2) ?></td>
                                                         <td class="text-center"><?= $line_qty ?></td>
                                                         <td class="text-center"><strong><?= number_format($line_total, 2) ?></strong></td>
@@ -614,7 +626,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <div><strong><?= __('allowance_days', 'Allowance Days') ?>:</strong> <?= (int)$trip_allowance_days ?></div>
                                     <div><strong><?= __('salary_level', 'Salary Level') ?>:</strong> <?= $matched_scale ? ('Level ' . (int)$matched_scale['level'] . ' (' . (int)$matched_scale['min'] . ' - ' . (int)$matched_scale['max'] . ')') : __('out_of_scale', 'Out of defined scale') ?></div>
                                     <hr style="margin:8px 0;">
-                                    <div><strong><?= __('hotel_allowance', 'Hotel Allowance') ?>:</strong> <?= number_format($calc_hotel_daily, 2) ?> × <?= (int)$trip_allowance_days ?> = <?= number_format($calc_hotel_total, 2) ?></div>
+                                    <div><strong><?= __('hotel_allowance', 'Hotel Allowance') ?>:</strong> <?= number_format($calc_hotel_daily, 2) ?> × <?= (int)$hotel_allowance_days ?> (<?= __('days', 'days') ?> - 1) = <?= number_format($calc_hotel_total, 2) ?></div>
                                     <div><strong><?= __('transportation_allowance', 'Transportation Allowance') ?>:</strong> <?= number_format($calc_transport_daily, 2) ?> × <?= (int)$trip_allowance_days ?> = <?= number_format($calc_transport_total, 2) ?></div>
                                     <div><strong><?= __('daily_allowance', 'Daily Allowance') ?>:</strong> <?= number_format($calc_daily_allowance_total, 0) ?></div>
                                     <div style="padding-left: 12px;">
@@ -663,48 +675,34 @@ if (mysqli_num_rows($query) == 1) {
                             <div id="approvalStatusContainer" style="display: none;">
                                 <div class="report-section">
                                     <h5 class="section-title">
-                                        <i class="fa fa-check-circle"></i> <?= __('approval_chain') ?>
+                                        <i class="fa fa-tasks"></i> <?= __('approval_status') ?>
                                     </h5>
                                     <?php if (!empty($approval_chain)): ?>
-                                        <div class="approval-timeline">
+                                        <div class="approval-flat-list">
                                             <?php foreach ($approval_chain as $step): ?>
                                                 <?php
                                                 $step_status = $step['status'] ?? 'pending';
-                                                $step_class = 'future';
-                                                if ($step_status === 'approved') $step_class = 'approved';
-                                                elseif ($step_status === 'pending') $step_class = 'pending';
-                                                elseif ($step_status === 'rejected') $step_class = 'rejected';
-                                                elseif ($step_status === 'awaiting') $step_class = 'awaiting';
+                                                $status_color = 'text-muted';
+                                                if ($step_status === 'approved') $status_color = 'text-success';
+                                                elseif ($step_status === 'rejected') $status_color = 'text-danger';
+                                                elseif ($step_status === 'pending') $status_color = 'text-warning';
+
+                                                $role_icon = 'fa-user';
+                                                if (!empty($step['approver_role']) && stripos($step['approver_role'], 'hr') !== false) {
+                                                    $role_icon = 'fa-user-shield';
+                                                } elseif (!empty($step['approver_role']) && (stripos($step['approver_role'], 'manager') !== false || stripos($step['approver_role'], 'administrator') !== false || stripos($step['approver_role'], 'gm') !== false)) {
+                                                    $role_icon = 'fa-user-tie';
+                                                }
+
+                                                $approver_display_name = getDisplayName((string)($step['approver_name'] ?? ('Emp#' . (int)($step['approver_id'] ?? 0))));
+                                                $level_scope = !empty($step['approver_dept_name']) ? getDisplayName($step['approver_dept_name']) : ucwords(str_replace('_', ' ', (string)($step['approver_role'] ?? '')));
                                                 ?>
-                                                <div class="timeline-item <?= $step_class ?>">
-                                                    <div class="icon">
-                                                        <?php if ($step_status === 'approved'): ?>
-                                                            <i class="fa fa-check" style="font-size: 8px;"></i>
-                                                        <?php elseif ($step_status === 'rejected'): ?>
-                                                            <i class="fa fa-times" style="font-size: 8px;"></i>
-                                                        <?php else: ?>
-                                                            <i class="fa fa-clock" style="font-size: 8px;"></i>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <div class="status">
-                                                        <strong><?= getDisplayName((string)($step['approver_name'] ?? ('Emp#' . (int)($step['approver_id'] ?? 0)))) ?></strong>
-                                                        <span class="badge badge-sm badge-<?php
-                                                            if ($step_status === 'approved') echo 'success';
-                                                            elseif ($step_status === 'rejected') echo 'danger';
-                                                            elseif ($step_status === 'pending') echo 'warning';
-                                                            else echo 'info';
-                                                        ?>"><?= __((string)$step_status) ?></span>
-                                                    </div>
-                                                    <div class="approver-info">
-                                                        <?= __('level') ." ". (int)($step['approval_level'] ?? 0) ?>
-                                                        <?php if (!empty($step['action_date'])): ?>
-                                                            • <?= htmlspecialchars((string)$step['action_date']) ?>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <?php if (!empty($step['note'])): ?>
-                                                        <div class="approver-info" style="font-style: italic; margin-top: 0.5rem;">
-                                                            <?= getDisplayName(htmlspecialchars((string)$step['note'])) ?>
-                                                        </div>
+                                                <div class="approval-flat-item">
+                                                    <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
+                                                    <strong><?= htmlspecialchars($approver_display_name) ?></strong>
+                                                    <small class="text-muted">(<?= __('level') ?> <?= (int)($step['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
+                                                    <?php if ($step_status === 'rejected' && !empty($step['note'])): ?>
+                                                        <div class="approval-flat-note"><?= getDisplayName(htmlspecialchars((string)$step['note'])) ?></div>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php endforeach; ?>

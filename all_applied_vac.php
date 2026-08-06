@@ -118,22 +118,13 @@ if ($current_filter === 'my_pending') {
     $types .= "i";
     $dept_filter_applied = true;
 } elseif ($current_filter === 'my_team') {
-    // Show requests for the current user's direct reports (supervisor) or entire department (manager)
-    $is_manager_role = (strpos($user_role ?? '', 'Manager') !== false) || ($user_role ?? '') === 'DPT_Manager';
-    $is_supervisor_role = (strpos($user_role ?? '', 'Supervisor') !== false) || ($user_role ?? '') === 'HR_Supervisor';
-
-    if ($is_manager_role) {
-        // Managers: see all in their department
-        $where_clauses[] = "e.dept = ?";
-        $params[] = $user_dept;
-        $types .= "i";
-        $dept_filter_applied = true;
-    } else {
-        // Supervisors (or default): show only direct reports
-        $where_clauses[] = "e.supervisor_id = ?";
-        $params[] = $empid;
-        $types .= "i";
-    }
+    // Show requests for the current user's assigned direct reports only.
+    // Not department-based: an employee follows whichever supervisor they were
+    // explicitly assigned to (employees.supervisor_id), even across departments,
+    // regardless of whether the viewer holds a Manager or Supervisor role.
+    $where_clauses[] = "e.supervisor_id = ?";
+    $params[] = $empid;
+    $types .= "i";
 } elseif ($current_filter === 'pending_payment') {
     // Show approved annual vacation (fly) requests without payment details
     $where_clauses[] = "v.current_status = 'approved'";

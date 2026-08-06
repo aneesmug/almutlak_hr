@@ -943,6 +943,146 @@ function openBusinessTripAllowanceModal(tripId, employeeName) {
     });
 }
 
+// Lets HR/admin add ad-hoc allowance entries (taxi, parking, etc.) with a
+// required comment explaining what each amount is for. Unlike the ticket/other
+// amount modal above, this can be used repeatedly over the life of the trip.
+function openBusinessTripOtherAllowanceModal(tripId, employeeName) {
+    Swal.fire({
+        title: __('loading') || 'Loading...',
+        html: __('loading_allowance_details') || 'Loading allowance details...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    $.ajax({
+        url: './includes/ajaxFile/ajaxBusinessTrip.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: {
+            ajaxType: 'getBusinessTripOtherAllowanceItems',
+            trip_id: tripId
+        }
+    }).done(function(response) {
+        if (response.status !== 'success') {
+            Swal.fire(__('error') || 'Error', response.message || 'Failed to load allowance details.', 'error');
+            return;
+        }
+
+        const existingItems = (response.data && response.data.items) || [];
+        const existingHtml = existingItems.length ? `
+            <div style="border:1px solid #e9ecef; border-radius:8px; padding:10px; background:#f8f9fa; margin-bottom:12px; max-height:150px; overflow-y:auto;">
+                <table class="table table-sm mb-0">
+                    <thead><tr><th>${__('comment') || 'Comment'}</th><th class="text-right">${__('amount') || 'Amount'}</th></tr></thead>
+                    <tbody>
+                        ${existingItems.map(it => `<tr><td>${$('<div>').text(it.description).html()}</td><td class="text-right">${Number(it.amount || 0).toFixed(2)}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : '';
+
+        const rowHtml = () => `
+            <div class="manual-allowance-row form-row align-items-center mb-2" style="gap: 6px;">
+                <div class="col">
+                    <input type="text" class="form-control form-control-sm manual-allowance-desc" placeholder="${__('comment_placeholder') || 'e.g. Taxi, Parking'}">
+                </div>
+                <div class="col-4">
+                    <input type="number" min="0" step="0.01" class="form-control form-control-sm manual-allowance-amount" placeholder="${__('amount') || 'Amount'}">
+                </div>
+                <div class="col-auto">
+                    <button type="button" class="btn btn-sm btn-outline-danger manual-allowance-remove"><i class="fa fa-times"></i></button>
+                </div>
+            </div>
+        `;
+
+        const html = `
+            <div style="text-align:left;">
+                ${existingHtml}
+                <div id="manual-allowance-rows">${rowHtml()}</div>
+                <button type="button" id="manual-allowance-add-row" class="btn btn-sm btn-light mt-1"><i class="fa fa-plus"></i> ${__('add_row') || 'Add Row'}</button>
+            </div>
+        `;
+
+        Swal.fire({
+            title: __('add_manual_allowance') || 'Add Manual Allowance',
+            html,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: __('save') || 'Save',
+            cancelButtonText: __('cancel') || 'Cancel',
+            confirmButtonColor: APP_COLORS.success,
+            cancelButtonColor: APP_COLORS.danger,
+            allowOutsideClick: false,
+            didOpen: () => {
+                const container = document.getElementById('manual-allowance-rows');
+                container.addEventListener('click', function(e) {
+                    const removeBtn = e.target.closest('.manual-allowance-remove');
+                    if (removeBtn && container.children.length > 1) {
+                        removeBtn.closest('.manual-allowance-row').remove();
+                    }
+                });
+                document.getElementById('manual-allowance-add-row').addEventListener('click', function() {
+                    container.insertAdjacentHTML('beforeend', rowHtml());
+                });
+            },
+            preConfirm: () => {
+                const rows = document.querySelectorAll('#manual-allowance-rows .manual-allowance-row');
+                const items = [];
+                for (const row of rows) {
+                    const description = row.querySelector('.manual-allowance-desc').value.trim();
+                    const amount = parseFloat(row.querySelector('.manual-allowance-amount').value || '0');
+                    if (description === '' && (!amount || amount <= 0)) {
+                        continue; // skip fully empty rows
+                    }
+                    if (description === '') {
+                        Swal.showValidationMessage(__('comment_required') || 'Please add a comment for every allowance entry.');
+                        return false;
+                    }
+                    if (isNaN(amount) || amount <= 0) {
+                        Swal.showValidationMessage(__('invalid_amount') || 'Invalid amount');
+                        return false;
+                    }
+                    items.push({ description, amount });
+                }
+
+                if (items.length === 0) {
+                    Swal.showValidationMessage(__('at_least_one_allowance_entry') || 'Add at least one allowance entry.');
+                    return false;
+                }
+
+                return $.ajax({
+                    url: './includes/ajaxFile/ajaxBusinessTrip.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: {
+                        ajaxType: 'addBusinessTripOtherAllowances',
+                        trip_id: tripId,
+                        items: JSON.stringify(items)
+                    }
+                }).then(function(saveResponse) {
+                    if (saveResponse.status !== 'success') {
+                        throw new Error(saveResponse.message || 'Failed to save allowances.');
+                    }
+                    return saveResponse;
+                }).catch(function(err) {
+                    Swal.showValidationMessage(err.message || 'Failed to save allowances.');
+                });
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: result.value.title || 'Saved',
+                    text: result.value.message || 'Manual allowance entries saved successfully.',
+                    icon: 'success',
+                    confirmButtonColor: APP_COLORS.success
+                }).then(() => location.reload());
+            }
+        });
+    }).fail(function() {
+        Swal.fire(__('error') || 'Error', __('error_loading_allowances') || 'An error occurred while loading allowance details.', 'error');
+    });
+}
+
 function openHRPayrollTicketFareModal(tripId, employeeName) {
     Swal.fire({
         title: __('loading') || 'Loading...',

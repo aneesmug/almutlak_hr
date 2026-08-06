@@ -110,6 +110,34 @@ $pct_terminated  = round((($status_cont_ter ?? 0) / $totalEmployees) * 100, 1);
 $pct_terminated_year = round((($status_cont_ter_year ?? 0) / $totalEmployees) * 100, 1);
 $pct_total       = 100.0;
 
+// ================= DASHBOARD PIE CHART DATA (active employees, scoped) =================
+require_once __DIR__ . '/includes/dashboard_chart_helpers.php';
+
+$dashboard_chart_data = get_all_dashboard_chart_data(
+    $conDB,
+    $company_filter_alias . $department_filter_alias . $employee_filter_alias,
+    $company_filter . $department_filter . $employee_filter,
+    ['department_ids' => [], 'company_ids' => [], 'sex' => null, 'country_id' => null, 'saudi' => null],
+    ($is_rtl ?? false)
+);
+
+// Department / Company option lists for the chart filter dropdowns (scoped the same way as the rest of the dashboard)
+$chart_filter_departments = [];
+$dept_opt_query = mysqli_query($conDB, "SELECT DISTINCT `id`, `dep_nme`, `dep_nme_ar` FROM `department` ORDER BY `dep_nme`");
+if ($dept_opt_query) {
+    while ($row = mysqli_fetch_assoc($dept_opt_query)) {
+        $chart_filter_departments[] = $row;
+    }
+}
+
+$chart_filter_companies = [];
+$comp_opt_query = mysqli_query($conDB, "SELECT DISTINCT `comp_id`, `comp_name`, `comp_name_ar` FROM `companies` ORDER BY `comp_name`");
+if ($comp_opt_query) {
+    while ($row = mysqli_fetch_assoc($comp_opt_query)) {
+        $chart_filter_companies[] = $row;
+    }
+}
+
 // Access scope labels for dashboard card
 $allowed_company_names = 'All Companies';
 if (!empty($allowed_companies_array)) {
@@ -313,6 +341,8 @@ if(isset($_POST['submit'])){
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+		<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+		<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 
         <script src="assets/js/modernizr.min.js"></script>
 
@@ -528,6 +558,102 @@ if(isset($_POST['submit'])){
 				background: #eef2ff;
 				color: #3730a3;
 			}
+
+			/* Dashboard demographic pie charts - always light background regardless of OS theme */
+			.dash-pie-card {
+				background: #ffffff;
+				border: 1px solid #e5e7eb;
+				border-radius: 12px;
+				padding: 16px;
+				height: 100%;
+			}
+			.dash-pie-title {
+				font-size: 14px;
+				font-weight: 700;
+				color: #212529;
+				margin-bottom: 10px;
+				text-align: center;
+			}
+			.dash-pie-canvas-wrap {
+				position: relative;
+				min-height: 280px;
+				margin: 0 auto;
+			}
+			/* Slice hover "pop" - bounce-style scale via overshoot easing, plus lift shadow */
+			.dash-pie-canvas-wrap .apexcharts-pie-area {
+				transform-box: fill-box;
+				transform-origin: center;
+				transition: transform 0.35s cubic-bezier(.34, 1.61, .7, 1), filter 0.2s ease-out;
+				cursor: pointer;
+			}
+			.dash-pie-canvas-wrap .apexcharts-pie-area:hover {
+				transform: scale(1.09);
+				filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .35));
+			}
+			.dash-pie-canvas-wrap .apexcharts-pie-series:hover .apexcharts-pie-area:not(:hover) {
+				opacity: .85;
+			}
+			.dash-pie-filter-row label {
+				font-size: 13px;
+				font-weight: 600;
+				color: #495057;
+			}
+			#dashChartApplyFilterBtn, #dashChartResetFilterBtn {
+				margin-top: 4px;
+			}
+
+			/* Demographic chart filters - select2 multi-select, colors only.
+			   Deliberately does NOT touch display/float/position - overriding the
+			   theme's own box model previously caused the selection box to grow an
+			   empty row above/below the pills. */
+			.dash-pie-filter-row .select2-container {
+				width: 100% !important;
+			}
+			.dash-pie-filter-row .select2-selection--multiple .select2-selection__choice {
+				background: linear-gradient(135deg, #2a78d6 0%, #1baf7a 100%) !important;
+				color: #ffffff !important;
+				border: none !important;
+				border-radius: 14px !important;
+				padding: 3px 10px !important;
+				margin: 3px 6px 3px 0 !important;
+				font-weight: 500;
+			}
+			.dash-pie-filter-row .select2-selection--multiple .select2-selection__choice__remove {
+				all: unset;
+				cursor: pointer;
+				color: #ffffff !important;
+				font-weight: bold;
+				font-size: 13px;
+				margin-right: 6px;
+			}
+			/* select2 keeps aria-selected in sync live as items are picked/unpicked -
+			   unlike option.disabled, this reflects immediately with no reopen needed. */
+			.select2-results__option:not([aria-selected=true]) {
+				cursor: pointer;
+			}
+			.select2-results__option[aria-selected=true] {
+				color: #adb5bd !important;
+				background-color: #f8f9fa !important;
+				cursor: not-allowed;
+				text-decoration: line-through;
+			}
+			.select2-results__option[aria-selected=true]::after {
+				content: " (<?= addslashes(__('selected') ?: 'selected') ?>)";
+				font-size: 11px;
+				font-style: italic;
+				text-decoration: none;
+			}
+			.select2-results__option--highlighted[aria-selected=true] {
+				background-color: #f8f9fa !important;
+				color: #adb5bd !important;
+			}
+			.dash-slice-filter-badge {
+				cursor: pointer;
+				font-size: 12px;
+				padding: 6px 10px;
+				margin-top: 10px;
+				display: inline-block;
+			}
 		</style>
 
 		<?php if ($is_rtl): ?>
@@ -598,6 +724,73 @@ if(isset($_POST['submit'])){
 								header("refresh:3 ; ./dashboard.php");
 							}
 						?>
+
+
+						<div class="card-box">
+							<h4 class="m-t-0 header-title"><?= __('employee_demographics') ?: 'Employee Demographics' ?></h4>
+
+							<div class="row dash-pie-filter-row">
+								<div class="col-sm-4 col-md-3">
+									<label for="dashChartDeptFilter" class="mb-1"><?= __('department') ?></label>
+									<select class="form-control" id="dashChartDeptFilter" multiple>
+										<?php foreach ($chart_filter_departments as $d): ?>
+											<option value="<?= (int)$d['id'] ?>"><?= htmlspecialchars(($is_rtl ?? false) && !empty($d['dep_nme_ar']) ? $d['dep_nme_ar'] : $d['dep_nme'], ENT_QUOTES, 'UTF-8') ?></option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="col-sm-4 col-md-3">
+									<label for="dashChartCompFilter" class="mb-1"><?= __('company') ?: 'Company' ?></label>
+									<select class="form-control" id="dashChartCompFilter" multiple>
+										<?php foreach ($chart_filter_companies as $c): ?>
+											<option value="<?= (int)$c['comp_id'] ?>"><?= htmlspecialchars(($is_rtl ?? false) && !empty($c['comp_name_ar']) ? $c['comp_name_ar'] : $c['comp_name'], ENT_QUOTES, 'UTF-8') ?></option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+								<div class="col-sm-4 col-md-3 d-flex align-items-end" style="gap:8px;">
+									<button type="button" class="btn btn-primary" id="dashChartApplyFilterBtn"><?= __('apply') ?: 'Apply' ?></button>
+									<button type="button" class="btn btn-secondary" id="dashChartResetFilterBtn"><?= __('reset') ?></button>
+								</div>
+								<div class="col-sm-4 col-md-3 d-flex align-items-end">
+									<div class="custom-control custom-checkbox">
+										<input type="checkbox" class="custom-control-input" id="dashChartShowLabels">
+										<label class="custom-control-label" for="dashChartShowLabels"><?= __('show_slice_labels', 'Show data labels on slices') ?></label>
+									</div>
+								</div>
+								<div class="col-12">
+									<span class="badge badge-info dash-slice-filter-badge" id="dashSliceFilterBadge" style="display:none;" title="<?= __('click_to_clear') ?: 'Click to clear' ?>"></span>
+								</div>
+							</div>
+							<div class="small text-muted mt-1"><?= __('click_a_chart_slice_to_filter') ?: 'Tip: click a slice on the Country, Gender, or Saudi/Non-Saudi chart to filter all charts by it.' ?></div>
+
+							<div class="row mt-3">
+								<div class="col-md-6 col-xl-3">
+									<div class="dash-pie-card">
+										<div class="dash-pie-title"><?= __('employees_by_country') ?: 'Employees by Country' ?></div>
+										<div class="dash-pie-canvas-wrap" id="chartByCountry"></div>
+									</div>
+								</div>
+								<div class="col-md-6 col-xl-3">
+									<div class="dash-pie-card">
+										<div class="dash-pie-title"><?= __('employees_by_gender') ?: 'Employees by Gender' ?></div>
+										<div class="dash-pie-canvas-wrap" id="chartByGender"></div>
+									</div>
+								</div>
+								<div class="col-md-6 col-xl-3">
+									<div class="dash-pie-card">
+										<div class="dash-pie-title"><?= __('employees_by_company') ?: 'Employees by Company' ?></div>
+										<div class="dash-pie-canvas-wrap" id="chartByCompany"></div>
+									</div>
+								</div>
+								<div class="col-md-6 col-xl-3">
+									<div class="dash-pie-card">
+										<div class="dash-pie-title"><?= __('saudi_vs_non_saudi') ?: 'Saudi vs Non-Saudi' ?></div>
+										<div class="dash-pie-canvas-wrap" id="chartBySaudi"></div>
+									</div>
+								</div>
+							</div>
+						</div>
+
+
 						<div class="row text-center">
 							<div class="col-sm-3 col-xl-3" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
 							<div class="stats-card professional-theme theme-custom" data-color="custom">
@@ -1134,7 +1327,203 @@ if(isset($_POST['submit'])){
 
         <!-- Dashboard Init -->
         <!-- <script src="assets/pages/jquery.dashboard.init.js"></script> -->
-		
+
+		<!-- Demographic Pie Charts (ApexCharts, always-light theme, filterable) -->
+		<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+		<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+		<script type="text/javascript">
+			(function() {
+				if (typeof ApexCharts === 'undefined') { return; }
+
+				// Fixed-order categorical palette (never reassigned per-series)
+				var DASH_PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+				var DASH_OTHER_COLOR = '#898781';
+				var NO_DATA_LABEL = <?= json_encode(__('no_records_found') ?: 'No data', JSON_UNESCAPED_UNICODE) ?>;
+				var OTHER_LABEL = <?= json_encode(__('other'), JSON_UNESCAPED_UNICODE) ?>;
+				var FILTERED_BY_LABEL = <?= json_encode(__('filtered_by') ?: 'Filtered by', JSON_UNESCAPED_UNICODE) ?>;
+
+				function colorsFor(labels) {
+					return labels.map(function(label, idx) {
+						if (label === OTHER_LABEL) { return DASH_OTHER_COLOR; }
+						return DASH_PALETTE[idx % DASH_PALETTE.length];
+					});
+				}
+
+				var dashCharts = {};
+				// Each pie's currently rendered slice ids, in series order - lets a click map back to a real id
+				var dashChartIds = {};
+				// The active click-driven slice filter (only one dimension active at a time)
+				var sliceFilter = { dim: null, value: null, label: null };
+				// Slice data labels are redundant with the hover tooltip - hidden by default, toggled via checkbox
+				var showSliceLabels = false;
+				// Last data rendered, so the labels checkbox can re-render without a round trip
+				var lastDashChartData = null;
+
+				// containerId -> which filter dimension a click on that chart sets
+				var DIM_BY_CONTAINER = {
+					chartByCountry: 'country_id',
+					chartByGender: 'sex',
+					chartBySaudi: 'saudi'
+					// chartByCompany intentionally omitted - use the Company dropdown for that dimension
+				};
+
+				function updateSliceFilterBadge() {
+					var $badge = $('#dashSliceFilterBadge');
+					if (sliceFilter.dim && sliceFilter.value !== null) {
+						$badge.text(FILTERED_BY_LABEL + ': ' + sliceFilter.label + ' ✕').show();
+					} else {
+						$badge.hide();
+					}
+				}
+
+				function buildPie(containerId, labels, data, ids) {
+					var el = document.getElementById(containerId);
+					if (!el) { return; }
+
+					dashChartIds[containerId] = ids || [];
+
+					var hasData = labels.length > 0 && data.reduce(function(a, b) { return a + b; }, 0) > 0;
+					var dim = DIM_BY_CONTAINER[containerId];
+					var options = {
+						chart: {
+							type: 'donut',
+							height: 280,
+							background: '#ffffff',
+							foreColor: '#212529',
+							events: dim ? {
+								dataPointSelection: function(event, chartCtx, config) {
+									onSliceClick(containerId, dim, config.dataPointIndex);
+								}
+							} : {}
+						},
+						theme: { mode: 'light' },
+						series: hasData ? data : [1],
+						labels: hasData ? labels : [NO_DATA_LABEL],
+						colors: hasData ? colorsFor(labels) : ['#e5e7eb'],
+						plotOptions: {
+							pie: {
+								donut: {
+									size: '65%',
+									labels: {
+										show: true,
+										total: { show: true, label: '' }
+									}
+								}
+							}
+						},
+						fill: {
+							type: hasData ? 'gradient' : 'solid',
+							gradient: {
+								shade: 'light',
+								type: 'radial',
+								shadeIntensity: 0.65,
+								gradientToColors: undefined,
+								inverseColors: true,
+								opacityFrom: 1,
+								opacityTo: 1,
+								stops: [0, 100]
+							}
+						},
+						stroke: { show: true, width: 2, colors: ['#ffffff'] },
+						states: {
+							hover: { filter: { type: 'none' } },
+							active: { filter: { type: 'none' } }
+						},
+						legend: { show: showSliceLabels, position: 'bottom', fontSize: '12px' },
+						dataLabels: { enabled: hasData, style: { fontSize: '11px' } },
+						tooltip: { enabled: hasData },
+						noData: { text: NO_DATA_LABEL }
+					};
+
+					if (dashCharts[containerId]) {
+						dashCharts[containerId].updateOptions(options, true, true);
+					} else {
+						dashCharts[containerId] = new ApexCharts(el, options);
+						dashCharts[containerId].render();
+						if (dim) {
+							el.style.cursor = 'pointer';
+						}
+					}
+				}
+
+				function renderAll(data) {
+					lastDashChartData = data;
+					buildPie('chartByCountry', data.country.labels, data.country.data, data.country.ids);
+					buildPie('chartByGender', data.gender.labels, data.gender.data, data.gender.ids);
+					buildPie('chartByCompany', data.company.labels, data.company.data, data.company.ids);
+					buildPie('chartBySaudi', data.saudi.labels, data.saudi.data, data.saudi.ids);
+					updateSliceFilterBadge();
+				}
+
+				// Initial render with server-side data (no filters applied yet)
+				renderAll(<?= json_encode($dashboard_chart_data, JSON_UNESCAPED_UNICODE) ?>);
+
+				if ($.fn.select2) {
+					// Selected items are marked via select2's own live aria-selected state
+					// (styled in CSS above) rather than a custom disabled/re-render hack -
+					// that state updates immediately as picks happen, dropdown open or not.
+					$('#dashChartDeptFilter').select2({ theme: 'bootstrap4', placeholder: '<?= addslashes(__('all_departments')) ?>', allowClear: true, closeOnSelect: false, width: '100%' });
+					$('#dashChartCompFilter').select2({ theme: 'bootstrap4', placeholder: '<?= addslashes(__('all_companies') ?: 'All Companies') ?>', allowClear: true, closeOnSelect: false, width: '100%' });
+				}
+
+				function applyDashboardChartFilter() {
+					var deptIds = $('#dashChartDeptFilter').val() || [];
+					var compIds = $('#dashChartCompFilter').val() || [];
+					var payload = { department_ids: deptIds, company_ids: compIds };
+					if (sliceFilter.dim && sliceFilter.value !== null) {
+						payload[sliceFilter.dim] = sliceFilter.value;
+					}
+
+					$.ajax({
+						url: './includes/ajaxFile/dashboardChartsHandler.php',
+						type: 'POST',
+						dataType: 'json',
+						data: payload,
+						success: function(resp) {
+							if (resp && resp.success) {
+								renderAll(resp.data);
+							}
+						}
+					});
+				}
+
+				function onSliceClick(containerId, dim, dataPointIndex) {
+					var ids = dashChartIds[containerId] || [];
+					var value = ids[dataPointIndex];
+					if (value === undefined || value === null) { return; } // "Other"/unspecified slices aren't filterable
+
+					var chart = dashCharts[containerId];
+					var label = (chart && chart.w && chart.w.config && chart.w.config.labels) ? chart.w.config.labels[dataPointIndex] : String(value);
+
+					if (sliceFilter.dim === dim && String(sliceFilter.value) === String(value)) {
+						// Clicking the active slice again clears the filter
+						sliceFilter = { dim: null, value: null, label: null };
+					} else {
+						sliceFilter = { dim: dim, value: value, label: label };
+					}
+					applyDashboardChartFilter();
+				}
+
+				$('#dashChartApplyFilterBtn').on('click', applyDashboardChartFilter);
+				$('#dashChartResetFilterBtn').on('click', function() {
+					$('#dashChartDeptFilter').val(null).trigger('change');
+					$('#dashChartCompFilter').val(null).trigger('change');
+					sliceFilter = { dim: null, value: null, label: null };
+					applyDashboardChartFilter();
+				});
+				$('#dashSliceFilterBadge').on('click', function() {
+					sliceFilter = { dim: null, value: null, label: null };
+					applyDashboardChartFilter();
+				});
+				$('#dashChartShowLabels').on('change', function() {
+					showSliceLabels = this.checked;
+					if (lastDashChartData) {
+						renderAll(lastDashChartData);
+					}
+				});
+			})();
+		</script>
+
 		<script type="text/javascript">
 			var docExpiryBandData = <?= $doc_expiry_data_json ?: '{"info":[],"warning":[],"danger":[]}' ?>;
 

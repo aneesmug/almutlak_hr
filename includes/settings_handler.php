@@ -4,14 +4,34 @@ header('Content-Type: application/json');
 // --- Database Connection ---
 // Ensure you have a db.php file or similar connection logic.
 require_once(__DIR__ . "/db.php");
+require_once(__DIR__ . "/session_check.php");
 require_once(__DIR__ . "/helper_functions.php");
 require_once(__DIR__ . "/special_access_helper.php");
+require_once(__DIR__ . "/page_access_helper.php");
 
 if ($conDB->connect_error) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed: ' . $conDB->connect_error]);
     exit();
 }
 
+// This endpoint reads/writes every row in app_settings - including who has Special
+// Access to what (privilege escalation risk) and page role access - so it must never
+// be reachable without a valid session. It previously had NO auth check at all (unlike
+// the sibling includes/payroll_settings_handler.php, which is gated per-group), so
+// any unauthenticated request could read or overwrite every app setting. Mirror
+// app_settings.php's own tab-visibility rule: system admin, or anyone granted at
+// least one of the three delegable settings-tab special access keys.
+$settingsHandlerCanManage = (
+    ($is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+if (!$settingsHandlerCanManage) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Access denied.']);
+    exit();
+}
 
 // --- Main Logic ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -24,14 +44,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'update_settings':
             update_all_settings($conDB);
             break;
-        case 'get_full_access_candidates':
-            get_full_access_candidates($conDB);
-            break;
         case 'get_report_permission_users':
             get_report_permission_users($conDB);
             break;
         case 'get_special_access_users':
+            // Assigning Special Access grants is a system-admin-only capability - there
+            // is deliberately no delegable key for it (delegating it would let a
+            // delegate grant themselves anything). The coarser $settingsHandlerCanManage
+            // check above is not enough here.
+            if (!($is_system_admin ?? false)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Access denied.']);
+                break;
+            }
             get_special_access_users($conDB);
+            break;
+        case 'update_page_role_access':
+            update_page_role_access($conDB);
             break;
         default:
             echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
@@ -50,9 +79,10 @@ $conDB->close();
  * Fetches all settings from the database.
  */
 function get_all_settings($conDB) {
-    ensure_full_access_override_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
+    ensure_page_role_access_setting($conDB);
+    ensure_announcement_smtp_settings($conDB);
 
     $settings = [];
     $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings ORDER BY setting_group, id";
@@ -72,9 +102,10 @@ function get_all_settings($conDB) {
  * Updates settings, handling both file uploads and text inputs.
  */
 function update_all_settings($conDB) {
-    ensure_full_access_override_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
+    ensure_page_role_access_setting($conDB);
+    ensure_announcement_smtp_settings($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
@@ -133,45 +164,6 @@ function update_all_settings($conDB) {
         $conDB->rollback();
         echo json_encode(['success' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
     }
-}
-
-/**
- * Ensure full access override setting exists in app_settings for frontend control.
- */
-function ensure_full_access_override_setting($conDB) {
-    $settingName = 'full_access_emp_ids';
-    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
-    $checkStmt = $conDB->prepare($checkSql);
-    if (!$checkStmt) {
-        return;
-    }
-
-    $checkStmt->bind_param("s", $settingName);
-    if (!$checkStmt->execute()) {
-        $checkStmt->close();
-        return;
-    }
-
-    $result = $checkStmt->get_result();
-    $exists = ($result && $result->num_rows > 0);
-    if ($result) {
-        $result->free();
-    }
-    $checkStmt->close();
-
-    if ($exists) {
-        return;
-    }
-
-    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, '', 'security', 'full_access_employee_ids_comma_separated_or_json_emp_id_values', 'text', NULL)";
-    $insertStmt = $conDB->prepare($insertSql);
-    if (!$insertStmt) {
-        return;
-    }
-
-    $insertStmt->bind_param("s", $settingName);
-    $insertStmt->execute();
-    $insertStmt->close();
 }
 
 /**
@@ -257,28 +249,131 @@ function ensure_special_access_setting($conDB) {
 }
 
 /**
- * Return employees list for full-access multi-selection UI.
+ * Ensure per-page role-access map setting exists in app_settings, seeded with
+ * the roles that used to be hardcoded in includes/main_menu.php so behavior
+ * is unchanged until an admin edits it from App Settings > Page Access.
  */
-function get_full_access_candidates($conDB) {
-    $employees = [];
+function ensure_page_role_access_setting($conDB) {
+    $settingName = 'page_role_access';
+    $defaultValue = json_encode(get_default_page_access_roles());
 
-    $sql = "SELECT emp_id, name, status FROM employees WHERE emp_id IS NOT NULL AND emp_id <> '' ORDER BY name ASC";
-    $result = $conDB->query($sql);
-
-    if (!$result) {
-        echo json_encode(['success' => false, 'message' => 'Error fetching employees: ' . $conDB->error]);
+    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
+    $checkStmt = $conDB->prepare($checkSql);
+    if (!$checkStmt) {
         return;
     }
 
-    while ($row = $result->fetch_assoc()) {
-        $parsedName = parseName((string)($row['name'] ?? ''));
-        $employees[] = [
-            'emp_id' => (string)($row['emp_id'] ?? ''),
-            'name' => $parsedName,
-        ];
+    $checkStmt->bind_param("s", $settingName);
+    if (!$checkStmt->execute()) {
+        $checkStmt->close();
+        return;
     }
 
-    echo json_encode(['success' => true, 'employees' => $employees]);
+    $result = $checkStmt->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $checkStmt->close();
+
+    if ($exists) {
+        return;
+    }
+
+    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'page_role_access', 'page_role_access_json_map_page_file_to_allowed_role_array', 'text', NULL)";
+    $insertStmt = $conDB->prepare($insertSql);
+    if (!$insertStmt) {
+        return;
+    }
+
+    $insertStmt->bind_param("ss", $settingName, $defaultValue);
+    $insertStmt->execute();
+    $insertStmt->close();
+}
+
+/**
+ * Ensure the Announcement Config SMTP settings exist in app_settings. These are
+ * kept separate from the general 'email' group's smtp_* rows because
+ * send_announcement.php sends from a dedicated mailbox, not the system's
+ * general notification sender. Seeded with empty defaults only - never with a
+ * real credential - so no secret is ever committed to this file; the actual
+ * values are set once directly in the database.
+ */
+function ensure_announcement_smtp_settings($conDB) {
+    $encryptionOptions = json_encode(['none' => 'None', 'tls' => 'TLS', 'ssl' => 'SSL']);
+
+    // Mirrors the general 'email' group's field set (host/port/user/pass/encryption/
+    // from email/from name), kept as its own group because send_announcement.php
+    // sends from a dedicated mailbox, not the system's general notification sender.
+    $defaults = [
+        'announcement_smtp_host' => ['', 'text', 'Announcement SMTP Host', null],
+        'announcement_smtp_port' => ['', 'text', 'Announcement SMTP Port', null],
+        'announcement_smtp_user' => ['', 'text', 'Announcement SMTP Username', null],
+        'announcement_smtp_pass' => ['', 'text', 'Announcement SMTP Password', null],
+        'announcement_smtp_encryption' => ['tls', 'select', 'Announcement SMTP Encryption', $encryptionOptions],
+        'announcement_smtp_from_email' => ['', 'text', 'Announcement From Email', null],
+        'announcement_smtp_from_name' => ['', 'text', 'Announcement From Name', null],
+    ];
+
+    $checkStmt = $conDB->prepare("SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1");
+    $insertStmt = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'announcement_config', ?, ?, ?)");
+    if (!$checkStmt || !$insertStmt) {
+        return;
+    }
+
+    foreach ($defaults as $settingName => $meta) {
+        [$defaultValue, $inputType, $description, $options] = $meta;
+
+        $checkStmt->bind_param('s', $settingName);
+        if (!$checkStmt->execute()) {
+            continue;
+        }
+        $result = $checkStmt->get_result();
+        $exists = ($result && $result->num_rows > 0);
+        if ($result) {
+            $result->free();
+        }
+        if ($exists) {
+            continue;
+        }
+
+        $insertStmt->bind_param('sssss', $settingName, $defaultValue, $description, $inputType, $options);
+        $insertStmt->execute();
+    }
+
+    $checkStmt->close();
+    $insertStmt->close();
+}
+
+/**
+ * Dedicated save for the Page Access tab, so it persists immediately instead
+ * of relying on the far-away global "Save Changes" button at the bottom of
+ * the Settings page (that button still also submits this field as a backup).
+ */
+function update_page_role_access($conDB) {
+    ensure_page_role_access_setting($conDB);
+
+    $raw = $_POST['page_role_access'] ?? '{}';
+    $decoded = decode_page_access_map($raw);
+
+    // Preserve any page not present in what the client sent (e.g. a page added
+    // after this browser tab loaded) instead of silently dropping it.
+    $current = get_page_access_map($conDB);
+    $merged = array_merge($current, $decoded);
+
+    $value = json_encode($merged);
+    $stmt = $conDB->prepare("UPDATE app_settings SET setting_value = ? WHERE setting_name = 'page_role_access'");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement: ' . $conDB->error]);
+        return;
+    }
+    $stmt->bind_param('s', $value);
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'page_role_access' => $merged]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to save page access: ' . $conDB->error]);
+    }
+    $stmt->close();
 }
 
 /**

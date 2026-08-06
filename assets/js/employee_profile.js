@@ -92,6 +92,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     var country = $(this).data('country');
     var currentBalance = $(this).data('balance') || 0;
     var allowEmergencyOverride = $(this).data('allow-emergency') == 1;
+    var allowVacSalaryBelowMinOverride = $(this).data('allow-vac-salary-below-min') == 1;
     var blockAnnual = $(this).data('block-annual') == 1;
     var blockEmergency = $(this).data('block-emergency') == 1;
     var blockLocal = $(this).data('block-local') == 1;
@@ -172,14 +173,14 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     cancelButtonColor: APP_COLORS.secondary
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
+                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride);
                     }
                 });
                 return;
             }
 
             // Proceed to open the modal as usual, passing active_return_date if available
-            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null, false, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
+            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null, false, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -191,7 +192,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride) {
     currentBalance = currentBalance || 0;
     forceEmergency = forceEmergency || false;
     activeReturnDate = activeReturnDate || null;
@@ -201,6 +202,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
     blockEmergency = blockEmergency || false;
     blockLocal = blockLocal || false;
     blockEncashed = blockEncashed || false;
+    allowVacSalaryBelowMinOverride = allowVacSalaryBelowMinOverride || false;
 
     const modalTitleText = forceEmergency
         ? __('apply_emergency_vacation')
@@ -393,15 +395,13 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             }
 
             function updateLocalVacationSalaryVisibility() {
-                const selectedVac = $('input[name="vac_type"]:checked').val();
                 const selectedFly = $('input[name="fly_type"]:checked').val();
 
-                if (!(selectedVac === 'Local Vacation' && selectedFly === 'annual')) {
+                // Applies to any annual vacation (Fly or Local Vacation) - the day-count
+                // threshold gates the choice itself, not just the Local Vacation/Saudi case.
+                if (selectedFly !== 'annual') {
                     return;
                 }
-
-                // Local annual must always show explicit vacation salary payment choice.
-                $('#salaryTypeSection').removeClass('d-none');
 
                 const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
                 const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
@@ -411,11 +411,18 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
                 }
 
-                if (localVacationDays > 0 && localVacationDays <= 5) {
-                    $('#salary_with_payroll').prop('checked', true);
-                    $('#salary_with_eos').prop('checked', false).prop('disabled', true);
-                } else {
+                // Below 20 days, the payroll-vs-end-of-service choice has no effect on payroll
+                // (matches matchesLocalAnnualPayrollRemovalRule()'s minimum_days_exclusive=20
+                // rule server-side), so don't ask - keep the section hidden. An employee with
+                // the 'allow_vacation_salary_below_min_days' override always sees the choice.
+                const meetsMinimumDays = localVacationDays >= 20 || allowVacSalaryBelowMinOverride;
+
+                if (meetsMinimumDays) {
+                    $('#salaryTypeSection').removeClass('d-none');
                     $('#salary_with_eos').prop('disabled', false);
+                } else {
+                    $('#salaryTypeSection').addClass('d-none');
+                    $('#salary_with_payroll, #salary_with_eos').prop('checked', false).prop('disabled', false);
                 }
             }
 
@@ -440,6 +447,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 $('#departure_date').datepicker('setEndDate', arrivalDate);
             });
 
+            // Replacement Person is required only for Sales (dept 14) and Finance (dept 2)
+            const requiresReplacement = (String(deptId) === '2' || String(deptId) === '14');
+            $('#replacementRequiredMark').toggleClass('d-none', !requiresReplacement);
+
             // Original replacement person loader
             $("#replacement_per").select2({
                 dropdownParent: $(swalModal) // Attach to modal
@@ -451,7 +462,6 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid, for_replacement: 1},
                 success: function(res) {
                     if (res.status == 200) {
-                        let options = '';
                         const currentLang = (typeof getCurrentLanguage === 'function') ? getCurrentLanguage() : 'en';
                         let pendingTranslations = res.data.length;
 
@@ -470,8 +480,6 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 
                                     pendingTranslations--;
                                     if (pendingTranslations === 0) {
-                                        // All translations done, add NONE option
-                                        $('#replacement_per').append(`<option value="N/A">${__('no_replacement_available')}</option>`);
                                         $("#replacement_per").select2('destroy').select2({
                                             dropdownParent: $(swalModal)
                                         });
@@ -482,29 +490,16 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 $(`#replacement_per`).append(optionHtml);
                                 pendingTranslations--;
                                 if (pendingTranslations === 0) {
-                                    $('#replacement_per').append(`<option value="N/A">${__('no_replacement_available')}</option>`);
                                     $("#replacement_per").select2('destroy').select2({
                                         dropdownParent: $(swalModal)
                                     });
                                 }
                             }
                         }
-
-                        if (res.data.length === 0) {
-                            // No available replacement persons
-                            $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
-                        }
-                    } else {
-                        // Non-200 status, still provide a NONE fallback
-                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
                     }
                 },
                 error: function(j, e) {
                     errorHandling(j, e);
-                    // On error also ensure user can proceed without replacement
-                    if (!$('#replacement_per option').length) {
-                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
-                    }
                 },
             });
 
@@ -646,11 +641,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             $('#replacementSection, #date_select').removeClass('d-none');
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
-                                if (vacValue === 'Local Vacation') {
-                                    updateLocalVacationSalaryVisibility();
-                                } else {
-                                    $('#salaryTypeSection').removeClass('d-none');
-                                }
+                                updateLocalVacationSalaryVisibility();
                                 // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation) and NOT for country 191 (Saudi Arabia)
                                 if (vacValue === 'Fly' && country !== '191') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -671,11 +662,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 $('#replacementSection, #date_select').removeClass('d-none');
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
-                                    if (currentVacValue === 'Local Vacation') {
-                                        updateLocalVacationSalaryVisibility();
-                                    } else {
-                                        $('#salaryTypeSection').removeClass('d-none');
-                                    }
+                                    updateLocalVacationSalaryVisibility();
                                     // Show flight dates AND remarks ONLY for Fly + Annual and NOT for country 191
                                     if (currentVacValue === 'Fly' && country !== '191') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -793,7 +780,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         Swal.showValidationMessage(__('start_return_date_required_validation'));
                         return false;
                     }
-                    if (!replacement) {
+                    const replacementRequired = (String(deptId) === '2' || String(deptId) === '14');
+                    if (replacementRequired && !replacement) {
                         Swal.showValidationMessage(__('replacement_person_required_validation'));
                         return false;
                     }
@@ -1919,7 +1907,7 @@ function vacationApply_HTML(country) {
             <div class="vacation-card d-none" id="replacementSection">
                 <div class="vacation-card-header">
                     <i class="fa fa-user-friends"></i>
-                    ${__('replacement_person')}<span class="text-danger">*</span>
+                    ${__('replacement_person')}<span class="text-danger d-none" id="replacementRequiredMark">*</span>
                 </div>
                 <select class="form-control form-control-modern" name="replacement_per" id="replacement_per">
                     <option value="">${__('select')}</option>

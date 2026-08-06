@@ -22,6 +22,7 @@
  * MODIFICATION SUMMARY (001-session_check.php): 
  * 1. RELIABLE PAGE DETECTION: Changed the method for getting the current page from using `REQUEST_URI` to `PHP_SELF`. This provides a more consistent and reliable way to identify the executing script, fixing the bug that caused incorrect redirects for employees.
  ****************************************************************/
+require_once __DIR__ . '/session_bootstrap.php';
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
@@ -86,25 +87,39 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
     <body>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                const redirectMs = 3000; // extended toast/redirect duration
-                let redirectTimeout;
-                const Toast = Swal.mixin({
-                    toast: true,
-                    position: 'top-end',
-                    showConfirmButton: false,
-                    showCloseButton: false,
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    timer: redirectMs,
-                    timerProgressBar: true,
-                });
-                Toast.fire({
-                    icon: 'info',
-                    title: 'Session expired due to inactivity'
-                }).then(() => {
-                    // Fallback redirect when toast naturally closes
-                    window.location.href = './dashboard.php';
-                });
+                var redirectMs = 3000; // extended toast/redirect duration
+                var redirectUrl = './dashboard.php';
+                var redirected = false;
+
+                function goToDashboard() {
+                    if (redirected) return;
+                    redirected = true;
+                    window.location.href = redirectUrl;
+                }
+
+                // Hard fallback: guarantees the redirect fires even if the CDN toast
+                // library fails to load/execute (blocked network, ad blocker, etc.),
+                // which otherwise leaves the user stuck on this page forever.
+                setTimeout(goToDashboard, redirectMs + 500);
+
+                try {
+                    var Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        showCloseButton: false,
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        timer: redirectMs,
+                        timerProgressBar: true,
+                    });
+                    Toast.fire({
+                        icon: 'info',
+                        title: 'Session expired due to inactivity'
+                    }).then(goToDashboard);
+                } catch (e) {
+                    goToDashboard();
+                }
             });
         </script>
     </body>
@@ -180,16 +195,36 @@ if ($numeric_user_id) {
             <body>
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
-                        Swal.fire({
-                            title: 'Session Terminated',
-                            text: 'Your session has been terminated by an administrator. Please log in again.',
-                            icon: 'warning',
-                            allowOutsideClick: false,
-                            allowEscapeKey: false,
-                            confirmButtonText: 'Go to Login'
-                        }).then(() => {
+                        var redirected = false;
+                        function goToLogin() {
+                            if (redirected) return;
+                            redirected = true;
                             window.location.href = './index.php';
-                        });
+                        }
+                        // Safety net: this dialog normally waits for the user to click
+                        // "Go to Login" - it should NOT auto-redirect while that's working.
+                        // But if the CDN toast library never loaded (blocked network, ad
+                        // blocker, etc.), Swal stays undefined and the user would be stuck
+                        // on this page forever with no way out. Only redirect here if that
+                        // actually happened.
+                        setTimeout(function() {
+                            if (typeof Swal === 'undefined') {
+                                goToLogin();
+                            }
+                        }, 4000);
+
+                        try {
+                            Swal.fire({
+                                title: 'Session Terminated',
+                                text: 'Your session has been terminated by an administrator. Please log in again.',
+                                icon: 'warning',
+                                allowOutsideClick: false,
+                                allowEscapeKey: false,
+                                confirmButtonText: 'Go to Login'
+                            }).then(goToLogin);
+                        } catch (e) {
+                            goToLogin();
+                        }
                     });
                 </script>
             </body>
@@ -284,23 +319,7 @@ $_SESSION['allowed_companies_array'] = $allowed_companies_array;
 // Normalize company restriction IDs to support both companies.id and companies.comp_id
 // This prevents scope leaks when legacy records store one format and employees.comp_no uses the other.
 if (!empty($allowed_companies_array)) {
-    $normalized_company_ids = $allowed_companies_array;
-    $company_ids_csv = implode(',', array_map('intval', $allowed_companies_array));
-
-    $company_map_sql = "SELECT `id`, `comp_id` FROM `companies` WHERE `id` IN ($company_ids_csv) OR `comp_id` IN ($company_ids_csv)";
-    $company_map_result = mysqli_query($conDB, $company_map_sql);
-    if ($company_map_result) {
-        while ($company_row = mysqli_fetch_assoc($company_map_result)) {
-            if (isset($company_row['id']) && (int)$company_row['id'] > 0) {
-                $normalized_company_ids[] = (int)$company_row['id'];
-            }
-            if (isset($company_row['comp_id']) && (int)$company_row['comp_id'] > 0) {
-                $normalized_company_ids[] = (int)$company_row['comp_id'];
-            }
-        }
-    }
-
-    $allowed_companies_array = array_values(array_unique(array_map('intval', $normalized_company_ids)));
+    $allowed_companies_array = normalizeAllowedCompanyIds($conDB, $allowed_companies_array);
     $_SESSION['allowed_companies_array'] = $allowed_companies_array;
 }
 
@@ -361,9 +380,21 @@ $_SESSION['allowed_employees'] = $allowed_employees;
 $_SESSION['allowed_employees_array'] = $allowed_employees_array;
 
 // Manager visibility mode flag
-// Rule: emp_type='Manager' is treated as manager-assigned user.
-// But strict direct-reports mode should NOT apply to roles with full employee visibility.
-$is_manager_assigned = ($user_type === 'dept_user' || strtolower((string)$emp_type) === 'manager');
+// Rule: emp_type='Manager' or 'Supervisor' is treated as a manager-assigned user,
+// restricted to their own assigned direct reports (employees.supervisor_id), never
+// department-wide. But strict direct-reports mode should NOT apply to roles with
+// full employee visibility (HR, Admin, GM, Finance Manager, etc).
+//
+// Default-deny: any account with no explicit allowed_companies/allowed_departments/
+// allowed_employees configured (admin never deliberately widened their scope) also
+// falls into this strict direct-reports-only mode, instead of the old fallback of
+// unrestricted access to every employee. Plain operational roles (IT Supporter, etc.)
+// must be explicitly widened via allowed_departments/companies or the
+// 'view_all_employees' Special Access key - never see everyone by default.
+$has_explicit_scope_restrictions = $has_company_restrictions || $has_department_restrictions || !empty($allowed_employees_array);
+$is_manager_assigned = ($user_type === 'dept_user'
+    || in_array(strtolower((string)$emp_type), ['manager', 'supervisor'], true)
+    || !$has_explicit_scope_restrictions);
 $is_dept_manager = ($is_manager_assigned && !canSeeAllEmployeesByRole(false));
 $_SESSION['manager_direct_reports_only'] = $is_dept_manager;
 
@@ -371,41 +402,14 @@ $_SESSION['manager_direct_reports_only'] = $is_dept_manager;
 // If company/department access is restricted, include employees from those scopes
 // plus any explicitly allowed employees. If company/department is unrestricted,
 // do not restrict by employees.
-$effective_allowed_employees = $allowed_employees_array;
-if ($is_dept_manager && !empty($empid)) {
-    // Strict manager mode: only direct reports are visible (same dept or cross dept).
-    $manager_emp_id = (int)$empid;
-    $scope_employees = [];
-    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `supervisor_id` = {$manager_emp_id}";
-    $scope_result = mysqli_query($conDB, $scope_sql);
-    if ($scope_result) {
-        while ($row = mysqli_fetch_assoc($scope_result)) {
-            $scope_employees[] = (int)$row['emp_id'];
-        }
-    }
-
-    // Keep explicitly allowed employees if configured, and merge with direct reports.
-    $effective_allowed_employees = array_values(array_unique(array_merge($effective_allowed_employees, $scope_employees)));
-} elseif ($has_company_restrictions || $has_department_restrictions) {
-    $scope_employees = [];
-    $scope_sql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1";
-    if ($has_company_restrictions) {
-        $company_ids = implode(',', array_map('intval', $allowed_companies_array));
-        $scope_sql .= " AND `comp_no` IN ($company_ids)";
-    }
-    if ($has_department_restrictions) {
-        $department_ids = implode(',', array_map('intval', $allowed_departments_array));
-        $scope_sql .= " AND `dept` IN ($department_ids)";
-    }
-
-    $scope_result = mysqli_query($conDB, $scope_sql);
-    if ($scope_result) {
-        while ($row = mysqli_fetch_assoc($scope_result)) {
-            $scope_employees[] = (int) $row['emp_id'];
-        }
-    }
-    $effective_allowed_employees = array_values(array_unique(array_merge($effective_allowed_employees, $scope_employees)));
-}
+$effective_allowed_employees = resolveEffectiveEmployeeScope(
+    $conDB,
+    $is_dept_manager,
+    $empid,
+    $allowed_employees_array,
+    $allowed_companies_array,
+    $allowed_departments_array
+);
 
 // Store effective employee access for filtering
 $allowed_employees_array = $effective_allowed_employees;

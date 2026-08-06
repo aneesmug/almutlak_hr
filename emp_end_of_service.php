@@ -537,6 +537,12 @@
                 $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);
                 $stmt_update->execute();
 
+                // Keep admin_login in sync: if this employee also has a login record, deactivate it too
+                $stmt_admin_login_status = $conDB->prepare("UPDATE `admin_login` SET `status`='0' WHERE `emp_id`=?");
+                $stmt_admin_login_status->bind_param("s", $emprow['empid']);
+                $stmt_admin_login_status->execute();
+                $stmt_admin_login_status->close();
+
                 // Create settlement record after EOS creation (if request_inv_no provided)
                 // IMPORTANT: This MUST complete synchronously before page redirect
                 $settlementCreated = false;

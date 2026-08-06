@@ -187,17 +187,19 @@ try {
         $allowed_departments = $rec["allowed_departments"];
         $allowed_employees = $rec["allowed_employees"];
         
-        // Convert JSON allowed_companies to company names with badge formatting
+        // Convert JSON allowed_companies to company names with badge formatting.
+        // Uses the same id/comp_id precedence the picker saves with, so this only
+        // shows companies actually selected - not ones a broader match would also
+        // catch (see resolveSelectedCompanyNames() doc comment).
         $company_names = '<span class="all-employees-badge">All Companies</span>';
         if (!empty($allowed_companies)) {
             $companies_array = json_decode($allowed_companies, true);
             if (is_array($companies_array) && !empty($companies_array)) {
-                $company_ids = implode(',', array_map('intval', $companies_array));
-                $comp_query = mysqli_query($conDB, "SELECT DISTINCT `comp_name` FROM `companies` WHERE `id` IN ($company_ids) OR `comp_id` IN ($company_ids) ORDER BY `comp_name`");
-                if ($comp_query && mysqli_num_rows($comp_query) > 0) {
+                $company_name_list = resolveSelectedCompanyNames($conDB, $companies_array);
+                if (!empty($company_name_list)) {
                     $badges = [];
-                    while ($comp_row = mysqli_fetch_assoc($comp_query)) {
-                        $badges[] = '<span class="employee-badge">' . htmlspecialchars($comp_row['comp_name']) . '</span>';
+                    foreach ($company_name_list as $comp_name) {
+                        $badges[] = '<span class="employee-badge">' . htmlspecialchars($comp_name) . '</span>';
                     }
                     $company_names = '<div class="employee-badges-container">' . implode('', $badges) . '</div>';
                 }

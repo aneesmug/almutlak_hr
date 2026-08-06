@@ -114,12 +114,14 @@ if (mysqli_num_rows($query) == 1) {
     // Fetch Approval Chain from request_approvers table and merge with emp_loan_approvals notes
     $approval_chain = [];
     if (!empty($loan_details['inv_no'])) {
-        $chain_sql = "SELECT ra.*, 
+        $chain_sql = "SELECT ra.*,
                       COALESCE(e.name, al.fullname, al.username) as approver_name,
-                      al.user_type
+                      al.user_type as approver_role,
+                      d2.dep_nme AS approver_dept_name
                       FROM request_approvers ra
                       LEFT JOIN employees e ON ra.approver_id = e.emp_id
                       LEFT JOIN admin_login al ON ra.approver_id = al.id_iqama
+                      LEFT JOIN department d2 ON e.dept = d2.id
                       WHERE ra.request_inv_no = ? AND ra.request_type_id = 2
                       ORDER BY ra.approval_level";
         $stmt_chain = $conDB->prepare($chain_sql);
@@ -264,6 +266,13 @@ if (mysqli_num_rows($query) == 1) {
             [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
             [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
             [dir="rtl"] .timeline-item .icon { left: auto; right: -9px; }
+
+            .approval-flat-list { padding: 0; }
+            .approval-flat-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }
+            .approval-flat-item i { width: 16px; text-align: center; font-size: 1rem; }
+            .approval-flat-item strong { font-size: 0.95rem; }
+            .approval-flat-note { flex-basis: 100%; margin-left: 24px; font-style: italic; color: var(--danger-color); font-size: 0.85rem; }
+            [dir="rtl"] .approval-flat-note { margin-left: 0; margin-right: 24px; }
             
             .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
             
@@ -511,51 +520,42 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="row" id="approvalStatusContainer" style="display: none;">
                                                 <div class="col-md-12">
                                                     <div class="report-section">
-                                                        <h5 class="section-title"><i class="fa fa-check-circle"></i> <?= __('approval_chain') ?></h5>
-                                                        <div class="approval-timeline">
+                                                        <h5 class="section-title"><i class="fa fa-tasks"></i> <?= __('approval_status') ?></h5>
+                                                        <div class="approval-flat-list">
                                                     <?php if (empty($approval_chain)): ?>
                                                         <div class="alert alert-info"><?= __('add') ?></div>
-                                                    <?php else: 
+                                                    <?php else:
                                                         // Check if request was rejected
                                                         $is_loan_rejected = isset($loan_details['status']) && $loan_details['status'] === 'rejected';
                                                     ?>
-                                                        <?php foreach ($approval_chain as $level): 
+                                                        <?php foreach ($approval_chain as $level):
                                                             // If request is rejected, skip pending/awaiting approvers
                                                             if ($is_loan_rejected && in_array($level['status'], ['pending', 'awaiting'])) {
                                                                 continue;
                                                             }
+
+                                                            $level_status = $level['status'] ?? 'pending';
+                                                            $status_color = 'text-muted';
+                                                            if ($level_status === 'approved') $status_color = 'text-success';
+                                                            elseif ($level_status === 'rejected') $status_color = 'text-danger';
+                                                            elseif ($level_status === 'pending') $status_color = 'text-warning';
+
+                                                            $role_icon = 'fa-user';
+                                                            if (!empty($level['approver_role']) && stripos($level['approver_role'], 'hr') !== false) {
+                                                                $role_icon = 'fa-user-shield';
+                                                            } elseif (!empty($level['approver_role']) && (stripos($level['approver_role'], 'manager') !== false || stripos($level['approver_role'], 'administrator') !== false || stripos($level['approver_role'], 'gm') !== false)) {
+                                                                $role_icon = 'fa-user-tie';
+                                                            }
+
+                                                            $level_scope = !empty($level['approver_dept_name']) ? getDisplayName($level['approver_dept_name']) : ucwords(str_replace('_', ' ', (string)($level['approver_role'] ?? '')));
                                                         ?>
-                                                        <div class="timeline-item <?= $level['status'] ?>">
-                                                            <span class="icon">
-                                                                <?php if ($level['status'] == 'approved'): ?><i class="fa fa-check"></i><?php elseif ($level['status'] == 'rejected'): ?><i class="fa fa-times"></i><?php else: ?><i class="fa fa-clock"></i><?php endif; ?>
-                                                            </span>
-                                                            <div>
-                                                                <span class="status" style="font-size:1rem;">
-                                                                    <strong><?=__('level') ?> <?= (int)$level['approval_level'] ?>:</strong> <?= getDisplayName($level['approver_name'] ?? 'Pending Assignment'); ?> - 
-                                                                    <?php 
-                                                                    switch($level['status']) {
-                                                                        case 'approved': echo '<span class="text-success">' . __('approved') . '</span>'; break;
-                                                                        case 'rejected': echo '<span class="text-danger">' . __('rejected') . '</span>'; break;
-                                                                        case 'pending': echo '<span class="text-warning">' . __('pending') . '</span>'; break;
-                                                                        case 'awaiting': echo '<span class="text-secondary">' . __('awaiting') . '</span>'; break;
-                                                                        default: echo '<span class="text-muted">' . htmlspecialchars($level['status']) . '</span>';
-                                                                    }
-                                                                    ?>
-                                                                </span>
-                                                                <?php if (!empty($level['action_date'])): ?>
-                                                                <div style="font-size:0.85rem; color:#999; margin-top:4px; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
-                                                                    <i class="fa fa-calendar"></i> <?= format_safe_date($level['action_date'] ?? null, 'd M Y, H:i'); ?>
-                                                                </div>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($level['note'])):
-                                                                    $note_border_color = ($level['status'] == 'rejected') ? '#dc3545' : '#667eea';
-                                                                    $note_label_color = ($level['status'] == 'rejected') ? 'color:#dc3545;' : '';
-                                                                ?>
-                                                                <div style="font-size:0.85rem; color:#666; margin-top:8px; padding:8px; background:#f5f5f5; border-radius:4px; border-left:3px solid <?= $note_border_color ?>; <?= ($is_rtl) ? 'margin-right:22px !important;' : 'margin-left:22px !important;' ?>">
-                                                                    <strong style="<?= $note_label_color ?>"><?= ($level['status'] == 'rejected') ? __('rejection_reason') : __('note') ?>:</strong> <?= getDisplayName($level['note']); ?>
-                                                                </div>
-                                                                <?php endif; ?>
-                                                            </div>
+                                                        <div class="approval-flat-item">
+                                                            <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
+                                                            <strong><?= getDisplayName($level['approver_name'] ?? 'Pending Assignment'); ?></strong>
+                                                            <small class="text-muted">(<?= __('level') ?> <?= (int)$level['approval_level'] ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
+                                                            <?php if ($level_status === 'rejected' && !empty($level['note'])): ?>
+                                                                <div class="approval-flat-note"><?= getDisplayName($level['note']); ?></div>
+                                                            <?php endif; ?>
                                                         </div>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>

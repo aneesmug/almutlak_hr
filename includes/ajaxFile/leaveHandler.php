@@ -1025,6 +1025,27 @@ elseif ($ajaxType == 'applyVacation') {
             $effective_remaining = 0.0;
         }
 
+        // [BUG FIX] Reserve days already tied up in this employee's own pending (not yet
+        // finally approved/rejected/cancelled) deductible vacation requests. Without this,
+        // balance only gets deducted at final approval, so an employee could submit several
+        // overlapping-balance requests (e.g. 20 + 20 with a 20-day total) since each request
+        // is checked independently against the still-untouched balance.
+        $pending_reserved_days = 0.0;
+        $stmt_pending = mysqli_prepare($conDB, "SELECT COALESCE(SUM(vacdays), 0) AS pending_days FROM emp_vacation WHERE emp_id = ? AND current_status = 'pending_approval' AND is_deductible = 1");
+        if ($stmt_pending) {
+            mysqli_stmt_bind_param($stmt_pending, "s", $emp_id);
+            mysqli_stmt_execute($stmt_pending);
+            $res_pending = mysqli_stmt_get_result($stmt_pending);
+            if ($res_pending && ($row_pending = mysqli_fetch_assoc($res_pending))) {
+                $pending_reserved_days = (float)$row_pending['pending_days'];
+            }
+            if ($res_pending) mysqli_free_result($res_pending);
+            mysqli_stmt_close($stmt_pending);
+        }
+        if ($pending_reserved_days > 0) {
+            $effective_remaining = max(0.0, $effective_remaining - $pending_reserved_days);
+        }
+
         // Management override: some employees are explicitly allowed to apply for emergency
         // vacation even with a healthy balance (employees.allow_emergency_vacation).
         $allow_emergency_override = false;
@@ -1105,17 +1126,33 @@ elseif ($ajaxType == 'applyVacation') {
             }
         }
 
-        // Local Vacation | Annual business rule:
-        // - If days <= 5: force payroll.
-        // - If days > 5: employee must explicitly choose payroll or end_of_service.
-        $is_local_annual_vacation = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
-        if ($is_local_annual_vacation) {
-            if ((float)$vacdays <= 5) {
-                $vacation_salary_type = 'payroll';
-            } else {
+        // Vacation Salary Payment choice - applies to every annual vacation (Fly or Local
+        // Vacation), mirrors the UI's updateLocalVacationSalaryVisibility():
+        // - Below the minimum_days_exclusive threshold (20 days) and no per-employee override,
+        //   don't ask - silently default to 'end_of_service'.
+        // - At/above the threshold, or with the override, the choice actually matters - require it.
+        $is_annual_vacation = ($fly_type === 'annual' && in_array($vac_type, ['Local Vacation', 'Fly'], true));
+        if ($is_annual_vacation) {
+            $allow_vac_salary_below_min = false;
+            $vac_salary_override_stmt = mysqli_prepare($conDB, "SELECT allow_vacation_salary_below_min_days FROM employees WHERE emp_id = ? LIMIT 1");
+            if ($vac_salary_override_stmt) {
+                mysqli_stmt_bind_param($vac_salary_override_stmt, "s", $emp_id);
+                mysqli_stmt_execute($vac_salary_override_stmt);
+                $vac_salary_override_result = mysqli_stmt_get_result($vac_salary_override_stmt);
+                $vac_salary_override_row = $vac_salary_override_result ? mysqli_fetch_assoc($vac_salary_override_result) : null;
+                mysqli_stmt_close($vac_salary_override_stmt);
+                $allow_vac_salary_below_min = $vac_salary_override_row && (string)($vac_salary_override_row['allow_vacation_salary_below_min_days'] ?? '0') === '1';
+            }
+
+            $localAnnualRule = getLocalAnnualPayrollRemovalRuleConfig();
+            $meets_minimum_days = ((float)$vacdays >= (float)$localAnnualRule['minimum_days_exclusive']) || $allow_vac_salary_below_min;
+
+            if ($meets_minimum_days) {
                 if (empty($vacation_salary_type)) {
                     throw new Exception(__('vacation_salary_type_required') ?: 'Please select vacation salary payment option.');
                 }
+            } else {
+                $vacation_salary_type = 'end_of_service';
             }
         }
 

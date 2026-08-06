@@ -25,6 +25,14 @@
 /*******************/
 	mysqli_query($conDB, "UPDATE `employees` SET `status`=0, `note`='".$_GET['note']."', `ter_note`='".$_GET['ter_note']."', `fly`='no', `ter_date`='".date("c")."' WHERE `emp_id`='".$_GET['emp_id']."' ") or die (mysqli_error($conDB));
 
+	// Keep admin_login in sync: if this employee also has a login record, deactivate it too
+	$stmt_admin_login_status = mysqli_prepare($conDB, "UPDATE `admin_login` SET `status`=0 WHERE `emp_id`=?");
+	if ($stmt_admin_login_status) {
+		mysqli_stmt_bind_param($stmt_admin_login_status, "s", $_GET['emp_id']);
+		mysqli_stmt_execute($stmt_admin_login_status);
+		mysqli_stmt_close($stmt_admin_login_status);
+	}
+
 	/************log************/
 	// mysqli_query($conDB, "INSERT INTO `activity_log` (`user_editor`,`page`,`pg_id`,`reg_date`) VALUES ('".$_COOKIE['user']."','".$pgname."','".$_GET['emp_id']."','".date("c")."')") or die (mysqli_error($conDB));
 	/************log************/

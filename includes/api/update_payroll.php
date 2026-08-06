@@ -11,6 +11,17 @@
 header('Content-Type: application/json');
 // Include the database connection file
 require_once("./../../includes/db.php");
+require_once("./../../includes/session_check.php");
+
+// This endpoint edits payroll records and previously had no auth check at all -
+// anyone reaching the URL, logged in or not, could modify payroll data for any
+// employee. Restrict to system admin / HR Payroll, matching who this is actually
+// meant to be used by (generate_payroll.php).
+if (!(($is_system_admin ?? false) || ($isHR_Payroll ?? false))) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Access denied.']);
+    exit();
+}
 
 function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
     $monthStart = $monthYear . '-01';

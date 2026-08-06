@@ -1,6 +1,15 @@
 <?php
 header('Content-Type: application/json');
 require_once("./../../includes/db.php");
+require_once("./../../includes/session_check.php");
+
+// This endpoint deletes payroll benefit line items and previously had no auth check
+// at all. Restrict to system admin / HR Payroll.
+if (!(($is_system_admin ?? false) || ($isHR_Payroll ?? false))) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Access denied.']);
+    exit();
+}
 
 $input = json_decode(file_get_contents('php://input'), true);
 $benefitId = $input['benefit_id'] ?? '';

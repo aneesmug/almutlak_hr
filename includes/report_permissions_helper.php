@@ -10,6 +10,7 @@ if (!function_exists('get_report_type_labels')) {
         return [
             'employee' => 'Employee Report',
             'vacation' => 'Vacation Report',
+            'rejoin' => 'Employee Rejoin Report',
             'loan' => 'Loan Report',
             'salary' => 'Salary Report',
             'payroll' => 'Payroll Report',
@@ -22,6 +23,7 @@ if (!function_exists('get_report_type_labels')) {
             'terminated_employees' => 'Terminated Employees',
             'eos' => 'End of Service',
             'dept_comparison' => 'Department Comparison Report',
+            'country_company_comparison' => 'Country & Company Comparison Report',
             'custom' => 'Custom Report',
         ];
     }

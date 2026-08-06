@@ -5,7 +5,7 @@
 // =================================================================================
 
 $dashboardLink = 'dashboard.php';
-$dashboardGMLink = 'dashboardgm.php';
+$dashboardGMLink = 'dashboard.php';
 $addNewEmployeeLink = 'add_new_employee.php';
 $allEmployeesLink = 'reg_employee.php';
 $tempContractsLink = 'emp_temp_contant.php';
@@ -41,6 +41,7 @@ $languageLink = 'language.php';
 $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
 $addManualLoanLink = 'add_manual_loan.php';
+$importLoanBalanceLink = 'import_loan_opening_balance.php';
 $employeeSalaryReportLink = 'employee_salary_report.php';
 $employeeEvaluationLink = 'employee_evaluation.php';
 $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
@@ -61,52 +62,12 @@ $loanRejectionReport = 'loan_rejection_report.php';
 // PAGE ACCESS CONTROL
 // =================================================================================
 
-$page_roles = [
-    'dashboard.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Executive_Team', 'Executive_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
-    'dashboardgm.php' => ['GM'],
-    'add_new_employee.php' => ['Administrator', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll', 'HR_Senior_BP'],
-    'reg_employee.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'emp_temp_contant.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'employee_audit_gen.php' => ['Administrator'],
-    'employee_salary_report.php' => ['Administrator'],
-    'generate_payroll.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll',  'HR_Manager'],
-    'all_applied_vac.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
-    'all_applied_business_trip.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_applied_loan.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager','IT_Team_Manager'],
-    'all_settlements.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_payroll_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'rejoin_approvals.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_resignations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'add_manual_loan.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_cars.php' => ['Administrator', 'GR_Officer'],
-    'all_locations.php' => ['Administrator', 'GR_Officer'],
-    'all_machines.php' => ['Administrator', 'GR_Officer'],
-    'asset_inventory.php' => ['Administrator', 'IT_Team', 'IT_Team_Manager', 'GR_Officer'],
-    'all_menu_item.php' => ['Administrator'],
-    'all_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_general_requests.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'send_announcement.php' => ['Administrator'],
-    'vouchers.php' => ['Administrator', 'HR_Senior_BP', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'],
-    'all_user_invoices.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'Finance_Officer', 'Auditor', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Employee', 'HR_Manager', 'Finance_Manager'],
-    'all_users.php' => ['Administrator'],
-    'file_manager.php' => ['Administrator'],
-    'gallery.php' => ['Administrator'],
-    'language.php' => ['Administrator'],
-    'log_activity.php' => ['Administrator'],
-    'view_activity_logs.php' => ['Administrator'],
-    'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'import_iqama_exp.php' => ['Administrator', 'HR_Operations', 'HR_Payroll'],
-    'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
-    'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager','HR_Recruitment','IT_Team_Manager'],
-    'manage_employee_supervisors.php' => ['Administrator', 'HR_Senior_BP'],
-    'manage_holidays.php' => ['Administrator', 'HR_Senior_BP', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
-    'vacation_dates_by_inv.php' => ['Administrator', 'HR_Senior_BP'],
-    'vacation_balance_history.php' => ['Administrator'],
-    'diagnose_double_deduction.php' => ['Administrator'],
-    'fix_double_deduction.php' => ['Administrator'],
-    'app_settings.php' => ['Administrator'],
-];
+require_once __DIR__ . '/page_access_helper.php';
+
+// Per-page allowed-role list, configurable from App Settings > Page Access
+// instead of hardcoded here. Falls back to sane defaults (see
+// get_default_page_access_roles()) for any page an admin hasn't touched yet.
+$page_roles = get_page_access_map($conDB);
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
 
@@ -124,18 +85,37 @@ $isGeneralRequestMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '',
 $page_special_access_bypass = [
     'vacation_balance_history.php' => 'view_vacation_balance_history',
     'app_settings.php' => ['manage_department_settings', 'manage_job_title_settings', 'manage_global_request_blocks'],
+    'all_applied_vac.php' => 'access_all_applied_vac',
+    'all_applied_loan.php' => 'access_all_applied_loan',
+    'all_applied_business_trip.php' => 'access_all_applied_business_trip',
+    'all_resignations.php' => 'access_all_resignations',
+    'all_settlements.php' => 'access_all_settlements',
+    'all_payroll_approvals.php' => 'access_all_payroll_approvals',
+    'payroll_checklist_report.php' => 'access_payroll_checklist_report',
+    'payroll_status_history.php' => 'access_payroll_status_history',
+    'loan_report_details.php' => 'access_loan_report_details',
+    'settlement_status_history.php' => 'access_settlement_status_history',
+    'vacation_status_history.php' => 'access_vacation_status_history',
+    'business_trip_status_history.php' => 'access_business_trip_status_history',
+    'edit_employee.php' => 'access_edit_employee',
 ];
 
-$has_page_special_access_bypass = false;
-if (isset($page_special_access_bypass[$current_page_name])) {
-    $bypassKeys = (array)$page_special_access_bypass[$current_page_name];
-    foreach ($bypassKeys as $bypassKey) {
+// Grant $user_role into $page_roles for any page this employee has an explicit
+// special-access bypass for, so the sidebar link visibility ($can_see_*, built
+// from $page_roles below) and the gate below both reflect the same grant -
+// not just the current page being loaded.
+foreach ($page_special_access_bypass as $bypassPage => $bypassKeys) {
+    foreach ((array)$bypassKeys as $bypassKey) {
         if (user_has_special_access($conDB, $empid ?? '', $bypassKey, $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
-            $has_page_special_access_bypass = true;
+            $page_roles[$bypassPage] = array_unique(array_merge($page_roles[$bypassPage] ?? [], [$user_role]));
             break;
         }
     }
 }
+
+$has_page_special_access_bypass = isset($page_special_access_bypass[$current_page_name])
+    && isset($page_roles[$current_page_name])
+    && in_array($user_role, $page_roles[$current_page_name]);
 
 if ($user_type != 'administrator') {
     // Allow reports page for all non-employee user types.
@@ -145,153 +125,38 @@ if ($user_type != 'administrator') {
         // intentionally bypass role-based restriction: explicit special-access grant
     } elseif (isset($page_roles[$current_page_name])) {
         if (!in_array($user_role, $page_roles[$current_page_name])) {
-            header("Location: dashboard.php");
+            header("Location: error403.php?page=" . urlencode($current_page_name));
             exit();
         }
     }
 }
 
 // --- Role lists for menu visibility ---
-// Updated to include all new specific roles and department-based team roles
-$can_see_employees_group_main = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_all_employees_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_employees_bank_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_new_employee_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Recruitment', 'HR_Payroll'
-];
-
-$can_see_employees_payroll_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Payroll', 'HR_Manager'
-];
-
-$can_see_import_iqama_page = [
-    'Administrator', 'HR_Operations', 'HR_Payroll'
-];
-
-$can_see_applied_vac_page = [
-    // Core leadership & HR
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Manager', 'HR_Team', 'HR_Team_Manager',
-    // Department & functional approvers
-    'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
-    // Asset / compliance related
-    'GR_Officer', 'Auditor'
-];
-
-$can_see_business_trip_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'HR_Manager', 'HR_Team', 'HR_Team_Manager',
-    'DPT_Manager', 'IT_Team', 'IT_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'Finance_Officer', 'Finance_Manager',
-    'GR_Officer', 'Auditor'
-];
-
-$can_see_rejoin_approvals_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager', 'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_loan_approvals_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'DPT_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager','IT_Team_Manager'
-];
-
-$can_see_settlements_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'DPT_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_payroll_approvals_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'DPT_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_resignations_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Payroll','HR_Recruitment',
-    'DPT_Manager', 'IT_Team_Manager',
-    'HR_Team', 'HR_Team_Manager',
-    'HR_Manager'
-];
-
-$can_see_content_approvals_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'HR_Team', 'HR_Team_Manager',
-    'HR_Manager'
-];
-
-$can_see_smart_requests_page = [
-    'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_general_requests_page = ['Administrator'];
-$can_see_announcement_page = ['Administrator'];
-// $can_see_general_requests_page = [
-//     'Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-//     'Finance_Officer', 'Auditor', 'GR_Officer', 'DPT_Manager', 'IT_Team', 'IT_Team_Manager',
-//     'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-//     'HR_Manager', 'Finance_Manager'
-// ];
-
-$can_see_vouchers_page = [
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager'
-];
-
-$can_see_employee_evaluation_page = [
-    'Administrator', 'GM', 'DPT_Manager', 'HR_Manager', 'Finance_Manager',
-    // 'Administrator'
-];
-
-$can_see_evaluations_report_strict = [
-    'Administrator', 'GM', 'HR_Recruitment'
-    // 'Administrator'
-];
-
-$can_see_all_evaluations_report = [
-    'Administrator', 'GM','HR_Manager', 'HR_Recruitment'
-    // 'Administrator'
-];
-
-$can_see_reports_page = [ 
-    'Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll',
-    'Finance_Officer', 'Auditor',
-    'HR_Team', 'HR_Team_Manager', 'Finance_Team', 'Finance_Team_Manager',
-    'HR_Manager', 'Finance_Manager','GM','IT_Team_Manager'
-];
-
-$can_see_asstet_inventory_page = [
-    'Administrator', 'IT_Team', 'IT_Team_Manager', 'GR_Officer'
-];
-
-$can_see_cars_management_page = [
-    'Administrator', 'GR_Officer'
-];
+// Sourced from the same $page_roles map as the redirect guard above (see App
+// Settings > Page Access), so a page's role list drives both whether the URL
+// is reachable AND whether its sidebar link is shown - one config, not two.
+$can_see_employees_group_main = $page_roles['import_loan_opening_balance.php'] ?? [];
+$can_see_all_employees_page = $page_roles['reg_employee.php'] ?? [];
+$can_see_new_employee_page = $page_roles['add_new_employee.php'] ?? [];
+$can_see_employees_payroll_page = $page_roles['generate_payroll.php'] ?? [];
+$can_see_import_iqama_page = $page_roles['import_iqama_exp.php'] ?? [];
+$can_see_applied_vac_page = $page_roles['all_applied_vac.php'] ?? [];
+$can_see_business_trip_page = $page_roles['all_applied_business_trip.php'] ?? [];
+$can_see_rejoin_approvals_page = $page_roles['rejoin_approvals.php'] ?? [];
+$can_see_loan_approvals_page = $page_roles['all_applied_loan.php'] ?? [];
+$can_see_settlements_page = $page_roles['all_settlements.php'] ?? [];
+$can_see_payroll_approvals_page = $page_roles['all_payroll_approvals.php'] ?? [];
+$can_see_resignations_page = $page_roles['all_resignations.php'] ?? [];
+$can_see_content_approvals_page = $page_roles['emp_temp_contant.php'] ?? [];
+$can_see_smart_requests_page = $page_roles['all_requests.php'] ?? [];
+$can_see_general_requests_page = $page_roles['all_general_requests.php'] ?? [];
+$can_see_announcement_page = $page_roles['send_announcement.php'] ?? [];
+$can_see_vouchers_page = $page_roles['vouchers.php'] ?? [];
+$can_see_employee_evaluation_page = $page_roles['employee_evaluation.php'] ?? [];
+$can_see_all_evaluations_report = $page_roles['all_employee_evaluations.php'] ?? [];
+$can_see_reports_page = $page_roles['reports.php'] ?? [];
+$can_see_asstet_inventory_page = $page_roles['asset_inventory.php'] ?? [];
+$can_see_cars_management_page = $page_roles['all_cars.php'] ?? [];
 
 $is_admin = $is_system_admin; 
 $is_gm = ($user_role == 'GM' || $isGM);
@@ -305,7 +170,10 @@ $use_dept_scoped_pending_counts = (
 
 $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see_employees_group_main)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_all_employees_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_employees_bank_page));
+                       !empty(array_intersect([$user_role, $user_type], $can_see_new_employee_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_employees_payroll_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_import_iqama_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page));
 
 $show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_business_trip_page)) ||
@@ -850,7 +718,11 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
 
-                <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page) || $isDeptManager): ?>
+                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                    <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_opening_balance', 'Import Loan Opening Balance') ?></span></a></li>
+                <?php endif; ?>
+
+                <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 
@@ -858,7 +730,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
                 <?php endif; ?>
 
-                <?php if ($isHR || $is_system_admin): ?>
+                <?php if ($is_system_admin || in_array($user_role, $page_roles['manage_holidays.php'] ?? []) || in_array($user_type, $page_roles['manage_holidays.php'] ?? [])): ?>
                     <li><a href="<?= $manageHolidaysLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
                 <?php endif; ?>
 
@@ -870,7 +742,6 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 ): ?>
                     <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa fa-file-chart-line"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
                 <?php endif; */ ?>
-
             </ul>
         </li>
         <?php endif; ?>
@@ -941,18 +812,20 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
             || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
             || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $can_see_vacation_date_editor = in_array($user_role, $page_roles['vacation_dates_by_inv.php'] ?? []) || in_array($user_type, $page_roles['vacation_dates_by_inv.php'] ?? []);
+        $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
         ?>
-        <?php if ($is_system_admin || $user_role === 'HR_Senior_BP' || $can_view_vac_balance_history || $can_access_app_settings): ?>
+        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'true' : 'false') ?>">
                 <?php if ($is_system_admin): ?>
                 <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
                 <?php endif; ?>
-                <?php if ($is_system_admin || $user_role === 'HR_Senior_BP'): ?>
+                <?php if ($is_system_admin || $can_see_vacation_date_editor): ?>
                 <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
                 <?php endif; ?>
-                <?php if ($is_system_admin || $user_role === 'HR_Senior_BP'): ?>
+                <?php if ($is_system_admin || $can_see_manage_supervisors_tool): ?>
                 <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_view_vac_balance_history): ?>
@@ -1011,3 +884,133 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <li><a href="./system_guide.php" target="_blank"><i class="fa fa-book-open-lines"></i><span><?=__('system_guide') ?></span></a></li>
     </ul>
 </div>
+
+<?php
+// Fixed session countdown badge - shown on every page that includes main_menu.php.
+// Remaining time comes straight from the same last_activity/timeout_duration values
+// session_check.php enforces server-side, so this is a live mirror, not a separate clock.
+if (isset($_SESSION['auth_user'], $_SESSION['timeout_duration'], $_SESSION['last_activity'])) {
+    $sessionCountdownRemaining = max(0, (int) $_SESSION['timeout_duration'] - (time() - (int) $_SESSION['last_activity']));
+?>
+<div id="session-countdown-badge" data-remaining="<?= $sessionCountdownRemaining ?>" data-timeout="<?= (int) $_SESSION['timeout_duration'] ?>" title="<?= htmlspecialchars(__('session_time_remaining', 'Session time remaining'), ENT_QUOTES, 'UTF-8') ?>">
+    <i class="fa fa-clock"></i>
+    <span id="session-countdown-text">--:--</span>
+</div>
+<style>
+    #session-countdown-badge {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #1f2937;
+        color: #e5e7eb;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+        user-select: none;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    #session-countdown-badge.session-countdown-warning {
+        background: #b91c1c;
+        color: #fff;
+    }
+    html[dir="rtl"] #session-countdown-badge {
+        right: auto;
+        left: 20px;
+    }
+</style>
+<script>
+(function () {
+    var badge = document.getElementById('session-countdown-badge');
+    if (!badge) {
+        return;
+    }
+    var textEl = document.getElementById('session-countdown-text');
+    var WARNING_THRESHOLD = 300; // last 5 minutes
+    var STORAGE_KEY = 'almutlak_session_countdown';
+
+    // Cross-tab sync: the server session (and its last_activity/timeout) is shared
+    // by every tab of this browser, but each tab only learns about it when THAT tab
+    // loads a page. Without sharing that, an idle tab keeps counting down on stale
+    // info while an active tab in another tab keeps resetting the real deadline.
+    // localStorage + the 'storage' event broadcast the deadline to every open tab
+    // the instant any one of them loads/refreshes, so they all count down together.
+    var serverRemaining = parseInt(badge.getAttribute('data-remaining'), 10) || 0;
+    var timeoutSeconds = parseInt(badge.getAttribute('data-timeout'), 10) || serverRemaining;
+    var thisPageDeadline = Date.now() + serverRemaining * 1000;
+
+    var state = { timeoutSeconds: timeoutSeconds, deadline: thisPageDeadline };
+
+    function readSharedState() {
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.deadline === 'number' && typeof parsed.timeoutSeconds === 'number') {
+                return parsed;
+            }
+        } catch (e) { /* ignore malformed/blocked storage */ }
+        return null;
+    }
+
+    function writeSharedState(s) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+        } catch (e) { /* ignore blocked storage (private mode, quota, etc.) */ }
+    }
+
+    // This page load is a real request, so it reflects the freshest known deadline.
+    // Only defer to an existing shared value if it's later AND was computed under the
+    // SAME timeout setting (e.g. another tab's background request pushed it further
+    // out). If timeoutSeconds differs, the admin changed "Set Session Timeout" since
+    // that value was stored - it's stale and must not override the fresh one, or a
+    // shortened timeout would never visibly take effect until the old deadline passed.
+    var existing = readSharedState();
+    if (existing && existing.timeoutSeconds === state.timeoutSeconds && existing.deadline > state.deadline) {
+        state = existing;
+    } else {
+        writeSharedState(state);
+    }
+
+    function format(totalSeconds) {
+        var h = Math.floor(totalSeconds / 3600);
+        var m = Math.floor((totalSeconds % 3600) / 60);
+        var s = totalSeconds % 60;
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        return h > 0 ? (pad(h) + ':' + pad(m) + ':' + pad(s)) : (pad(m) + ':' + pad(s));
+    }
+
+    function render() {
+        var remaining = Math.max(0, Math.round((state.deadline - Date.now()) / 1000));
+        textEl.textContent = format(remaining);
+        badge.classList.toggle('session-countdown-warning', remaining <= WARNING_THRESHOLD);
+    }
+
+    render();
+
+    // Pick up deadline updates broadcast by any other tab the instant they happen.
+    window.addEventListener('storage', function (e) {
+        if (e.key !== STORAGE_KEY || !e.newValue) return;
+        try {
+            var updated = JSON.parse(e.newValue);
+            if (updated && typeof updated.deadline === 'number') {
+                state = updated;
+                render();
+            }
+        } catch (err) { /* ignore malformed update */ }
+    });
+
+    // Display only - never navigate/reload from this client-side clock. Actual
+    // expiry is enforced by session_check.php on the next real request.
+    setInterval(render, 1000);
+})();
+</script>
+<?php
+}
+?>

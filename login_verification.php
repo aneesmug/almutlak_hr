@@ -13,6 +13,7 @@
  * - FIXED: Removed init.php dependency and added custom language logic to correctly
  * display the user's preferred language during OTP verification.
  ********************************************************************************/
+require_once __DIR__ . '/includes/session_bootstrap.php';
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }

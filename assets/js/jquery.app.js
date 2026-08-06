@@ -2959,13 +2959,27 @@ function loadEmployeeAccess(userId, userType) {
                     $('#allowed_employees').select2('destroy');
                 }
                 
-                // Populate employee options
+                // Populate employee options - each one shows its home department
+                // (and official supervisor, if any) so it's clear when picking an
+                // employee here means sharing them with another department/supervisor
+                // rather than moving them under this user.
+                var ownDeptName = response.own_dept_name || '';
                 var employeeHTML = '';
                 $.each(response.employees, function(index, emp) {
-                    employeeHTML += '<option value="' + emp.id + '">' + emp.name + '</option>';
+                    var label = emp.id + ' - ' + emp.name;
+                    var isCrossDept = false;
+                    if (emp.dept_name) {
+                        label += ' — ' + emp.dept_name;
+                        isCrossDept = ownDeptName !== '' && emp.dept_name !== ownDeptName;
+                    }
+                    if (emp.supervisor_name) {
+                        label += ' (' + (__('supervisor') || 'Supervisor') + ': ' + emp.supervisor_name + ')';
+                    }
+                    var crossAttr = isCrossDept ? ' data-cross-dept="1"' : '';
+                    employeeHTML += '<option value="' + emp.id + '"' + crossAttr + '>' + escapeHtml(label) + '</option>';
                 });
                 $('#allowed_employees').html(employeeHTML);
-                
+
                 // Initialize Select2 with search functionality
                 $('#allowed_employees').select2({
                     placeholder: __('select_employees') || 'Search and select employees...',
@@ -2975,9 +2989,55 @@ function loadEmployeeAccess(userId, userType) {
                     language: {
                         searching: function () { return __('searching') || 'Searching...'; },
                         noResults: function () { return __('no_results_found') || 'No results found'; }
+                    },
+                    templateResult: function(option) {
+                        if (!option.id) return option.text;
+                        var $el = $(option.element);
+                        if ($el.data('cross-dept')) {
+                            return $('<span><i class="fa fa-random text-warning mr-1" title="' +
+                                escapeHtml(__('different_department') || 'Different department') + '"></i>' +
+                                escapeHtml(option.text) + '</span>');
+                        }
+                        return option.text;
                     }
                 });
-                
+
+                // Note explaining the department/supervisor tags shown above, and
+                // flagging that this user currently has employees assigned outside
+                // their own department.
+                var $empNote = $('#employee-access-group .employee-cross-dept-summary');
+                if ($empNote.length === 0) {
+                    $empNote = $('<small class="form-text text-warning d-block mt-1 employee-cross-dept-summary"></small>');
+                    $('#employee-access-group #allowed_employees').closest('.form-group, #employee-access-group').find('.form-text').first().before($empNote);
+                }
+
+                // Separate note: this account's own emp_id may already directly
+                // supervise employees via the org chart - that access exists
+                // regardless of what's picked below, so make it visible here.
+                var $ownReportsNote = $('#employee-access-group .employee-own-reports-note');
+                if ($ownReportsNote.length === 0) {
+                    $ownReportsNote = $('<small class="form-text text-info d-block mt-1 employee-own-reports-note"></small>');
+                    $empNote.after($ownReportsNote);
+                }
+                if (response.own_report_count > 0) {
+                    $ownReportsNote.text((__('employee_access_own_reports_note') ||
+                        'This user already directly supervises {count} employees (in addition to anything selected above).'
+                    ).replace('{count}', response.own_report_count)).show();
+                } else {
+                    $ownReportsNote.hide();
+                }
+                var crossDeptCount = response.employees.filter(function(emp) {
+                    return ownDeptName !== '' && emp.dept_name && emp.dept_name !== ownDeptName &&
+                        response.allowed_employees && response.allowed_employees.indexOf(String(emp.id)) !== -1;
+                }).length;
+                if (crossDeptCount > 0) {
+                    $empNote.text((__('employee_access_cross_dept_warning') ||
+                        '{count} of the selected employees belong to a different department/supervisor - this user will have additional access to them alongside their existing supervisor.'
+                    ).replace('{count}', crossDeptCount)).show();
+                } else {
+                    $empNote.hide();
+                }
+
                 // Set current selections
                 if (response.allowed_employees && response.allowed_employees.length > 0) {
                     // Delay value setting to ensure DOM is ready
@@ -5881,6 +5941,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
     var country = $(this).data('country');
     var currentBalance = $(this).data('balance') || 0;
     var allowEmergencyOverride = $(this).data('allow-emergency') == 1;
+    var allowVacSalaryBelowMinOverride = $(this).data('allow-vac-salary-below-min') == 1;
     var blockAnnual = $(this).data('block-annual') == 1;
     var blockEmergency = $(this).data('block-emergency') == 1;
     var blockLocal = $(this).data('block-local') == 1;
@@ -5961,14 +6022,14 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     cancelButtonColor: APP_COLORS.secondary,
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
+                        openVacationApplyModal(empid, deptId, country, currentBalance, shouldForceEmergency, res.active_return_date, !shouldForceEmergency, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride);
                     }
                 });
                 return;
             }
 
             // Proceed to open the modal as usual, passing active_return_date if available
-            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null, false, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed);
+            openVacationApplyModal(empid, deptId, country, currentBalance, false, res.active_return_date || null, false, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride);
         }).fail(function(jqXHR){
             let msg = 'Unable to verify eligibility.';
             try { let j = JSON.parse(jqXHR.responseText); if (j.message) msg = j.message; } catch(e) {}
@@ -5980,7 +6041,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
 });
 
 // Extracted function to open the Apply Vacation modal after eligibility check
-function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed) {
+function openVacationApplyModal(empid, deptId, country, currentBalance, forceEmergency, activeReturnDate, preferAnotherTitle, allowEmergencyOverride, blockAnnual, blockEmergency, blockLocal, blockEncashed, allowVacSalaryBelowMinOverride) {
     currentBalance = currentBalance || 0;
     forceEmergency = forceEmergency || false;
     activeReturnDate = activeReturnDate || null;
@@ -5990,6 +6051,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
     blockEmergency = blockEmergency || false;
     blockLocal = blockLocal || false;
     blockEncashed = blockEncashed || false;
+    allowVacSalaryBelowMinOverride = allowVacSalaryBelowMinOverride || false;
 
     const modalTitleText = forceEmergency
         ? __('apply_emergency_vacation')
@@ -6198,15 +6260,13 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             }
 
             function updateLocalVacationSalaryVisibility() {
-                const selectedVac = $('input[name="vac_type"]:checked').val();
                 const selectedFly = $('input[name="fly_type"]:checked').val();
 
-                if (!(selectedVac === 'Local Vacation' && selectedFly === 'annual')) {
+                // Applies to any annual vacation (Fly or Local Vacation) - the day-count
+                // threshold gates the choice itself, not just the Local Vacation/Saudi case.
+                if (selectedFly !== 'annual') {
                     return;
                 }
-
-                // Local annual must always show explicit vacation salary payment choice.
-                $('#salaryTypeSection').removeClass('d-none');
 
                 const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
                 const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
@@ -6216,11 +6276,18 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
                 }
 
-                if (localVacationDays > 0 && localVacationDays <= 5) {
-                    $('#salary_with_payroll').prop('checked', true);
-                    $('#salary_with_eos').prop('checked', false).prop('disabled', true);
-                } else {
+                // Below 20 days, the payroll-vs-end-of-service choice has no effect on payroll
+                // (matches matchesLocalAnnualPayrollRemovalRule()'s minimum_days_exclusive=20
+                // rule server-side), so don't ask - keep the section hidden. An employee with
+                // the 'allow_vacation_salary_below_min_days' override always sees the choice.
+                const meetsMinimumDays = localVacationDays >= 20 || allowVacSalaryBelowMinOverride;
+
+                if (meetsMinimumDays) {
+                    $('#salaryTypeSection').removeClass('d-none');
                     $('#salary_with_eos').prop('disabled', false);
+                } else {
+                    $('#salaryTypeSection').addClass('d-none');
+                    $('#salary_with_payroll, #salary_with_eos').prop('checked', false).prop('disabled', false);
                 }
             }
 
@@ -6245,6 +6312,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 $('#departure_date').datepicker('setEndDate', arrivalDate);
             });
 
+            // Replacement Person is required only for Sales (dept 14) and Finance (dept 2)
+            const requiresReplacement = (String(deptId) === '2' || String(deptId) === '14');
+            $('#replacementRequiredMark').toggleClass('d-none', !requiresReplacement);
+
             // Original replacement person loader
             $("#replacement_per").select2({
                 dropdownParent: $(swalModal) // Attach to modal
@@ -6256,49 +6327,34 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 data: {ajaxType: "emp_department", dept: deptId, exclude_emp_id: empid, for_replacement: 1},
                 success: function(res) {
                     if (res.status == 200) {
-                        let options = '';
                         const currentLang = getCurrentLanguage();
                         let pendingTranslations = res.data.length;
-                        
+
                         for (let i in res.data) {
                             const emp = res.data[i];
                             // Defensive: ensure name has at least two parts
                             const nameParts = emp.name ? emp.name.split(' ') : [];
                             const displayName = nameParts.length >= 2 ? (nameParts[0] + ' ' + nameParts[1]) : emp.name;
-                            
+
                             // Translate the display name
                             translateName(displayName, 'en', currentLang, function(translatedName) {
                                 // Update the option with translated name
                                 const optionHtml = `<option value="${emp.emp_id}">${translatedName}</option>`;
                                 // Store in data attribute for later use
                                 $(`#replacement_per`).append(optionHtml);
-                                
+
                                 pendingTranslations--;
                                 if (pendingTranslations === 0) {
-                                    // All translations done, add NONE option
-                                    $('#replacement_per').append(`<option value="N/A">${__('no_replacement_available')}</option>`);
                                     $("#replacement_per").select2('destroy').select2({
                                         dropdownParent: $(swalModal)
                                     });
                                 }
                             });
                         }
-                        
-                        if (res.data.length === 0) {
-                            // No available replacement persons
-                            $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
-                        }
-                    } else {
-                        // Non-200 status, still provide a NONE fallback
-                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
                     }
                 },
                 error: function(j, e) {
                     errorHandling(j, e);
-                    // On error also ensure user can proceed without replacement
-                    if (!$('#replacement_per option').length) {
-                        $('#replacement_per').append(`<option value="N/A" selected>${__('no_replacement_available')}</option>`);
-                    }
                 },
             });
 
@@ -6440,11 +6496,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             $('#replacementSection, #date_select').removeClass('d-none');
                             // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                             if (flyVal === 'annual') {
-                                if (vacValue === 'Local Vacation') {
-                                    updateLocalVacationSalaryVisibility();
-                                } else {
-                                    $('#salaryTypeSection').removeClass('d-none');
-                                }
+                                updateLocalVacationSalaryVisibility();
                                 // Show flight dates AND remarks ONLY for Fly + Annual (NOT Local Vacation) and NOT for country 191 (Saudi Arabia)
                                 if (vacValue === 'Fly' && country !== '191') {
                                     $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -6465,11 +6517,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 $('#replacementSection, #date_select').removeClass('d-none');
                                 // NEW: Show salary type selection for BOTH Fly + Annual AND Local Vacation + Annual
                                 if (flyVal === 'annual') {
-                                    if (currentVacValue === 'Local Vacation') {
-                                        updateLocalVacationSalaryVisibility();
-                                    } else {
-                                        $('#salaryTypeSection').removeClass('d-none');
-                                    }
+                                    updateLocalVacationSalaryVisibility();
                                     // Show flight dates AND remarks ONLY for Fly + Annual and NOT for country 191
                                     if (currentVacValue === 'Fly' && country !== '191') {
                                         $('#flightDatesSection, #notesSection').removeClass('d-none');
@@ -6587,7 +6635,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         Swal.showValidationMessage(__('start_return_date_required_validation'));
                         return false;
                     }
-                    if (!replacement) {
+                    const replacementRequired = (String(deptId) === '2' || String(deptId) === '14');
+                    if (replacementRequired && !replacement) {
                         Swal.showValidationMessage(__('replacement_person_required_validation'));
                         return false;
                     }
@@ -8841,7 +8890,7 @@ function vacationApply_HTML(country) {
             <div class="vacation-card d-none" id="replacementSection">
                 <div class="vacation-card-header">
                     <i class="fa fa-user-friends"></i>
-                    ${__('replacement_person')}<span class="text-danger">*</span>
+                    ${__('replacement_person')}<span class="text-danger d-none" id="replacementRequiredMark">*</span>
                 </div>
                 <select class="form-control form-control-modern" name="replacement_per" id="replacement_per">
                     <option value="">${__('select')}</option>

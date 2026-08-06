@@ -1,6 +1,15 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
+
+// This endpoint changes an employee's payment type (bank/cash/hold) and previously
+// had no auth check at all. Restrict to system admin / HR Payroll.
+if (!(($is_system_admin ?? false) || ($isHR_Payroll ?? false))) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Access denied.']);
+    exit();
+}
 
 try {
     // Read JSON body

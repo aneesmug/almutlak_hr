@@ -1594,7 +1594,11 @@ function cancel_loan_admin() {
     global $conDB;
     if (session_status() == PHP_SESSION_NONE) session_start();
     $current_user_id = $_SESSION['empid'] ?? '';
-    $session_user_type = $_SESSION['type'] ?? '';
+    // NOTE: was reading $_SESSION['type'], which is never set anywhere in this codebase
+    // (the correct key is 'user_type') - that always evaluated to '', so $is_admin was
+    // always false here and real system admins got "Access denied" cancelling loans
+    // unless separately granted the 'cancel_loan_requests' special access.
+    $session_user_type = $_SESSION['user_type'] ?? '';
     $is_admin = (strtolower(trim((string)$session_user_type)) === 'administrator');
 
     require_once __DIR__ . '/../special_access_helper.php';

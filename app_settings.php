@@ -139,6 +139,89 @@
              border-radius: .25rem;
              z-index: 1050; /* Ensure dropdown appears above other content */
         }
+
+        /* Special Access - grouped-by-category checkbox grid (used both inline and inside the Swal edit modal) */
+        .special-access-category {
+            border: 1px solid #e9ecef;
+            border-radius: .5rem;
+            overflow: hidden;
+            background: #fff;
+        }
+        .special-access-category-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f4f6f9;
+            padding: .55rem .9rem;
+            border-bottom: 1px solid #e9ecef;
+            font-size: .92rem;
+        }
+        .special-access-category-header i {
+            color: #4fa0e3;
+            width: 18px;
+            text-align: center;
+        }
+        .special-access-category-body {
+            padding: .75rem .9rem .25rem;
+        }
+        /* CSS grid instead of Bootstrap's .row/.col-* - avoids the negative-margin
+           overflow that .row causes inside a constrained container like a Swal popup. */
+        .special-access-checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: .35rem 1rem;
+        }
+        .special-access-item {
+            min-width: 0;
+        }
+        .special-access-item .custom-control-label {
+            word-break: break-word;
+        }
+        .special-access-cat-count {
+            font-weight: 600;
+            transition: background-color .15s ease, color .15s ease;
+        }
+        .special-access-user-card {
+            border: 1px solid #e9ecef;
+            border-left: 3px solid #4fa0e3;
+            border-radius: .5rem;
+            padding: .9rem 1rem;
+            margin-bottom: .75rem;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
+            transition: box-shadow .15s ease;
+        }
+        .special-access-user-card:hover {
+            box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
+        }
+        .special-access-empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #8792a2;
+        }
+        .special-access-empty-state i {
+            font-size: 2rem;
+            margin-bottom: .5rem;
+            display: block;
+            color: #c3cad6;
+        }
+        .special-access-group-label {
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #8792a2;
+            font-weight: 700;
+            margin: .4rem 0 .25rem;
+        }
+        .special-access-group-label:first-child {
+            margin-top: 0;
+        }
+        /* Distinguishes Report Access badges (a different underlying map) from ability
+           badges (badge-info/blue) at a glance in the assigned-users list. */
+        .badge-purple {
+            background-color: #7c5cf0;
+            color: #fff;
+        }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -207,6 +290,10 @@
                                     <!-- Persistent (not tab-content) so it survives switching to another
                                          settings tab before Save - see loadSettings()/renderSpecialAccessSettings(). -->
                                     <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
+                                    <!-- Report access is now managed from inside the Special Access tab too (see
+                                         "Report Access" group in renderSpecialAccessSettings) instead of its own tab,
+                                         so this hidden field must survive tab switches the same way. -->
+                                    <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
 
                                     <div class="form-group text-right m-t-20">
                                         <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">
@@ -256,11 +343,8 @@
         let appSettings = [];
         let groupedSettings = {};
         let fullAccessCandidates = null;
-        let reportPermissionUsers = null;
         let specialAccessUsersRaw = null;
-        let reportPermissionEligibleUsers = [];
         let reportPermissionMap = {};
-        let currentReportPermissionEmpId = '';
         let specialAccessEligibleUsers = [];
         let specialAccessMap = {};
         let currentSpecialAccessEmpId = '';
@@ -282,6 +366,15 @@
                 .split(',')
                 .map(v => v.trim())
                 .filter(v => v !== '');
+        }
+
+        // 'hr_payroll' -> 'Hr Payroll' for display (user_type values are DB slugs, not labels).
+        function formatRoleLabel(role) {
+            return String(role || '')
+                .split('_')
+                .filter(Boolean)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
         }
 
         function escapeHtml(value) {
@@ -309,6 +402,8 @@
                 { value: 'terminated_employees', label: '<?= __('terminated_employees') ?>' },
                 { value: 'eos', label: '<?= __('calculate_end_of_service') ?>' },
                 { value: 'dept_comparison', label: '<?= __('dept_comparison_report') ?>' },
+                { value: 'rejoin', label: '<?= __('employee_rejoin_report', 'Employee Rejoin Report') ?>' },
+                { value: 'country_company_comparison', label: '<?= __('country_company_comparison_report', 'Country & Company Comparison Report') ?>' },
                 { value: 'custom', label: '<?= __('custom_report') ?>' }
             ];
         }
@@ -319,6 +414,187 @@
                 { value: '<?= $key ?>', label: '<?= addslashes($label) ?>' },
                 <?php endforeach; ?>
             ];
+        }
+
+        // Purely presentational grouping (icon + ordered keys) for the Special Access
+        // checkbox grid - mirrors includes/special_access_helper.php::get_special_access_categories()
+        // so both stay in sync. Any catalog key not listed in any category here still shows,
+        // just bucketed under a trailing "Other" group by buildSpecialAccessGroupedHtml().
+        function getSpecialAccessCategories() {
+            return [
+                <?php foreach (get_special_access_categories() as $categoryName => $meta): ?>
+                { name: '<?= addslashes($categoryName) ?>', icon: '<?= addslashes($meta['icon']) ?>', keys: <?= json_encode(array_values($meta['keys'])) ?> },
+                <?php endforeach; ?>
+            ];
+        }
+
+        // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
+        // inline "select a user" panel and the SweetAlert2 edit modal. idPrefix keeps
+        // checkbox/count element ids unique between the two contexts.
+        function buildSpecialAccessGroupedHtml(idPrefix, selectedSet) {
+            const categories = getSpecialAccessCategories();
+            const catalog = getSpecialAccessCatalog();
+            const labelByKey = new Map(catalog.map(item => [item.value, item.label]));
+            const placedKeys = new Set();
+
+            function renderCategoryBlock(catIndex, name, icon, keys) {
+                let block = `<div class="special-access-category mb-3" data-cat-index="${catIndex}">`;
+                block += `<div class="special-access-category-header">`;
+                block += `<span><i class="fa ${icon}"></i> <strong>${escapeHtml(name)}</strong></span>`;
+                block += `<span class="badge badge-light special-access-cat-count" id="${idPrefix}-catcount-${catIndex}" data-total="${keys.length}">0/${keys.length}</span>`;
+                block += `</div>`;
+                block += `<div class="special-access-category-body"><div class="special-access-checkbox-grid">`;
+                keys.forEach(key => {
+                    const label = labelByKey.get(key) || key;
+                    const checkboxId = `${idPrefix}-${key}`;
+                    block += `
+                        <div class="special-access-item" data-search-label="${escapeHtml(label).toLowerCase()}">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${escapeHtml(key)}" data-access-key="${escapeHtml(key)}" data-cat-index="${catIndex}" ${selectedSet.has(key) ? 'checked' : ''}>
+                                <label class="custom-control-label" for="${checkboxId}">${escapeHtml(label)}</label>
+                            </div>
+                        </div>
+                    `;
+                });
+                block += `</div></div></div>`;
+                return block;
+            }
+
+            let html = '';
+            categories.forEach((cat, catIndex) => {
+                const keysInCat = cat.keys.filter(k => labelByKey.has(k));
+                if (!keysInCat.length) return;
+                keysInCat.forEach(k => placedKeys.add(k));
+                html += renderCategoryBlock(catIndex, cat.name, cat.icon, keysInCat);
+            });
+
+            const uncategorized = catalog.filter(item => !placedKeys.has(item.value)).map(item => item.value);
+            if (uncategorized.length) {
+                html += renderCategoryBlock(categories.length, '<?= __('other', 'Other') ?>', 'fa-ellipsis-h', uncategorized);
+            }
+            return html;
+        }
+
+        // Recomputes each category's "checked/total" badge after checkboxes change.
+        function updateSpecialAccessCategoryCounts(container) {
+            if (!container) return;
+            container.querySelectorAll('.special-access-category').forEach(block => {
+                const catIndex = block.getAttribute('data-cat-index');
+                const countBadge = block.querySelector(`.special-access-cat-count[id$="-catcount-${catIndex}"]`);
+                if (!countBadge) return;
+                const total = parseInt(countBadge.getAttribute('data-total'), 10) || 0;
+                const checked = block.querySelectorAll('.special-access-checkbox:checked').length;
+                countBadge.textContent = `${checked}/${total}`;
+                countBadge.classList.toggle('badge-success', checked > 0);
+                countBadge.classList.toggle('badge-light', checked === 0);
+            });
+        }
+
+        // Report Access lives inside the Special Access editor (both the inline panel and
+        // the Swal edit modal) as one more grouped block, but it's backed by its own map
+        // (reportPermissionMap / report_visibility_by_user) with different semantics: no
+        // explicit entry for a user means "sees ALL report types" (backward-compatible
+        // default from get_allowed_report_types_for_user()), not "sees none" like every
+        // other Special Access key. That's why it gets its own builder/wiring instead of
+        // reusing buildSpecialAccessGroupedHtml - the "no entry yet" starting state, the
+        // Custom/All(default) mode badge, and the "Reset to Default" action are all specific
+        // to this map's semantics. It renders nothing actionable for plain employees, since
+        // get_report_permission_users() never included them in the first place (report
+        // pages aren't reachable by that role).
+        function buildReportAccessBlockHtml(idPrefix, empId) {
+            const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === empId);
+            const userType = user ? String(user.user_type || '').trim().toLowerCase() : '';
+
+            let html = `<div class="special-access-category mb-3" data-report-access-block="1">`;
+            html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong><?= __('report_access', 'Report Access') ?></strong></span>`;
+
+            if (userType === 'employee') {
+                html += `<span class="badge badge-light"><?= __('not_applicable', 'N/A') ?></span></div>`;
+                html += `<div class="special-access-category-body"><p class="text-muted mb-0" style="font-size:.85rem;"><?= __('report_access_not_applicable_for_employees', "Report access doesn't apply to plain employee accounts.") ?></p></div></div>`;
+                return html;
+            }
+
+            const catalog = getReportTypeCatalog();
+            const allTypeValues = catalog.map(item => item.value);
+            const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
+            const selectedSet = new Set(hasExplicit ? normalizeReportTypeList(reportPermissionMap[empId]) : allTypeValues);
+
+            html += `<span class="badge ${hasExplicit ? 'badge-info' : 'badge-light'}" id="${idPrefix}-report-mode">${hasExplicit ? '<?= __('custom', 'Custom') ?>' : '<?= __('all_default', 'All (default)') ?>'}</span></div>`;
+            html += `<div class="special-access-category-body">`;
+            html += `<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">`;
+            html += `<small class="text-muted"><?= __('check_reports_user_can_view') ?></small>`;
+            html += `<div>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-primary mr-1 report-access-select-all" data-target="${idPrefix}"><?= __('select_all') ?></button>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-secondary mr-1 report-access-clear-all" data-target="${idPrefix}"><?= __('clear_all') ?></button>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-warning report-access-reset-default" data-target="${idPrefix}"><?= __('reset_default') ?></button>`;
+            html += `</div></div>`;
+            html += `<div class="special-access-checkbox-grid">`;
+            catalog.forEach(item => {
+                const checkboxId = `${idPrefix}-report-${item.value}`;
+                html += `
+                    <div class="special-access-item" data-search-label="${escapeHtml(item.label).toLowerCase()}">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input report-type-checkbox" id="${checkboxId}" value="${escapeHtml(item.value)}" data-report-type="${escapeHtml(item.value)}" data-target="${idPrefix}" ${selectedSet.has(item.value) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div></div>`;
+            return html;
+        }
+
+        // Wires the checkboxes/buttons rendered by buildReportAccessBlockHtml. onChange(mode,
+        // values) fires on every change with mode 'custom' (values = the checked list) or
+        // 'default' (Reset to Default was clicked) - the caller decides whether that means
+        // "write straight to reportPermissionMap" (inline panel) or "hold until Save" (modal).
+        function wireReportAccessBlock(root, idPrefix, onChange) {
+            const modeBadge = root.querySelector(`#${idPrefix}-report-mode`);
+            function setMode(isCustom) {
+                if (!modeBadge) return;
+                modeBadge.textContent = isCustom ? '<?= __('custom', 'Custom') ?>' : '<?= __('all_default', 'All (default)') ?>';
+                modeBadge.classList.toggle('badge-info', isCustom);
+                modeBadge.classList.toggle('badge-light', !isCustom);
+            }
+            function currentChecked() {
+                return Array.from(root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`))
+                    .filter(el => el.checked)
+                    .map(el => el.value);
+            }
+
+            root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(cb => {
+                cb.addEventListener('change', () => {
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            });
+
+            const selectAllBtn = root.querySelector(`.report-access-select-all[data-target="${idPrefix}"]`);
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = true; });
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            }
+
+            const clearAllBtn = root.querySelector(`.report-access-clear-all[data-target="${idPrefix}"]`);
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = false; });
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            }
+
+            const resetBtn = root.querySelector(`.report-access-reset-default[data-target="${idPrefix}"]`);
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = true; });
+                    setMode(false);
+                    onChange('default', getReportTypeCatalog().map(item => item.value));
+                });
+            }
         }
 
         function parseSpecialAccessMap(rawValue) {
@@ -553,12 +829,6 @@
             // Special handling for departments configuration
             if (normalizedGroupName === 'departments') {
                 renderDepartmentsSettings();
-                return;
-            }
-
-            // Special handling for report permissions configuration
-            if (normalizedGroupName === 'report_permissions') {
-                renderReportPermissionsSettings();
                 return;
             }
 
@@ -1192,38 +1462,9 @@
             });
         }
 
-        async function fetchReportPermissionUsers() {
-            if (Array.isArray(reportPermissionUsers)) {
-                return reportPermissionUsers;
-            }
-
-            try {
-                const response = await fetch('./includes/settings_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_report_permission_users' })
-                });
-
-                if (!response.ok) {
-                    throw new Error('<?= __('failed_to_load_users') ?>');
-                }
-
-                const data = await response.json();
-                if (!data.success || !Array.isArray(data.users)) {
-                    throw new Error(data.message || '<?= __('failed_to_load_users') ?>');
-                }
-
-                reportPermissionUsers = data.users;
-                return reportPermissionUsers;
-            } catch (error) {
-                console.error('Failed loading report permission users:', error);
-                reportPermissionUsers = [];
-                return reportPermissionUsers;
-            }
-        }
-
-        // Same as fetchReportPermissionUsers(), but includes user_type='employee' accounts -
-        // Special Access is the mechanism for unlocking a normally-blocked page for one employee.
+        // Superset of the old report-permission user list (includes user_type='employee'
+        // accounts too) - Special Access is also the mechanism for unlocking a normally-blocked
+        // page for one employee, and Report Access now piggybacks on this same picker/list.
         async function fetchSpecialAccessUsers() {
             if (Array.isArray(specialAccessUsersRaw)) {
                 return specialAccessUsersRaw;
@@ -1261,274 +1502,10 @@
             }
         }
 
-        function renderAssignedUsersSummary(users) {
-            const container = document.getElementById('report-assigned-users-list');
-            if (!container) return;
-
-            const userMap = new Map((users || []).map(user => [String(user.emp_id || ''), user]));
-            const catalogMap = new Map(getReportTypeCatalog().map(item => [item.value, item.label]));
-            const assignedEmpIds = Object.keys(reportPermissionMap || {});
-
-            if (!assignedEmpIds.length) {
-                container.innerHTML = `<p class="text-muted mb-0"><?= __('no_assigned_users_yet') ?></p>`;
-                return;
-            }
-
-            let html = '<div class="table-responsive">';
-            html += '<table class="table table-sm table-bordered mb-0">';
-            html += '<thead class="thead-light"><tr>';
-            html += `<th><?= __('user') ?></th>`;
-            html += `<th><?= __('allowed_reports') ?></th>`;
-            html += `<th style="width:140px;"><?= __('actions') ?></th>`;
-            html += '</tr></thead><tbody>';
-
-            assignedEmpIds.forEach(empId => {
-                const user = userMap.get(empId);
-                const name = user ? ((user.name || '').trim() || empId) : empId;
-                const role = user ? ((user.user_type || '').trim()) : '';
-                const allowedTypes = normalizeReportTypeList(reportPermissionMap[empId]);
-
-                let reportsHtml = '';
-                if (!allowedTypes.length) {
-                    reportsHtml = `<span class="badge badge-danger"><?= __('no_reports_allowed') ?></span>`;
-                } else {
-                    reportsHtml = allowedTypes.map(type => {
-                        const label = catalogMap.get(type) || type;
-                        return `<span class="badge badge-info mr-1 mb-1">${escapeHtml(label)}</span>`;
-                    }).join('');
-                }
-
-                html += '<tr>';
-                html += `<td><strong>${escapeHtml(name)}</strong><br><small class="text-muted">${escapeHtml(empId)}${role ? ' - ' + escapeHtml(role) : ''}</small></td>`;
-                html += `<td>${reportsHtml}</td>`;
-                html += `<td>
-                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-user" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-user mt-1" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-trash-alt"></i></button>
-                </td>`;
-                html += '</tr>';
-            });
-
-            html += '</tbody></table></div>';
-            container.innerHTML = html;
-
-            container.querySelectorAll('.edit-assigned-user').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const empId = String(this.dataset.empId || '');
-                    const select = document.getElementById('report-permission-user-select');
-                    if (!select || !empId) return;
-                    select.value = empId;
-                    $(select).trigger('change');
-                });
-            });
-
-            container.querySelectorAll('.remove-assigned-user').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const empId = String(this.dataset.empId || '');
-                    if (!empId) return;
-                    Swal.fire({
-                        title: '<?= __('remove_user_assignment') ?>',
-                        text: '<?= __('this_will_remove_custom_report_permissions_for_this_user') ?>',
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: '<?= __('yes_remove_it') ?>',
-                        cancelButtonText: '<?= __('cancel') ?>'
-                    }).then((result) => {
-                        if (!result.isConfirmed) return;
-
-                        delete reportPermissionMap[empId];
-                        updateReportPermissionHiddenValue();
-                        renderAssignedUsersSummary(reportPermissionEligibleUsers);
-
-                        const select = document.getElementById('report-permission-user-select');
-                        if (select && select.value === empId) {
-                            renderReportPermissionCheckboxes(empId);
-                        }
-                    });
-                });
-            });
-        }
-
-        function renderReportPermissionCheckboxes(empId) {
-            const container = document.getElementById('report-permission-checkboxes');
-            if (!container) return;
-
-            currentReportPermissionEmpId = String(empId || '').trim();
-
-            if (!currentReportPermissionEmpId) {
-                container.innerHTML = '<p class="text-muted mb-0"><?= __('select_user_to_configure_report_access') ?></p>';
-                renderAssignedUsersSummary(reportPermissionEligibleUsers);
-                return;
-            }
-
-            const catalog = getReportTypeCatalog();
-            const allTypeValues = catalog.map(item => item.value);
-            const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, currentReportPermissionEmpId);
-            const selectedTypes = hasExplicit
-                ? normalizeReportTypeList(reportPermissionMap[currentReportPermissionEmpId])
-                : allTypeValues;
-            const selectedSet = new Set(selectedTypes);
-            const safeEmpId = String(currentReportPermissionEmpId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
-
-            let html = '<div class="d-flex justify-content-between align-items-center mb-2">';
-            html += '<small class="text-muted"><?= __('check_reports_user_can_view') ?></small>';
-            html += '<div>';
-            html += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="report-select-all-btn"><?= __('select_all') ?></button>';
-            html += '<button type="button" class="btn btn-sm btn-outline-secondary mr-1" id="report-clear-all-btn"><?= __('clear_all') ?></button>';
-            html += '<button type="button" class="btn btn-sm btn-outline-warning" id="report-reset-default-btn"><?= __('reset_default') ?></button>';
-            html += '</div></div>';
-            html += '<div class="row">';
-
-            catalog.forEach(item => {
-                const checkboxId = `report-type-${safeEmpId}-${item.value}`;
-                html += `
-                    <div class="col-md-6 mb-2">
-                        <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input report-type-checkbox" id="${checkboxId}" value="${item.value}" data-report-type="${item.value}">
-                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += '</div>';
-            container.innerHTML = html;
-
-            // Force checked state after DOM insertion to avoid stale browser form-state reuse.
-            container.querySelectorAll('.report-type-checkbox').forEach(checkbox => {
-                const reportType = checkbox.getAttribute('data-report-type') || '';
-                checkbox.checked = selectedSet.has(reportType);
-            });
-
-            function persistFromCheckboxes() {
-                const activeEmpId = String(currentReportPermissionEmpId || '').trim();
-                if (!activeEmpId) return;
-                const checkedValues = Array.from(container.querySelectorAll('.report-type-checkbox:checked'))
-                    .map(el => el.value);
-                reportPermissionMap[activeEmpId] = normalizeReportTypeList(checkedValues);
-                updateReportPermissionHiddenValue();
-                renderAssignedUsersSummary(reportPermissionEligibleUsers);
-            }
-
-            container.querySelectorAll('.report-type-checkbox').forEach(checkbox => {
-                checkbox.addEventListener('change', persistFromCheckboxes);
-            });
-
-            const selectAllBtn = document.getElementById('report-select-all-btn');
-            const clearAllBtn = document.getElementById('report-clear-all-btn');
-            const resetDefaultBtn = document.getElementById('report-reset-default-btn');
-
-            if (selectAllBtn) {
-                selectAllBtn.addEventListener('click', function() {
-                    container.querySelectorAll('.report-type-checkbox').forEach(el => { el.checked = true; });
-                    persistFromCheckboxes();
-                });
-            }
-
-            if (clearAllBtn) {
-                clearAllBtn.addEventListener('click', function() {
-                    container.querySelectorAll('.report-type-checkbox').forEach(el => { el.checked = false; });
-                    persistFromCheckboxes();
-                });
-            }
-
-            if (resetDefaultBtn) {
-                resetDefaultBtn.addEventListener('click', function() {
-                    const activeEmpId = String(currentReportPermissionEmpId || '').trim();
-                    if (!activeEmpId) return;
-                    delete reportPermissionMap[activeEmpId];
-                    updateReportPermissionHiddenValue();
-                    renderReportPermissionCheckboxes(activeEmpId);
-                });
-            }
-
-            renderAssignedUsersSummary(reportPermissionEligibleUsers);
-        }
-
-        async function renderReportPermissionsSettings() {
-            settingsContainer.innerHTML = `
-                <div class="tab-pane active" id="group-report-permissions" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0"><?= __('report_access_by_user') ?></h5>
-                    </div>
-                    <p class="text-muted mb-3"><?= __('select_user_and_enable_the_reports_they_are_allowed_to_view') ?></p>
-                    <div class="form-group">
-                        <label for="report-permission-user-select"><?= __('select_user') ?></label>
-                        <select id="report-permission-user-select" class="form-control select2"></select>
-                    </div>
-                    <div id="report-permission-checkboxes" class="border rounded p-3 bg-light">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2"><?= __('loading') ?></span>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <h6 class="mb-2"><?= __('assigned_users') ?></h6>
-                        <div id="report-assigned-users-list" class="border rounded p-3 bg-white">
-                            <div class="text-center text-muted">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <span class="ml-2"><?= __('loading') ?></span>
-                            </div>
-                        </div>
-                    </div>
-                    <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
-                </div>
-            `;
-
-            const setting = appSettings.find(s => s.setting_name === 'report_visibility_by_user');
-            reportPermissionMap = parseReportPermissionMap(setting ? setting.setting_value : '{}');
-            updateReportPermissionHiddenValue();
-
-            const usersRaw = await fetchReportPermissionUsers();
-            const users = usersRaw.filter(user => {
-                const role = String(user.user_type || '').trim().toLowerCase();
-                return role !== 'employee';
-            });
-            reportPermissionEligibleUsers = users;
-            const select = document.getElementById('report-permission-user-select');
-            const checkboxContainer = document.getElementById('report-permission-checkboxes');
-
-            if (!select || !checkboxContainer) return;
-
-            if (!users.length) {
-                select.innerHTML = '<option value=""><?= __('no_users_found') ?></option>';
-                checkboxContainer.innerHTML = '<p class="text-muted mb-0"><?= __('no_users_found') ?></p>';
-                return;
-            }
-
-            let options = `<option value=""><?= __('select_user') ?></option>`;
-            users.forEach(user => {
-                const empId = String(user.emp_id || '').trim();
-                if (!empId) return;
-                const displayName = (user.name || '').trim() || empId;
-                const role = (user.user_type || '').trim();
-                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(role) : ''}</option>`;
-            });
-            select.innerHTML = options;
-
-            if ($(select).hasClass('select2-hidden-accessible')) {
-                $(select).trigger('change.select2');
-            } else {
-                $(select).select2({ width: '100%' });
-            }
-
-            const $select = $(select);
-            $select.off('change.reportPermissions select2:select.reportPermissions select2:clear.reportPermissions');
-            $select.on('change.reportPermissions select2:select.reportPermissions select2:clear.reportPermissions', function() {
-                const selectedEmpId = String($select.val() || '').trim();
-                currentReportPermissionEmpId = selectedEmpId;
-                renderReportPermissionCheckboxes(selectedEmpId);
-            });
-
-            const firstUserOption = users.find(user => String(user.emp_id || '').trim() !== '');
-            if (firstUserOption) {
-                const firstEmpId = String(firstUserOption.emp_id);
-                currentReportPermissionEmpId = firstEmpId;
-                $select.val(firstEmpId).trigger('change');
-            } else {
-                currentReportPermissionEmpId = '';
-                renderReportPermissionCheckboxes('');
-            }
-        }
+        // Report Access no longer has its own tab/select-driven panel - it's rendered inside
+        // the Special Access editor by buildReportAccessBlockHtml()/wireReportAccessBlock()
+        // (see renderSpecialAccessCheckboxes and openSpecialAccessEditModal below), and its
+        // assigned-user summary is folded into renderAssignedSpecialAccessSummary().
 
         function updateSpecialAccessHiddenValue() {
             const hidden = document.getElementById('setting-special_access_by_user');
@@ -1543,52 +1520,100 @@
 
             const userMap = new Map((users || []).map(user => [String(user.emp_id || ''), user]));
             const catalogMap = new Map(getSpecialAccessCatalog().map(item => [item.value, item.label]));
-            const assignedEmpIds = Object.keys(specialAccessMap || {}).filter(empId => (specialAccessMap[empId] || []).length > 0);
+            const reportCatalogMap = new Map(getReportTypeCatalog().map(item => [item.value, item.label]));
+            const categories = getSpecialAccessCategories();
+
+            // A user counts as "assigned" if they have ability grants OR an explicit report
+            // access override (even one that grants zero reports - that's still a deliberate
+            // restriction worth surfacing here, not the same as "never touched").
+            const abilityEmpIds = Object.keys(specialAccessMap || {}).filter(empId => (specialAccessMap[empId] || []).length > 0);
+            const reportEmpIds = Object.keys(reportPermissionMap || {});
+            const assignedEmpIds = [...new Set([...abilityEmpIds, ...reportEmpIds])];
+
+            const totalBadge = document.getElementById('special-access-total-users-badge');
+            if (totalBadge) {
+                totalBadge.textContent = assignedEmpIds.length + ' <?= __('assigned', 'assigned') ?>';
+                totalBadge.classList.toggle('badge-primary', assignedEmpIds.length > 0);
+                totalBadge.classList.toggle('badge-light', assignedEmpIds.length === 0);
+            }
 
             if (!assignedEmpIds.length) {
-                container.innerHTML = `<p class="text-muted mb-0"><?= __('no_assigned_users_yet') ?></p>`;
+                container.innerHTML = `<div class="special-access-empty-state"><i class="fas fa-user-shield"></i><?= __('no_assigned_users_yet') ?></div>`;
                 return;
             }
 
-            let html = '<div class="table-responsive">';
-            html += '<table class="table table-sm table-bordered mb-0">';
-            html += '<thead class="thead-light"><tr>';
-            html += `<th><?= __('user') ?></th>`;
-            html += `<th><?= __('special_access') ?></th>`;
-            html += `<th style="width:140px;"><?= __('actions') ?></th>`;
-            html += '</tr></thead><tbody>';
+            // Renders one user's granted keys as badges, grouped under a small uppercase
+            // category label (same categories as the edit grid) instead of one flat run -
+            // makes it scannable at a glance instead of a wall of identical blue badges.
+            function buildGroupedBadges(grantedKeys) {
+                const grantedSet = new Set(grantedKeys);
+                const placed = new Set();
+                let out = '';
+
+                categories.forEach(cat => {
+                    const keysHere = cat.keys.filter(k => grantedSet.has(k));
+                    if (!keysHere.length) return;
+                    keysHere.forEach(k => placed.add(k));
+                    out += `<div class="special-access-group-label"><i class="fa ${cat.icon} mr-1"></i>${escapeHtml(cat.name)}</div>`;
+                    out += keysHere.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                });
+
+                const leftover = grantedKeys.filter(k => !placed.has(k));
+                if (leftover.length) {
+                    out += `<div class="special-access-group-label"><?= __('other', 'Other') ?></div>`;
+                    out += leftover.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                }
+                return out;
+            }
+
+            // Report access only gets a line here when the user has an EXPLICIT entry - if
+            // they've never been touched they're on the "sees everything" default and there's
+            // nothing to call out.
+            function buildReportAccessBadges(empId) {
+                if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
+                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]);
+                let out = `<div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i><?= __('report_access', 'Report Access') ?></div>`;
+                if (!grantedTypes.length) {
+                    out += `<span class="badge badge-danger mr-1 mb-1"><?= __('no_reports', 'No reports') ?></span>`;
+                } else {
+                    out += grantedTypes.map(type => `<span class="badge badge-purple mr-1 mb-1">${escapeHtml(reportCatalogMap.get(type) || type)}</span>`).join('');
+                }
+                return out;
+            }
+
+            let html = '';
 
             assignedEmpIds.forEach(empId => {
                 const user = userMap.get(empId);
                 const name = user ? ((user.name || '').trim() || empId) : empId;
                 const role = user ? ((user.user_type || '').trim()) : '';
                 const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
+                const badgeCount = grantedKeys.length + (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId) ? 1 : 0);
 
-                const accessHtml = grantedKeys.map(key => {
-                    const label = catalogMap.get(key) || key;
-                    return `<span class="badge badge-info mr-1 mb-1">${escapeHtml(label)}</span>`;
-                }).join('');
-
-                html += '<tr>';
-                html += `<td><strong>${escapeHtml(name)}</strong><br><small class="text-muted">${escapeHtml(empId)}${role ? ' - ' + escapeHtml(role) : ''}</small></td>`;
-                html += `<td>${accessHtml}</td>`;
-                html += `<td>
-                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user mt-1" data-emp-id="${escapeHtml(empId)}"><i class="fas fa-trash-alt"></i></button>
-                </td>`;
-                html += '</tr>';
+                html += '<div class="special-access-user-card">';
+                html += '<div class="d-flex justify-content-between align-items-start">';
+                html += `<div>
+                    <strong>${escapeHtml(name)}</strong>
+                    <span class="text-muted ml-1">#${escapeHtml(empId)}</span>
+                    ${role ? `<span class="badge badge-primary ml-1">${escapeHtml(formatRoleLabel(role))}</span>` : ''}
+                    <span class="badge badge-pill badge-secondary ml-2">${badgeCount}</span>
+                </div>`;
+                html += `<div class="text-nowrap">
+                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="<?= __('edit') ?>"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user ml-1" data-emp-id="${escapeHtml(empId)}" title="<?= __('remove') ?>"><i class="fas fa-trash-alt"></i></button>
+                </div>`;
+                html += '</div>';
+                html += `<div class="mt-2">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
+                html += '</div>';
             });
 
-            html += '</tbody></table></div>';
             container.innerHTML = html;
 
             container.querySelectorAll('.edit-assigned-special-access-user').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const empId = String(this.dataset.empId || '');
-                    const select = document.getElementById('special-access-user-select');
-                    if (!select || !empId) return;
-                    select.value = empId;
-                    $(select).trigger('change');
+                    if (!empId) return;
+                    openSpecialAccessEditModal(empId);
                 });
             });
 
@@ -1598,7 +1623,7 @@
                     if (!empId) return;
                     Swal.fire({
                         title: '<?= __('remove_user_assignment') ?>',
-                        text: '<?= __('this_will_remove_special_access_for_this_user') ?>',
+                        text: '<?= __('this_will_remove_special_access_and_report_access_for_this_user', 'This will remove all special access AND report access customizations for this user.') ?>',
                         icon: 'warning',
                         showCancelButton: true,
                         confirmButtonText: '<?= __('yes_remove_it') ?>',
@@ -1608,6 +1633,8 @@
 
                         delete specialAccessMap[empId];
                         updateSpecialAccessHiddenValue();
+                        delete reportPermissionMap[empId];
+                        updateReportPermissionHiddenValue();
                         renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
 
                         const select = document.getElementById('special-access-user-select');
@@ -1626,12 +1653,11 @@
             currentSpecialAccessEmpId = String(empId || '').trim();
 
             if (!currentSpecialAccessEmpId) {
-                container.innerHTML = '<p class="text-muted mb-0"><?= __('select_user_to_configure_special_access') ?></p>';
+                container.innerHTML = '<div class="special-access-empty-state"><i class="fas fa-hand-pointer"></i><?= __('select_user_to_configure_special_access') ?></div>';
                 renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
                 return;
             }
 
-            const catalog = getSpecialAccessCatalog();
             const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, currentSpecialAccessEmpId);
             // Unlike report permissions, an employee with no explicit entry has NO special access by default.
             const selectedTypes = hasExplicit ? normalizeSpecialAccessList(specialAccessMap[currentSpecialAccessEmpId]) : [];
@@ -1647,27 +1673,22 @@
             html += `<div class="form-group mb-2">
                 <input type="text" class="form-control form-control-sm" id="special-access-search-input" placeholder="<?= __('search') ?>...">
             </div>`;
-            html += '<div class="row" id="special-access-checkbox-grid">';
-
-            catalog.forEach(item => {
-                const checkboxId = `special-access-${safeEmpId}-${item.value}`;
-                html += `
-                    <div class="col-md-6 mb-2 special-access-item" data-search-label="${escapeHtml(item.label).toLowerCase()}">
-                        <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${item.value}" data-access-key="${item.value}">
-                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += '</div>';
+            html += `<div id="special-access-checkbox-grid">${buildSpecialAccessGroupedHtml('special-access-' + safeEmpId, selectedSet)}</div>`;
             html += '<p class="text-muted mb-0 mt-2" id="special-access-no-match" style="display:none;"><?= __('no_matching_records_found', 'No matching records found') ?></p>';
+            html += buildReportAccessBlockHtml('special-access-' + safeEmpId, currentSpecialAccessEmpId);
             container.innerHTML = html;
 
-            container.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
-                const accessKey = checkbox.getAttribute('data-access-key') || '';
-                checkbox.checked = selectedSet.has(accessKey);
+            updateSpecialAccessCategoryCounts(container);
+            wireReportAccessBlock(container, 'special-access-' + safeEmpId, (mode, values) => {
+                const activeEmpId = String(currentSpecialAccessEmpId || '').trim();
+                if (!activeEmpId) return;
+                if (mode === 'default') {
+                    delete reportPermissionMap[activeEmpId];
+                } else {
+                    reportPermissionMap[activeEmpId] = normalizeReportTypeList(values);
+                }
+                updateReportPermissionHiddenValue();
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
             });
 
             const searchInput = document.getElementById('special-access-search-input');
@@ -1692,6 +1713,7 @@
                     .map(el => el.value);
                 specialAccessMap[activeEmpId] = normalizeSpecialAccessList(checkedValues);
                 updateSpecialAccessHiddenValue();
+                updateSpecialAccessCategoryCounts(container);
                 renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
             }
 
@@ -1717,6 +1739,127 @@
             }
 
             renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+        }
+
+        // Edit button on the "Assigned users" table opens the checkbox grid inside a
+        // SweetAlert2 modal (self-contained popup) instead of scrolling the admin up to
+        // the top select-driven panel. Reuses the same catalog/state as
+        // renderSpecialAccessCheckboxes but keeps its own DOM ids so the two never clash
+        // if both happen to be present at once.
+        function openSpecialAccessEditModal(empId) {
+            const targetEmpId = String(empId || '').trim();
+            if (!targetEmpId) return;
+
+            const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === targetEmpId);
+            const displayName = user ? ((user.name || '').trim() || targetEmpId) : targetEmpId;
+
+            const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, targetEmpId);
+            const selectedSet = new Set(hasExplicit ? normalizeSpecialAccessList(specialAccessMap[targetEmpId]) : []);
+            const grantedCount = selectedSet.size;
+
+            // Report Access state is tracked locally until Save (mirrors how abilities are only
+            // read from the DOM on preConfirm) - seeded from the current reportPermissionMap so
+            // closing without touching it doesn't silently reset anything.
+            const reportHasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, targetEmpId);
+            let reportAccessMode = reportHasExplicit ? 'custom' : 'default';
+            let reportAccessValues = reportHasExplicit
+                ? normalizeReportTypeList(reportPermissionMap[targetEmpId])
+                : getReportTypeCatalog().map(item => item.value);
+
+            let gridHtml = '<div class="text-left">';
+            gridHtml += `<p class="text-muted mb-3" style="font-size:.85rem;"><?= __('currently_granted', 'Currently granted') ?>: <span class="badge badge-${grantedCount ? 'success' : 'light'}">${grantedCount}</span></p>`;
+            gridHtml += '<div class="d-flex justify-content-between align-items-center mb-3">';
+            gridHtml += '<input type="text" class="form-control form-control-sm mr-2" id="swal-special-access-search" placeholder="<?= __('search') ?>...">';
+            gridHtml += '<div class="text-nowrap">';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="swal-special-access-select-all"><?= __('select_all') ?></button>';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all"><?= __('clear_all') ?></button>';
+            gridHtml += '</div></div>';
+            gridHtml += `<div id="swal-special-access-grid" style="max-height:55vh;overflow-y:auto;">`;
+            gridHtml += buildSpecialAccessGroupedHtml('swal-special-access', selectedSet);
+            gridHtml += buildReportAccessBlockHtml('swal-special-access', targetEmpId);
+            gridHtml += `</div>`;
+            gridHtml += '</div>';
+
+            Swal.fire({
+                title: displayName,
+                html: gridHtml,
+                width: '70%',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('save_changes') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                focusConfirm: false,
+                didOpen: () => {
+                    const popup = Swal.getPopup();
+                    updateSpecialAccessCategoryCounts(popup);
+
+                    popup.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
+                        checkbox.addEventListener('change', () => updateSpecialAccessCategoryCounts(popup));
+                    });
+
+                    wireReportAccessBlock(popup, 'swal-special-access', (mode, values) => {
+                        reportAccessMode = mode;
+                        reportAccessValues = values;
+                    });
+
+                    const searchInput = popup.querySelector('#swal-special-access-search');
+                    if (searchInput) {
+                        searchInput.addEventListener('input', function() {
+                            const term = this.value.trim().toLowerCase();
+                            popup.querySelectorAll('.special-access-item').forEach(item => {
+                                const matches = term === '' || (item.getAttribute('data-search-label') || '').includes(term);
+                                item.style.display = matches ? '' : 'none';
+                            });
+                            popup.querySelectorAll('.special-access-category').forEach(block => {
+                                const anyVisible = Array.from(block.querySelectorAll('.special-access-item')).some(el => el.style.display !== 'none');
+                                block.style.display = anyVisible ? '' : 'none';
+                            });
+                        });
+                    }
+                    const selectAllBtn = popup.querySelector('#swal-special-access-select-all');
+                    if (selectAllBtn) {
+                        selectAllBtn.addEventListener('click', () => {
+                            popup.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = true; });
+                            updateSpecialAccessCategoryCounts(popup);
+                        });
+                    }
+                    const clearAllBtn = popup.querySelector('#swal-special-access-clear-all');
+                    if (clearAllBtn) {
+                        clearAllBtn.addEventListener('click', () => {
+                            popup.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = false; });
+                            updateSpecialAccessCategoryCounts(popup);
+                        });
+                    }
+                },
+                preConfirm: () => {
+                    const popup = Swal.getPopup();
+                    const abilities = Array.from(popup.querySelectorAll('.special-access-checkbox:checked')).map(el => el.value);
+                    const reportAccessApplicable = !!popup.querySelector('.report-type-checkbox, .report-access-select-all');
+                    return { abilities, reportAccessApplicable, reportAccessMode, reportAccessValues };
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                const { abilities, reportAccessApplicable, reportAccessMode: finalMode, reportAccessValues: finalValues } = result.value || {};
+
+                specialAccessMap[targetEmpId] = normalizeSpecialAccessList(abilities || []);
+                updateSpecialAccessHiddenValue();
+
+                if (reportAccessApplicable) {
+                    if (finalMode === 'default') {
+                        delete reportPermissionMap[targetEmpId];
+                    } else {
+                        reportPermissionMap[targetEmpId] = normalizeReportTypeList(finalValues || []);
+                    }
+                    updateReportPermissionHiddenValue();
+                }
+
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+
+                // Keep the top select-driven panel in sync if it's currently showing this user.
+                if (currentSpecialAccessEmpId === targetEmpId) {
+                    renderSpecialAccessCheckboxes(targetEmpId);
+                }
+            });
         }
 
         function renderRequestTypeBlocksSettings() {
@@ -1807,27 +1950,30 @@
         async function renderSpecialAccessSettings() {
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-special-access" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0"><?= __('special_access_by_user') ?></h5>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h5 class="mb-0"><i class="fas fa-user-shield mr-2 text-primary"></i><?= __('special_access_by_user') ?></h5>
+                        <span class="badge badge-pill badge-light" id="special-access-total-users-badge"></span>
                     </div>
-                    <p class="text-muted mb-3"><?= __('select_a_user_and_grant_them_specific_admin_hr_abilities') ?></p>
-                    <div class="form-group">
-                        <label for="special-access-user-select"><?= __('select_user') ?></label>
-                        <select id="special-access-user-select" class="form-control select2"></select>
+                    <p class="text-muted mb-3"><?= __('select_a_user_and_grant_them_specific_admin_hr_abilities') ?> <?= __('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.') ?></p>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <label for="special-access-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i><?= __('select_user') ?></label>
+                            <select id="special-access-user-select" class="form-control select2"></select>
+                            <div id="special-access-checkboxes" class="mt-3">
+                                <div class="text-center text-muted">
+                                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                                    <span class="ml-2"><?= __('loading') ?></span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div id="special-access-checkboxes" class="border rounded p-3 bg-light">
+
+                    <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i><?= __('assigned_users') ?></h6>
+                    <div id="special-access-assigned-users-list">
                         <div class="text-center text-muted">
                             <div class="spinner-border spinner-border-sm" role="status"></div>
                             <span class="ml-2"><?= __('loading') ?></span>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <h6 class="mb-2"><?= __('assigned_users') ?></h6>
-                        <div id="special-access-assigned-users-list" class="border rounded p-3 bg-white">
-                            <div class="text-center text-muted">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <span class="ml-2"><?= __('loading') ?></span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1861,7 +2007,7 @@
                 if (!empId) return;
                 const displayName = (user.name || '').trim() || empId;
                 const role = (user.user_type || '').trim();
-                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(role) : ''}</option>`;
+                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(formatRoleLabel(role)) : ''}</option>`;
             });
             select.innerHTML = options;
 
@@ -3049,7 +3195,17 @@
                 // never as their own top-level nav entries - drop their raw rows here so
                 // they don't also show up mixed in alphabetically with unrelated tabs.
                 const payrollSubGroupKeys = PAYROLL_SETTINGS_SUB_TABS.map(t => t.key);
-                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group));
+                // 'page_role_access' stores its data as a raw JSON blob (page -> allowed roles)
+                // with no dedicated UI here - it only has a generic text input via the default
+                // renderer, which is unusable for editing and not meant to be admin-facing on
+                // this screen. Drop it so it doesn't show up as its own tab; the setting itself
+                // (read by includes/page_access_helper.php) and its save path in
+                // settings_handler.php are untouched.
+                // 'report_permissions' (report_visibility_by_user) no longer gets its own tab -
+                // it's now managed per-user from inside the Special Access tab (see the "Report
+                // Access" group in renderSpecialAccessSettings). Drop its raw row the same way;
+                // get_allowed_report_types_for_user() and settings_handler.php are untouched.
+                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group) && s.setting_group !== 'page_role_access' && s.setting_group !== 'report_permissions');
                 groupedSettings = appSettings.reduce((acc, setting) => {
                     const group = setting.setting_group;
                     if (!acc[group]) acc[group] = [];
@@ -3066,6 +3222,14 @@
                 const specialAccessSetting = appSettings.find(s => s.setting_name === 'special_access_by_user');
                 specialAccessMap = parseSpecialAccessMap(specialAccessSetting ? specialAccessSetting.setting_value : '{}');
                 updateSpecialAccessHiddenValue();
+
+                // Same early-seed as above, for report access. Its row was just filtered out of
+                // appSettings (its old standalone tab is gone), so read it from the unfiltered
+                // data.settings instead - otherwise this would always seed as "{}" and wipe every
+                // existing per-user report restriction on first Save.
+                const reportVisibilitySetting = data.settings.find(s => s.setting_name === 'report_visibility_by_user');
+                reportPermissionMap = parseReportPermissionMap(reportVisibilitySetting ? reportVisibilitySetting.setting_value : '{}');
+                updateReportPermissionHiddenValue();
 
                 // Ensure custom management tabs always exist
                 if (!groupedSettings['job titles']) {

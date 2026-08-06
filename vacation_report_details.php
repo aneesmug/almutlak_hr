@@ -51,6 +51,7 @@ if (mysqli_num_rows($query) == 1) {
                 e.joining_date,
                 e.gosi,
                 e.country as country_id,
+                e.allow_vacation_salary_below_min_days,
                 e.passport_number,
                 e.passport_exp,
                 e.bank_name,
@@ -203,12 +204,14 @@ if (mysqli_num_rows($query) == 1) {
     $is_local_annual = ($vac_type === 'Local Vacation' && $fly_type === 'annual');
     $is_encashment = ($vac_type === 'Encashed');
     $is_emergency = ($fly_type === 'emergency');
+    $allow_vacation_salary_below_min_days = ((string)($request['allow_vacation_salary_below_min_days'] ?? '0') === '1');
     $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
         $vac_type,
         $fly_type,
         $request['country_id'] ?? 0,
         $approved_days,
-        $vacation_salary_type
+        $vacation_salary_type,
+        $allow_vacation_salary_below_min_days
     );
     $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
         $vac_type,
@@ -216,7 +219,8 @@ if (mysqli_num_rows($query) == 1) {
         $request['country_id'] ?? 0,
         $approved_days,
         $request['is_deductible'] ?? 0,
-        $vacation_salary_type
+        $vacation_salary_type,
+        $allow_vacation_salary_below_min_days
     );
     
     // Non-payable leave types
@@ -544,7 +548,14 @@ if (mysqli_num_rows($query) == 1) {
             [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 30px; }
             [dir="rtl"] .timeline-item::before { left: auto; right: 0; }
             [dir="rtl"] .timeline-item .icon { left: auto; right: -9px; }
-            
+
+            .approval-flat-list { padding: 0; }
+            .approval-flat-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; }
+            .approval-flat-item i { width: 16px; text-align: center; font-size: 1rem; }
+            .approval-flat-item strong { font-size: 0.95rem; }
+            .approval-flat-note { flex-basis: 100%; margin-left: 24px; font-style: italic; color: var(--danger-color); font-size: 0.85rem; }
+            [dir="rtl"] .approval-flat-note { margin-left: 0; margin-right: 24px; }
+
             .notes-section { background-color: #fff9e6; border-left: 4px solid var(--warning-color); padding: 1rem; border-radius: 4px; font-size: 0.85rem; }
             
             [dir="rtl"] .notes-section { border-left: none; border-right: 4px solid var(--warning-color); }
@@ -871,8 +882,18 @@ if (mysqli_num_rows($query) == 1) {
                                             <li><?= __('vacation_type') ?>: <strong><?= getDisplayName($request['vac_type'] . ' - ' . $request['fly_type']); ?></strong></li>
                                             <li><?= __('payroll_status') ?>: <strong><?= __('removed_from_active_payroll') ?? 'Removed from Active Payroll' ?></strong></li>
                                             <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
-                                            <li><?= __('country') ?? 'Country' ?>: <strong><?= __('saudi_arabia') ?? 'Saudi Arabia' ?></strong></li>
+                                            <li><?= __('country') ?? 'Country' ?>: <strong><?= (((int)($request['country_id'] ?? 0) === 191) ? (__('saudi_arabia') ?? 'Saudi Arabia') : getDisplayName($request['country_name'] ?? null)); ?></strong></li>
                                         </ul>
+                                        <?php
+                                            $used_below_min_days_override = $allow_vacation_salary_below_min_days && (
+                                                $approved_days < $local_annual_min_days_exclusive
+                                                || (int)($request['country_id'] ?? 0) !== 191
+                                            );
+                                        ?>
+                                        <?php if ($used_below_min_days_override): ?>
+                                        <hr>
+                                        <p class="mb-0"><i class="fa fa-info-circle"></i> <?= __('vacation_salary_below_min_days_override_note') ?? ('This employee is individually authorized (Employee Master) to receive the vacation salary payout regardless of nationality and even though the approved days are below the normal ' . (int)$local_annual_min_days_exclusive . '-day minimum.') ?></p>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php endif; ?>
@@ -1029,12 +1050,22 @@ if (mysqli_num_rows($query) == 1) {
                                                         <span class="status ml-3"><strong><?= __('request_approved') ?></strong></span>
                                                     </div>
                                                     <?php if (!empty($approval_chain)): ?>
-                                                        <div class="mt-3">
-                                                            <small class="text-muted"><i class="fa fa-info-circle"></i> <?= __('approved_by') ?></small>
+                                                        <div class="approval-flat-list mt-3">
                                                             <?php foreach ($approval_chain as $approver): ?>
                                                                 <?php if ($approver['status'] == 'approved'): ?>
-                                                                    <div class="ml-3 mt-1">
-                                                                        <small><i class="fa fa-user-check text-success"></i> <?=getDisplayName($approver['approver_name']) ?> (<?= getRoleLabel($approver['approver_role']) ?>)</small>
+                                                                    <?php
+                                                                    $role_icon = 'fa-user';
+                                                                    if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
+                                                                        $role_icon = 'fa-user-shield';
+                                                                    } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false || stripos($approver['approver_role'], 'gm') !== false)) {
+                                                                        $role_icon = 'fa-user-tie';
+                                                                    }
+                                                                    $level_scope = !empty($approver['approver_dept_name']) ? getDisplayName($approver['approver_dept_name']) : getRoleLabel($approver['approver_role']);
+                                                                    ?>
+                                                                    <div class="approval-flat-item">
+                                                                        <i class="fa <?= $role_icon ?> text-success"></i>
+                                                                        <strong><?= getDisplayName($approver['approver_name']) ?></strong>
+                                                                        <small class="text-muted">(<?= __('level') ?> <?= (int)($approver['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
                                                                     </div>
                                                                 <?php endif; ?>
                                                             <?php endforeach; ?>
@@ -1046,42 +1077,37 @@ if (mysqli_num_rows($query) == 1) {
                                                         // Check if request was rejected
                                                         $is_vacation_rejected = isset($request['status']) && $request['status'] === 'rejected';
                                                     ?>
-                                                    <?php foreach ($approval_chain as $index => $approver): 
+                                                    <div class="approval-flat-list">
+                                                    <?php foreach ($approval_chain as $index => $approver):
                                                         // If request is rejected, skip pending/awaiting approvers
                                                         if ($is_vacation_rejected && in_array($approver['status'], ['pending', 'awaiting'])) {
                                                             continue;
                                                         }
-                                                        
-                                                        $item_class = '';
-                                                        if ($approver['status'] == 'approved') {
-                                                            $item_class = 'approved';
-                                                            $icon = 'fa-check-circle';
-                                                        } elseif ($approver['status'] == 'pending') {
-                                                            $item_class = 'pending';
-                                                            $icon = 'fa-clock';
-                                                        } elseif ($approver['status'] == 'rejected') {
-                                                            $item_class = 'rejected';
-                                                            $icon = 'fa-times-circle';
-                                                        } else {
-                                                            $item_class = 'future';
-                                                            $icon = 'fa-circle';
-                                                        }
+
+                                                        $status_color = 'text-muted';
+                                                        if ($approver['status'] == 'approved') $status_color = 'text-success';
+                                                        elseif ($approver['status'] == 'rejected') $status_color = 'text-danger';
+                                                        elseif ($approver['status'] == 'pending') $status_color = 'text-warning';
+
                                                         $role_icon = 'fa-user';
-                                                                    if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
+                                                        if (!empty($approver['approver_role']) && stripos($approver['approver_role'], 'hr') !== false) {
                                                             $role_icon = 'fa-user-shield';
-                                                                    } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false)) {
+                                                        } elseif (!empty($approver['approver_role']) && (stripos($approver['approver_role'], 'manager') !== false || stripos($approver['approver_role'], 'administrator') !== false || stripos($approver['approver_role'], 'gm') !== false)) {
                                                             $role_icon = 'fa-user-tie';
                                                         }
+
+                                                        $level_scope = !empty($approver['approver_dept_name']) ? getDisplayName($approver['approver_dept_name']) : getRoleLabel($approver['approver_role']);
                                                     ?>
-                                                            <div class="timeline-item <?= $item_class ?>">
-                                                                <div class="icon"><i class="fa <?= $icon ?>"></i></div>
-                                                                <span class="status ml-3">
-                                                                    <i class="fa <?= $role_icon ?>"></i>
-                                                                    <?= getDisplayName($approver['approver_name']) ?> 
-                                                                    <small class="text-muted">(<?= __('level') ?> <?= $approver['approval_level'] ?>: <?= getDisplayName(!empty($approver['approver_dept_name']) ? $approver['approver_dept_name'] : getRoleLabel($approver['approver_role'])) ?>)</small>
-                                                                </span>
+                                                            <div class="approval-flat-item">
+                                                                <i class="fa <?= $role_icon ?> <?= $status_color ?>"></i>
+                                                                <strong><?= getDisplayName($approver['approver_name']) ?></strong>
+                                                                <small class="text-muted">(<?= __('level') ?> <?= (int)($approver['approval_level'] ?? 0) ?><?= $level_scope !== '' ? ': ' . htmlspecialchars((string)$level_scope) : '' ?>)</small>
+                                                                <?php if ($approver['status'] == 'rejected' && !empty($approver['note'])): ?>
+                                                                    <div class="approval-flat-note"><?= getDisplayName(htmlspecialchars((string)$approver['note'])) ?></div>
+                                                                <?php endif; ?>
                                                             </div>
                                                     <?php endforeach; ?>
+                                                    </div>
                                                 <?php else: ?>
                                                     <?php // OLD SYSTEM or PENDING: Show simple status ?>
                                                     <div class="timeline-item pending">

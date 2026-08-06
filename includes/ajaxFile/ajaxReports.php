@@ -346,6 +346,7 @@ if ($action === 'getAssetItems') {
 $reportType = isset($_POST['reportType']) ? $_POST['reportType'] : '';
 $columns = isset($_POST['columns']) ? $_POST['columns'] : [];
 $departments = isset($_POST['departments']) ? $_POST['departments'] : [];
+$companies = isset($_POST['companies']) ? $_POST['companies'] : [];
 $dateFrom = isset($_POST['dateFrom']) ? $_POST['dateFrom'] : '';
 $dateTo = isset($_POST['dateTo']) ? $_POST['dateTo'] : '';
 $status = isset($_POST['status']) ? $_POST['status'] : '';
@@ -368,6 +369,9 @@ $userDept = $_SESSION['user_dept'] ?? ($user_dept ?? '');
 // Normalize departments for filters (array of IDs as strings)
 if (!is_array($departments)) {
     $departments = empty($departments) ? [] : [$departments];
+}
+if (!is_array($companies)) {
+    $companies = empty($companies) ? [] : [$companies];
 }
 
 if (empty($reportType) || empty($columns)) {
@@ -431,6 +435,9 @@ try {
         case 'dept_comparison':
             $result = generateDepartmentComparisonReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
             break;
+        case 'country_company_comparison':
+            $result = generateCountryCompanyComparisonReport($conDB, $columns, $departments, $companies, $hasFullAccess, $userDept);
+            break;
         case 'custom':
             $customTables = isset($_POST['customTables']) ? $_POST['customTables'] : [];
             $customDepartments = isset($_POST['customDepartments']) ? $_POST['customDepartments'] : [];
@@ -489,6 +496,7 @@ function getColumnLabel($column) {
         'emp_name' => 'Employee Name',
         'comp_no' => 'Company',
         'company_name' => 'Company Name',
+        'company' => 'Company',
         'vac_type' => 'Vacation Type',
         'start_date' => 'Start Date',
         'return_date' => 'Return Date',
@@ -2659,6 +2667,101 @@ function generateDepartmentComparisonReport($conDB, $columns, $departments, $has
         $data[] = $deptRow;
     }
     
+    return ['data' => $data, 'headers' => $headers];
+}
+
+function generateCountryCompanyComparisonReport($conDB, $columns, $departments, $companies, $hasFullAccess, $userDept) {
+    $data = [];
+    $headers = [];
+
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+
+    $whereClause = '';
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        $whereClause = "WHERE e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, $d) . "'";
+        }, $departments);
+        $whereClause = "WHERE e.dept IN (" . implode(',', $deptList) . ")";
+    }
+
+    // User-selected company filter (from the Select Companies dropdown)
+    if (!empty($companies) && !in_array('all', $companies, true)) {
+        $compList = array_map(function($c) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, $c) . "'";
+        }, $companies);
+        $compClause = "e.comp_no IN (" . implode(',', $compList) . ")";
+        $whereClause = !empty($whereClause) ? $whereClause . " AND " . $compClause : "WHERE " . $compClause;
+    }
+
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($company_filter, 5) : "WHERE " . substr($company_filter, 5);
+    }
+
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $whereClause = !empty($whereClause) ? $whereClause . " AND " . substr($department_filter, 5) : "WHERE " . substr($department_filter, 5);
+    }
+
+    // Grouped by country + company together, so each row shows the employee
+    // count for a given nationality within a given company.
+    $sql = "SELECT
+                co.name AS country_name,
+                co.name_ar AS country_name_ar,
+                cm.comp_name,
+                cm.comp_name_ar,
+                COUNT(DISTINCT e.id) as total_employees,
+                COUNT(DISTINCT CASE WHEN e.status = 1 THEN e.id END) as active_employees,
+                COUNT(DISTINCT CASE WHEN e.status = 0 THEN e.id END) as inactive_employees
+            FROM employees e
+            LEFT JOIN countries co ON e.country = co.id
+            LEFT JOIN companies cm ON e.comp_no = cm.comp_id
+            " . $whereClause . "
+            GROUP BY co.id, co.name, co.name_ar, cm.comp_id, cm.comp_name, cm.comp_name_ar
+            ORDER BY cm.comp_name, total_employees DESC";
+
+    $result = mysqli_query($conDB, $sql);
+    if (!$result) {
+        throw new Exception('Country/Company Comparison query error: ' . mysqli_error($conDB));
+    }
+
+    $isRtl = $GLOBALS['is_rtl'] ?? false;
+    while ($row = mysqli_fetch_assoc($result)) {
+        $countryRow = [];
+        $countryName = ($isRtl && !empty($row['country_name_ar'])) ? $row['country_name_ar'] : $row['country_name'];
+        $companyName = ($isRtl && !empty($row['comp_name_ar'])) ? $row['comp_name_ar'] : $row['comp_name'];
+
+        foreach ($columns as $col) {
+            switch ($col) {
+                case 'country':
+                    $countryRow[$col] = $countryName;
+                    break;
+                case 'company':
+                    $countryRow[$col] = $companyName;
+                    break;
+                case 'total_employees':
+                    $countryRow[$col] = $row['total_employees'];
+                    break;
+                case 'active_employees':
+                    $countryRow[$col] = $row['active_employees'];
+                    break;
+                case 'inactive_employees':
+                    $countryRow[$col] = $row['inactive_employees'];
+                    break;
+            }
+        }
+
+        $data[] = $countryRow;
+    }
+
     return ['data' => $data, 'headers' => $headers];
 }
 

@@ -15,6 +15,7 @@ if (!function_exists('get_special_access_labels')) {
             'cancel_resignation_requests' => 'Cancel Submitted Resignation Requests',
             'cancel_rejoin_requests' => 'Cancel Submitted Rejoin Requests',
             'cancel_business_trip_requests' => 'Cancel Submitted Business Trip Requests',
+            'add_business_trip_manual_allowance' => 'Business Trip: Add Manual Allowance (Taxi, Parking, etc.)',
             'view_vacation_balance_history' => 'View Vacation Balance History',
             'view_remaining_balance_in_report' => 'Show Remaining Balance in Vacation Report',
             'manage_employee_request_block' => 'Block/Unblock Employee from All Requests',
@@ -31,6 +32,12 @@ if (!function_exists('get_special_access_labels')) {
             'manage_vacation_payroll_settings' => 'Access App Settings - Vacation Payroll Settings Tab',
             'manage_overtime_settings' => 'Access App Settings - Overtime Settings Tab',
             'manage_deduction_settings' => 'Access App Settings - Deduction Settings Tab',
+            'manage_vacation_salary_below_min_days' => 'Employee Master: Allow Vacation Salary Payout Below Minimum Days',
+            'view_employee_eos_value' => 'Employee Master: View End of Service (EOS) Estimated Value',
+            'view_employee_salary_value' => 'Employee Master: View Salary',
+            'view_all_employees' => 'View All Employees (Cross-Department/Company Access)',
+            'view_employee_banking_details' => 'Employee Master: View Banking/IBAN/GOSI Details',
+            'view_employee_documents' => 'Employee Master: View Uploaded Documents (Passport/Iqama, etc.)',
         ] + get_special_access_page_labels();
     }
 }
@@ -56,7 +63,105 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_settlement_status_history' => 'Access Page: Settlement Status History',
             'access_vacation_status_history' => 'Access Page: Vacation Status History',
             'access_business_trip_status_history' => 'Access Page: Business Trip Status History',
+            'access_edit_employee' => 'Access Page: Edit Employee',
         ];
+    }
+}
+
+if (!function_exists('get_special_access_categories')) {
+    /**
+     * Groups every Special Access key into a display category for the App Settings UI.
+     * Purely presentational (grouping/icon/order) - has no effect on what a key
+     * actually grants. New keys that aren't listed here fall back to 'Other' so
+     * nothing breaks if this list drifts out of sync with get_special_access_labels().
+     */
+    function get_special_access_categories() {
+        return [
+            'Cancel Submitted Requests' => [
+                'icon' => 'fa-ban',
+                'keys' => [
+                    'cancel_vacation_requests',
+                    'cancel_smart_requests',
+                    'cancel_general_requests',
+                    'cancel_loan_requests',
+                    'cancel_resignation_requests',
+                    'cancel_rejoin_requests',
+                    'cancel_business_trip_requests',
+                ],
+            ],
+            'Page Access' => [
+                'icon' => 'fa-door-open',
+                'keys' => array_keys(get_special_access_page_labels()),
+            ],
+            'Employee Master' => [
+                'icon' => 'fa-id-badge',
+                'keys' => [
+                    'view_all_employees',
+                    'view_employee_eos_value',
+                    'view_employee_salary_value',
+                    'view_employee_banking_details',
+                    'view_employee_documents',
+                    'manage_vacation_salary_below_min_days',
+                    'manage_employee_request_block',
+                    'manage_employee_request_type_block',
+                ],
+            ],
+            'Vacation Visibility' => [
+                'icon' => 'fa-umbrella-beach',
+                'keys' => [
+                    'view_vacation_balance_history',
+                    'view_remaining_balance_in_report',
+                ],
+            ],
+            'Payroll Checklist Report' => [
+                'icon' => 'fa-clipboard-check',
+                'keys' => [
+                    'payroll_checklist_upload_excel',
+                    'payroll_checklist_review_import',
+                    'payroll_checklist_export_excel',
+                ],
+            ],
+            'App Settings Tabs' => [
+                'icon' => 'fa-cogs',
+                'keys' => [
+                    'manage_department_settings',
+                    'manage_job_title_settings',
+                    'manage_global_request_blocks',
+                    'manage_loan_settings',
+                    'manage_vacation_payroll_settings',
+                    'manage_overtime_settings',
+                    'manage_deduction_settings',
+                ],
+            ],
+            'Business Trip' => [
+                'icon' => 'fa-plane',
+                'keys' => [
+                    'add_business_trip_manual_allowance',
+                ],
+            ],
+            'Other Special Actions' => [
+                'icon' => 'fa-star',
+                'keys' => [
+                    'direct_rejoin_bypass_approval',
+                    'ungenerate_payroll',
+                ],
+            ],
+        ];
+    }
+}
+
+if (!function_exists('get_special_access_key_category')) {
+    function get_special_access_key_category($key) {
+        static $lookup = null;
+        if ($lookup === null) {
+            $lookup = [];
+            foreach (get_special_access_categories() as $categoryName => $meta) {
+                foreach ($meta['keys'] as $k) {
+                    $lookup[$k] = $categoryName;
+                }
+            }
+        }
+        return $lookup[$key] ?? 'Other';
     }
 }
 

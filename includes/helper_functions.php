@@ -126,19 +126,29 @@ if (!function_exists('getLocalAnnualPayrollRemovalRuleConfig')) {
 }
 
 if (!function_exists('matchesLocalAnnualPayrollRemovalRule')) {
-    function matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays, $vacationSalaryType = null)
+    /**
+     * @param bool $allowBelowMinDays Per-employee override (employees.allow_vacation_salary_below_min_days).
+     *        When true, BOTH the Saudi-only country restriction and the minimum_days_exclusive
+     *        threshold are bypassed, so this specific employee can still be paid/removed from
+     *        payroll for a Local Annual vacation regardless of nationality or day count.
+     */
+    function matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays, $vacationSalaryType = null, $allowBelowMinDays = false)
     {
         $rule = getLocalAnnualPayrollRemovalRuleConfig();
 
-        $is_local_annual_saudi = trim((string)$vacType) === $rule['vac_type']
-            && trim((string)$flyType) === $rule['fly_type']
-            && (int)$countryId === (int)$rule['country_id'];
+        $is_local_annual_type = trim((string)$vacType) === $rule['vac_type']
+            && trim((string)$flyType) === $rule['fly_type'];
 
-        if (!$is_local_annual_saudi) {
+        if (!$is_local_annual_type) {
             return false;
         }
 
-        $meets_minimum_days = (float)$vacDays >= (float)$rule['minimum_days_exclusive'];
+        $meets_country = ((int)$countryId === (int)$rule['country_id']) || !empty($allowBelowMinDays);
+        if (!$meets_country) {
+            return false;
+        }
+
+        $meets_minimum_days = ((float)$vacDays >= (float)$rule['minimum_days_exclusive']) || !empty($allowBelowMinDays);
 
         $vacationSalaryType = trim((string)$vacationSalaryType);
         if ($vacationSalaryType === 'payroll') {
@@ -154,26 +164,26 @@ if (!function_exists('matchesLocalAnnualPayrollRemovalRule')) {
 }
 
 if (!function_exists('isLocalAnnualRemovedFromPayroll')) {
-    function isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType = null)
+    function isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType = null, $allowBelowMinDays = false)
     {
         $vacationSalaryType = trim((string)$vacationSalaryType);
         if ($vacationSalaryType === 'payroll') {
-            return matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays, $vacationSalaryType);
+            return matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays, $vacationSalaryType, $allowBelowMinDays);
         }
         if ($vacationSalaryType === 'end_of_service') {
             return false;
         }
 
-        return matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays)
+        return matchesLocalAnnualPayrollRemovalRule($vacType, $flyType, $countryId, $vacDays, null, $allowBelowMinDays)
             && (int)$isDeductible === 1;
     }
 }
 
 if (!function_exists('isSettlementPayableVacation')) {
-    function isSettlementPayableVacation($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType = null)
+    function isSettlementPayableVacation($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType = null, $allowBelowMinDays = false)
     {
         return (trim((string)$vacType) === 'Fly' && trim((string)$flyType) === 'annual')
-            || isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType);
+            || isLocalAnnualRemovedFromPayroll($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType, $allowBelowMinDays);
     }
 }
 
@@ -5256,20 +5266,15 @@ if (!function_exists('canSeeAllEmployeesByRole')) {
             || $resolvedUserRole === 'finance_manager'
             || ($resolvedUserDept === 2 && $resolvedEmpType === 'manager');
 
-        $manualFullAccessEmpIds = [];
-        $manualFullAccessRaw = get_setting($conDB, 'full_access_emp_ids', '');
-        if (!empty($manualFullAccessRaw)) {
-            $decoded = json_decode($manualFullAccessRaw, true);
-            if (is_array($decoded)) {
-                $manualFullAccessEmpIds = array_map('intval', $decoded);
-            } else {
-                $csvParts = array_filter(array_map('trim', explode(',', (string)$manualFullAccessRaw)), static function ($value) {
-                    return $value !== '';
-                });
-                $manualFullAccessEmpIds = array_map('intval', $csvParts);
-            }
-        }
-        $isManualFullAccess = ($resolvedEmpId > 0 && in_array($resolvedEmpId, $manualFullAccessEmpIds, true));
+        require_once __DIR__ . '/special_access_helper.php';
+        $isManualFullAccess = ($resolvedEmpId > 0) && user_has_special_access(
+            $conDB,
+            $resolvedEmpId,
+            'view_all_employees',
+            $resolvedUserRole,
+            $resolvedUserType,
+            $isSystemAdminResolved
+        );
 
         return (
             $isSystemAdminResolved
@@ -5279,6 +5284,282 @@ if (!function_exists('canSeeAllEmployeesByRole')) {
             || $isFinanceManagerResolved
             || $isManualFullAccess
         );
+    }
+}
+
+/**
+ * Same rule set as canSeeAllEmployeesByRole(), but for an arbitrary admin_login
+ * row instead of the currently logged-in session - needed to compute another
+ * user's own "can see everyone" status (e.g. when listing all users) without
+ * touching/overriding the current request's session globals.
+ *
+ * @param mysqli $conDB
+ * @param string $userType admin_login.user_type (lowercase enum value)
+ * @param int    $userDept admin_login.dept
+ * @param string $empType  admin_login.emp_type (e.g. 'Manager')
+ * @param int    $empId    admin_login.emp_id
+ * @return bool
+ */
+if (!function_exists('canSeeAllEmployeesByRoleParams')) {
+    function canSeeAllEmployeesByRoleParams($conDB, $userType, $userDept, $empType, $empId) {
+        $resolvedUserType = strtolower((string)$userType);
+        $resolvedUserDept = (int)$userDept;
+        $resolvedEmpType = strtolower((string)$empType);
+        $resolvedEmpId = (int)$empId;
+
+        $isSystemAdminResolved = $resolvedUserType === 'administrator';
+        $isGMResolved = $resolvedUserType === 'gm';
+        $isHRResolved = $resolvedUserDept === 5 || $resolvedUserType === 'hr' || $resolvedUserType === 'hr_payroll';
+        $isAdministrationResolved = $resolvedUserDept === 1;
+        $isFinanceManagerResolved = $resolvedUserType === 'finance'
+            || ($resolvedUserDept === 2 && $resolvedEmpType === 'manager');
+
+        require_once __DIR__ . '/special_access_helper.php';
+        $isManualFullAccess = ($resolvedEmpId > 0) && user_has_special_access(
+            $conDB,
+            $resolvedEmpId,
+            'view_all_employees',
+            '',
+            $resolvedUserType,
+            $isSystemAdminResolved
+        );
+
+        return (
+            $isSystemAdminResolved
+            || $isGMResolved
+            || $isHRResolved
+            || $isAdministrationResolved
+            || $isFinanceManagerResolved
+            || $isManualFullAccess
+        );
+    }
+}
+
+/**
+ * Resolve display names for a raw admin_login.allowed_companies ID list,
+ * using the SAME id-vs-comp_id precedence the picker itself saves with
+ * (includes/ajaxFile/getCompanyAccess.php: comp_id when set, else id) -
+ * NOT the broader "id OR comp_id" match used for access-control normalization
+ * (normalizeAllowedCompanyIds()). That broader match is deliberately
+ * permissive for security (never under-grant access), but reusing it for
+ * display shows companies the admin never actually picked whenever their
+ * `id` happens to collide with another company's `comp_id` (e.g. saved
+ * comp_id=8 correctly resolves to one company, but a second company whose
+ * own `id` happens to be 8 would incorrectly also show up).
+ *
+ * @param mysqli $conDB
+ * @param int[]  $rawCompanyIds
+ * @return string[] company names actually selected, deduplicated
+ */
+if (!function_exists('resolveSelectedCompanyNames')) {
+    function resolveSelectedCompanyNames($conDB, array $rawCompanyIds) {
+        $ids = array_values(array_unique(array_map('intval', $rawCompanyIds)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $csv = implode(',', $ids);
+        $sql = "SELECT DISTINCT `comp_name` FROM `companies`
+                WHERE (`comp_id` IS NOT NULL AND `comp_id` != 0 AND `comp_id` IN ($csv))
+                   OR ((`comp_id` IS NULL OR `comp_id` = 0) AND `id` IN ($csv))
+                ORDER BY `comp_name`";
+        $result = mysqli_query($conDB, $sql);
+
+        $names = [];
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $names[] = $row['comp_name'];
+            }
+        }
+
+        return $names;
+    }
+}
+
+/**
+ * Normalize a list of allowed-company IDs to cover both companies.id and
+ * companies.comp_id, since admin_login.allowed_companies can be saved using
+ * either format. Without this, filtering employees.comp_no directly against
+ * the raw stored ID under-matches whenever a company group spans branches
+ * that use the other ID column.
+ *
+ * @param mysqli $conDB
+ * @param int[]  $rawCompanyIds
+ * @return int[] normalized, deduplicated company IDs
+ */
+if (!function_exists('normalizeAllowedCompanyIds')) {
+    function normalizeAllowedCompanyIds($conDB, array $rawCompanyIds) {
+        $companyIds = array_values(array_unique(array_map('intval', $rawCompanyIds)));
+        if (empty($companyIds)) {
+            return [];
+        }
+
+        $normalized = $companyIds;
+        $csv = implode(',', $companyIds);
+        $result = mysqli_query($conDB, "SELECT `id`, `comp_id` FROM `companies` WHERE `id` IN ($csv) OR `comp_id` IN ($csv)");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                if ((int)$row['id'] > 0) {
+                    $normalized[] = (int)$row['id'];
+                }
+                if ((int)$row['comp_id'] > 0) {
+                    $normalized[] = (int)$row['comp_id'];
+                }
+            }
+        }
+
+        return array_values(array_unique($normalized));
+    }
+}
+
+/**
+ * Compute how many employees a GIVEN admin_login account (any account, not
+ * necessarily the current session) can currently see, as an exact total and
+ * active-only count. Mirrors dashboard.php's "Total Employees" / active-count
+ * cards precisely - including the redundant-but-real interaction where an
+ * explicitly allowed employee outside the account's allowed companies/
+ * departments still gets excluded from company/department-restricted totals
+ * (that's how getCompanyFilterSQL()/getDepartmentFilterSQL() combine with
+ * getEmployeeFilterSQL() today). Used to keep the "Allowed Employees" column
+ * in App Settings > Users showing the same number as that user's own
+ * dashboard, instead of an unrelated metric (like their org-chart team size).
+ *
+ * @param mysqli $conDB
+ * @param array $adminLoginRow needs emp_id, user_type, dept, emp_type,
+ *              allowed_companies, allowed_departments, allowed_employees
+ *              (the raw admin_login columns, JSON strings as stored)
+ * @return array{total:int, active:int}
+ */
+if (!function_exists('computeAdminUserEmployeeScopeCounts')) {
+    function computeAdminUserEmployeeScopeCounts($conDB, array $adminLoginRow) {
+        $decodeIds = static function ($raw) {
+            if (empty($raw)) {
+                return [];
+            }
+            $decoded = json_decode($raw, true);
+            return is_array($decoded) ? array_map('intval', $decoded) : [];
+        };
+
+        $adminEmpId = (int)($adminLoginRow['emp_id'] ?? 0);
+        $rawCompanies = $decodeIds($adminLoginRow['allowed_companies'] ?? null);
+        $rawDepartments = $decodeIds($adminLoginRow['allowed_departments'] ?? null);
+        $rawEmployees = $decodeIds($adminLoginRow['allowed_employees'] ?? null);
+
+        $normalizedCompanies = normalizeAllowedCompanyIds($conDB, $rawCompanies);
+        $hasCompanyRestrictions = !empty($normalizedCompanies);
+        $hasDepartmentRestrictions = !empty($rawDepartments);
+
+        $seesAll = canSeeAllEmployeesByRoleParams(
+            $conDB,
+            $adminLoginRow['user_type'] ?? '',
+            $adminLoginRow['dept'] ?? 0,
+            $adminLoginRow['emp_type'] ?? '',
+            $adminEmpId
+        );
+        $hasExplicitScopeRestrictions = $hasCompanyRestrictions || $hasDepartmentRestrictions || !empty($rawEmployees);
+        $isManagerAssigned = (($adminLoginRow['user_type'] ?? '') === 'dept_user'
+            || in_array(strtolower((string)($adminLoginRow['emp_type'] ?? '')), ['manager', 'supervisor'], true)
+            || !$hasExplicitScopeRestrictions);
+        $isDeptManagerStrict = $isManagerAssigned && !$seesAll;
+
+        $effectiveIds = resolveEffectiveEmployeeScope(
+            $conDB,
+            $isDeptManagerStrict,
+            $adminEmpId,
+            $rawEmployees,
+            $normalizedCompanies,
+            $rawDepartments
+        );
+
+        if (empty($effectiveIds)) {
+            // No explicit grants and no company/department/manager scope at all = full access.
+            if (!$isDeptManagerStrict && !$hasCompanyRestrictions && !$hasDepartmentRestrictions) {
+                $totalRow = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT COUNT(*) c FROM `employees`"));
+                $activeRow = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT COUNT(*) c FROM `employees` WHERE `status`=1 AND `fly`=0"));
+                return ['total' => (int)$totalRow['c'], 'active' => (int)$activeRow['c']];
+            }
+            return ['total' => 0, 'active' => 0];
+        }
+
+        $conditions = ["`emp_id` IN (" . implode(',', $effectiveIds) . ")"];
+        if (!$isDeptManagerStrict) {
+            if ($hasCompanyRestrictions) {
+                $conditions[] = "`comp_no` IN (" . implode(',', $normalizedCompanies) . ")";
+            }
+            if ($hasDepartmentRestrictions) {
+                $conditions[] = "`dept` IN (" . implode(',', array_map('intval', $rawDepartments)) . ")";
+            }
+        }
+        $where = implode(' AND ', $conditions);
+
+        $total = 0;
+        $active = 0;
+        $totalResult = mysqli_query($conDB, "SELECT COUNT(*) AS c FROM `employees` WHERE $where");
+        if ($totalResult) {
+            $total = (int)mysqli_fetch_assoc($totalResult)['c'];
+        }
+        $activeResult = mysqli_query($conDB, "SELECT COUNT(*) AS c FROM `employees` WHERE $where AND `status`=1 AND `fly`=0");
+        if ($activeResult) {
+            $active = (int)mysqli_fetch_assoc($activeResult)['c'];
+        }
+
+        return ['total' => $total, 'active' => $active];
+    }
+}
+
+/**
+ * Resolve the effective set of employee IDs an admin_login account can see,
+ * combining (in priority order):
+ *   1. Strict manager mode: only that person's direct reports (supervisor_id).
+ *   2. Otherwise, everyone in their allowed companies/departments, additively
+ *      merged with any explicitly allowed employees.
+ * This is the single source of truth for "how many employees does this
+ * account actually have access to" - used both to build session-wide list
+ * filters (session_check.php) and to report a user's total scope elsewhere
+ * (e.g. the Allowed Employees column in App Settings > Users), so the two
+ * can never show different numbers for the same account.
+ *
+ * @param mysqli $conDB
+ * @param bool   $isDeptManagerStrict
+ * @param int    $adminEmpId
+ * @param int[]  $allowedEmployeeIds        explicit admin_login.allowed_employees
+ * @param int[]  $normalizedAllowedCompanyIds  already run through normalizeAllowedCompanyIds()
+ * @param int[]  $allowedDepartmentIds
+ * @return int[] effective employee IDs (deduplicated)
+ */
+if (!function_exists('resolveEffectiveEmployeeScope')) {
+    function resolveEffectiveEmployeeScope($conDB, $isDeptManagerStrict, $adminEmpId, array $allowedEmployeeIds, array $normalizedAllowedCompanyIds, array $allowedDepartmentIds) {
+        $effective = array_map('intval', $allowedEmployeeIds);
+        $hasCompanyRestrictions = !empty($normalizedAllowedCompanyIds);
+        $hasDepartmentRestrictions = !empty($allowedDepartmentIds);
+
+        if ($isDeptManagerStrict && !empty($adminEmpId)) {
+            // Include the manager's own record too - direct-report scope alone would
+            // otherwise drop the manager from their own department/employee counts.
+            $effective[] = (int)$adminEmpId;
+            $scopeSql = "SELECT `emp_id` FROM `employees` WHERE `supervisor_id` = " . (int)$adminEmpId;
+        } elseif ($hasCompanyRestrictions || $hasDepartmentRestrictions) {
+            $scopeSql = "SELECT `emp_id` FROM `employees` WHERE `status` = 1";
+            if ($hasCompanyRestrictions) {
+                $scopeSql .= " AND `comp_no` IN (" . implode(',', array_map('intval', $normalizedAllowedCompanyIds)) . ")";
+            }
+            if ($hasDepartmentRestrictions) {
+                $scopeSql .= " AND `dept` IN (" . implode(',', array_map('intval', $allowedDepartmentIds)) . ")";
+            }
+        } else {
+            return $effective;
+        }
+
+        $result = mysqli_query($conDB, $scopeSql);
+        if ($result) {
+            $scopeIds = [];
+            while ($row = mysqli_fetch_assoc($result)) {
+                $scopeIds[] = (int)$row['emp_id'];
+            }
+            $effective = array_merge($effective, $scopeIds);
+        }
+
+        return array_values(array_unique($effective));
     }
 }
 
@@ -5842,7 +6123,16 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
             error_log("ACCESS_CONTROL: ALLOWED via rule 2 (HR department)");
             return true;
         }
-        
+
+        // 1.5. Anyone granted "full employee access" (GM, HR, Finance Manager, or
+        // an explicit App Settings > Security > Full Access Employees grant) -
+        // same rule set used to gate reports/dashboard scope, so viewing an
+        // individual profile isn't more restrictive than seeing them in a list.
+        if (function_exists('canSeeAllEmployeesByRole') && canSeeAllEmployeesByRole(true)) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 1.5 (canSeeAllEmployeesByRole - manual full access or role-based)");
+            return true;
+        }
+
         // 2.5. EXPLICITLY ALLOWED EMPLOYEES - user can view employees they've been explicitly granted access to
         if (!empty($allowed_employees_array) && in_array($emp_id, $allowed_employees_array)) {
             error_log("ACCESS_CONTROL: ALLOWED via rule 2.5 (explicitly allowed employee). emp_id={$emp_id} in allowed_employees_array");
@@ -5876,9 +6166,18 @@ if (!function_exists('canEmployeeSupervisorAccess')) {
             return true;
         }
         
-        // 6. Regular employee in accessible departments - can view colleagues in their accessible departments (company check removed for multi-dept access)
-        if ($emp_dept > 0 && $has_dept_access) {
-            error_log("ACCESS_CONTROL: ALLOWED via rule 6 (colleague in accessible dept, company check skipped)");
+        // 6. Regular employee in their own literal department - can view colleagues
+        // there (company check remains skipped for multi-dept access, as before).
+        // Deliberately NOT using $has_dept_access here: that flag treats an
+        // unconfigured/"full access to all departments" allowed_departments
+        // setting as "every department is accessible", which let any non-manager
+        // account (e.g. a Finance Officer never given an explicit department
+        // restriction) view every employee's full profile company-wide - viewing
+        // one employee's whole profile is more sensitive than being included in a
+        // filtered list/report, so it requires the SAME actual department, not
+        // just "accessible".
+        if ($emp_dept > 0 && $emp_dept === $user_dept) {
+            error_log("ACCESS_CONTROL: ALLOWED via rule 6 (same literal department)");
             return true;
         }
         

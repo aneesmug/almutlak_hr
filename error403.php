@@ -93,10 +93,13 @@ header("Content-Type: text/html; charset=UTF-8");
         <div class="error-code">403</div>
         <div class="error-title">Access Denied</div>
         <div class="error-message">
-            <p>Sorry, you don't have permission to access this resource.</p>
-            <p>This directory/file is protected and cannot be accessed directly.</p>
+            <p>Sorry, you don't have permission to access this page.</p>
+            <?php if (!empty($_GET['page'])): ?>
+                <p><strong><?= htmlspecialchars((string)$_GET['page'], ENT_QUOTES, 'UTF-8') ?></strong> is not included in your role's page access.</p>
+            <?php endif; ?>
+            <p>Contact your administrator if you believe you should have access.</p>
         </div>
-        <a href="/" class="btn-home">← Back to Home</a>
+        <a href="dashboard.php" class="btn-home">← Back to Dashboard</a>
         <div class="security-info">
             <p>If you believe this is an error, please contact the administrator.</p>
             <p><?= date('Y-m-d H:i:s') ?></p>

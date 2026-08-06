@@ -33,6 +33,7 @@ mysqli_free_result($typeQuery);
 // Search, Pagination & Filtering Logic
 $allStatuses = [
     'my_pending' => __('my_pending_queue'),
+    'my_team' => (function_exists('__') ? __('my_team_requests') : 'My Team'),
     'my_dept' => __('my_department_requests'),
     'pending_approval' => __('all_pending'),
     'approved' => __('approved'),
@@ -89,6 +90,11 @@ if ($current_filter === 'my_pending') {
     $params[] = $empid;
     $paramTypes .= "i";
     $whereClauses[] = "s.settlement_status != 'rejected'";
+} elseif ($current_filter === 'my_team') {
+    // Assigned direct reports only (employees.supervisor_id) - not department-based.
+    $whereClauses[] = "e.supervisor_id = ?";
+    $params[] = $empid;
+    $paramTypes .= "i";
 } elseif ($current_filter === 'my_dept') {
     // All settlements from user's department
     $whereClauses[] = "e.dept = ?";
@@ -116,22 +122,26 @@ if (!empty($searchTerm)) {
 }
 
 // Department scoping for non-admin users
-if (!$canSeeAllDepts && !$deptFilterApplied && $current_filter !== 'my_pending') {
+if (!$canSeeAllDepts && !$deptFilterApplied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
     $whereClauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
     array_push($params, $user_dept, $requestTypeId, $empid);
     $paramTypes .= "iii";
     $deptFilterApplied = true;
 }
 
-// Add company filter to WHERE clause (same as vacation and loan pages)
-$companyFilter = getCompanyFilterSQL('e.comp_no', true);
-$departmentFilter = getDepartmentFilterSQL('e.dept', true);
-$employeeFilter = getEmployeeFilterSQL('e.emp_id', true);
-if (empty($whereClauses)) {
-    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter . $employeeFilter;
+// Add company/department/employee scoping filters, except for 'my_pending'/'my_team':
+// those are already scoped by explicit approver_id / supervisor_id assignment, so a
+// supervisor overseeing someone outside their own department/company must still see them.
+if ($current_filter === 'my_pending' || $current_filter === 'my_team') {
+    $companyFilter = "";
+    $departmentFilter = "";
+    $employeeFilter = "";
 } else {
-    $whereClauses[] = "1=1" . $companyFilter . $departmentFilter . $employeeFilter;
+    $companyFilter = getCompanyFilterSQL('e.comp_no', true);
+    $departmentFilter = getDepartmentFilterSQL('e.dept', true);
+    $employeeFilter = getEmployeeFilterSQL('e.emp_id', true);
 }
+$whereClauses[] = "1=1" . $companyFilter . $departmentFilter . $employeeFilter;
 
 
 $whereSql = " WHERE " . implode(" AND ", $whereClauses);
@@ -179,6 +189,7 @@ if ($totalItems > 0) {
         e.dept,
         e.gosi,
         e.country as country_id,
+        e.allow_vacation_salary_below_min_days,
         ra_pending.approver_id as current_approver_id,
         approver_emp.name as current_approver_name,
         ra_pending.approval_level as current_approval_level,
@@ -551,13 +562,15 @@ if ($canSeeAllDepts) {
                                                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                                                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                                                 $is_emergency = ($fly_type === 'emergency');
+                                                $allow_vacation_salary_below_min_days = ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
                                                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                                                     $vac_type,
                                                     $fly_type,
                                                     $settlement['country_id'] ?? 0,
                                                     $approved_days,
                                                     $settlement['is_deductible'] ?? 0,
-                                                    $vacation_salary_type
+                                                    $vacation_salary_type,
+                                                    $allow_vacation_salary_below_min_days
                                                 );
                                                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                                                     $vac_type,
@@ -565,7 +578,8 @@ if ($canSeeAllDepts) {
                                                     $settlement['country_id'] ?? 0,
                                                     $approved_days,
                                                     $settlement['is_deductible'] ?? 0,
-                                                    $vacation_salary_type
+                                                    $vacation_salary_type,
+                                                    $allow_vacation_salary_below_min_days
                                                 );
                                                 
                                                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];

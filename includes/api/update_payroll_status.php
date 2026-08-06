@@ -19,7 +19,15 @@ header('Content-Type: application/json');
 
 // Include the database connection file. Adjust the path as needed for your project structure.
 require_once(__DIR__ . "/../../includes/db.php");
+require_once(__DIR__ . "/../../includes/session_check.php");
 
+// This endpoint marks payroll records as paid and previously had no auth check at
+// all. Restrict to system admin / HR Payroll.
+if (!(($is_system_admin ?? false) || ($isHR_Payroll ?? false))) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Access denied.']);
+    exit();
+}
 
 // Get the raw POST data from the request body
 $input = json_decode(file_get_contents('php://input'), true);

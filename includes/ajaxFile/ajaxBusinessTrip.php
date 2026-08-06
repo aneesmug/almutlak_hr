@@ -2137,6 +2137,202 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'saveBusinessTripAllowan
     exit;
 }
 
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripOtherAllowanceItems') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        $items = [];
+        $stmtHead = mysqli_prepare($conDB, "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1");
+        if ($stmtHead) {
+            mysqli_stmt_bind_param($stmtHead, 'i', $trip_id);
+            mysqli_stmt_execute($stmtHead);
+            $resHead = mysqli_stmt_get_result($stmtHead);
+            if ($resHead && ($rowHead = mysqli_fetch_assoc($resHead))) {
+                $allowance_id = (int)$rowHead['id'];
+                $stmtItems = mysqli_prepare($conDB, "SELECT description, unit_amount, line_total, created_at FROM emp_business_trip_allowance_items WHERE allowance_id = ? AND allowance_type = 'others' ORDER BY line_order ASC, id ASC");
+                if ($stmtItems) {
+                    mysqli_stmt_bind_param($stmtItems, 'i', $allowance_id);
+                    mysqli_stmt_execute($stmtItems);
+                    $resItems = mysqli_stmt_get_result($stmtItems);
+                    while ($resItems && ($itemRow = mysqli_fetch_assoc($resItems))) {
+                        $items[] = [
+                            'description' => (string)($itemRow['description'] ?? ''),
+                            'amount' => (float)($itemRow['unit_amount'] ?? 0),
+                            'created_at' => (string)($itemRow['created_at'] ?? '')
+                        ];
+                    }
+                    mysqli_stmt_close($stmtItems);
+                }
+            }
+            mysqli_stmt_close($stmtHead);
+        }
+
+        echo json_encode(['status' => 'success', 'data' => ['items' => $items]]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'addBusinessTripOtherAllowances') {
+    try {
+        ensureBusinessTripAllowancesTable($conDB);
+
+        require_once __DIR__ . '/../special_access_helper.php';
+        if (!user_has_special_access($conDB, $current_user_id, 'add_business_trip_manual_allowance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+            throw new Exception('You are not authorized to add manual allowances.');
+        }
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        if ($trip_id <= 0) {
+            throw new Exception('Invalid trip ID');
+        }
+
+        $items_raw = (string)($_POST['items'] ?? '[]');
+        $items = json_decode($items_raw, true);
+        if (!is_array($items) || empty($items)) {
+            throw new Exception('At least one allowance entry (with a comment) is required.');
+        }
+
+        $prepared_items = [];
+        foreach ($items as $item) {
+            $description = trim((string)($item['description'] ?? ''));
+            $amount = round((float)($item['amount'] ?? 0), 2);
+            if ($description === '') {
+                throw new Exception('Every allowance entry needs a comment (e.g. Taxi, Parking).');
+            }
+            if ($amount <= 0) {
+                throw new Exception('Every allowance entry needs an amount greater than 0.');
+            }
+            $prepared_items[] = ['description' => $description, 'amount' => $amount];
+        }
+
+        $sqlTrip = "SELECT id, request_inv_no, emp_id, trip_start_date, trip_end_date FROM emp_business_trip WHERE id = ? LIMIT 1";
+        $stmtTrip = mysqli_prepare($conDB, $sqlTrip);
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $resTrip = mysqli_stmt_get_result($stmtTrip);
+        $trip = mysqli_fetch_assoc($resTrip);
+        mysqli_stmt_close($stmtTrip);
+
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+
+        $request_inv_no = (string)($trip['request_inv_no'] ?? '');
+        $emp_id = (string)($trip['emp_id'] ?? '');
+        $allowance_days = calculateTripAllowanceDays($trip['trip_start_date'] ?? '', $trip['trip_end_date'] ?? '');
+        $current_user_id = (int)($_SESSION['empid'] ?? 0);
+
+        mysqli_begin_transaction($conDB);
+
+        // Manual allowances (taxi, parking, etc.) can be added repeatedly over the
+        // life of the trip, unlike the one-time ticket/other-amount entry above -
+        // so we upsert the header row instead of blocking on "already exists".
+        $insHeadSql = "INSERT INTO emp_business_trip_allowances
+            (trip_id, request_inv_no, emp_id, ticket_fares, other_allowance, allowance_days, total_allowance, notes, created_by, updated_by)
+            VALUES (?, ?, ?, 0, 0, ?, 0, '', ?, ?)
+            ON DUPLICATE KEY UPDATE
+                request_inv_no = VALUES(request_inv_no),
+                emp_id = VALUES(emp_id),
+                updated_by = VALUES(updated_by),
+                updated_at = NOW()";
+        $insHeadStmt = mysqli_prepare($conDB, $insHeadSql);
+        if (!$insHeadStmt) {
+            throw new Exception('Failed to initialize allowance record: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($insHeadStmt, 'issiii', $trip_id, $request_inv_no, $emp_id, $allowance_days, $current_user_id, $current_user_id);
+        if (!mysqli_stmt_execute($insHeadStmt)) {
+            throw new Exception('Failed to initialize allowance record: ' . mysqli_stmt_error($insHeadStmt));
+        }
+        mysqli_stmt_close($insHeadStmt);
+
+        $allowance_id = 0;
+        $selHeadStmt = mysqli_prepare($conDB, "SELECT id FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($selHeadStmt, 'i', $trip_id);
+        mysqli_stmt_execute($selHeadStmt);
+        $selHeadRes = mysqli_stmt_get_result($selHeadStmt);
+        if ($selHeadRes && ($selHeadRow = mysqli_fetch_assoc($selHeadRes))) {
+            $allowance_id = (int)$selHeadRow['id'];
+        }
+        mysqli_stmt_close($selHeadStmt);
+
+        if ($allowance_id <= 0) {
+            throw new Exception('Failed to prepare allowance record id.');
+        }
+
+        $nextOrder = 1;
+        $ordStmt = mysqli_prepare($conDB, "SELECT COALESCE(MAX(line_order), 0) AS max_order FROM emp_business_trip_allowance_items WHERE allowance_id = ?");
+        mysqli_stmt_bind_param($ordStmt, 'i', $allowance_id);
+        mysqli_stmt_execute($ordStmt);
+        $ordRes = mysqli_stmt_get_result($ordStmt);
+        if ($ordRes && ($ordRow = mysqli_fetch_assoc($ordRes))) {
+            $nextOrder = (int)$ordRow['max_order'] + 1;
+        }
+        mysqli_stmt_close($ordStmt);
+
+        $insLineStmt = mysqli_prepare($conDB, "INSERT INTO emp_business_trip_allowance_items (allowance_id, trip_id, allowance_type, description, unit_amount, qty, line_total, line_order) VALUES (?, ?, 'others', ?, ?, 1, ?, ?)");
+        if (!$insLineStmt) {
+            throw new Exception('Failed to prepare allowance line insert: ' . mysqli_error($conDB));
+        }
+        foreach ($prepared_items as $item) {
+            $desc = $item['description'];
+            $amt = $item['amount'];
+            $order = $nextOrder++;
+            mysqli_stmt_bind_param($insLineStmt, 'iisddi', $allowance_id, $trip_id, $desc, $amt, $amt, $order);
+            if (!mysqli_stmt_execute($insLineStmt)) {
+                throw new Exception('Failed to save allowance line: ' . mysqli_stmt_error($insLineStmt));
+            }
+        }
+        mysqli_stmt_close($insLineStmt);
+
+        $aggSql = "SELECT
+            SUM(CASE WHEN allowance_type = 'ticket_fares' THEN line_total ELSE 0 END) AS ticket_fares,
+            SUM(CASE WHEN allowance_type IN ('others', 'other_allowance') THEN line_total ELSE 0 END) AS other_allowance,
+            SUM(line_total) AS total_allowance
+            FROM emp_business_trip_allowance_items WHERE allowance_id = ?";
+        $aggStmt = mysqli_prepare($conDB, $aggSql);
+        mysqli_stmt_bind_param($aggStmt, 'i', $allowance_id);
+        mysqli_stmt_execute($aggStmt);
+        $aggRes = mysqli_stmt_get_result($aggStmt);
+        $agg = mysqli_fetch_assoc($aggRes) ?: [];
+        mysqli_stmt_close($aggStmt);
+
+        $aggTicket = (float)($agg['ticket_fares'] ?? 0);
+        $aggOther = (float)($agg['other_allowance'] ?? 0);
+        $aggTotal = (float)($agg['total_allowance'] ?? 0);
+
+        $updHeadStmt = mysqli_prepare($conDB, "UPDATE emp_business_trip_allowances SET ticket_fares = ?, other_allowance = ?, allowance_days = ?, total_allowance = ?, updated_by = ?, updated_at = NOW() WHERE id = ?");
+        mysqli_stmt_bind_param($updHeadStmt, 'ddidii', $aggTicket, $aggOther, $allowance_days, $aggTotal, $current_user_id, $allowance_id);
+        if (!mysqli_stmt_execute($updHeadStmt)) {
+            throw new Exception('Failed to update allowance totals: ' . mysqli_stmt_error($updHeadStmt));
+        }
+        mysqli_stmt_close($updHeadStmt);
+
+        mysqli_commit($conDB);
+
+        echo json_encode([
+            'status' => 'success',
+            'title' => 'Saved',
+            'message' => 'Manual allowance entries saved successfully.',
+            'other_allowance' => round($aggOther, 2),
+            'total_allowance' => round($aggTotal, 2)
+        ]);
+    } catch (Exception $e) {
+        @mysqli_rollback($conDB);
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripTicketFareOnly') {
     try {
         ensureBusinessTripAllowancesTable($conDB);

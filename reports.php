@@ -55,6 +55,7 @@ $all_report_options = [
     'terminated_employees' => __('terminated_employees'),
     'eos' => __('calculate_end_of_service'),
     'dept_comparison' => __('dept_comparison_report'),
+    'country_company_comparison' => __('country_company_comparison_report'),
     'custom' => __('custom_report')
 ];
 
@@ -643,8 +644,23 @@ if (mysqli_num_rows($query) == 1) {
                                                 </select>
                                                 <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
                                             </div>
-                                        <?php endif; ?> 
-                                        
+                                        <?php endif; ?>
+
+                                        <!-- Company Filter (for country/company comparison report) -->
+                                        <div class="col-md-4 mb-3" id="companyFilterWrapper" style="display:none;">
+                                            <label for="companyMultiFilter"><?= __('select_companies') ?></label>
+                                            <select class="form-control" id="companyMultiFilter" multiple="multiple" size="8" style="height: auto;">
+                                                <option value="all" data-select-all="true">✓ <?= __('all_companies') ?></option>
+                                                <?php
+                                                $company_query = mysqli_query($conDB, "SELECT DISTINCT comp_id, comp_name, comp_name_ar FROM companies ORDER BY comp_name");
+                                                while ($comp = mysqli_fetch_assoc($company_query)) {
+                                                    echo '<option value="' . $comp['comp_id'] . '">' . htmlspecialchars($current_lang == 'en' ? $comp['comp_name'] : $comp['comp_name_ar'], ENT_QUOTES, 'UTF-8') . '</option>';
+                                                }
+                                                ?>
+                                            </select>
+                                            <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_companies') ?></small>
+                                        </div>
+
                                         <!-- Employee Filter (for employee-related reports) -->
                                         <div class="col-md-4 mb-3" id="employeeFilterWrapper" style="display:none;">
                                             <label for="employeeFilter"><?= __('employee') ?></label>
@@ -1033,6 +1049,70 @@ if (mysqli_num_rows($query) == 1) {
                     }
                 }
 
+                // Initialize Select2 for multi-company filter (only if plugin loaded)
+                function initCompanySelect2() {
+                    if ($.fn.select2) {
+                        function updateCompanyDeselectOption() {
+                            var $select = $('#companyMultiFilter');
+                            var allValues = [];
+                            $select.find('option').each(function() {
+                                if ($(this).val() !== 'all' && $(this).val() !== 'none') {
+                                    allValues.push($(this).val());
+                                }
+                            });
+                            var selected = $select.val() || [];
+                            var $none = $select.find('option[value="none"]');
+                            if (selected.length === allValues.length && !$none.length) {
+                                $select.prepend(`<option value="none" data-deselect-all="true">✗ ${__('deselect_all')}</option>`);
+                            } else if (selected.length !== allValues.length && $none.length) {
+                                $none.remove();
+                            }
+                        }
+                        if ($('#companyMultiFilter').data('select2')) {
+                            return; // already initialized
+                        }
+                        $('#companyMultiFilter').select2({
+                            theme: 'bootstrap4',
+                            placeholder: (typeof __ === 'function') ? __('select_companies') : 'Select companies',
+                            allowClear: true,
+                            closeOnSelect: false,
+                            width: '100%',
+                            templateSelection: function(data) {
+                                if (data.id === 'all') {
+                                    return (typeof __ === 'function') ? __('all_companies') : 'All Companies';
+                                }
+                                if (data.id === 'none') {
+                                    return (typeof __ === 'function') ? __('deselect_all') : 'Deselect All';
+                                }
+                                return data.text;
+                            }
+                        });
+                        $('#companyMultiFilter').on('select2:select', function(e) {
+                            var data = e.params.data;
+                            if (data.id === 'all') {
+                                var allValues = [];
+                                $('#companyMultiFilter option').each(function() {
+                                    if ($(this).val() !== 'all' && $(this).val() !== 'none') {
+                                        allValues.push($(this).val());
+                                    }
+                                });
+                                $(this).val(allValues).trigger('change');
+                            }
+                            if (data.id === 'none') {
+                                $(this).val(null).trigger('change');
+                            }
+                            updateCompanyDeselectOption();
+                        });
+                        $('#companyMultiFilter').on('select2:unselect', function(e) {
+                            updateCompanyDeselectOption();
+                        });
+                        $('#companyMultiFilter').on('change', function() {
+                            updateCompanyDeselectOption();
+                        });
+                        updateCompanyDeselectOption();
+                    }
+                }
+
                 function initCustomTablesSelect2() {
                     if ($.fn.select2) {
                         $('#customTables').select2({
@@ -1228,6 +1308,7 @@ if (mysqli_num_rows($query) == 1) {
                     terminated_employees: { hide: true },
                     eos: { hide: true },
                     dept_comparison: { hide: true },
+                    country_company_comparison: { hide: true },
                     custom: { hide: true }
                 };
 
@@ -2412,6 +2493,32 @@ if (mysqli_num_rows($query) == 1) {
                             default: false
                         }
                     ],
+                    country_company_comparison: [{
+                            id: 'country',
+                            label: (typeof __ === 'function') ? __('country') : 'Country',
+                            default: true
+                        },
+                        {
+                            id: 'company',
+                            label: (typeof __ === 'function') ? __('company') : 'Company',
+                            default: true
+                        },
+                        {
+                            id: 'total_employees',
+                            label: (typeof __ === 'function') ? __('total_employees') : 'Total Employees',
+                            default: true
+                        },
+                        {
+                            id: 'active_employees',
+                            label: (typeof __ === 'function') ? __('active_employees') : 'Active Employees',
+                            default: true
+                        },
+                        {
+                            id: 'inactive_employees',
+                            label: (typeof __ === 'function') ? __('inactive_employees') : 'Inactive Employees',
+                            default: false
+                        }
+                    ],
                     custom: [],
                     assets: [{
                             id: 'asset_name',
@@ -2594,6 +2701,17 @@ if (mysqli_num_rows($query) == 1) {
                     // Clear multi-select department filters
                     $('#deptMultiFilter').val(null).trigger('change');
                     $('#customDeptMultiFilter').val(null).trigger('change');
+                    if ($('#companyMultiFilter').data('select2')) {
+                        $('#companyMultiFilter').val(null).trigger('change');
+                    }
+
+                    // Show/hide company filter (country/company comparison report only)
+                    if (reportType === 'country_company_comparison') {
+                        $('#companyFilterWrapper').show();
+                        initCompanySelect2();
+                    } else {
+                        $('#companyFilterWrapper').hide();
+                    }
 
                     // Clear column selection container and hidden select
                     $('#columnSortableContainer').empty();
@@ -3165,6 +3283,11 @@ if (mysqli_num_rows($query) == 1) {
                         userDept: '<?= $user_dept ?>',
                         employeeId: employeeIdValue
                     };
+
+                    // If country/company comparison, include selected companies filter
+                    if (reportType === 'country_company_comparison') {
+                        filterData.companies = $('#companyMultiFilter').val() || [];
+                    }
 
                     // If assets_list, include selected asset item filter
                     if (reportType === 'assets_list') {
