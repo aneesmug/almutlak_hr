@@ -12,6 +12,7 @@ if (!function_exists('get_report_type_labels')) {
             'vacation' => 'Vacation Report',
             'rejoin' => 'Employee Rejoin Report',
             'loan' => 'Loan Report',
+            'salary_increment' => 'Salary Increment Report',
             'salary' => 'Salary Report',
             'payroll' => 'Payroll Report',
             'attendance' => 'Attendance Report',

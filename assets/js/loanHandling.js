@@ -538,35 +538,67 @@ $(document).on('click', '.addManualPayment', async function(e) {
         if (response.status === 'success') {
             const remainingBalance = response.remaining_balance;
 
+            Swal.close();
             Swal.fire({
-                title: __('add_manual_loan_payment_title'),
+                title: '<i class="fa fa-hand-holding-usd"></i> ' + __('add_manual_loan_payment_title'),
                 html: `
-                    <div class="alert alert-info text-left">
-                        <p class="mb-0">${__('remaining_balance_label')} <strong>${remainingBalance.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
+                    <div class="vacation-form-container text-left">
+                        <div class="vacation-card">
+                            <div class="vacation-card-header"><i class="fa fa-wallet"></i> ${__('loan_balance_label') || 'Loan Balance'}</div>
+                            <div class="info-row">
+                                <div class="info-field">
+                                    <label>${__('remaining_balance_label') || 'Remaining Balance'}</label>
+                                    <input type="text" readonly value="${remainingBalance.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}" style="font-weight:700; color:#e74a3b;">
+                                </div>
+                                <div class="info-field">
+                                    <label>${__('remaining_after_payment') || 'Remaining After Payment'}</label>
+                                    <input type="text" id="remaining_after_display" readonly value="${remainingBalance.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}" style="font-weight:700; color:#1cc88a;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <form id="manualPaymentForm" enctype="multipart/form-data">
+                            <div class="vacation-card">
+                                <div class="vacation-card-header"><i class="fa fa-money-bill-wave"></i> ${__('payment_amount_label')}</div>
+                                <input type="number" id="payment_amount" name="payment_amount" class="form-control form-control-modern" placeholder="${__('enter_amount_placeholder')}" required step="0.01" max="${remainingBalance}">
+                                <small id="payment_feedback" class="form-text text-danger mt-1 d-block"></small>
+                            </div>
+
+                            <div class="vacation-card">
+                                <div class="vacation-card-header"><i class="fa fa-calendar-alt"></i> ${__('payment_date_label')}</div>
+                                <input type="text" id="payment_date" name="payment_date" class="form-control form-control-modern" required autocomplete="off">
+                            </div>
+
+                            <div class="vacation-card">
+                                <div class="vacation-card-header"><i class="fa fa-receipt"></i> ${__('payment_documentation') || 'Payment Documentation'}</div>
+                                <div class="date-range-container">
+                                    <div class="date-field">
+                                        <label class="form-label-modern">${__('receipt_id')}</label>
+                                        <input type="text" id="receipt_id" name="receipt_id" class="form-control form-control-modern" placeholder="${__('enter_receipt_id_placeholder')}" required>
+                                        <small id="receipt_feedback" class="form-text text-danger mt-1 d-block"></small>
+                                    </div>
+                                    <div class="date-field">
+                                        <label class="form-label-modern">${__('attachment')}</label>
+                                        <input type="file" id="attachment" name="attachment" class="form-control-file" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
                     </div>
-                    <form id="manualPaymentForm" class="text-left" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="payment_amount">${__('payment_amount_label')}</label>
-                            <input type="number" id="payment_amount" name="payment_amount" class="form-control" placeholder="${__('enter_amount_placeholder')}" required step="0.01" max="${remainingBalance}">
-                            <small id="payment_feedback" class="form-text text-danger"></small>
-                        </div>
-                        <div class="form-group">
-                            <label for="payment_date">${__('payment_date_label')}</label>
-                            <input type="text" id="payment_date" name="payment_date" class="form-control" required autocomplete="off">
-                        </div>
-                        <div class="form-group">
-                            <label for="receipt_id">${__('receipt_id')}</label>
-                            <input type="text" id="receipt_id" name="receipt_id" class="form-control" placeholder="${__('enter_receipt_id_placeholder')}" required>
-                            <small id="receipt_feedback" class="form-text text-danger"></small>
-                        </div>
-                        <div class="form-group">
-                            <label for="attachment">${__('attachment')}</label>
-                            <input type="file" id="attachment" name="attachment" class="form-control-file" required>
-                        </div>
-                    </form>
                 `,
                 showCancelButton: true,
-                confirmButtonText: __('submit_payment_button'),
+                confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_payment_button'),
+                cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
+                confirmButtonColor: '#4e73df',
+                cancelButtonColor: '#e74a3b',
+                allowOutsideClick: false,
+                customClass: {
+                    popup: 'vacation-modal-popup',
+                    title: 'vacation-modal-title',
+                    confirmButton: 'btn-modern-confirm',
+                    cancelButton: 'btn-modern-cancel'
+                },
+                width: '600px',
                 showLoaderOnConfirm: true,
                 didOpen: () => {
                     // Initialize Datepicker
@@ -579,6 +611,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
 
                     const paymentAmountInput = $('#payment_amount');
                     const paymentFeedback = $('#payment_feedback');
+                    const remainingAfterDisplay = $('#remaining_after_display');
                     const receiptIdInput = $('#receipt_id');
                     const receiptFeedback = $('#receipt_feedback');
                     const confirmButton = Swal.getConfirmButton();
@@ -587,7 +620,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
                     function validateForm() {
                         const amount = parseFloat(paymentAmountInput.val());
                         const isReceiptDuplicate = receiptFeedback.text() !== '';
-                        
+
                         let isAmountValid = true;
                         if (isNaN(amount) || amount <= 0 || amount > remainingBalance) {
                             isAmountValid = false;
@@ -599,6 +632,9 @@ $(document).on('click', '.addManualPayment', async function(e) {
                         } else {
                             paymentFeedback.text('');
                         }
+
+                        const remainingAfter = isNaN(amount) ? remainingBalance : Math.max(remainingBalance - amount, 0);
+                        remainingAfterDisplay.val(remainingAfter.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
 
                         confirmButton.disabled = !isAmountValid || isReceiptDuplicate;
                     }
@@ -703,12 +739,179 @@ $(document).on('click', '.addManualPayment', async function(e) {
         }
 
     } catch (error) {
+        Swal.close();
         Swal.fire({
             icon: 'error',
             title: __('error_title'),
             text: error.message,
             allowOutsideClick:false});
     }
+});
+
+// NEW FUNCTION for adding a direct, pre-approved manual loan (skips the full
+// apply/approve workflow entirely - used to record legacy/off-system loans).
+// If the employee already has an active loan, this tops up that loan's amount
+// instead of creating a second, separate loan record (e.g. 1000 + 500 = 1500).
+$(document).on('click', '.addManualLoan', function(e) {
+    e.preventDefault();
+    var emp_id = $(this).data('emp-id');
+    var activeLoanId = $(this).data('active-loan-id');
+
+    if (activeLoanId) {
+        var currentAmount = parseFloat($(this).data('active-loan-amount')) || 0;
+        var currentRemaining = parseFloat($(this).data('active-remaining')) || 0;
+
+        Swal.fire({
+            title: __('add_manual_loan', 'Add Manual Loan'),
+            html: `
+                <div class="alert alert-info text-left">
+                    ${__('current_loan_amount', 'Current loan amount')}: <strong>${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong><br>
+                    ${__('remaining_balance', 'Remaining Balance')}: <strong>${currentRemaining.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong>
+                </div>
+                <form id="manualLoanTopupForm" class="text-left">
+                    <div class="form-group">
+                        <label for="topup_amount">${__('additional_amount', 'Additional Amount')}</label>
+                        <input type="number" step="0.01" id="topup_amount" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="topup_new_total">${__('new_total_loan_amount', 'New Total Loan Amount')}</label>
+                        <input type="text" id="topup_new_total" class="form-control" readonly>
+                    </div>
+                </form>
+            `,
+            showCancelButton: true,
+            confirmButtonText: __('save', 'Add'),
+            cancelButtonText: __('cancel'),
+            allowOutsideClick: false,
+            showLoaderOnConfirm: true,
+            didOpen: () => {
+                $('#topup_amount').on('input', function() {
+                    const add = parseFloat($(this).val()) || 0;
+                    $('#topup_new_total').val((currentAmount + add).toFixed(2));
+                });
+            },
+            preConfirm: () => {
+                const additional_amount = parseFloat($('#topup_amount').val());
+                if (!additional_amount || additional_amount <= 0) {
+                    Swal.showValidationMessage(__('please_enter_valid_amount', 'Please enter a valid amount.'));
+                    return false;
+                }
+                return $.ajax({
+                    url: './includes/ajaxFile/ajaxLoan.php',
+                    type: 'POST',
+                    data: {
+                        ajaxType: 'topup_manual_loan',
+                        loan_id: activeLoanId,
+                        additional_amount: additional_amount
+                    },
+                    dataType: 'json'
+                }).fail((jqXHR, textStatus) => {
+                    const error = handleAjaxFailure(jqXHR, textStatus);
+                    Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+                });
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                const response = result.value;
+                Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false })
+                    .then(() => { if (response.status === 'success') location.reload(); });
+            }
+        });
+        return;
+    }
+
+    Swal.fire({
+        title: __('add_manual_loan', 'Add Manual Loan'),
+        html: `
+            <form id="manualLoanForm" class="text-left" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="manual_loan_date">${__('payment_date') || 'Loan Date'}</label>
+                    <input type="text" id="manual_loan_date" name="start_date" class="form-control" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="manual_total_loan_amount">${__('total_payable') || 'Total Loan Amount'}</label>
+                    <input type="number" step="0.01" id="manual_total_loan_amount" name="total_loan_amount" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="manual_paid_amount">${__('total_paid') || 'Total Paid'}</label>
+                    <input type="number" step="0.01" id="manual_paid_amount" name="paid_amount" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="manual_remaining_amount">${__('remaining_balance') || 'Remaining Balance'}</label>
+                    <input type="text" id="manual_remaining_amount" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="manual_receipt_id">${__('receipt_id') || 'Receipt ID'}</label>
+                    <input type="text" id="manual_receipt_id" name="payment_receipt_id" class="form-control" placeholder="${__('enter_receipt_id') || ''}">
+                </div>
+                <div class="form-group">
+                    <label for="manual_attachment">${__('attachment') || 'Attachment'}</label>
+                    <input type="file" id="manual_attachment" name="payment_attachment" class="form-control-file">
+                </div>
+            </form>
+        `,
+        showCancelButton: true,
+        confirmButtonText: __('save_loan_history') || 'Save',
+        cancelButtonText: __('cancel'),
+        allowOutsideClick: false,
+        showLoaderOnConfirm: true,
+        didOpen: () => {
+            $('#manual_loan_date').datepicker({
+                format: 'yyyy-mm-dd',
+                todayHighlight: true,
+                autoclose: true,
+                endDate: new Date()
+            }).datepicker('setDate', new Date());
+
+            function calculateRemaining() {
+                const total = parseFloat($('#manual_total_loan_amount').val()) || 0;
+                const paid = parseFloat($('#manual_paid_amount').val()) || 0;
+                $('#manual_remaining_amount').val((total - paid).toFixed(2));
+            }
+            $('#manual_total_loan_amount, #manual_paid_amount').on('input', calculateRemaining);
+        },
+        preConfirm: () => {
+            const form = document.getElementById('manualLoanForm');
+            const formData = new FormData(form);
+            formData.append('ajaxType', 'add_simplified_manual_loan');
+            formData.append('emp_id', emp_id);
+
+            const total_loan_amount = parseFloat(formData.get('total_loan_amount'));
+            const paid_amount = parseFloat(formData.get('paid_amount'));
+            const start_date = formData.get('start_date');
+
+            if (!start_date || isNaN(total_loan_amount) || isNaN(paid_amount)) {
+                Swal.showValidationMessage(__('fill_all_fields_validation'));
+                return false;
+            }
+            if (total_loan_amount <= 0) {
+                Swal.showValidationMessage(__('loan_amount_must_be_positive_validation') || 'Loan amount must be greater than 0.');
+                return false;
+            }
+            if (paid_amount > total_loan_amount) {
+                Swal.showValidationMessage('Paid amount cannot be greater than the total loan amount.');
+                return false;
+            }
+
+            return $.ajax({
+                url: './includes/ajaxFile/ajaxLoan.php',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json'
+            }).fail((jqXHR, textStatus) => {
+                const error = handleAjaxFailure(jqXHR, textStatus);
+                Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
+            });
+        }
+    }).then(result => {
+        if (result.isConfirmed) {
+            const response = result.value;
+            Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false })
+                .then(() => { if (response.status === 'success') location.reload(); });
+        }
+    });
 });
 
 // The following function has been moved to assets/js/ajaxErrorHandling.js

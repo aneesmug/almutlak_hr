@@ -8,6 +8,7 @@
     $canAccessVacationPayrollTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_vacation_payroll_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessOvertimeSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_overtime_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessDeductionSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_deduction_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessSalaryIncrementSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_salary_increment_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -295,7 +296,7 @@
                                          so this hidden field must survive tab switches the same way. -->
                                     <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
 
-                                    <div class="form-group text-right m-t-20">
+                                    <div class="form-group text-right m-t-20" id="saveBtnWrapper">
                                         <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">
                                             <?= __("save_changes") ?>
                                         </button>
@@ -339,6 +340,7 @@
         const canAccessVacationPayrollTab = <?= $canAccessVacationPayrollTab ? 'true' : 'false' ?>;
         const canAccessOvertimeSettingsTab = <?= $canAccessOvertimeSettingsTab ? 'true' : 'false' ?>;
         const canAccessDeductionSettingsTab = <?= $canAccessDeductionSettingsTab ? 'true' : 'false' ?>;
+        const canAccessSalaryIncrementSettingsTab = <?= $canAccessSalaryIncrementSettingsTab ? 'true' : 'false' ?>;
         const requestTypeBlockLabels = <?= json_encode(get_blockable_request_type_labels(), JSON_UNESCAPED_UNICODE) ?>;
         let appSettings = [];
         let groupedSettings = {};
@@ -391,6 +393,7 @@
                 { value: 'employee', label: '<?= __('employee_report') ?>' },
                 { value: 'vacation', label: '<?= __('vacation_report') ?>' },
                 { value: 'loan', label: '<?= __('loan_report') ?>' },
+                { value: 'salary_increment', label: '<?= __('salary_increment_report', 'Salary Increment Report') ?>' },
                 { value: 'salary', label: '<?= __('salary_report') ?>' },
                 { value: 'payroll', label: '<?= __('payroll_report') ?>' },
                 { value: 'attendance', label: '<?= __('attendance_report') ?>' },
@@ -808,7 +811,17 @@
             // Try to get settings with original groupName first, then with underscores replaced
             const displayGroupName = groupName.replace(/_/g, ' ');
             const settings = groupedSettings[groupName] || groupedSettings[displayGroupName];
-            
+
+            // These groups render their own dedicated Save button(s) and post straight to
+            // their own handler (bypassing the outer settings form entirely) - the generic
+            // bottom-right "Save Changes" button does nothing for them and only misleads
+            // users into thinking their change was saved when it wasn't. Hide it here.
+            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'approval', 'request_type_blocks', 'payroll_settings'];
+            const saveBtnWrapper = document.getElementById('saveBtnWrapper');
+            if (saveBtnWrapper) {
+                saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
+            }
+
             if (!settings) {
                  settingsContainer.innerHTML = '<p class="text-center text-danger"><?= __('Group not found.') ?></p>';
                  return;
@@ -964,6 +977,7 @@
             { key: 'vacation_payroll', label: '<?= __('vacation_payroll_settings', 'Vacation Payroll Settings') ?>', canAccess: () => canAccessVacationPayrollTab },
             { key: 'overtime_settings', label: '<?= __('overtime_settings', 'Overtime Settings') ?>', canAccess: () => canAccessOvertimeSettingsTab },
             { key: 'deduction_settings', label: '<?= __('deduction_settings', 'Deduction Settings') ?>', canAccess: () => canAccessDeductionSettingsTab },
+            { key: 'salary_increment_settings', label: '<?= __('salary_increment_settings', 'Salary Increment Settings') ?>', canAccess: () => canAccessSalaryIncrementSettingsTab },
         ];
 
         function renderPayrollSettingsHub() {
@@ -3139,7 +3153,7 @@
                     if (canAccessRequestBlocksTab) {
                         groupedSettings['request type blocks'] = [];
                     }
-                    if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab) {
+                    if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab || canAccessSalaryIncrementSettingsTab) {
                         groupedSettings['payroll_settings'] = [];
                     }
 

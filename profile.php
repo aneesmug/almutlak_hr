@@ -88,30 +88,36 @@ $isVacationEmergencyBlocked = is_employee_request_blocked($conDB, $empIdForBlock
 $isVacationLocalBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
 $isVacationEncashedBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
 $isAllVacationBlocked = ($isVacationAnnualBlocked && $isVacationEmergencyBlocked && $isVacationLocalBlocked && $isVacationEncashedBlocked);
+$isBusinessTripBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'business_trip')['blocked'];
 
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
 if ($emprow['status'] == 1) {
     $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-danger\" onclick=\"window.location.href='./system_guide.php'\"><i class=\"fa fa-book-open-lines\"></i><span>" . __('system_guide') . "</span></a>";
     $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+    // Sequence below mirrors includes/emp_top_info.php's More Actions order
+    // (Loan -> Vacation -> Excuse Leave -> Rejoin -> Edit -> Resignation), limited
+    // to the items that apply in this self-service context.
+    if (!$isLoanBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    }
     $allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
     if (!$isAllVacationBlocked) {
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
     }
-    // $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
+    if (!$isBusinessTripBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
+    }
     if (!$isExcuseLeaveBlocked) {
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
-    }
-    if (!$isResignationBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
     }
     if ($activeFlyVacCount > 0 && !$isRejoinBlocked) {
         $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
-    if (!$isLoanBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+    if (!$isResignationBlocked) {
+        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
     }
 } else {
     $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
@@ -569,144 +575,6 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             text-align: right;
         }
 
-        /* ===== ACTION CARDS ===== */
-        .action-cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 40px;
-            max-width: 1400px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .action-card {
-            background: var(--white);
-            border-radius: 12px;
-            padding: 24px;
-            text-align: center;
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s ease;
-            cursor: pointer;
-            border-top: 4px solid var(--primary);
-        }
-
-        .action-card:hover {
-            box-shadow: var(--shadow-lg);
-            transform: translateY(-8px);
-        }
-
-        .action-card.blue {
-            border-top-color: var(--primary);
-        }
-
-        .action-card.green {
-            border-top-color: var(--success);
-        }
-
-        .action-card.info {
-            border-top-color: var(--info);
-        }
-
-        .action-card.warning {
-            border-top-color: var(--warning);
-        }
-
-        .action-card.danger {
-            border-top-color: var(--danger);
-        }
-
-        .action-card.purple {
-            border-top-color: #6f42c1;
-        }
-
-        .action-icon {
-            font-size: 36px;
-            margin-bottom: 12px;
-            display: block;
-        }
-
-        .action-card.blue .action-icon {
-            color: var(--primary);
-        }
-
-        .action-card.green .action-icon {
-            color: var(--success);
-        }
-
-        .action-card.info .action-icon {
-            color: var(--info);
-        }
-
-        .action-card.warning .action-icon {
-            color: var(--warning);
-        }
-
-        .action-card.danger .action-icon {
-            color: var(--danger);
-        }
-
-        .action-card.purple .action-icon {
-            color: #6f42c1;
-        }
-
-        .action-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--dark);
-            margin-bottom: 8px;
-        }
-
-        .action-desc {
-            font-size: 12px;
-            color: var(--secondary);
-            margin-bottom: 12px;
-        }
-
-        .action-btn {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: none;
-            background: var(--light);
-            color: var(--dark);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-
-        .action-card.blue .action-btn:hover {
-            background: var(--primary);
-            color: white;
-        }
-
-        .action-card.green .action-btn:hover {
-            background: var(--success);
-            color: white;
-        }
-
-        .action-card.info .action-btn:hover {
-            background: var(--info);
-            color: white;
-        }
-
-        .action-card.warning .action-btn:hover {
-            background: var(--warning);
-            color: white;
-        }
-
-        .action-card.danger .action-btn:hover {
-            background: var(--danger);
-            color: white;
-        }
-
-        .action-card.purple .action-btn:hover {
-            background: #6f42c1;
-            color: white;
-        }
-
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
             .profile-header {
@@ -758,27 +626,6 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
                 grid-template-columns: 1fr;
                 gap: 16px;
             }
-
-            .action-cards-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-            }
-
-            .action-card {
-                padding: 16px;
-            }
-
-            .action-icon {
-                font-size: 28px;
-            }
-
-            .action-title {
-                font-size: 13px;
-            }
-
-            .action-desc {
-                font-size: 11px;
-            }
         }
 
         @media (max-width: 480px) {
@@ -810,11 +657,6 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             .cards-grid {
                 grid-template-columns: 1fr;
                 gap: 12px;
-            }
-
-            .action-cards-grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
             }
 
             .info-card {
@@ -1107,21 +949,23 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             background: #ffeeee;
         }
 
-        /* ===== MORE ACTIONS MODAL - PROFESSIONAL DESIGN ===== */
+        /* ===== MORE ACTIONS MODAL - PROFESSIONAL ACTION-SHEET DESIGN ===== */
         .more-actions-modal .swal2-popup {
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
             overflow: hidden;
+            background: #f7f8fa;
         }
 
         .more-actions-modal .swal2-title {
-            font-size: 1.8rem;
+            font-size: 1.25rem;
             font-weight: 700;
-            color: #2c3e50;
-            padding: 1.5rem;
+            color: #1f2937;
+            padding: 1.25rem 1.5rem 1rem;
             margin: 0;
-            border-bottom: 3px solid #e9ecef;
-            background: linear-gradient(135deg, #f5f7fa 0%, #fff 100%);
+            text-align: left;
+            background: #fff;
+            border-bottom: 1px solid #eef0f4;
         }
 
         .more-actions-modal .swal2-html-container {
@@ -1134,145 +978,125 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         .more-actions-modal .menu-items-container {
             display: flex;
             flex-direction: column;
-            gap: 0;
+            gap: 6px;
             margin: 0;
-            padding: 0;
+            padding: 10px 10px 14px;
             width: 100%;
-            background: #fff;
+            background: #f7f8fa;
+            max-height: 60vh;
+            overflow-y: auto;
         }
 
         .more-actions-modal .menu-item {
             display: flex !important;
             align-items: center;
-            gap: 14px;
-            padding: 16px 20px !important;
+            gap: 12px;
+            padding: 10px 12px !important;
             margin: 0 !important;
             cursor: pointer !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border: none;
-            border-left: 4px solid transparent;
-            border-radius: 0;
-            font-weight: 500;
-            font-size: 15px;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14.5px;
             user-select: none;
             box-sizing: border-box;
             background-color: #fff;
             position: relative;
-        }
-
-        .more-actions-modal .menu-item::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(90deg, rgba(0, 0, 0, 0.02) 0%, transparent 50%);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
         }
 
         .more-actions-modal .menu-item:hover {
-            background-color: #f8f9fa;
-            border-left-width: 4px;
-            transform: translateX(4px);
+            transform: translateX(2px);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+            border-color: currentColor;
         }
 
         .more-actions-modal .menu-item:active {
-            background-color: #f0f2f5;
+            transform: translateX(2px) scale(0.99);
         }
 
         .more-actions-modal .menu-item i {
-            font-size: 18px;
-            width: 22px;
-            height: 22px;
+            font-size: 15px;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
             text-align: center;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
+            background-color: rgba(108, 117, 125, 0.14);
         }
 
         .more-actions-modal .menu-item span {
-            font-size: 15px;
+            font-size: 14.5px;
             white-space: nowrap;
             flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
+            text-align: start;
+            color: #374151;
         }
 
-        /* Color Schemes - Professional */
-        .more-actions-modal .menu-item.text-primary {
-            color: var(--primary) !important;
-            border-left-color: transparent;
+        .more-actions-modal .menu-item span.menu-item-count {
+            flex: 0 0 auto;
+            width: auto;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 9px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.06);
+            color: inherit;
+            text-align: center;
         }
 
-        .more-actions-modal .menu-item.text-primary:hover {
-            background-color: rgba(91, 115, 232, 0.08);
-            border-left-color: var(--primary);
+        .more-actions-modal .menu-item::after {
+            content: '\f105';
+            font-family: 'Font Awesome 5 Free', 'FontAwesome';
+            font-weight: 900;
+            font-size: 13px;
+            color: #c7cbd1;
+            flex-shrink: 0;
+            transition: transform 0.2s ease, color 0.2s ease;
         }
 
-        .more-actions-modal .menu-item.text-warning {
-            color: var(--warning) !important;
+        .more-actions-modal .menu-item:hover::after {
+            transform: translateX(3px);
+            color: currentColor;
         }
 
-        .more-actions-modal .menu-item.text-warning:hover {
-            background-color: rgba(241, 180, 76, 0.08);
-            border-left-color: var(--warning);
-        }
+        /* Color Schemes - icon badge tinted to its own action color, label stays neutral */
+        .more-actions-modal .menu-item.text-primary { color: var(--primary) !important; }
+        .more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, 0.14); }
 
-        .more-actions-modal .menu-item.text-info {
-            color: var(--info) !important;
-        }
+        .more-actions-modal .menu-item.text-warning { color: var(--warning) !important; }
+        .more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, 0.16); }
 
-        .more-actions-modal .menu-item.text-info:hover {
-            background-color: rgba(80, 165, 241, 0.08);
-            border-left-color: var(--info);
-        }
+        .more-actions-modal .menu-item.text-info { color: var(--info) !important; }
+        .more-actions-modal .menu-item.text-info i { background-color: rgba(80, 165, 241, 0.14); }
 
-        .more-actions-modal .menu-item.text-danger {
-            color: var(--danger) !important;
-        }
+        .more-actions-modal .menu-item.text-danger { color: var(--danger) !important; }
+        .more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
 
-        .more-actions-modal .menu-item.text-danger:hover {
-            background-color: rgba(244, 106, 106, 0.08);
-            border-left-color: var(--danger);
-        }
+        .more-actions-modal .menu-item.text-success { color: var(--success) !important; }
+        .more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, 0.14); }
 
-        .more-actions-modal .menu-item.text-success {
-            color: var(--success) !important;
-        }
+        .more-actions-modal .menu-item.text-dark { color: var(--dark) !important; }
+        .more-actions-modal .menu-item.text-dark i { background-color: rgba(52, 58, 64, 0.14); }
 
-        .more-actions-modal .menu-item.text-success:hover {
-            background-color: rgba(40, 167, 69, 0.08);
-            border-left-color: var(--success);
-        }
+        .more-actions-modal .menu-item.text-secondary { color: var(--secondary) !important; }
+        .more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, 0.14); }
 
-        .more-actions-modal .menu-item.text-dark {
-            color: var(--dark) !important;
-        }
-
-        .more-actions-modal .menu-item.text-dark:hover {
-            background-color: rgba(52, 58, 64, 0.08);
-            border-left-color: var(--dark);
-        }
-
-        .more-actions-modal .menu-item.text-secondary {
-            color: var(--secondary) !important;
-        }
-
-        .more-actions-modal .menu-item.text-secondary:hover {
-            background-color: rgba(52, 58, 64, 0.08);
-            border-left-color: var(--secondary);
-        }
+        .more-actions-modal .menu-item.text-purple { color: #6f42c1 !important; }
+        .more-actions-modal .menu-item.text-purple i { background-color: rgba(111, 66, 193, 0.14); }
 
         /* Close Button */
         .more-actions-modal .swal2-close {
-            font-size: 2rem;
-            color: #74788d;
-            width: 40px;
-            height: 40px;
+            font-size: 1.5rem;
+            color: #9aa1ac;
+            width: 36px;
+            height: 36px;
         }
 
         .more-actions-modal .swal2-close:hover {
@@ -1954,10 +1778,6 @@ RTL Support
             justify-content: flex-end;
         }
 
-        .rtl .action-cards-grid {
-            direction: rtl;
-        }
-
         .rtl .info-row {
             justify-content: space-between;
         }
@@ -1978,9 +1798,6 @@ RTL Support
         .rtl .swal2-close {
             left: 12px;
             right: auto;
-        }
-        .action-btn{
-            width: 60px !important;
         }
     </style>
 
@@ -2079,6 +1896,9 @@ RTL Support
                 </a>
                 <button class="more-actions-btn" id="moreActionsBtn">
                     <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
+                </button>
+                <button class="more-actions-btn" id="recordsBtn">
+                    <i class="fa fa-folder-open"></i> <?= __('employee_records') ?>
                 </button>
             <?php if ($hasGrantedPages) : ?>
                 <button class="more-actions-btn" id="myPagesBtn">
@@ -2534,133 +2354,78 @@ RTL Support
             </div>
         </div>
 
-        <!-- ACTION CARDS -->
-        <div>
-            <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('employee_records') ?></h3>
-            <?php
-            // Get counts for active/pending requests
-            $emp_id_escaped = mysqli_real_escape_string($conDB, $emprow['empid']);
-            
-            // Pending vacation requests (using current_status column)
-            $vac_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_vacation WHERE emp_id = '$emp_id_escaped' AND current_status IN ('pending_approval', 'approved')");
-            $vac_count = 0;
-            if ($vac_count_query) {
-                $vac_result = mysqli_fetch_assoc($vac_count_query);
-                $vac_count = (int)$vac_result['total'];
-            }
-            
-            // Pending loan applications (emp_loan might not have status column, count all active loans)
-            $loan_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_loan WHERE emp_id = '$emp_id_escaped' AND status LIKE 'pending%'");
-            $loan_count = 0;
-            if ($loan_count_query) {
-                $loan_result = mysqli_fetch_assoc($loan_count_query);
-                $loan_count = (int)$loan_result['total'];
-            }
-            
-            // Active assigned assets (already calculated above)
-            // $total_assets already available
-            
-            // Total salary records count (emp_salary doesn't have date filter)
-            $payroll_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_salary WHERE emp_id = '$emp_id_escaped' AND status = 1");
-            $payroll_count = 0;
-            if ($payroll_count_query) {
-                $payroll_result = mysqli_fetch_assoc($payroll_count_query);
-                $payroll_count = (int)$payroll_result['total'];
-            }
-            
-            // Notice count (all types in emp_notice, active + not deleted)
-            $warnings_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_notice WHERE emp_id = '$emp_id_escaped' AND status = 1 AND is_deleted = 0");
-            $warnings_count = 0;
-            if ($warnings_count_query) {
-                $warnings_result = mysqli_fetch_assoc($warnings_count_query);
-                $warnings_count = (int)$warnings_result['total'];
-            }
-            
-            // Evaluations table doesn't exist in current schema
-            $eval_count = 0;
-
-            // Business trip history count
-            $business_trip_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_business_trip WHERE emp_id = '$emp_id_escaped'");
-            $business_trip_count = 0;
-            if ($business_trip_count_query) {
-                $business_trip_count_result = mysqli_fetch_assoc($business_trip_count_query);
-                $business_trip_count = (int)($business_trip_count_result['total'] ?? 0);
-                mysqli_free_result($business_trip_count_query);
-            }
-            ?>
-            <div class="action-cards-grid">
-                <a href="employee_vacation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card blue" style="position: relative;">
-                    <?php if ($vac_count > 0): ?>
-                        <span class="badge badge-danger" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $vac_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-calendar-check action-icon"></i>
-                    <div class="action-title"><?= __('vacation_history') ?></div>
-                    <div class="action-desc"><?= __('view_all_vacation_records') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_loan_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card green" style="position: relative;">
-                    <?php if ($loan_count > 0): ?>
-                        <span class="badge badge-danger" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $loan_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-money-bill action-icon"></i>
-                    <div class="action-title"><?= __('loan_history') ?></div>
-                    <div class="action-desc"><?= __('view_loan_applications') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_assigned_assets.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info" style="position: relative;">
-                    <?php if ($total_assets > 0): ?>
-                        <span class="badge badge-success" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $total_assets ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-briefcase action-icon"></i>
-                    <div class="action-title"><?= __('assigned_assets') ?></div>
-                    <div class="action-desc"><?= __('view_assigned_assets') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_payroll_slip.php?emp_id=<?= $emprow['empid'] ?>" class="action-card warning" style="position: relative;">
-                    <?php if ($payroll_count > 0): ?>
-                        <span class="badge badge-info" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $payroll_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-file-invoice action-icon"></i>
-                    <div class="action-title"><?= __('payroll_slips') ?></div>
-                    <div class="action-desc"><?= __('download_salary_slips') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_warnings.php?emp_id=<?= $emprow['empid'] ?>" class="action-card danger" style="position: relative;">
-                    <?php if ($warnings_count > 0): ?>
-                        <span class="badge badge-warning" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px; background: #ff9800; color: #fff;"><?= $warnings_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-exclamation-circle action-icon"></i>
-                    <div class="action-title"><?= __('notices') ?></div>
-                    <div class="action-desc"><?= __('view_employee_notices') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_evaluation_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card purple" style="position: relative;">
-                    <?php if ($eval_count > 0): ?>
-                        <span class="badge badge-primary" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $eval_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-star action-icon"></i>
-                    <div class="action-title"><?= __('evaluations') ?></div>
-                    <div class="action-desc"><?= __('view_performance_evaluations') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-
-                <a href="employee_business_trip_history.php?emp_id=<?= $emprow['empid'] ?>" class="action-card info" style="position: relative;">
-                    <?php if ($business_trip_count > 0): ?>
-                        <span class="badge badge-success" style="position: absolute; top: 10px; right: 10px; font-size: 12px; padding: 4px 8px;"><?= $business_trip_count ?></span>
-                    <?php endif; ?>
-                    <i class="fa fa-plane action-icon"></i>
-                    <div class="action-title"><?= __('business_trip_history', 'Business Trip History') ?></div>
-                    <div class="action-desc"><?= __('view_all_business_trip_records', 'View all business trip records') ?></div>
-                    <button class="action-btn"><?= __('view') ?></button>
-                </a>
-            </div>
-        </div>
     </div>
+
+    <?php
+    // Employee Records - same counts previously shown as cards, now surfaced via the
+    // "Records" button/modal (same SweetAlert2 menu pattern as More Actions / My Pages).
+    $emp_id_escaped = mysqli_real_escape_string($conDB, $emprow['empid']);
+
+    $vac_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_vacation WHERE emp_id = '$emp_id_escaped' AND current_status IN ('pending_approval', 'approved')");
+    $vac_count = 0;
+    if ($vac_count_query) {
+        $vac_result = mysqli_fetch_assoc($vac_count_query);
+        $vac_count = (int)$vac_result['total'];
+    }
+
+    $loan_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_loan WHERE emp_id = '$emp_id_escaped' AND status LIKE 'pending%'");
+    $loan_count = 0;
+    if ($loan_count_query) {
+        $loan_result = mysqli_fetch_assoc($loan_count_query);
+        $loan_count = (int)$loan_result['total'];
+    }
+
+    // Active assigned assets (already calculated above)
+    // $total_assets already available
+
+    $payroll_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_salary WHERE emp_id = '$emp_id_escaped' AND status = 1");
+    $payroll_count = 0;
+    if ($payroll_count_query) {
+        $payroll_result = mysqli_fetch_assoc($payroll_count_query);
+        $payroll_count = (int)$payroll_result['total'];
+    }
+
+    $warnings_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_notice WHERE emp_id = '$emp_id_escaped' AND status = 1 AND is_deleted = 0");
+    $warnings_count = 0;
+    if ($warnings_count_query) {
+        $warnings_result = mysqli_fetch_assoc($warnings_count_query);
+        $warnings_count = (int)$warnings_result['total'];
+    }
+
+    // Evaluations table doesn't exist in current schema
+    $eval_count = 0;
+
+    $business_trip_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_business_trip WHERE emp_id = '$emp_id_escaped'");
+    $business_trip_count = 0;
+    if ($business_trip_count_query) {
+        $business_trip_count_result = mysqli_fetch_assoc($business_trip_count_query);
+        $business_trip_count = (int)($business_trip_count_result['total'] ?? 0);
+        mysqli_free_result($business_trip_count_query);
+    }
+
+    $salary_increment_count_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM emp_salary_increment WHERE emp_id = '$emp_id_escaped'");
+    $salary_increment_count = 0;
+    if ($salary_increment_count_query) {
+        $salary_increment_count_result = mysqli_fetch_assoc($salary_increment_count_query);
+        $salary_increment_count = (int)($salary_increment_count_result['total'] ?? 0);
+        mysqli_free_result($salary_increment_count_query);
+    }
+
+    $recordItem = function ($href, $empIdVal, $colorClass, $icon, $title, $count) {
+        $countBadge = $count > 0 ? "<span class=\"menu-item-count\">" . (int)$count . "</span>" : '';
+        return "<a href=\"" . htmlspecialchars($href . '?emp_id=' . $empIdVal, ENT_QUOTES) . "\" class=\"menu-item {$colorClass}\"><i class=\"fa {$icon}\"></i><span>" . $title . "</span>{$countBadge}</a>";
+    };
+
+    $recordsHtml = '';
+    $recordsHtml .= $recordItem('employee_vacation_history.php', $emprow['empid'], 'text-primary', 'fa-calendar-check', __('vacation_history'), $vac_count);
+    $recordsHtml .= $recordItem('employee_loan_history.php', $emprow['empid'], 'text-success', 'fa-money-bill', __('loan_history'), $loan_count);
+    $recordsHtml .= $recordItem('employee_assigned_assets.php', $emprow['empid'], 'text-info', 'fa-briefcase', __('assigned_assets'), $total_assets ?? 0);
+    $recordsHtml .= $recordItem('employee_payroll_slip.php', $emprow['empid'], 'text-warning', 'fa-file-invoice', __('payroll_slips'), $payroll_count);
+    $recordsHtml .= $recordItem('employee_warnings.php', $emprow['empid'], 'text-danger', 'fa-exclamation-circle', __('notices'), $warnings_count);
+    $recordsHtml .= $recordItem('employee_evaluation_history.php', $emprow['empid'], 'text-purple', 'fa-star', __('evaluations'), $eval_count);
+    $recordsHtml .= $recordItem('employee_business_trip_history.php', $emprow['empid'], 'text-info', 'fa-plane', __('business_trip_history', 'Business Trip History'), $business_trip_count);
+    $recordsHtml .= $recordItem('employee_salary_increment_history.php', $emprow['empid'], 'text-primary', 'fa-arrow-trend-up', __('salary_increment_history', 'Salary Increment History'), $salary_increment_count);
+    ?>
 
     <!-- Hidden file input for image cropping -->
     <input type="file" id="img-crop-input" accept="image/*" style="display: none;">
@@ -2690,6 +2455,23 @@ RTL Support
 
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
             var grantedPagesHtml = <?= json_encode($grantedPagesHtml); ?>;
+            var recordsHtml = <?= json_encode($recordsHtml); ?>;
+            $('#recordsBtn').click(function() {
+                Swal.fire({
+                    title: '<?= __('employee_records') ?>',
+                    html: '<div class="menu-items-container">' + recordsHtml + '</div>',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: {
+                        container: 'more-actions-modal',
+                        popup: 'swal2-popup',
+                        closeButton: 'swal2-close'
+                    },
+                    width: '450px',
+                    padding: '0',
+                    allowOutsideClick: false
+                });
+            });
             $('#myPagesBtn').click(function() {
                 Swal.fire({
                     title: '<?= __('my_pages', 'My Pages') ?>',
@@ -2701,6 +2483,7 @@ RTL Support
                         popup: 'swal2-popup',
                         closeButton: 'swal2-close'
                     },
+                    allowOutsideClick: false,
                     width: '450px',
                     padding: '0'
                 });

@@ -164,6 +164,12 @@ if (isset($_POST['ajaxType'])) {
         case 'purgeAndRegenerateLoanDeductions':
             purgeAndRegenerateLoanDeductions();
             break;
+        case 'import_loan_opening_balance':
+            import_loan_opening_balance();
+            break;
+        case 'topup_manual_loan':
+            topup_manual_loan();
+            break;
         default:
             echo json_encode(['status' => 'error','title' => 'Error','message' => 'Invalid AJAX type specified.','type' => 'error']);
             break;
@@ -2941,6 +2947,259 @@ function add_simplified_manual_loan() {
     }
 }
 
+function import_loan_opening_balance() {
+    global $conDB, $is_system_admin, $isHR, $isFinance;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+
+    if (!($is_system_admin || $isHR || $isFinance)) {
+        echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => 'You are not allowed to import loan balances.', 'type' => 'error']);
+        return;
+    }
+
+    if (!isset($_FILES['balance_file']) || $_FILES['balance_file']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['status' => 'error', 'title' => 'Upload Error', 'message' => 'Please choose a valid file to upload.', 'type' => 'error']);
+        return;
+    }
+
+    $autoloadPath = __DIR__ . '/../../vendor/autoload.php';
+    if (!file_exists($autoloadPath)) {
+        echo json_encode(['status' => 'error', 'title' => 'Server Error', 'message' => 'Vendor autoload not found. Run composer install.', 'type' => 'error']);
+        return;
+    }
+    require_once $autoloadPath;
+
+    $tmpPath = $_FILES['balance_file']['tmp_name'];
+    $fileName = strtolower($_FILES['balance_file']['name']);
+    $isCsv = (substr($fileName, -4) === '.csv');
+
+    try {
+        if ($isCsv) {
+            $rows = [];
+            if (($handle = fopen($tmpPath, 'r')) !== false) {
+                while (($data = fgetcsv($handle)) !== false) {
+                    $rows[] = $data;
+                }
+                fclose($handle);
+            }
+            if (count($rows) < 2) {
+                throw new Exception('File must contain a header row and at least one data row.');
+            }
+            $dataRows = array_slice($rows, 1);
+        } else {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
+            $sheet = $spreadsheet->getSheet(0);
+            $highestRow = $sheet->getHighestDataRow();
+            $dataRows = [];
+            for ($row = 2; $row <= $highestRow; $row++) {
+                $dataRows[] = [
+                    $sheet->getCell("A$row")->getValue(),
+                    $sheet->getCell("B$row")->getCalculatedValue(),
+                    $sheet->getCell("C$row")->getValue(),
+                    $sheet->getCell("D$row")->getCalculatedValue(),
+                    $sheet->getCell("E$row")->getValue(),
+                ];
+            }
+        }
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'title' => 'File Error', 'message' => 'Could not read the uploaded file: ' . $e->getMessage(), 'type' => 'error']);
+        return;
+    }
+
+    $validLoanTypes = ['regular', 'emergency', 'end_of_service', 'housing', 'advance_salary'];
+    $inserted = 0;
+    $skipped = 0;
+    $skippedEmpIds = [];
+    $errors = [];
+    $submittedBy = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
+
+    $conDB->begin_transaction();
+    try {
+        foreach ($dataRows as $i => $rowData) {
+            $rowNum = $i + 2;
+            $empId = trim((string)($rowData[0] ?? ''));
+            if ($empId === '') {
+                continue; // fully blank row
+            }
+
+            $openingBalance = filter_var(trim((string)($rowData[1] ?? '')), FILTER_VALIDATE_FLOAT);
+            $loanType = strtolower(trim((string)($rowData[2] ?? ''))) ?: 'regular';
+            $installments = (int)($rowData[3] ?? 0);
+            if ($installments <= 0) {
+                $installments = 12;
+            }
+            $startDateRaw = trim((string)($rowData[4] ?? ''));
+
+            if ($openingBalance === false || $openingBalance <= 0) {
+                $skipped++;
+                $skippedEmpIds[] = $empId;
+                $errors[] = ['row' => $rowNum, 'emp_id' => $empId, 'reason' => 'opening_balance must be a number greater than 0'];
+                continue;
+            }
+            if (!in_array($loanType, $validLoanTypes, true)) {
+                $skipped++;
+                $skippedEmpIds[] = $empId;
+                $errors[] = ['row' => $rowNum, 'emp_id' => $empId, 'reason' => "invalid loan_type '{$loanType}'"];
+                continue;
+            }
+
+            $checkEmp = $conDB->prepare("SELECT emp_id FROM employees WHERE emp_id = ? LIMIT 1");
+            $checkEmp->bind_param("s", $empId);
+            $checkEmp->execute();
+            $empExists = $checkEmp->get_result()->num_rows > 0;
+            $checkEmp->close();
+            if (!$empExists) {
+                $skipped++;
+                $skippedEmpIds[] = $empId;
+                $errors[] = ['row' => $rowNum, 'emp_id' => $empId, 'reason' => 'Employee ID not found'];
+                continue;
+            }
+
+            $startDate = date('Y-m-d');
+            if ($startDateRaw !== '') {
+                if (is_numeric($startDateRaw)) {
+                    $startDate = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($startDateRaw)->format('Y-m-d');
+                } else {
+                    $ts = strtotime($startDateRaw);
+                    if ($ts) {
+                        $startDate = date('Y-m-d', $ts);
+                    }
+                }
+            }
+
+            $monthlyDeduction = round($openingBalance / $installments, 2);
+            $endDate = (new DateTime($startDate))->modify("+{$installments} months")->format('Y-m-d');
+            $invNo = generate_loan_inv_no($conDB);
+
+            $stmt = $conDB->prepare("INSERT INTO `emp_loan` (`inv_no`, `emp_id`, `submitted_by_emp_id`, `loan_type`, `loan_amount`, `interest_rate`, `total_payable`, `monthly_deduction`, `installments`, `start_date`, `end_date`, `status`, `reason`) VALUES (?, ?, ?, ?, ?, 0.00, ?, ?, ?, ?, ?, 'approved', 'Legacy opening balance import')");
+            $stmt->bind_param(
+                "ssisdddiss",
+                $invNo,
+                $empId,
+                $submittedBy,
+                $loanType,
+                $openingBalance,
+                $openingBalance,
+                $monthlyDeduction,
+                $installments,
+                $startDate,
+                $endDate
+            );
+
+            if ($stmt->execute() && $conDB->insert_id > 0) {
+                $inserted++;
+            } else {
+                $skipped++;
+                $skippedEmpIds[] = $empId;
+                $errors[] = ['row' => $rowNum, 'emp_id' => $empId, 'reason' => 'Database error: ' . $stmt->error];
+            }
+            $stmt->close();
+        }
+
+        $conDB->commit();
+        echo json_encode([
+            'status' => 'success',
+            'title' => 'Import Complete',
+            'message' => "Imported {$inserted} loan record(s), skipped {$skipped}.",
+            'type' => $skipped > 0 ? 'warning' : 'success',
+            'inserted' => $inserted,
+            'skipped' => $skipped,
+            'skipped_emp_ids' => $skippedEmpIds,
+            'errors' => $errors,
+        ]);
+    } catch (Exception $e) {
+        $conDB->rollback();
+        echo json_encode(['status' => 'error', 'title' => 'Import Failed', 'message' => $e->getMessage(), 'type' => 'error']);
+    }
+}
+
+function topup_manual_loan() {
+    global $conDB, $is_system_admin, $isHR, $isDeptHr, $isFinance;
+    if (session_status() == PHP_SESSION_NONE) session_start();
+
+    if (!($is_system_admin || $isHR || $isDeptHr || $isFinance)) {
+        echo json_encode(['status' => 'error', 'title' => 'Access Denied', 'message' => 'You are not allowed to modify loan amounts.', 'type' => 'error']);
+        return;
+    }
+
+    if (!isset($_POST['loan_id'], $_POST['additional_amount'])) {
+        echo json_encode(['status' => 'error', 'title' => 'Input Error', 'message' => 'Missing required parameters.', 'type' => 'error']);
+        return;
+    }
+
+    $loan_id = filter_var($_POST['loan_id'], FILTER_VALIDATE_INT);
+    $additional_amount = filter_var($_POST['additional_amount'], FILTER_VALIDATE_FLOAT);
+    if ($loan_id === false || $loan_id <= 0 || $additional_amount === false || $additional_amount <= 0) {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid Input', 'message' => 'Please provide a valid additional amount.', 'type' => 'error']);
+        return;
+    }
+
+    $stmt = $conDB->prepare("SELECT emp_id, loan_amount, total_payable, final_approved_amount, installments, status FROM emp_loan WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $loan_id);
+    $stmt->execute();
+    $loan = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$loan) {
+        echo json_encode(['status' => 'error', 'title' => 'Not Found', 'message' => 'Loan not found.', 'type' => 'error']);
+        return;
+    }
+    if ($loan['status'] !== 'approved') {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid State', 'message' => 'Only an active (approved) loan can be topped up.', 'type' => 'error']);
+        return;
+    }
+
+    $stmtPaid = $conDB->prepare("SELECT COALESCE(SUM(amount), 0) as total_paid FROM emp_loan_payments WHERE loan_id = ?");
+    $stmtPaid->bind_param("i", $loan_id);
+    $stmtPaid->execute();
+    $total_paid = (float)($stmtPaid->get_result()->fetch_assoc()['total_paid'] ?? 0);
+    $stmtPaid->close();
+
+    $installments = max(1, (int)$loan['installments']);
+    $new_loan_amount = (float)$loan['loan_amount'] + $additional_amount;
+    $new_total_payable = (float)$loan['total_payable'] + $additional_amount;
+    $new_remaining = $new_total_payable - $total_paid;
+    $new_monthly_deduction = round($new_remaining / $installments, 2);
+    $new_final_approved = $loan['final_approved_amount'] !== null ? (float)$loan['final_approved_amount'] + $additional_amount : null;
+
+    $previous_loan_amount = (float)$loan['loan_amount'];
+    $added_by = isset($_SESSION['empid']) ? (int)$_SESSION['empid'] : null;
+
+    $conDB->begin_transaction();
+    try {
+        $stmtUpdate = $conDB->prepare("UPDATE emp_loan SET loan_amount = ?, total_payable = ?, monthly_deduction = ?, final_approved_amount = ? WHERE id = ?");
+        $stmtUpdate->bind_param("ddddi", $new_loan_amount, $new_total_payable, $new_monthly_deduction, $new_final_approved, $loan_id);
+        if (!$stmtUpdate->execute()) {
+            throw new Exception('Failed to update loan: ' . $stmtUpdate->error);
+        }
+        $stmtUpdate->close();
+
+        // Log the top-up as its own event so "Loan History" can show a distinct
+        // line for it - the emp_loan row itself is updated in place (not a new
+        // row), so without this log the increase would be invisible in history.
+        $topup_emp_id = $loan['emp_id'];
+        $stmtLog = $conDB->prepare("INSERT INTO emp_loan_topups (loan_id, emp_id, additional_amount, previous_loan_amount, new_loan_amount, new_monthly_deduction, added_by_emp_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmtLog->bind_param("isddddi", $loan_id, $topup_emp_id, $additional_amount, $previous_loan_amount, $new_loan_amount, $new_monthly_deduction, $added_by);
+        if (!$stmtLog->execute()) {
+            throw new Exception('Failed to log the top-up: ' . $stmtLog->error);
+        }
+        $stmtLog->close();
+
+        $conDB->commit();
+        echo json_encode([
+            'status' => 'success',
+            'title' => 'Loan Updated',
+            'message' => "Added {$additional_amount} SAR. New total loan amount: {$new_loan_amount} SAR.",
+            'type' => 'success',
+            'new_loan_amount' => $new_loan_amount,
+            'new_total_payable' => $new_total_payable,
+            'new_monthly_deduction' => $new_monthly_deduction,
+        ]);
+    } catch (Exception $e) {
+        $conDB->rollback();
+        echo json_encode(['status' => 'error', 'title' => 'Error', 'message' => $e->getMessage(), 'type' => 'error']);
+    }
+}
+
 function check_loan_eligibility() {
     global $conDB;
     
@@ -3319,15 +3578,40 @@ function integrate_loan_to_payroll($loan_id, $conDB) {
             case 'end_of_service':
                 // End of Service Loan: Add as monthly installment deduction
                 return add_monthly_installment_deduction(
-                    $conDB, 
-                    $emp_id, 
-                    $loan['inv_no'], 
-                    $monthly_deduction, 
-                    $installments, 
+                    $conDB,
+                    $emp_id,
+                    $loan['inv_no'],
+                    $monthly_deduction,
+                    $installments,
                     $start_date,
                     'End of Service Loan'
                 );
-                
+
+            case 'emergency':
+                // Emergency Loan: Add as monthly installment deduction
+                return add_monthly_installment_deduction(
+                    $conDB,
+                    $emp_id,
+                    $loan['inv_no'],
+                    $monthly_deduction,
+                    $installments,
+                    $start_date,
+                    'Emergency Loan'
+                );
+
+            case 'regular':
+                // Manual/legacy loan (add_simplified_manual_loan, add_manual_loan_history,
+                // import_loan_opening_balance, topup_manual_loan): Add as monthly installment deduction
+                return add_monthly_installment_deduction(
+                    $conDB,
+                    $emp_id,
+                    $loan['inv_no'],
+                    $monthly_deduction,
+                    $installments,
+                    $start_date,
+                    'Manual Loan'
+                );
+
             case 'housing':
                 // Housing Loan: Add as monthly deduction from housing allowance
                 if ($housing_allowance <= 0) {

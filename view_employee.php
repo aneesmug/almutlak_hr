@@ -313,21 +313,23 @@ if (mysqli_num_rows($query) == 1) {
 			.card-box.tilebox-one:has(.duotone-secondary) {
 				border-left-color: var(--secondary);
 			}
-			/* More Actions Modal - Professional Tab Design */
+			/* More Actions Modal - Professional Action-Sheet Design */
 			.more-actions-modal .swal2-popup {
-				border-radius: 10px;
-				box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+				border-radius: 16px;
+				box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
 				overflow: hidden;
+				background: #f7f8fa;
 			}
 
 			.more-actions-modal .swal2-title {
-				font-size: 1.8rem;
+				font-size: 1.25rem;
 				font-weight: 700;
-				color: #2c3e50;
-				padding: 1.5rem;
+				color: #1f2937;
+				padding: 1.25rem 1.5rem 1rem;
 				margin: 0;
-				border-bottom: 3px solid #e9ecef;
-				background: linear-gradient(135deg, #f5f7fa 0%, #fff 100%);
+				text-align: left;
+				background: #fff;
+				border-bottom: 1px solid #eef0f4;
 			}
 
 			.more-actions-modal .swal2-html-container {
@@ -340,145 +342,109 @@ if (mysqli_num_rows($query) == 1) {
 			.more-actions-modal .menu-items-container {
 				display: flex;
 				flex-direction: column;
-				gap: 0;
+				gap: 6px;
 				margin: 0;
-				padding: 0;
+				padding: 10px 10px 14px;
 				width: 100%;
-				background: #fff;
+				background: #f7f8fa;
+				max-height: 60vh;
+				overflow-y: auto;
 			}
 
 			.more-actions-modal .menu-item {
 				display: flex !important;
 				align-items: center;
-				gap: 14px;
-				padding: 16px 20px !important;
+				gap: 12px;
+				padding: 10px 12px !important;
 				margin: 0 !important;
 				cursor: pointer !important;
-				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-				border: none;
-				border-left: 4px solid transparent;
-				border-radius: 0;
-				font-weight: 500;
-				font-size: 15px;
+				transition: all 0.2s ease;
+				border: 1px solid transparent;
+				border-radius: 12px;
+				font-weight: 600;
+				font-size: 14.5px;
 				user-select: none;
 				box-sizing: border-box;
 				background-color: #fff;
 				position: relative;
-			}
-
-			.more-actions-modal .menu-item::before {
-				content: '';
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				background: linear-gradient(90deg, rgba(0, 0, 0, 0.02) 0%, transparent 50%);
-				opacity: 0;
-				transition: opacity 0.3s ease;
-				pointer-events: none;
+				box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 			}
 
 			.more-actions-modal .menu-item:hover {
-				background-color: #f8f9fa;
-				border-left-width: 4px;
-				transform: translateX(4px);
+				transform: translateX(2px);
+				box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+				border-color: currentColor;
 			}
 
 			.more-actions-modal .menu-item:active {
-				background-color: #f0f2f5;
+				transform: translateX(2px) scale(0.99);
 			}
 
 			.more-actions-modal .menu-item i {
-				font-size: 18px;
-				width: 22px;
-				height: 22px;
+				font-size: 15px;
+				width: 34px;
+				height: 34px;
+				border-radius: 10px;
 				text-align: center;
 				flex-shrink: 0;
 				display: flex;
 				align-items: center;
 				justify-content: center;
+				background-color: rgba(108, 117, 125, 0.14);
 			}
 
 			.more-actions-modal .menu-item span {
-				font-size: 15px;
+				font-size: 14.5px;
 				white-space: nowrap;
 				flex: 1;
 				overflow: hidden;
 				text-overflow: ellipsis;
+				color: #374151;
 			}
 
-			/* Color Schemes - Professional */
-			.more-actions-modal .menu-item.text-primary {
-				color: var(--primary) !important;
-				border-left-color: transparent;
+			.more-actions-modal .menu-item::after {
+				content: '\f105';
+				font-family: 'Font Awesome 5 Free', 'FontAwesome';
+				font-weight: 900;
+				font-size: 13px;
+				color: #c7cbd1;
+				flex-shrink: 0;
+				transition: transform 0.2s ease, color 0.2s ease;
 			}
 
-			.more-actions-modal .menu-item.text-primary:hover {
-				background-color: rgba(91, 115, 232, 0.08);
-				border-left-color: var(--primary);
+			.more-actions-modal .menu-item:hover::after {
+				transform: translateX(3px);
+				color: currentColor;
 			}
 
-			.more-actions-modal .menu-item.text-warning {
-				color: var(--warning) !important;
-			}
+			/* Color Schemes - icon badge tinted to its own action color, label stays neutral */
+			.more-actions-modal .menu-item.text-primary { color: var(--primary) !important; }
+			.more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, 0.14); }
 
-			.more-actions-modal .menu-item.text-warning:hover {
-				background-color: rgba(241, 180, 76, 0.08);
-				border-left-color: var(--warning);
-			}
+			.more-actions-modal .menu-item.text-warning { color: var(--warning) !important; }
+			.more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, 0.16); }
 
-			.more-actions-modal .menu-item.text-info {
-				color: var(--info) !important;
-			}
+			.more-actions-modal .menu-item.text-info { color: var(--info) !important; }
+			.more-actions-modal .menu-item.text-info i { background-color: rgba(80, 165, 241, 0.14); }
 
-			.more-actions-modal .menu-item.text-success {
-            color: var(--success) !important;
-			}
+			.more-actions-modal .menu-item.text-success { color: var(--success) !important; }
+			.more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, 0.14); }
 
-			.more-actions-modal .menu-item.text-success:hover {
-				background-color: rgba(40, 167, 69, 0.08);
-				border-left-color: var(--success);
-			}
+			.more-actions-modal .menu-item.text-danger { color: var(--danger) !important; }
+			.more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
 
-			.more-actions-modal .menu-item.text-info:hover {
-				background-color: rgba(80, 165, 241, 0.08);
-				border-left-color: var(--info);
-			}
+			.more-actions-modal .menu-item.text-secondary { color: var(--secondary) !important; }
+			.more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, 0.14); }
 
-			.more-actions-modal .menu-item.text-danger {
-				color: var(--danger) !important;
-			}
-
-			.more-actions-modal .menu-item.text-danger:hover {
-				background-color: rgba(244, 106, 106, 0.08);
-				border-left-color: var(--danger);
-			}
-
-			.more-actions-modal .menu-item.text-secondary {
-				color: var(--secondary) !important;
-			}
-
-			.more-actions-modal .menu-item.text-secondary:hover {
-				background-color: rgba(108, 117, 125, 0.08);
-				border-left-color: var(--secondary);
-			}
-
-			.more-actions-modal .menu-item.text-dark {
-				color: var(--dark) !important;
-			}
-
-			.more-actions-modal .menu-item.text-dark:hover {
-				background-color: rgba(52, 58, 64, 0.08);
-				border-left-color: var(--dark);
-			}
+			.more-actions-modal .menu-item.text-dark { color: var(--dark) !important; }
+			.more-actions-modal .menu-item.text-dark i { background-color: rgba(52, 58, 64, 0.14); }
 
 			/* Close Button */
 			.more-actions-modal .swal2-close {
-				font-size: 2rem;
-				color: #74788d;
-				width: 40px;
-				height: 40px;
+				font-size: 1.5rem;
+				color: #9aa1ac;
+				width: 36px;
+				height: 36px;
 			}
 
 			.more-actions-modal .swal2-close:hover {
@@ -793,6 +759,7 @@ if (mysqli_num_rows($query) == 1) {
 		<?php endif; ?>
 		<script>
 			window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+			window.SALARY_INCREMENT_MAX_AMOUNT = <?= json_encode((float)get_setting_num($conDB, 'salary_increment_max_amount', 2000)) ?>;
 		</script>
 	</head>
 
@@ -1765,6 +1732,16 @@ if (mysqli_num_rows($query) == 1) {
 											?>
 											<div class="d-flex justify-content-between align-items-center mb-3">
 												<h4 class="header-title m-t-0"><?= __('loan_history') ?></h4>
+												<?php if ($isHR || $is_system_admin || $isDeptHr || $isFinance): ?>
+												<button type="button" class="btn btn-sm btn-primary addManualLoan" data-emp-id="<?= $emprow['empid'] ?>"
+													<?php if ($loan_summary): ?>
+													data-active-loan-id="<?= $loan_summary['loan_id'] ?>"
+													data-active-loan-amount="<?= $loan_summary['loan_amount'] ?>"
+													data-active-remaining="<?= $loan_summary['remaining_balance'] ?>"
+													<?php endif; ?>>
+													<i class="fa fa-plus"></i> <?= __('add_manual_loan', 'Add Manual Loan') ?>
+												</button>
+												<?php endif; ?>
 											</div>
 											<table id="loan_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 												<thead>
@@ -1781,9 +1758,60 @@ if (mysqli_num_rows($query) == 1) {
 												</thead>
 												<tbody>
 													<?php
+													// Build a single chronological list mixing loan records with manual
+													// top-up events (emp_loan_topups), so a top-up shows as its own line
+													// instead of silently vanishing into the updated loan row's numbers.
+													$loan_history_rows = [];
+
 													$sql_emp_loan = "SELECT * FROM `emp_loan` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC";
 													$query_emp_loan = mysqli_query($conDB, $sql_emp_loan);
 													while ($loan_rec = mysqli_fetch_array($query_emp_loan)) {
+														// Do not show legacy invoices in loan history
+														if (isset($loan_rec['inv_no']) && strpos($loan_rec['inv_no'], 'LEGACY-') === 0) {
+															continue;
+														}
+														$loan_history_rows[] = [
+															'event' => 'loan',
+															'sort_at' => $loan_rec['created_at'] ?? $loan_rec['start_date'],
+															'rec' => $loan_rec,
+														];
+													}
+
+													$sql_loan_topups = "SELECT t.*, l.inv_no, l.loan_type FROM `emp_loan_topups` t JOIN `emp_loan` l ON l.id = t.loan_id WHERE t.emp_id = '" . $emprow['empid'] . "' ORDER BY t.id DESC";
+													$query_loan_topups = mysqli_query($conDB, $sql_loan_topups);
+													if ($query_loan_topups) {
+														while ($topup_rec = mysqli_fetch_assoc($query_loan_topups)) {
+															$loan_history_rows[] = [
+																'event' => 'topup',
+																'sort_at' => $topup_rec['created_at'],
+																'rec' => $topup_rec,
+															];
+														}
+													}
+
+													usort($loan_history_rows, function ($a, $b) {
+														return strtotime($b['sort_at'] ?? '1970-01-01') <=> strtotime($a['sort_at'] ?? '1970-01-01');
+													});
+
+													foreach ($loan_history_rows as $history_row) {
+														if ($history_row['event'] === 'topup') {
+															$topup_rec = $history_row['rec'];
+														?>
+															<tr class="bg-light">
+																<td class="font-weight-bold text-primary">+<?= number_format($topup_rec['additional_amount'], 2); ?></td>
+																<td><?= number_format($topup_rec['new_monthly_deduction'], 2); ?></td>
+																<td>-</td>
+																<td><?= format_safe_date($topup_rec['created_at'], 'd, M Y H:i'); ?></td>
+																<td>-</td>
+																<td><span class="badge badge-info"><?= ucfirst(__($topup_rec['loan_type'])); ?></span></td>
+																<td><span class="badge badge-primary"><i class="fa fa-arrow-up"></i> <?= __('manual_top_up', 'Manual Top-up') ?></span></td>
+																<td><a href="./loan_report_details.php?id=<?= $topup_rec['loan_id'] ?>&emp_id=<?= $emprow['emp_id'] ?>" target="_blank" class="btn btn-sm btn-dark"><i class="fa fa-eye"></i> <?= __('view') ?></a></td>
+															</tr>
+														<?php
+															continue;
+														}
+
+														$loan_rec = $history_row['rec'];
 														// Calculate remaining balance for each loan
 														$loan_id_hist = $loan_rec['id'];
 														$total_payable_hist = $loan_rec['total_payable'];
@@ -1792,10 +1820,6 @@ if (mysqli_num_rows($query) == 1) {
 														$paid_rec_hist = mysqli_fetch_assoc($query_total_paid_hist);
 														$total_paid_hist = $paid_rec_hist['total_paid'];
 														$remaining_balance_hist = $total_payable_hist - $total_paid_hist;
-				                                        // Do not show legacy invoices in loan history
-				                                        if (isset($loan_rec['inv_no']) && strpos($loan_rec['inv_no'], 'LEGACY-') === 0) {
-				                                            continue;
-				                                        }
 													?>
 														<tr>
 															<td><?= number_format($loan_rec['loan_amount'], 2); ?></td>
@@ -2313,6 +2337,7 @@ if (mysqli_num_rows($query) == 1) {
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 		<script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
+		<script src="assets/js/salaryIncrement.js?t=<?= time() ?>"></script>
 		<script src="assets/js/empVacationHandle.js"></script>
 
 		<!-- Dropzone JS -->
@@ -4165,6 +4190,7 @@ if (mysqli_num_rows($query) == 1) {
 						<label><?= __('number_of_installments') ?></label>
 						<input type="number" id="newInstallments" class="form-control" value="${currentInstallments}" min="1" max="60" placeholder="e.g. 12">
 						<small class="text-muted d-block mt-1"><?= __('minimum') ?> 1, <?= __('maximum') ?> 60</small>
+						<small id="installmentsFeedback" class="text-danger d-block mt-1"></small>
 					</div>
 					<div class="form-group text-left">
 						<label><?= __('monthly_deduction') ?> (SAR)</label>
@@ -4192,12 +4218,33 @@ if (mysqli_num_rows($query) == 1) {
 						};
 					},
 					didOpen: () => {
-						// Update monthly deduction when installments change
-						$('#newInstallments').on('change', function() {
-							const installments = parseInt($(this).val()) || 1;
-							const newDeduction = remaining / installments;
-							$('#newMonthlyDeduction').val(newDeduction.toFixed(2));
-						});
+						const installmentsInput = $('#newInstallments');
+						const feedback = $('#installmentsFeedback');
+						const confirmButton = Swal.getConfirmButton();
+
+						function validateInstallments() {
+							const raw = installmentsInput.val();
+							const installments = parseInt(raw);
+							const isValid = raw !== '' && !isNaN(installments) && installments >= 1 && installments <= 60;
+
+							if (!isValid) {
+								feedback.text(
+									!raw || isNaN(installments)
+										? '<?= __('please_enter_valid_amount') ?>'
+										: '<?= __('installments_must_be_between_1_and_60') ?>'
+								);
+								$('#newMonthlyDeduction').val('');
+							} else {
+								feedback.text('');
+								const newDeduction = remaining / installments;
+								$('#newMonthlyDeduction').val(newDeduction.toFixed(2));
+							}
+
+							confirmButton.disabled = !isValid;
+						}
+
+						installmentsInput.on('input', validateInstallments);
+						validateInstallments();
 					}
 				}).then((result) => {
 					if (result.isConfirmed) {

@@ -347,6 +347,7 @@ $reportType = isset($_POST['reportType']) ? $_POST['reportType'] : '';
 $columns = isset($_POST['columns']) ? $_POST['columns'] : [];
 $departments = isset($_POST['departments']) ? $_POST['departments'] : [];
 $companies = isset($_POST['companies']) ? $_POST['companies'] : [];
+$countries = isset($_POST['countries']) ? $_POST['countries'] : [];
 $dateFrom = isset($_POST['dateFrom']) ? $_POST['dateFrom'] : '';
 $dateTo = isset($_POST['dateTo']) ? $_POST['dateTo'] : '';
 $status = isset($_POST['status']) ? $_POST['status'] : '';
@@ -373,6 +374,9 @@ if (!is_array($departments)) {
 if (!is_array($companies)) {
     $companies = empty($companies) ? [] : [$companies];
 }
+if (!is_array($countries)) {
+    $countries = empty($countries) ? [] : [$countries];
+}
 
 if (empty($reportType) || empty($columns)) {
     echo json_encode(['success' => false, 'message' => 'Report type and columns are required']);
@@ -390,47 +394,50 @@ try {
     
     switch ($reportType) {
         case 'employee':
-            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId);
+            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'vacation':
-            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType, $employeeId);
+            $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType, $employeeId, $companies, $countries);
             break;
         case 'loan':
-            $result = generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId);
+            $result = generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
+            break;
+        case 'salary_increment':
+            $result = generateSalaryIncrementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'salary':
-            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'payroll':
-            $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'attendance':
-            $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
+            $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'document':
-            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'assets':
-            $result = generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'assets_list':
-            $result = generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'evaluation':
             // Check if user can acknowledge evaluations (managers only)
             if (!can_acknowledge_evaluations($user_type, $user_role)) {
                 throw new Exception('Unauthorized: Only authorized managers can access evaluation reports');
             }
-            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'resignation':
-            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId);
+            $result = generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'eos':
-            $result = generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
+            $result = generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'terminated_employees':
-            $result = generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId);
+            $result = generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'dept_comparison':
             $result = generateDepartmentComparisonReport($conDB, $columns, $departments, $hasFullAccess, $userDept);
@@ -441,7 +448,7 @@ try {
         case 'custom':
             $customTables = isset($_POST['customTables']) ? $_POST['customTables'] : [];
             $customDepartments = isset($_POST['customDepartments']) ? $_POST['customDepartments'] : [];
-            $result = generateCustomReport($conDB, $columns, $customTables, $customDepartments, $dateFrom, $dateTo);
+            $result = generateCustomReport($conDB, $columns, $customTables, $customDepartments, $dateFrom, $dateTo, $status);
             break;
         default:
             throw new Exception('Invalid report type');
@@ -455,6 +462,24 @@ try {
     
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+}
+
+// Shared Company/Country filter for every employee-related report - mirrors the
+// existing department filter pattern (explicit user-selected IDs, not the session-based
+// access-control scoping getCompanyFilterSQL()/getDepartmentFilterSQL() already apply).
+function applyEmployeeCompanyCountryFilter($conDB, array &$where, $companies, $countries, $empAlias = 'e') {
+    if (!empty($companies) && !in_array('all', $companies, true)) {
+        $vals = array_map(function ($c) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, trim((string)$c)) . "'";
+        }, $companies);
+        $where[] = "`{$empAlias}`.`comp_no` IN (" . implode(',', $vals) . ")";
+    }
+    if (!empty($countries) && !in_array('all', $countries, true)) {
+        $vals = array_map(function ($c) use ($conDB) {
+            return "'" . mysqli_real_escape_string($conDB, trim((string)$c)) . "'";
+        }, $countries);
+        $where[] = "`{$empAlias}`.`country` IN (" . implode(',', $vals) . ")";
+    }
 }
 
 // Helper function to get column label
@@ -512,6 +537,11 @@ function getColumnLabel($column) {
         'final_approved_amount' => 'Approved Amount',
         'total_payable' => 'Total Payable',
         'remaining_amount' => 'Remaining Amount',
+        'request_inv_no' => 'Request ID',
+        'increment_amount' => 'Increment Amount',
+        'approved_amount' => 'Approved Amount',
+        'evaluation_score' => 'Evaluation Score',
+        'reason' => 'Reason',
         'basic' => 'Basic Salary',
         'housing' => 'Housing',
         'transport' => 'Transport',
@@ -597,7 +627,7 @@ function getColumnLabel($column) {
 }
 
 // Employee Report
-function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '') {
+function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     global $is_rtl;
     // Map column IDs to actual database columns with proper joins
     $columnMap = [
@@ -738,6 +768,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -849,7 +880,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
 }
 
 // Vacation Report
-function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '', $employeeId = '') {
+function generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType = '', $employeeId = '', $companies = [], $countries = []) {
     global $is_rtl;
     
     // Build SELECT clause for transaction-level leave balance reporting
@@ -932,6 +963,7 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
         $where[] = "v.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1125,7 +1157,7 @@ function generateVacationReport($conDB, $columns, $departments, $dateFrom, $date
 }
 
 // Loan Report
-function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '') {
+function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     // Add column mappings
     $columnMap = [
         'dept' => 'd.dep_nme',
@@ -1202,6 +1234,7 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
         $where[] = "l.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1254,8 +1287,115 @@ function generateLoanReport($conDB, $columns, $departments, $dateFrom, $dateTo, 
     return ['data' => $data, 'headers' => $headers];
 }
 
+// Salary Increment Report
+function generateSalaryIncrementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+    // Build SELECT clause
+    $selectCols = ['si.id'];
+
+    foreach ($columns as $col) {
+        if ($col == 'emp_name') {
+            $selectCols[] = 'e.name AS emp_name';
+        } elseif ($col == 'emp_id') {
+            $selectCols[] = 'si.emp_id';
+        } elseif ($col == 'dept') {
+            $selectCols[] = 'd.dep_nme AS dept';
+        } elseif ($col == 'status') {
+            $selectCols[] = 'si.current_status AS status';
+        } else {
+            $selectCols[] = 'si.' . $col;
+        }
+    }
+    $selectClause = implode(', ', $selectCols);
+
+    // Build WHERE clause - only active employees
+    $where = ['e.status = 1'];
+
+    // Department fallback filter (only when no explicit scope restrictions are configured)
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+
+    // Company filter - restrict by accessible companies
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+
+    // Department filter - restrict by accessible departments
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
+    }
+
+    // Date filter (applied date)
+    if (!empty($dateFrom)) {
+        $where[] = "si.created_at >= '" . mysqli_real_escape_string($conDB, $dateFrom) . "'";
+    }
+    if (!empty($dateTo)) {
+        $where[] = "si.created_at <= '" . mysqli_real_escape_string($conDB, $dateTo) . " 23:59:59'";
+    }
+
+    // Status filter
+    if ($status !== '') {
+        $where[] = "si.current_status = '" . mysqli_real_escape_string($conDB, $status) . "'";
+    }
+
+    // Employee filter
+    if (!empty($employeeId)) {
+        $where[] = "si.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
+    $whereClause = implode(' AND ', $where);
+
+    // Build and execute query
+    $sql = "SELECT $selectClause
+            FROM emp_salary_increment si
+            INNER JOIN employees e ON si.emp_id = e.emp_id
+            LEFT JOIN department d ON e.dept = d.id
+            WHERE $whereClause
+            ORDER BY si.created_at DESC";
+
+    $query = mysqli_query($conDB, $sql);
+    if (!$query) {
+        throw new Exception('Salary increment query error: ' . mysqli_error($conDB));
+    }
+
+    $data = [];
+    $headers = [];
+
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+
+    while ($row = mysqli_fetch_assoc($query)) {
+        unset($row['id']);
+
+        if (isset($row['emp_name'])) {
+            $row['emp_name'] = getDisplayName(parseName($row['emp_name']));
+        }
+        if (isset($row['dept'])) {
+            $row['dept'] = getDisplayName($row['dept']);
+        }
+        if (isset($row['status'])) {
+            $row['status'] = getDisplayName(str_replace('_', ' ', $row['status']));
+        }
+
+        $data[] = $row;
+    }
+
+    return ['data' => $data, 'headers' => $headers];
+}
+
 // Salary Report
-function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Build SELECT clause
     $selectCols = [];
     
@@ -1313,6 +1453,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
         $where[] = "s.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
 
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1356,7 +1497,7 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
 }
 
 // Payroll Report
-function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Build SELECT clause with column mapping aligned to actual schema
     $selectCols = [];
 
@@ -1513,6 +1654,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
         $where[] = "p.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
 
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT $selectClause 
@@ -1556,7 +1698,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
 }
 
 // Attendance Report
-function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
+function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     // Build SELECT clause
     $selectCols = [];
     
@@ -1621,6 +1763,7 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
         $where[] = "a.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1659,7 +1802,7 @@ function generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Document Report
-function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Build SELECT clause - always include d.id and d.path for attachment button
     $selectCols = ['d.id AS document_id', 'd.path AS file_path', 'd.docu_ext AS file_extension'];
     
@@ -1724,6 +1867,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
         $where[] = "d.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1778,7 +1922,7 @@ function generateDocumentReport($conDB, $columns, $departments, $hasFullAccess, 
 }
 
 // Evaluation Report
-function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Add column mappings
     $columnMap = [
         'dept' => 'd.dep_nme',
@@ -1876,6 +2020,7 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
         $where[] = "ev.employee_emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -1938,7 +2083,7 @@ function generateEvaluationReport($conDB, $columns, $departments, $dateFrom, $da
 }
 
 // Resignation Report
-function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateResignationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     global $is_rtl;
     
     // Build SELECT clause
@@ -2008,6 +2153,7 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
         $where[] = "r.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -2054,7 +2200,7 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
 }
 
 // End of Service Report (Prospective Calculation for Active Employees)
-function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
+function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     // This report calculates prospective EOS amounts for active employees
     // based on a selected termination date (dateTo parameter)
     
@@ -2093,6 +2239,7 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
         $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Fetch active employees with their salary details
@@ -2301,7 +2448,7 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
 }
 
 // Exit Settlement Report - Shows detailed settlement for all terminated employees
-function generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '') {
+function generateExitSettlementReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     global $is_rtl;
     
     // Build WHERE clause
@@ -2344,6 +2491,7 @@ function generateExitSettlementReport($conDB, $columns, $departments, $dateFrom,
         $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Fetch terminated employees with their settlement details
@@ -2765,7 +2913,7 @@ function generateCountryCompanyComparisonReport($conDB, $columns, $departments, 
     return ['data' => $data, 'headers' => $headers];
 }
 
-function generateCustomReport($conDB, $columns, $tableNames, $departments = [], $dateFrom = '', $dateTo = '') {
+function generateCustomReport($conDB, $columns, $tableNames, $departments = [], $dateFrom = '', $dateTo = '', $status = '') {
     if (empty($tableNames) || empty($columns)) {
         throw new Exception('Table name(s) and columns are required');
     }
@@ -2807,10 +2955,10 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
         }
     }
     
-    // Auto-include employees table for department filtering if not already selected
-    // but any selected table has emp_id
+    // Auto-include employees table for department/status filtering if not already
+    // selected but any selected table has emp_id
     $needsEmployeesForFiltering = false;
-    if (!in_array('employees', $validatedTables) && !empty($departments) && !in_array('all', $departments)) {
+    if (!in_array('employees', $validatedTables) && ((!empty($departments) && !in_array('all', $departments)) || $status !== '')) {
         foreach ($validatedTables as $tbl) {
             if (isset($tableColumns[$tbl]) && in_array('emp_id', $tableColumns[$tbl])) {
                 $needsEmployeesForFiltering = true;
@@ -3036,7 +3184,14 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
             $whereClauses[] = "`" . $deptAnchorTable . "`.`" . $deptColumnFound . "` IN (" . implode(',', $values) . ")";
         }
     }
-    
+
+    // Status filter - only meaningful (and only offered by the UI) when the
+    // employees table is one of the selected/auto-joined tables and has a
+    // 'status' column (Active/Inactive, same 1/0 values generateEmployeeReport uses).
+    if ($status !== '' && $hasEmployees && isset($tableColumns['employees']) && in_array('status', $tableColumns['employees'])) {
+        $whereClauses[] = "`employees`.`status` = '" . mysqli_real_escape_string($conDB, $status) . "'";
+    }
+
     // Add date filters if provided
     if (!empty($dateFrom) || !empty($dateTo)) {
         // Find date columns in selected tables
@@ -3196,7 +3351,7 @@ function generateCustomReport($conDB, $columns, $tableNames, $departments = [], 
 }
 
 // Asset Inventory Report
-function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Build SELECT clause
     $selectCols = ['a.id AS asset_id'];
     
@@ -3294,6 +3449,7 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
         $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
     
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
     
     // Build and execute query
@@ -3347,7 +3503,7 @@ function generateAssetsReport($conDB, $columns, $departments, $dateFrom, $dateTo
 }
 
 // Assets List (one row per asset with latest status/holder)
-function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '') {
+function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status = '', $employeeId = '', $companies = [], $countries = []) {
     // Check if a specific asset item is selected - if so, show full activity
     $selectedItemId = isset($_POST['assetItemId']) ? intval($_POST['assetItemId']) : 0;
     if ($selectedItemId > 0) {
@@ -3491,6 +3647,7 @@ function generateAssetsListReport($conDB, $columns, $departments, $dateFrom, $da
         $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
     }
 
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
     $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT $selectClause

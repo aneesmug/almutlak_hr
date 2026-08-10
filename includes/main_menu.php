@@ -13,6 +13,7 @@ $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
 $appliedBusinessTripLink = 'all_applied_business_trip.php';
+$appliedSalaryIncrementLink = 'all_applied_salary_increment.php';
 $appliedLoanLink = 'all_applied_loan.php';
 $settlementsLink = 'all_settlements.php';
 $payrollApprovalsLink = 'all_payroll_approvals.php';
@@ -80,6 +81,19 @@ require_once __DIR__ . '/special_access_helper.php';
 $isSmartRequestMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'smart_request')['blocked'];
 $isGeneralRequestMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'general_request')['blocked'];
 
+// Approvals sidebar entries hidden for non-admins when their request type is globally
+// blocked (or individually blocked for the current user) - admins keep seeing every
+// entry so they can still manage pending items and the block toggle itself.
+$isBusinessTripMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'business_trip')['blocked'];
+$isLoanMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'loan_request')['blocked'];
+$isResignationMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'resignation_request')['blocked'];
+$isRejoinMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'rejoin_request')['blocked'];
+$isSalaryIncrementMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'salary_increment')['blocked'];
+$isAllVacationMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'vacation_annual')['blocked']
+    && is_employee_request_blocked($conDB, $empid ?? '', 'vacation_emergency')['blocked']
+    && is_employee_request_blocked($conDB, $empid ?? '', 'vacation_local')['blocked']
+    && is_employee_request_blocked($conDB, $empid ?? '', 'vacation_encashed')['blocked'];
+
 // Pages whose page_roles restriction can be bypassed by an explicit special-access grant.
 // Value can be a single access key, or an array of keys where any one grants access.
 $page_special_access_bypass = [
@@ -88,6 +102,8 @@ $page_special_access_bypass = [
     'all_applied_vac.php' => 'access_all_applied_vac',
     'all_applied_loan.php' => 'access_all_applied_loan',
     'all_applied_business_trip.php' => 'access_all_applied_business_trip',
+    'all_applied_salary_increment.php' => 'access_all_applied_salary_increment',
+    'salary_increment_status_history.php' => 'access_salary_increment_status_history',
     'all_resignations.php' => 'access_all_resignations',
     'all_settlements.php' => 'access_all_settlements',
     'all_payroll_approvals.php' => 'access_all_payroll_approvals',
@@ -142,6 +158,7 @@ $can_see_employees_payroll_page = $page_roles['generate_payroll.php'] ?? [];
 $can_see_import_iqama_page = $page_roles['import_iqama_exp.php'] ?? [];
 $can_see_applied_vac_page = $page_roles['all_applied_vac.php'] ?? [];
 $can_see_business_trip_page = $page_roles['all_applied_business_trip.php'] ?? [];
+$can_see_salary_increment_page = $page_roles['all_applied_salary_increment.php'] ?? [];
 $can_see_rejoin_approvals_page = $page_roles['rejoin_approvals.php'] ?? [];
 $can_see_loan_approvals_page = $page_roles['all_applied_loan.php'] ?? [];
 $can_see_settlements_page = $page_roles['all_settlements.php'] ?? [];
@@ -175,13 +192,15 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_import_iqama_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page));
 
-$show_approvals_menu = !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_business_trip_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page)) ||
+$show_approvals_menu = !empty($is_system_admin) ||
+                       (!$isAllVacationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page))) ||
+                       (!$isBusinessTripMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_business_trip_page))) ||
+                       (!$isSalaryIncrementMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_salary_increment_page))) ||
+                       (!$isLoanMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_loan_approvals_page))) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_settlements_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_payroll_approvals_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page)) ||
+                       (!$isResignationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page))) ||
+                       (!$isRejoinMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page))) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
 
 $can_see_reports_menu = !$is_employee_user_type;
@@ -618,6 +637,54 @@ if ($business_trip_type_id > 0) {
 }
 // --- END NEW BUSINESS TRIP PENDING COUNT ---
 
+// --- Fetch Salary Increment Pending Approval Count (NEW) ---
+$salary_increment_pending_count = 0;
+$salary_increment_type_id = 0;
+$salary_increment_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'salary_increment' LIMIT 1");
+if ($row = mysqli_fetch_assoc($salary_increment_type_query)) {
+    $salary_increment_type_id = (int)$row['id'];
+}
+if ($salary_increment_type_id > 0) {
+    if ($is_system_admin || $user_role == 'Administrator') {
+        // Admin: count all distinct salary increment requests still pending anywhere
+        $salary_increment_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                             FROM request_approvers ra
+                                                                             JOIN emp_salary_increment si ON si.request_inv_no = ra.request_inv_no
+                                                                             WHERE ra.status = 'pending'
+                                                                                 AND ra.request_type_id = $salary_increment_type_id
+                                                                                 AND si.current_status = 'pending_approval'";
+        $res_si_admin = mysqli_query($conDB, $salary_increment_pending_query_admin);
+        if ($res_si_admin && ($rsia = mysqli_fetch_assoc($res_si_admin))) {
+            $salary_increment_pending_count = (int)$rsia['count'];
+        }
+    } elseif ($use_dept_scoped_pending_counts) {
+        // Department Manager: count all salary increment requests from their department employees
+        $salary_increment_pending_query_dept = "SELECT COUNT(DISTINCT si.request_inv_no) AS count
+                                                                           FROM emp_salary_increment si
+                                                                           JOIN employees e ON si.emp_id = e.emp_id
+                                                                           WHERE e.dept = '" . mysqli_real_escape_string($conDB, $user_dept) . "'
+                                                                               AND si.current_status = 'pending_approval'";
+        $res_si_dept = mysqli_query($conDB, $salary_increment_pending_query_dept);
+        if ($res_si_dept && ($rsid = mysqli_fetch_assoc($res_si_dept))) {
+            $salary_increment_pending_count = (int)$rsid['count'];
+        }
+    } else {
+        // Regular user: count requests awaiting THIS user's approval
+        $salary_increment_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
+                                                                     FROM request_approvers ra
+                                                                     JOIN emp_salary_increment si ON si.request_inv_no = ra.request_inv_no
+                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                         AND ra.status = 'pending'
+                                                                         AND ra.request_type_id = $salary_increment_type_id
+                                                                         AND si.current_status = 'pending_approval'";
+        $res_si = mysqli_query($conDB, $salary_increment_pending_query);
+        if ($res_si && ($rsi = mysqli_fetch_assoc($res_si))) {
+            $salary_increment_pending_count = (int)$rsi['count'];
+        }
+    }
+}
+// --- END NEW SALARY INCREMENT PENDING COUNT ---
+
 // Initialize counts to 0
 $status_cont_vacapl = 0;
 $status_cont_vacaphr = 0;
@@ -650,7 +717,7 @@ if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
 
 // --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
 // Total count for Approvals menu
-$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $payroll_pending_count + $status_cont_contaprl;
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $salary_increment_pending_count + $payroll_pending_count + $status_cont_contaprl;
 
 // Total count for Requests menu
 $requests_total_count = $smart_request_count + $general_request_count;
@@ -718,10 +785,6 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
                 <?php endif; ?>
 
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                    <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_opening_balance', 'Import Loan Opening Balance') ?></span></a></li>
-                <?php endif; ?>
-
                 <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
@@ -751,28 +814,31 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <li class="<?=(strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><?= ($approvals_total_count > 0) ? "<span class='badgez badge-danger'>$approvals_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'true' : 'false') ?>">
-                <?php if (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)): ?>
+                <?php if (!empty($is_system_admin) || (!$isAllVacationMenuBlocked && (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)))): ?>
                     <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)): ?>
+                <?php if (!empty($is_system_admin) || (!$isBusinessTripMenuBlocked && (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)))): ?>
                     <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)): ?>
+                <?php if (!empty($is_system_admin) || (!$isSalaryIncrementMenuBlocked && (in_array($user_role, $can_see_salary_increment_page) || in_array($user_type, $can_see_salary_increment_page)))): ?>
+                    <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa fa-arrow-trend-up"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+                <?php if (!empty($is_system_admin) || (!$isRejoinMenuBlocked && (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)))): ?>
                     <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa fa-plane-arrival"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)): ?>
+                <?php if (!empty($is_system_admin) || (!$isLoanMenuBlocked && (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)))): ?>
                     <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_settlements_page) || in_array($user_type, $can_see_settlements_page)): ?>
+                <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_settlements_page) || in_array($user_type, $can_see_settlements_page)): ?>
                     <li><a href="<?= $settlementsLink ?>"><i class="fa fa-file-invoice-dollar"></i><span><?=__('settlements', 'Settlements') ?></span><?= ($settlement_pending_count > 0) ? "<span class='badgez badge-danger'>$settlement_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_payroll_approvals_page) || in_array($user_type, $can_see_payroll_approvals_page)): ?>
+                <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_payroll_approvals_page) || in_array($user_type, $can_see_payroll_approvals_page)): ?>
                     <li><a href="<?= $payrollApprovalsLink ?>"><i class="fa fa-money-check-dollar"></i><span><?=__('payroll_approvals', 'Payroll Approvals') ?></span><?= ($payroll_pending_count > 0) ? "<span class='badgez badge-danger'>$payroll_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)): ?>
+                <?php if (!empty($is_system_admin) || (!$isResignationMenuBlocked && (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)))): ?>
                     <li><a href="<?= $allResignationsLink ?>"><i class="fa fa-user-times"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                 <?php if (in_array($user_role, $can_see_content_approvals_page) || in_array($user_type, $can_see_content_approvals_page)): ?>
+                 <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_content_approvals_page) || in_array($user_type, $can_see_content_approvals_page)): ?>
                     <li><a href="<?= $tempContractsLink ?>"><i class="fa fa-arrows-spin"></i><span><?=__('content_updates') ?> <?= ($status_cont_contaprl > 0) ? "<span class='badgez badge-danger'>$status_cont_contaprl</span>" : "" ?></span></a></li>
                 <?php endif; ?>
             </ul>
@@ -815,12 +881,15 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         $can_see_vacation_date_editor = in_array($user_role, $page_roles['vacation_dates_by_inv.php'] ?? []) || in_array($user_type, $page_roles['vacation_dates_by_inv.php'] ?? []);
         $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
         ?>
-        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings): ?>
-        <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'mm-active' : '') ?>">
+        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+        <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
-            <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php') ? 'true' : 'false') ?>">
+            <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
                 <?php if ($is_system_admin): ?>
                 <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
+                <?php endif; ?>
+                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_opening_balance', 'Import Loan Opening Balance') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($is_system_admin || $can_see_vacation_date_editor): ?>
                 <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
@@ -879,7 +948,13 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
         <!-- Reports -->
         <?php if ($can_see_reports_menu): ?>
-            <li><a href="reports.php"><i class="fa fa-chart-simple"></i> <span> <?=__('reports') ?> </span></a></li>
+            <li>
+                <a href="javascript:void(0);"><i class="fa fa-chart-simple"></i><span> <?=__('reports') ?> </span><span class="float-right fa fa-arrow-right"></span></a>
+                <ul class="nav-second-level" aria-expanded="<?= ($current_page_name === 'graphical_reports.php' ? 'true' : 'false') ?>">
+                    <li><a href="reports.php"><i class="fa fa-table"></i><span><?=__('reports') ?></span></a></li>
+                    <li><a href="graphical_reports.php"><i class="fa fa-chart-pie"></i><span><?=__('graphical_reports', 'Graphical Reports') ?></span></a></li>
+                </ul>
+            </li>
         <?php endif; ?>
         <li><a href="./system_guide.php" target="_blank"><i class="fa fa-book-open-lines"></i><span><?=__('system_guide') ?></span></a></li>
     </ul>

@@ -1764,6 +1764,7 @@ if (!function_exists('load_email_template')) {
         $template_map = [
             'smart_request' => 'smart_request_email_template.html',
             'business_trip' => 'smart_request_email_template.html',
+            'salary_increment' => 'smart_request_email_template.html',
             'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
@@ -2031,6 +2032,42 @@ if (!function_exists('get_request_details_for_email')) {
                         $template_data['LOAN_AMOUNT'] = number_format($row['loan_amount'], 2);
                         $template_data['INSTALLMENTS'] = $row['installments'];
                         $template_data['REQUEST_URL'] = $base_url . '/all_applied_loan.php?status=my_pending';
+
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            return false;
+        } elseif ($request_type === 'salary_increment') {
+            // Fetch salary increment details
+            $sql = "SELECT si.*, e.name as employee_name, d.dep_nme as department_name, sup.name as submitted_by_name
+                    FROM emp_salary_increment si
+                    JOIN employees e ON si.emp_id = e.emp_id
+                    LEFT JOIN department d ON e.dept = d.id
+                    LEFT JOIN employees sup ON si.submitted_by = sup.emp_id
+                    WHERE si.request_inv_no = ?
+                    LIMIT 1";
+
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $template_data['REQUEST_TYPE'] = 'Salary Increment Request';
+                        $template_data['REQUEST_TYPE_LOWER'] = 'salary increment request';
+                        $template_data['REQUEST_TITLE'] = 'Salary Increment - ' . $row['employee_name'] . ' (' . number_format($row['increment_amount'], 2) . ' SAR)';
+                        $template_data['SUBMITTED_BY'] = $row['submitted_by_name'] ?: $row['submitted_by'];
+                        $template_data['DEPARTMENT'] = $row['department_name'] ?: 'N/A';
+                        $template_data['EMPLOYEE_NAME'] = $row['employee_name'];
+                        $template_data['INCREMENT_AMOUNT'] = number_format($row['increment_amount'], 2);
+                        $template_data['REASON'] = $row['reason'];
+                        $template_data['EMAIL_MESSAGE'] = 'A salary increment request of ' . number_format($row['increment_amount'], 2) . ' SAR for ' . $row['employee_name'] . ' requires your approval.';
+                        $template_data['REQUEST_URL'] = $base_url . '/all_applied_salary_increment.php?status=my_pending';
 
                         mysqli_free_result($result);
                         mysqli_stmt_close($stmt);

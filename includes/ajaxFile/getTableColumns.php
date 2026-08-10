@@ -5,7 +5,7 @@ require_once __DIR__ . '/../session_check.php';
 header('Content-Type: application/json');
 
 // Check authorization
-$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager'];
+$can_see_reports_page = ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Recruitment', 'IT_Team_Manager'];
 
 if (!in_array($user_role, $can_see_reports_page) && !$is_system_admin) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized access']);

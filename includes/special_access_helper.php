@@ -15,6 +15,7 @@ if (!function_exists('get_special_access_labels')) {
             'cancel_resignation_requests' => 'Cancel Submitted Resignation Requests',
             'cancel_rejoin_requests' => 'Cancel Submitted Rejoin Requests',
             'cancel_business_trip_requests' => 'Cancel Submitted Business Trip Requests',
+            'cancel_salary_increment_requests' => 'Cancel Submitted Salary Increment Requests',
             'add_business_trip_manual_allowance' => 'Business Trip: Add Manual Allowance (Taxi, Parking, etc.)',
             'view_vacation_balance_history' => 'View Vacation Balance History',
             'view_remaining_balance_in_report' => 'Show Remaining Balance in Vacation Report',
@@ -32,6 +33,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_vacation_payroll_settings' => 'Access App Settings - Vacation Payroll Settings Tab',
             'manage_overtime_settings' => 'Access App Settings - Overtime Settings Tab',
             'manage_deduction_settings' => 'Access App Settings - Deduction Settings Tab',
+            'manage_salary_increment_settings' => 'Access App Settings - Salary Increment Settings Tab',
             'manage_vacation_salary_below_min_days' => 'Employee Master: Allow Vacation Salary Payout Below Minimum Days',
             'view_employee_eos_value' => 'Employee Master: View End of Service (EOS) Estimated Value',
             'view_employee_salary_value' => 'Employee Master: View Salary',
@@ -63,6 +65,8 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_settlement_status_history' => 'Access Page: Settlement Status History',
             'access_vacation_status_history' => 'Access Page: Vacation Status History',
             'access_business_trip_status_history' => 'Access Page: Business Trip Status History',
+            'access_all_applied_salary_increment' => 'Access Page: All Applied Salary Increments',
+            'access_salary_increment_status_history' => 'Access Page: Salary Increment Status History',
             'access_edit_employee' => 'Access Page: Edit Employee',
         ];
     }
@@ -87,6 +91,7 @@ if (!function_exists('get_special_access_categories')) {
                     'cancel_resignation_requests',
                     'cancel_rejoin_requests',
                     'cancel_business_trip_requests',
+                    'cancel_salary_increment_requests',
                 ],
             ],
             'Page Access' => [
@@ -131,6 +136,7 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_vacation_payroll_settings',
                     'manage_overtime_settings',
                     'manage_deduction_settings',
+                    'manage_salary_increment_settings',
                 ],
             ],
             'Business Trip' => [
@@ -257,6 +263,7 @@ if (!function_exists('get_blockable_request_type_labels')) {
             'rejoin_request' => 'Rejoin Request',
             'general_request' => 'General Request',
             'business_trip' => 'Business Trip',
+            'salary_increment' => 'Salary Increment',
         ];
     }
 }

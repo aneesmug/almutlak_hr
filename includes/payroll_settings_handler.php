@@ -21,6 +21,7 @@ const PAYROLL_SETTINGS_GROUP_KEYS = [
     'vacation_payroll' => 'manage_vacation_payroll_settings',
     'overtime_settings' => 'manage_overtime_settings',
     'deduction_settings' => 'manage_deduction_settings',
+    'salary_increment_settings' => 'manage_salary_increment_settings',
 ];
 
 function payrollSettingsCanAccessGroup($conDB, $group) {
@@ -45,6 +46,7 @@ function ensurePayrollParamSettings($conDB) {
         ['overtime_monthly_hours', '240', 'overtime_settings', 'Standard monthly working hours used as the divisor for overtime hourly rate'],
         ['overtime_extra_multiplier', '0.5', 'overtime_settings', 'Extra multiplier applied to the basic-salary hourly portion of overtime pay'],
         ['deduction_base_components', '["basic_salary","housing_allowance","transport_allowance","miscellaneous_allowance","cashier_allowance","fuel_allowance","telephone_allowance","other_allowance","guard_allowance"]', 'deduction_settings', 'Salary components summed as the base for percentage-based deductions (e.g. GOSI)'],
+        ['salary_increment_max_amount', '2000', 'salary_increment_settings', 'Maximum salary increment amount allowed per request'],
     ];
 
     foreach ($defaults as [$name, $value, $group, $description]) {

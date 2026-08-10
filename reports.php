@@ -44,6 +44,7 @@ $all_report_options = [
     'employee' => __('employee_report'),
     'vacation' => __('vacation_report'),
     'loan' => __('loan_report'),
+    'salary_increment' => __('salary_increment_report'),
     'salary' => __('salary_report'),
     'payroll' => __('payroll_report'),
     'attendance' => __('attendance_report'),
@@ -1258,6 +1259,16 @@ if (mysqli_num_rows($query) == 1) {
                         ],
                         defaultValue: ''
                     },
+                    salary_increment: {
+                        options: [
+                            { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'pending_approval', label: (typeof __ === 'function') ? __('pending_approval') : 'Pending Approval' },
+                            { value: 'approved', label: (typeof __ === 'function') ? __('approved') : 'Approved' },
+                            { value: 'rejected', label: (typeof __ === 'function') ? __('rejected') : 'Rejected' },
+                            { value: 'cancelled', label: (typeof __ === 'function') ? __('cancelled') : 'Cancelled' }
+                        ],
+                        defaultValue: ''
+                    },
                     document: {
                         options: [
                             { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
@@ -1344,7 +1355,7 @@ if (mysqli_num_rows($query) == 1) {
 
                 // Toggle Employee Filter visibility based on report type
                 function toggleEmployeeFilter(reportType) {
-                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement'];
+                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement'];
                     
                     if (employeeRelatedReports.includes(reportType)) {
                         $('#employeeFilterWrapper').show();
@@ -1855,6 +1866,57 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'remaining_amount',
                             label: (typeof __ === 'function') ? __('remaining_amount') : 'Remaining Amount',
+                            default: true
+                        }
+                    ],
+                    salary_increment: [{
+                            id: 'request_inv_no',
+                            label: (typeof __ === 'function') ? __('request_id') : 'Request ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_id',
+                            label: (typeof __ === 'function') ? __('emp_id') : 'Employee ID',
+                            default: true
+                        },
+                        {
+                            id: 'emp_name',
+                            label: (typeof __ === 'function') ? __('emp_name') : 'Employee Name',
+                            default: true
+                        },
+                        {
+                            id: 'dept',
+                            label: (typeof __ === 'function') ? __('dept') : 'Department',
+                            default: true
+                        },
+                        {
+                            id: 'increment_amount',
+                            label: (typeof __ === 'function') ? __('increment_amount') : 'Increment Amount',
+                            default: true
+                        },
+                        {
+                            id: 'approved_amount',
+                            label: (typeof __ === 'function') ? __('approved_amount') : 'Approved Amount',
+                            default: true
+                        },
+                        {
+                            id: 'evaluation_score',
+                            label: (typeof __ === 'function') ? __('evaluation_score') : 'Evaluation Score',
+                            default: false
+                        },
+                        {
+                            id: 'reason',
+                            label: (typeof __ === 'function') ? __('reason') : 'Reason',
+                            default: false
+                        },
+                        {
+                            id: 'status',
+                            label: (typeof __ === 'function') ? __('status') : 'Status',
+                            default: true
+                        },
+                        {
+                            id: 'created_at',
+                            label: (typeof __ === 'function') ? __('created_at') : 'Applied Date',
                             default: true
                         }
                     ],

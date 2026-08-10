@@ -33,6 +33,7 @@ $isVacationEmergencyBlocked = is_employee_request_blocked($conDB, $empIdForBlock
 $isVacationLocalBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
 $isVacationEncashedBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
 $isAllVacationBlocked = ($isVacationAnnualBlocked && $isVacationEmergencyBlocked && $isVacationLocalBlocked && $isVacationEncashedBlocked);
+$isBusinessTripBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'business_trip')['blocked'];
 
 // Get available vacation balance for modal actions
 $displayBalance = 0;
@@ -65,7 +66,32 @@ if ($emprow['status'] == 1) {
 	if ($hr_actions) {
 		$moreActionsHtml .= $hr_actions;
 	}
-	
+
+	// Apply Salary Increment (Direct Supervisor only, for employees with > 1 year tenure)
+	$isSupervisorOfThisEmp = (string)($emprow['supervisor_id'] ?? '') === (string)($empid ?? '');
+	$tenureOk = false;
+	if (!empty($emprow['joining_date'])) {
+		try {
+			$joinDate = new DateTime($emprow['joining_date']);
+			$tenureOk = $joinDate <= (new DateTime('-1 year'));
+		} catch (Exception $e) {
+			$tenureOk = false;
+		}
+	}
+	$isSalaryIncrementBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'salary_increment')['blocked'];
+
+	if (($isSupervisorOfThisEmp || $is_system_admin) && $tenureOk && !$isSalaryIncrementBlocked && $current_page_name !== 'profile.php') {
+		$deptNameForSalaryIncrement = '';
+		if (!empty($emprow['dept'])) {
+			$deptNameQuery = mysqli_query($conDB, "SELECT `dep_nme` FROM `department` WHERE `id` = '" . (int)$emprow['dept'] . "' LIMIT 1");
+			if ($deptNameQuery && ($deptNameRow = mysqli_fetch_assoc($deptNameQuery))) {
+				$deptNameForSalaryIncrement = $deptNameRow['dep_nme'] ?? '';
+			}
+			if ($deptNameQuery) mysqli_free_result($deptNameQuery);
+		}
+		$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"openSalaryIncrementApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['iqama'] ?? '') . "', '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', '" . htmlspecialchars($deptNameForSalaryIncrement, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['joining_date'] ?? '') . "')\" role=\"button\"><i class=\"fa fa-arrow-trend-up\"></i><span>" . __('apply_salary_increment', 'Apply Salary Increment') . "</span></div>";
+	}
+
 	// *IT ACTIONS
 	/* if ($isItAssistant || $is_system_admin) {
 		$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"assignAsset('" . htmlspecialchars($emprow['empid']) . "')\" role=\"button\"><i class=\"fa fa-solid fa-project-diagram\"></i><span>" . __('assign_asset') . "</span></div>";
@@ -82,8 +108,10 @@ if ($emprow['status'] == 1) {
 			}
 			
 			// Business Trip Request
-			$moreActionsHtml .= "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
-		
+			if (!$isBusinessTripBlocked) {
+				$moreActionsHtml .= "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
+			}
+
 			// Excuse Leave
 			if (!$isExcuseLeaveBlocked) {
 				$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
