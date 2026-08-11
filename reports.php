@@ -1353,6 +1353,11 @@ if (mysqli_num_rows($query) == 1) {
                     }
                 }
 
+                // Report types whose backend generator accepts $companies/$countries filters
+                // (all per-employee reports) - used to show the company select2 and include
+                // it in the submitted filter payload.
+                const companyFilterReportTypes = ['employee', 'vacation', 'loan', 'salary_increment', 'salary', 'payroll', 'attendance', 'document', 'assets', 'assets_list', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'country_company_comparison'];
+
                 // Toggle Employee Filter visibility based on report type
                 function toggleEmployeeFilter(reportType) {
                     const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement'];
@@ -2338,6 +2343,11 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
+                            id: 'company_name',
+                            label: (typeof __ === 'function') ? __('company_name') : 'Company Name',
+                            default: true
+                        },
+                        {
                             id: 'dept',
                             label: (typeof __ === 'function') ? __('department') : 'Department',
                             default: true
@@ -2767,8 +2777,8 @@ if (mysqli_num_rows($query) == 1) {
                         $('#companyMultiFilter').val(null).trigger('change');
                     }
 
-                    // Show/hide company filter (country/company comparison report only)
-                    if (reportType === 'country_company_comparison') {
+                    // Show/hide company filter (all reports whose backend accepts a company filter)
+                    if (companyFilterReportTypes.includes(reportType)) {
                         $('#companyFilterWrapper').show();
                         initCompanySelect2();
                     } else {
@@ -3346,8 +3356,8 @@ if (mysqli_num_rows($query) == 1) {
                         employeeId: employeeIdValue
                     };
 
-                    // If country/company comparison, include selected companies filter
-                    if (reportType === 'country_company_comparison') {
+                    // Include selected companies filter for every report type whose backend accepts it
+                    if (companyFilterReportTypes.includes(reportType)) {
                         filterData.companies = $('#companyMultiFilter').val() || [];
                     }
 

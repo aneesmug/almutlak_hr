@@ -2203,7 +2203,8 @@ function generateResignationReport($conDB, $columns, $departments, $dateFrom, $d
 function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
     // This report calculates prospective EOS amounts for active employees
     // based on a selected termination date (dateTo parameter)
-    
+    global $is_rtl;
+
     // Use dateTo as the termination date for calculations, default to today if not provided
     $terminationDate = !empty($dateTo) ? $dateTo : date('Y-m-d');
     
@@ -2243,7 +2244,7 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
     $whereClause = implode(' AND ', $where);
     
     // Fetch active employees with their salary details
-    $sql = "SELECT 
+    $sql = "SELECT
                 e.emp_id,
                 e.name,
                 e.joining_date,
@@ -2251,6 +2252,8 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
                 e.vac_period,
                 d.dep_nme AS dept_name,
                 d.dep_nme_ar AS dept_name_ar,
+                c.comp_name,
+                c.comp_name_ar,
                 s.basic,
                 s.housing,
                 s.transport,
@@ -2263,6 +2266,7 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
                 s.other
             FROM employees e
             LEFT JOIN department d ON e.dept = d.id
+            LEFT JOIN companies c ON e.comp_no = c.comp_id
             LEFT JOIN emp_salary s ON e.emp_id = s.emp_id AND s.status = 1
             WHERE $whereClause
             ORDER BY e.name";
@@ -2403,6 +2407,9 @@ function generateEOSReport($conDB, $columns, $departments, $dateFrom, $dateTo, $
                 case 'dept':
                     // Use getDisplayName for consistent translation handling
                     $rowData[$col] = getDisplayName($row['dept_name']);
+                    break;
+                case 'company_name':
+                    $rowData[$col] = ($is_rtl ?? false) && !empty($row['comp_name_ar']) ? $row['comp_name_ar'] : ($row['comp_name'] ?? '');
                     break;
                 case 'joining_date':
                     $rowData[$col] = $joiningDate;
