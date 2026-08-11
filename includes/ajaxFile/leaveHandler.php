@@ -3638,9 +3638,13 @@ elseif ($ajaxType == 'cancelVacationRequest') {
         }
 
         $vac_snapshot = get_vacation_balance_snapshot($conDB, $vacation['emp_id']);
-        $was_approved_note = ($vacation['current_status'] === 'approved')
-            ? ' NOTE: request was already approved - balance was NOT auto-refunded, review manually if a refund is due.'
-            : '';
+        $was_approved_note = '';
+        if ($vacation['current_status'] === 'approved') {
+            $refund_ok = refund_vacation_balance_on_cancel($conDB, $vacation_id);
+            $was_approved_note = $refund_ok
+                ? ' Vacation balance was automatically refunded.'
+                : ' NOTE: request was already approved - automatic balance refund FAILED, review manually.';
+        }
         log_vacation_activity(
             $conDB,
             $vacation['emp_id'],
@@ -3772,9 +3776,13 @@ elseif ($ajaxType == 'cancelVacationRequestAdmin') {
         }
 
         $vac_snapshot = get_vacation_balance_snapshot($conDB, $vacation['emp_id']);
-        $was_approved_note = ($vacation['current_status'] === 'approved')
-            ? ' NOTE: request was already approved - balance was NOT auto-refunded, review manually if a refund is due.'
-            : '';
+        $was_approved_note = '';
+        if ($vacation['current_status'] === 'approved') {
+            $refund_ok = refund_vacation_balance_on_cancel($conDB, $vacation_id);
+            $was_approved_note = $refund_ok
+                ? ' Vacation balance was automatically refunded.'
+                : ' NOTE: request was already approved - automatic balance refund FAILED, review manually.';
+        }
         log_vacation_activity(
             $conDB,
             $vacation['emp_id'],

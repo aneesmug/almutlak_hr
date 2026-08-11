@@ -44,6 +44,60 @@ $params = [
     ':feedback_month_param' => $monthYear
 ];
 
+// Must mirror the VACATION PAYROLL DROPOUT CHECK in process_payroll.php so the
+// listing page doesn't show employees that generation will skip anyway.
+$vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+$dropoutFilter = "";
+if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
+    $dropoutFilter = " AND NOT EXISTS (
+            SELECT 1 FROM emp_vacation vd
+            WHERE vd.emp_id = e.emp_id
+                AND vd.review = 'A'
+                AND vd.current_status IN ('approved', 'completed')
+                AND vd.start_date <= :dropout_month_end
+                AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
+                AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                AND vd.request_inv_no LIKE 'VAC-%'
+        )";
+    $params[':dropout_month_end'] = $monthEnd;
+    $params[':dropout_month_start'] = $monthStart;
+    $params[':dropout_days_param'] = $vacationDropoutDays;
+}
+
+// Double-check: a PAID vacation settlement (special-case early payout) overlapping this
+// month means the employee already got paid for that period, regardless of day count.
+// LEFT JOIN, not INNER: some settlement_records rows imported from the live server have
+// no matching emp_vacation row anymore. For those orphaned settlements, fall back to the
+// settlement's own payment_date falling inside the payroll month.
+$settlementFilter = "";
+if (!empty($monthStart) && !empty($monthEnd)) {
+    $settlementFilter = " AND NOT EXISTS (
+            SELECT 1 FROM settlement_records sr
+            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+            WHERE sr.emp_id = e.emp_id
+                AND sr.request_type = 'annual_vacation'
+                AND sr.settlement_status IN ('completed', 'processed')
+                AND sr.payment_date IS NOT NULL
+                AND (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= :settlement_month_end
+                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
+                        )
+                )
+        )";
+    $params[':settlement_month_end'] = $monthEnd;
+    $params[':settlement_month_start'] = $monthStart;
+    $params[':settlement_month_end2'] = $monthEnd;
+    $params[':settlement_month_start2'] = $monthStart;
+}
+
 if (!$can_see_all_employees && isset($user_dept)) {
     $dept_filter = " AND e.dept = :user_dept";
     $params[':user_dept'] = $user_dept;
@@ -135,7 +189,7 @@ try {
             e.fly = 0 
             OR (e.fly = 1 AND v.id IS NOT NULL)
             OR (v.is_deductible = 0)
-        )" . $dept_filter . $newHireFilter . "
+        )" . $dept_filter . $newHireFilter . $dropoutFilter . $settlementFilter . "
         ORDER BY e.dept, e.name
     ";
 

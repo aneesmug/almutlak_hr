@@ -4163,6 +4163,280 @@ if (!function_exists('update_vacation_balance_on_approval')) {
 
 /**
  * =================================================================
+ * == REFUND VACATION BALANCE ON CANCEL OF AN ALREADY-APPROVED VACATION
+ * =================================================================
+ * Mirror image of update_vacation_balance_on_approval(): adds the deducted
+ * day count back to the employee's current emp_vacation_balance row instead
+ * of subtracting it. Uses the exact same deductible-type and holiday/weekend
+ * exclusion logic as the approval function so the refunded amount matches
+ * what was actually deducted.
+ *
+ * Only call this when the vacation being cancelled is currently in
+ * 'approved' status (i.e. update_vacation_balance_on_approval() already ran
+ * for it) - cancelling anything earlier in the approval chain never reached
+ * the deduction step, so there is nothing to refund.
+ *
+ * @param mysqli $conDB
+ * @param int $vacation_id The ID from the `emp_vacation` table.
+ * @return bool True on success (including no-op for non-deductible types), false on failure.
+ */
+if (!function_exists('refund_vacation_balance_on_cancel')) {
+    function refund_vacation_balance_on_cancel($conDB, $vacation_id)
+    {
+        if (!$conDB || !is_numeric($vacation_id) || $vacation_id <= 0) {
+            return false;
+        }
+
+        $vac_id_safe = (int)$vacation_id;
+
+        // 1. Get the cancelled vacation's details (same fields used at approval time)
+        $sql_vac = "SELECT `emp_id`, `vacdays`, `vac_type`, `fly_type`, `remarks`, `start_date`, `return_date` FROM `emp_vacation` WHERE `id` = ?";
+        $stmt_vac = mysqli_prepare($conDB, $sql_vac);
+        if (!$stmt_vac) {
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt_vac, "i", $vac_id_safe);
+        if (!mysqli_stmt_execute($stmt_vac)) {
+            mysqli_stmt_close($stmt_vac);
+            return false;
+        }
+        $res_vac = mysqli_stmt_get_result($stmt_vac);
+        if (mysqli_num_rows($res_vac) == 0) {
+            mysqli_free_result($res_vac);
+            mysqli_stmt_close($stmt_vac);
+            return false;
+        }
+        $vac_details = mysqli_fetch_assoc($res_vac);
+        mysqli_free_result($res_vac);
+        mysqli_stmt_close($stmt_vac);
+
+        $emp_id = (int)$vac_details['emp_id'];
+        $days_to_refund = (float)$vac_details['vacdays'];
+        $remarks = trim(strtolower($vac_details['remarks'] ?? ''));
+        $vac_type_lower = trim(strtolower($vac_details['vac_type'] ?? ''));
+        $fly_type_lower = trim(strtolower($vac_details['fly_type'] ?? ''));
+
+        // Emergency vacations were never deducted - nothing to refund
+        if ($fly_type_lower === 'emergency' || strpos($vac_type_lower, 'emergency') !== false || strpos($remarks, 'emergency') !== false) {
+            error_log("DEBUG: Vacation ID {$vac_id_safe} is EMERGENCY - NO BALANCE REFUND NEEDED");
+            return true;
+        }
+
+        // ===== HOLIDAY CALCULATION (mirrors update_vacation_balance_on_approval) =====
+        $vacation_start = $vac_details['start_date'] ?? null;
+        $vacation_end = $vac_details['return_date'] ?? null;
+
+        if (!empty($vacation_start) && !empty($vacation_end)) {
+            $emp_company_id = 0;
+            $emp_dept_id = 0;
+            $emp_company_sql = "SELECT COALESCE(c.id, e.comp_no) AS company_id, e.dept AS dept_id
+                                FROM employees e
+                                LEFT JOIN companies c ON c.comp_id = e.comp_no
+                                WHERE e.emp_id = ?";
+            $emp_company_stmt = mysqli_prepare($conDB, $emp_company_sql);
+            if ($emp_company_stmt) {
+                mysqli_stmt_bind_param($emp_company_stmt, "i", $emp_id);
+                if (mysqli_stmt_execute($emp_company_stmt)) {
+                    $emp_company_res = mysqli_stmt_get_result($emp_company_stmt);
+                    $emp_company = mysqli_fetch_assoc($emp_company_res);
+                    if ($emp_company_res) mysqli_free_result($emp_company_res);
+                    mysqli_stmt_close($emp_company_stmt);
+
+                    $emp_company_id = (int)($emp_company['company_id'] ?? 0);
+                    $emp_dept_id = (int)($emp_company['dept_id'] ?? 0);
+                } else {
+                    mysqli_stmt_close($emp_company_stmt);
+                }
+            }
+
+            $active_holidays = get_active_holidays_in_range($conDB, $vacation_start, $vacation_end, $emp_company_id > 0 ? $emp_company_id : null);
+
+            $holiday_date_set = [];
+            $app_tz = get_setting($conDB, 'timezone') ?: 'Asia/Riyadh';
+            $tz = new DateTimeZone($app_tz);
+            foreach ($active_holidays as $h) {
+                try {
+                    $h_start = new DateTime($h['start_date'], $tz);
+                    $h_end = new DateTime($h['end_date'], $tz);
+                    $vac_s = new DateTime($vacation_start, $tz);
+                    $vac_e = new DateTime($vacation_end, $tz);
+                    $overlap_start = max($h_start->getTimestamp(), $vac_s->getTimestamp());
+                    $overlap_end = min($h_end->getTimestamp(), $vac_e->getTimestamp());
+                    if ($overlap_start <= $overlap_end) {
+                        $cur = new DateTime('@' . $overlap_start);
+                        $cur->setTimezone($tz);
+                        $oe = new DateTime('@' . $overlap_end);
+                        $oe->setTimezone($tz);
+                        while ($cur <= $oe) {
+                            $holiday_date_set[$cur->format('Y-m-d')] = true;
+                            $cur->modify('+1 day');
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log("Error building holiday date set (refund): " . $e->getMessage());
+                }
+            }
+
+            $weekend_day_numbers = get_weekend_days($emp_company_id, $emp_dept_id);
+            $excluded_days = 0;
+            try {
+                $day_cur = new DateTime($vacation_start);
+                $day_end = new DateTime($vacation_end);
+                while ($day_cur <= $day_end) {
+                    $dow = (int)$day_cur->format('w');
+                    $date_str = $day_cur->format('Y-m-d');
+                    $is_holiday = isset($holiday_date_set[$date_str]);
+                    if ($is_holiday) {
+                        $excluded_days++;
+                    }
+                    $day_cur->modify('+1 day');
+                }
+            } catch (Exception $e) {
+                error_log("Error in single-pass day classification (refund): " . $e->getMessage());
+            }
+
+            if ($excluded_days > 0) {
+                $days_to_refund = max(0, $days_to_refund - $excluded_days);
+            }
+        }
+        // ===== END HOLIDAY CALCULATION =====
+
+        $is_encashment = ($remarks === 'encashment') || ($vac_type_lower === 'encashed');
+
+        // Matches VacationCalculator::getUsedVacationDays() - the actual live/baseline
+        // calculation that counts vacation days against the balance (surfaced into the
+        // stored snapshot by the daily/force cron refresh). Fly+Annual vacations ARE
+        // counted there even though update_vacation_balance_on_approval() (a separate,
+        // narrower deduction path used for Local Vacation) does not touch them - so both
+        // must be refundable here.
+        $is_deductible_type = (
+            ($vac_type_lower === 'fly' && $fly_type_lower === 'annual')
+            || $vac_type_lower === 'local vacation'
+        );
+
+        $is_balance_deductible = $is_deductible_type;
+        if ($is_encashment) {
+            $is_balance_deductible = true;
+        }
+
+        if (!$is_balance_deductible) {
+            // This vacation type was never deducted - nothing to refund
+            error_log("DEBUG: Vacation ID {$vac_id_safe} is NON-DEDUCTIBLE - NO BALANCE REFUND NEEDED");
+            return true;
+        }
+
+        // Get the *latest* balance row for this employee (single running row per period)
+        $sql_latest_balance = "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1";
+        $stmt_latest = mysqli_prepare($conDB, $sql_latest_balance);
+        if (!$stmt_latest) {
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt_latest, "i", $emp_id);
+        if (!mysqli_stmt_execute($stmt_latest)) {
+            mysqli_stmt_close($stmt_latest);
+            return false;
+        }
+        $res_latest = mysqli_stmt_get_result($stmt_latest);
+        $latest_balance = mysqli_fetch_assoc($res_latest);
+        mysqli_free_result($res_latest);
+        mysqli_stmt_close($stmt_latest);
+
+        if (!$latest_balance) {
+            // No balance record exists at all - nothing to add the refund on top of
+            error_log("DEBUG: Vacation ID {$vac_id_safe} - No balance record exists for emp_id {$emp_id}, skipping refund");
+            return true;
+        }
+
+        $contract_id = (int)$latest_balance['contract_id'];
+        $period_start = $latest_balance['period_start'];
+        $period_end = $latest_balance['period_end'];
+        $carryover_days = (float)$latest_balance['carryover_days'];
+        $old_available_balance = (float)$latest_balance['available_balance'];
+        $old_used_days = (float)$latest_balance['used_days'];
+
+        // Add the days back (opening balance increases), reduce cumulative used_days
+        $new_total_days = $old_available_balance + $days_to_refund;
+        $new_used_days = max(0, $old_used_days - $days_to_refund);
+        $new_remaining_balance = $new_total_days;
+        $new_available_balance = $new_total_days;
+
+        error_log("DEBUG: Vacation ID {$vac_id_safe} - Refund Calculation: old_available={$old_available_balance}, days_to_refund={$days_to_refund}, new_available={$new_available_balance}, old_used_days={$old_used_days}, new_used_days={$new_used_days}");
+
+        $sql_insert_balance = "INSERT INTO `emp_vacation_balance`
+                                (`emp_id`, `vac_id`, `contract_id`, `period_start`, `period_end`,
+                                 `total_days`, `used_days`, `remaining_balance`, `available_balance`, `carryover_days`, `last_updated`)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                               ON DUPLICATE KEY UPDATE
+                               `vac_id` = ?,
+                               `period_end` = ?,
+                               `total_days` = ?,
+                               `used_days` = ?,
+                               `remaining_balance` = ?,
+                               `available_balance` = ?,
+                               `carryover_days` = ?,
+                               `last_updated` = NOW()";
+        $stmt_insert = mysqli_prepare($conDB, $sql_insert_balance);
+        if (!$stmt_insert) {
+            error_log("ERROR: Failed to prepare refund UPDATE statement for vacation ID {$vac_id_safe}");
+            return false;
+        }
+        mysqli_stmt_bind_param(
+            $stmt_insert,
+            "iiisssddddisddddd",
+            $emp_id,
+            $vac_id_safe,
+            $contract_id,
+            $period_start,
+            $period_end,
+            $new_total_days,
+            $new_used_days,
+            $new_remaining_balance,
+            $new_available_balance,
+            $carryover_days,
+            // ON DUPLICATE KEY UPDATE values
+            $vac_id_safe,
+            $period_end,
+            $new_total_days,
+            $new_used_days,
+            $new_remaining_balance,
+            $new_available_balance,
+            $carryover_days
+        );
+
+        if (mysqli_stmt_execute($stmt_insert)) {
+            mysqli_stmt_close($stmt_insert);
+            error_log("SUCCESS: Refunded balance for cancelled vacation ID {$vac_id_safe} - emp_id={$emp_id}, refunded={$days_to_refund}, new_available_balance={$new_available_balance}");
+
+            log_vacation_activity(
+                $conDB,
+                $emp_id,
+                $vac_id_safe,
+                'VACATION_CANCEL_REFUND',
+                "Cancellation of an approved vacation refunded {$days_to_refund} day(s) - {$vac_details['vac_type']}/{$vac_details['fly_type']}",
+                $old_available_balance,
+                $old_used_days,
+                $old_available_balance,
+                $new_available_balance,
+                $new_used_days,
+                $new_remaining_balance,
+                $carryover_days,
+                $new_total_days,
+                $period_start,
+                $period_end
+            );
+
+            return true;
+        } else {
+            $error = mysqli_stmt_error($stmt_insert);
+            error_log("ERROR: Refund UPDATE failed for vacation ID {$vac_id_safe}: {$error}");
+            mysqli_stmt_close($stmt_insert);
+            return false;
+        }
+    }
+}
+
+/**
+ * =================================================================
  * == TRAVEL COMPANY EMAIL NOTIFICATION FUNCTION
  * =================================================================
  * Sends employee travel information to the traveling company

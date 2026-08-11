@@ -117,6 +117,55 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
     return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
 }
 
+/**
+ * Double-check against settlement_records: if the employee already has a PAID
+ * settlement (annual_vacation settlement, completed/processed + payment_date set)
+ * tied to a vacation overlapping this payroll month, he must be dropped from
+ * payroll entirely - even if the vacation's day count is below the normal
+ * dropout/GOSI thresholds (special-case early settlement).
+ *
+ * Uses LEFT JOIN, not INNER JOIN: some settlement_records rows imported from the
+ * live server have no matching emp_vacation row anymore (the vacation record didn't
+ * survive the import). For those orphaned settlements there's no date range to
+ * compare against, so fall back to the settlement's own payment_date falling
+ * inside the payroll month.
+ */
+function hasPaidVacationSettlementForMonth(PDO $pdo, $empId, $monthYear) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    $stmt = $pdo->prepare("SELECT sr.id
+        FROM settlement_records sr
+        LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+        WHERE sr.emp_id = :emp_id
+          AND sr.request_type = 'annual_vacation'
+          AND sr.settlement_status IN ('completed', 'processed')
+          AND sr.payment_date IS NOT NULL
+          AND (
+                (
+                    v.id IS NOT NULL
+                    AND v.current_status IN ('approved', 'completed')
+                    AND v.start_date <= :month_end
+                    AND COALESCE(v.return_date, v.start_date) >= :month_start
+                )
+                OR
+                (
+                    v.id IS NULL
+                    AND sr.payment_date BETWEEN :month_start2 AND :month_end2
+                )
+          )
+        LIMIT 1");
+    $stmt->execute([
+        ':emp_id' => $empId,
+        ':month_start' => $monthStart,
+        ':month_end' => $monthEnd,
+        ':month_start2' => $monthStart,
+        ':month_end2' => $monthEnd
+    ]);
+
+    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+}
+
 // Decode the incoming JSON payload from the request body
 $input = json_decode(file_get_contents('php://input'), true);
 
@@ -349,6 +398,12 @@ try {
         // --- VACATION PAYROLL DROPOUT CHECK ---
         // Any active/approved vacation (regardless of type) whose day count exceeds the
         // configured threshold drops the employee out of this month's payroll entirely.
+        // Scoped to VAC-* (real vacations) only - LV-* leave/excuse requests (sick,
+        // marriage, hajj, maternity, etc.) must never drop an employee out of payroll,
+        // no matter how many days they cover.
+        // Uses full-month overlap (start_date <= month_end AND return_date >= month_start),
+        // not just "active on day 1" - a qualifying vacation starting mid-month must still
+        // drop the employee from that month's payroll.
         $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
         if ($vacationDropoutDays > 0) {
             $stmtVacationDropout = $pdo->prepare(
@@ -357,15 +412,16 @@ try {
                  WHERE v.emp_id = :emp_id
                      AND v.review = 'A'
                      AND v.current_status IN ('approved', 'completed')
-                     AND v.start_date <= :month_start_upper
-                     AND COALESCE(v.return_date, v.start_date) >= :month_start_lower
+                     AND v.start_date <= :month_end
+                     AND COALESCE(v.return_date, v.start_date) >= :month_start
                      AND COALESCE(v.vacdays, 0) >= :dropout_days
+                     AND v.request_inv_no LIKE 'VAC-%'
                  LIMIT 1"
             );
             $stmtVacationDropout->execute([
                 ':emp_id' => $empId,
-                ':month_start_upper' => $payrollMonthStart,
-                ':month_start_lower' => $payrollMonthStart,
+                ':month_end' => $payrollMonthEnd,
+                ':month_start' => $payrollMonthStart,
                 ':dropout_days' => $vacationDropoutDays
             ]);
             $vacationDropout = $stmtVacationDropout->fetch(PDO::FETCH_ASSOC);
@@ -377,6 +433,17 @@ try {
                 ];
                 continue;
             }
+        }
+
+        // Double-check: even if the vacation's day count is below the dropout threshold,
+        // a PAID settlement (special-case early payout) tied to a vacation overlapping this
+        // month means the employee already got paid for that period - drop from payroll.
+        if (hasPaidVacationSettlementForMonth($pdo, $empId, $monthYear)) {
+            $skippedEmployees[] = [
+                'emp_id' => $empId,
+                'reason' => 'Employee already has a paid vacation settlement for this payroll month'
+            ];
+            continue;
         }
         // --- VACATION PAYROLL DROPOUT CHECK END ---
 
