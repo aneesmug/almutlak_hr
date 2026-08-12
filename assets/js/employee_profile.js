@@ -475,7 +475,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                 // Translate the display name
                                 translateName(displayName, 'en', currentLang, function(translatedName) {
                                     // Update the option with translated name
-                                    const optionHtml = `<option value="${emp.emp_id}">${translatedName}</option>`;
+                                    const optionHtml = `<option value="${emp.emp_id}">${emp.emp_id} - ${translatedName}</option>`;
                                     $(`#replacement_per`).append(optionHtml);
 
                                     pendingTranslations--;
@@ -486,7 +486,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                                     }
                                 });
                             } else {
-                                const optionHtml = `<option value="${emp.emp_id}">${displayName}</option>`;
+                                const optionHtml = `<option value="${emp.emp_id}">${emp.emp_id} - ${displayName}</option>`;
                                 $(`#replacement_per`).append(optionHtml);
                                 pendingTranslations--;
                                 if (pendingTranslations === 0) {
@@ -808,11 +808,12 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         }
                     }
                     // NEW: Validate vacation salary type selection for annual vacations ONLY (Emergency vacation is unpaid)
+                    // Must mirror updateLocalVacationSalaryVisibility()'s exact rule (20-day threshold,
+                    // applies to both Fly and Local Vacation, respects the below-min override) - otherwise
+                    // the section stays hidden for the employee while this still demands a selection,
+                    // leaving them unable to submit.
                     if (flyType === 'annual') {
-                        const localVacationDays = (function () {
-                            if (selectedRadio !== 'Local Vacation') {
-                                return null;
-                            }
+                        const vacationDaysCount = (function () {
                             const start = new Date(startDate);
                             const end = new Date(endDate);
                             if (isNaN(start) || isNaN(end)) {
@@ -821,8 +822,12 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             return Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
                         })();
 
-                        if (selectedRadio === 'Local Vacation' && localVacationDays !== null && localVacationDays <= 5) {
-                            formData.set('vacation_salary_type', 'payroll');
+                        const meetsMinimumDays = vacationDaysCount !== null && (vacationDaysCount >= 20 || allowVacSalaryBelowMinOverride);
+
+                        if (!meetsMinimumDays) {
+                            // Server silently forces 'end_of_service' below the threshold regardless
+                            // of what's sent (leaveHandler.php) - match it here for clarity.
+                            formData.set('vacation_salary_type', 'end_of_service');
                         } else {
                             const salaryType = $('input[name="vacation_salary_type"]:checked').val();
                             if (!salaryType) {

@@ -260,15 +260,125 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { 
-            font-family: 'Roboto', sans-serif; 
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #050506;
         }
-        .otp-digit:focus { 
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); 
+
+        .otp-card {
+            background: radial-gradient(120% 140% at 50% -10%, #1a1b22 0%, #0b0b0f 55%, #08080a 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 25px 70px -20px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+            animation: card-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
+
+        @keyframes card-in {
+            from { opacity: 0; transform: translateY(14px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .eyebrow {
+            letter-spacing: 0.2em;
+        }
+
+        .otp-row { direction: ltr !important; }
+
+        .otp-box {
+            position: relative;
+            width: 3rem;
+            height: 3.5rem;
+            border-radius: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.15s ease, background-color 0.25s ease;
+        }
+        @media (min-width: 768px) { .otp-box { width: 3.5rem; height: 4rem; } }
+
+        .otp-box.is-filled { transform: scale(1.03); }
+
+        .otp-box:focus-within {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18), 0 0 18px rgba(59, 130, 246, 0.35);
+        }
+
         .otp-digit {
             direction: ltr !important;
+            background: transparent;
+            color: #f5f5f7;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border: none;
+            outline: none;
+            border-radius: inherit;
+            transition: opacity 0.2s ease;
         }
+
+        .otp-sep {
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 1.25rem;
+            font-weight: 600;
+            align-self: center;
+        }
+
+        .otp-check {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: scale(0.4);
+            transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+        }
+        .otp-check svg { width: 1.4rem; height: 1.4rem; }
+
+        /* Verified state */
+        .otp-box.state-verified {
+            border-color: rgba(34, 197, 94, 0.6);
+            background: rgba(34, 197, 94, 0.08);
+            box-shadow: 0 0 16px rgba(34, 197, 94, 0.25);
+        }
+        .otp-box.state-verified .otp-digit { opacity: 0; }
+        .otp-box.state-verified .otp-check { opacity: 1; transform: scale(1); }
+
+        /* Error state */
+        .otp-box.state-error {
+            border-color: rgba(239, 68, 68, 0.6);
+            background: rgba(239, 68, 68, 0.08);
+            box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+        }
+        .otp-box.state-error .otp-digit { color: #fca5a5; }
+
+        .otp-row.shake { animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+        @keyframes shake {
+            10%, 90% { transform: translateX(-1px); }
+            20%, 80% { transform: translateX(2px); }
+            30%, 50%, 70% { transform: translateX(-4px); }
+            40%, 60% { transform: translateX(4px); }
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 9999px;
+            background: #6b7280;
+            transition: background-color 0.25s ease;
+        }
+        .status-text.is-verified .status-dot { background: #22c55e; }
+        .status-text.is-error .status-dot { background: #ef4444; }
+        .status-text.is-verified .status-label { color: #4ade80; }
+        .status-text.is-error .status-label { color: #f87171; }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .status-label { display: inline-block; animation: fade-in 0.25s ease; }
     </style>
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 </head>
@@ -276,16 +386,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
     <!-- Background Image and Overlay -->
     <div class="fixed inset-0 z-[-1]">
         <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('assets/images/login-background.webp');"></div>
-        <div class="absolute inset-0 bg-black/60"></div>
+        <div class="absolute inset-0 bg-black/75"></div>
     </div>
 
     <div class="min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md">
-            <div class="bg-white rounded-2xl shadow-2xl p-8 md:p-12 text-center">
-                
-                <img src="assets/images/logo_color_sm.png" class="w-24 h-24 rounded-full mx-auto mb-6 ring-4 ring-gray-200 p-1" alt="Logo">
-                
-                <h2 class="text-2xl font-bold text-gray-800 mb-2"><?=__('email_verification') ?></h2>
+            <div class="otp-card rounded-2xl p-8 md:p-12 text-center">
+
+                <img src="assets/images/logo_color_sm.png" class="w-16 h-16 rounded-full mx-auto mb-5 ring-2 ring-white/10 p-1" alt="Logo">
+
+                <p class="eyebrow text-xs font-semibold text-gray-500 uppercase mb-3"><?=__('security_check', 'Security Check') ?></p>
+                <h2 class="text-2xl font-bold text-white mb-2"><?=__('email_verification') ?></h2>
                 <?php
                 // Mask email for display using reusable function
                 $masked_email = '';
@@ -303,37 +414,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                     }
                 }
                 ?>
-                <p class="text-gray-500 mb-6">
+                <p class="text-gray-400 text-sm mb-8">
                     <?=sprintf(__('enter_the_6digit_code_sent_to_your_registered_email_address_masked'), $masked_email) ?>
                 </p>
-                
-                <div id="message-container" class="mb-4">
-                    <?php if(!empty($error_message)): ?>
-                        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
-                            <?=$error_message; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
+
+                <div id="message-container" class="hidden"></div>
+
                 <form id="otpForm" method="post" action="login_verification.php">
-                    <div class="flex justify-center gap-2 md:gap-4 mb-6" dir="ltr">
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="0" autofocus>
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="1">
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="2">
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="3">
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="4">
-                        <input type="tel" pattern="\d*" maxlength="1" class="otp-digit w-12 h-14 md:w-14 md:h-16 text-center text-2xl font-bold border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition duration-150" data-index="5">
+                    <div id="otpRow" class="otp-row flex justify-center items-center gap-2 md:gap-3 mb-4<?= !empty($error_message) ? ' shake' : '' ?>">
+                        <?php for ($i = 0; $i < 6; $i++): ?>
+                            <?php if ($i === 3): ?><span class="otp-sep">-</span><?php endif; ?>
+                            <div class="otp-box<?= !empty($error_message) ? ' state-error' : '' ?>" data-index="<?= $i ?>">
+                                <input type="tel" pattern="\d*" maxlength="1" class="otp-digit" data-index="<?= $i ?>" <?= $i === 0 ? 'autofocus' : '' ?>>
+                                <span class="otp-check">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </span>
+                            </div>
+                        <?php endfor; ?>
                     </div>
                     <input type="hidden" id="fullOtp" name="full_otp">
                 </form>
 
+                <p id="statusText" class="status-text<?= !empty($error_message) ? ' is-error' : '' ?> text-sm text-gray-500 mb-6">
+                    <span class="status-dot"></span>
+                    <span class="status-label" id="statusLabel"><?= !empty($error_message) ? $error_message : __('otp_status_default', 'Enter the 6-digit code') ?></span>
+                </p>
+
                 <div class="text-sm text-gray-500">
-                    <p id="countdown-text"><?=__('you_can_resend_otp_in')?> <span id="countdown" class="font-bold text-gray-700">120</span>s</p>
-                    <button id="resend-btn" class="hidden text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled><?=__('resend_otp') ?></button>
+                    <p id="countdown-text"><?=__('you_can_resend_otp_in')?> <span id="countdown" class="font-bold text-gray-300">120</span>s</p>
+                    <button id="resend-btn" class="hidden text-blue-400 hover:text-blue-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled><?=__('resend_otp') ?></button>
                 </div>
 
+                <p class="text-xs text-gray-600 mt-6"><?=__('otp_paste_tip', 'Tip: paste to fill every box at once.') ?></p>
+
             </div>
-            <p class="text-center text-gray-200 mt-8 text-sm"><?=isset($site_footer) ? $site_footer : date('Y') . ' &copy; Al Mutlak Co.'; ?></p>
+            <p class="text-center text-gray-400 mt-8 text-sm"><?=isset($site_footer) ? $site_footer : date('Y') . ' &copy; Al Mutlak Co.'; ?></p>
         </div>
     </div>
 
@@ -341,25 +456,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const otpDigits = document.querySelectorAll('.otp-digit');
+        const otpBoxes = document.querySelectorAll('.otp-box');
+        const otpRow = document.getElementById('otpRow');
         const otpForm = document.getElementById('otpForm');
         const fullOtpInput = document.getElementById('fullOtp');
         const messageContainer = document.getElementById('message-container');
-        
-        // If there's an error message, clear the OTP fields
-        if (messageContainer.querySelector('.bg-red-100')) {
+        const statusText = document.getElementById('statusText');
+        const statusLabel = document.getElementById('statusLabel');
+
+        const DEFAULT_STATUS = <?= json_encode(__('otp_status_default', 'Enter the 6-digit code')) ?>;
+        const VERIFIED_STATUS = <?= json_encode(__('otp_status_verifying', 'Code verified')) ?>;
+
+        function setStatus(text, mode) {
+            statusLabel.textContent = text;
+            statusText.classList.remove('is-error', 'is-verified');
+            if (mode) statusText.classList.add(mode);
+            // restart the fade-in animation
+            statusLabel.style.animation = 'none';
+            void statusLabel.offsetWidth;
+            statusLabel.style.animation = '';
+        }
+
+        function clearErrorState() {
+            otpRow.classList.remove('shake');
+            otpBoxes.forEach(box => box.classList.remove('state-error'));
+            if (statusText.classList.contains('is-error')) {
+                setStatus(DEFAULT_STATUS, null);
+            }
+        }
+
+        // If there's an error message on load, keep the fields empty and focused
+        if (statusText.classList.contains('is-error')) {
             otpDigits.forEach(digit => digit.value = '');
             otpDigits[0].focus();
         }
 
+        function playVerifiedAnimation() {
+            setStatus(VERIFIED_STATUS, 'is-verified');
+            otpBoxes.forEach((box, i) => {
+                setTimeout(() => box.classList.add('state-verified'), i * 90);
+            });
+            // Let the checkmarks finish staggering in before the form actually submits
+            setTimeout(() => otpForm.submit(), otpBoxes.length * 90 + 350);
+        }
+
         otpDigits.forEach((digit, index) => {
             digit.addEventListener('input', (e) => {
+                clearErrorState();
+                const box = otpBoxes[index];
+                box.classList.toggle('is-filled', digit.value.length === 1);
+
                 if (digit.value.length === 1 && index < otpDigits.length - 1) {
                     otpDigits[index + 1].focus();
                 }
                 let otpCode = Array.from(otpDigits).map(d => d.value).join('');
                 fullOtpInput.value = otpCode;
                 if (otpCode.length === 6) {
-                    otpForm.submit();
+                    playVerifiedAnimation();
                 }
             });
 
@@ -372,13 +525,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             // --- PASTE LOGIC ---
             digit.addEventListener('paste', (e) => {
                 e.preventDefault();
+                clearErrorState();
                 const pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
                 if (!pastedData) return;
 
                 const charsToPaste = pastedData.substring(0, otpDigits.length - index);
-                
+
                 charsToPaste.split('').forEach((char, i) => {
                     otpDigits[index + i].value = char;
+                    otpBoxes[index + i].classList.add('is-filled');
                 });
 
                 let otpCode = Array.from(otpDigits).map(d => d.value).join('');
@@ -386,7 +541,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
 
                 if (otpCode.length === 6) {
                     otpDigits[5].focus();
-                    otpForm.submit();
+                    playVerifiedAnimation();
                 } else {
                     otpDigits[otpCode.length].focus();
                 }
@@ -404,7 +559,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             countdownText.style.display = 'block';
             resendBtn.style.display = 'none';
             resendBtn.disabled = true;
-            
+
             clearInterval(countdownInterval); // Clear any existing interval
 
             countdownInterval = setInterval(() => {
@@ -418,19 +573,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 }
             }, 1000);
         }
-        
+
         // Initial countdown start
         startCountdown();
 
         // --- START: Resend OTP Logic ---
+        function showToast(message, ok) {
+            messageContainer.classList.remove('hidden');
+            const palette = ok
+                ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                : 'bg-red-500/10 border-red-500/30 text-red-400';
+            messageContainer.innerHTML = `<div class="${palette} border px-3 py-2 rounded-lg text-xs mb-4" role="alert">${message}</div>`;
+        }
+
         resendBtn.addEventListener('click', function() {
             resendBtn.disabled = true;
             resendBtn.textContent = 'Sending...';
-            // We only need to clear our own message container, not the PHP-rendered one.
-            const existingAlert = messageContainer.querySelector('.alert-js');
-            if (existingAlert) {
-                existingAlert.remove();
-            }
+            messageContainer.classList.add('hidden');
+            messageContainer.innerHTML = '';
 
             $.ajax({
                 url: './resend_otp.php',
@@ -438,15 +598,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                 dataType: 'json',
                 success: function(response) {
                     if (response.status === 'success') {
-                        messageContainer.innerHTML = `<div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative alert-js" role="alert">${response.message}</div>`;
+                        showToast(response.message, true);
+                        clearErrorState();
+                        otpDigits.forEach((d, i) => { d.value = ''; otpBoxes[i].classList.remove('is-filled', 'state-verified'); });
+                        otpDigits[0].focus();
                         startCountdown(); // Restart the countdown
                     } else {
-                        messageContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative alert-js" role="alert">${response.message}</div>`;
+                        showToast(response.message, false);
                         resendBtn.disabled = false; // Re-enable button on failure
                     }
                 },
                 error: function() {
-                    messageContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative alert-js" role="alert">An error occurred. Please try again.</div>`;
+                    showToast('An error occurred. Please try again.', false);
                     resendBtn.disabled = false; // Re-enable button on error
                 },
                 complete: function() {

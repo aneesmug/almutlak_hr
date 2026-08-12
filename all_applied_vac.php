@@ -748,13 +748,13 @@ if ($can_see_all_depts) {
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?= __('applied') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'd M Y')); ?></div>
                                                         <div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?= __('type') ?>:</strong> <?= getDisplayName($req['vac_type']) . " | " . $req['fly_type_translated']; ?></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?= __('start') ?>:</strong> <?= htmlspecialchars($req['start_date'] ?? 'N/A'); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?= __('return') ?>:</strong> <?= htmlspecialchars($req['return_date'] ?? 'N/A'); ?></div>
+                                                        <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?= __('start') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['start_date'] ?? null, 'l, d M Y', 'N/A')); ?></div>
+                                                        <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?= __('return') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['return_date'] ?? null, 'l, d M Y', 'N/A')); ?></div>
                                                         <?php if (!empty($req['departure_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
-                                                            <div class="detail-item"><i class="fad fa-plane-departure duotone-info"></i><strong><?= __('departure_date') ?>:</strong> <?= htmlspecialchars($req['departure_date']); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-plane-departure duotone-info"></i><strong><?= __('departure_date') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['departure_date'], 'l, d M Y', 'N/A')); ?></div>
                                                         <?php endif; ?>
                                                         <?php if (!empty($req['arrival_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
-                                                            <div class="detail-item"><i class="fad fa-plane-arrival duotone-info"></i><strong><?= __('arrival_date') ?>:</strong> <?= htmlspecialchars($req['arrival_date']); ?></div>
+                                                            <div class="detail-item"><i class="fad fa-plane-arrival duotone-info"></i><strong><?= __('arrival_date') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['arrival_date'], 'l, d M Y', 'N/A')); ?></div>
                                                         <?php endif; ?>
                                                         <div class="detail-item"><i class="fad fa-sun duotone-info"></i><strong><?= __('days') ?>:</strong> <?= htmlspecialchars($req['vacdays']); ?></div>
 

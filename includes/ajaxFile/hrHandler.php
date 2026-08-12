@@ -1,4 +1,4 @@
-﻿<?php
+<?php
     header('Content-Type: application/json');
 	require_once __DIR__ . '/../../includes/db.php';
     require_once __DIR__ . '/../../includes/session_check.php';
@@ -202,18 +202,45 @@ if($ajaxType == 'emp_search') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);
     $department_filter = $for_replacement ? '' : getDepartmentFilterSQL('e.dept', true);
-    
-    $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept".$company_filter.$department_filter;
+
+    // HR Assistant can assign ANY employee as a replacement, not just someone from the
+    // applicant's own department - drop the department restriction entirely for them.
+    $replacement_shows_all_departments = $for_replacement && !empty($isHR_Assistant);
+
+    if ($replacement_shows_all_departments) {
+        $where_clause = "`e`.`status`=1".$company_filter;
+    } else {
+        $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept".$company_filter.$department_filter;
+    }
     if (!empty($exclude_emp_id)) {
         $where_clause .= " AND `e`.`emp_id` != '$exclude_emp_id'";
     }
-    
-    $stmt = mysqli_query($conDB, "SELECT 
+
+    // For the Replacement Person picker, also surface employees the current user has
+    // been explicitly granted via Users -> "Allowed Employees" (users.php), even when
+    // they sit outside this employee's own department - e.g. a dept_user supervisor
+    // granted visibility into a specific employee elsewhere in the company should be
+    // able to pick that employee as their replacement too. Not needed when HR Assistant
+    // already sees everyone.
+    $extra_allowed_where = '';
+    if ($for_replacement && !$replacement_shows_all_departments && !empty($_SESSION['allowed_employees_array'])) {
+        $allowed_ids = array_filter(array_map('intval', $_SESSION['allowed_employees_array']));
+        if (!empty($allowed_ids)) {
+            $allowed_list = implode(',', $allowed_ids);
+            $extra_allowed_where = " OR (`e`.`status`=1 AND `e`.`emp_id` IN ($allowed_list)".$company_filter;
+            if (!empty($exclude_emp_id)) {
+                $extra_allowed_where .= " AND `e`.`emp_id` != '$exclude_emp_id'";
+            }
+            $extra_allowed_where .= ")";
+        }
+    }
+
+    $stmt = mysqli_query($conDB, "SELECT DISTINCT
     `e`.*,
     `d`.`dep_nme` AS `deptnme`
     FROM `employees` `e`
-    LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept` 
-    WHERE $where_clause");
+    LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+    WHERE ($where_clause)".$extra_allowed_where);
     $name = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
         $name[] = $row;

@@ -1,3 +1,82 @@
+<?php
+// Resolve department, company & actual job title for this card.
+// Callers only pass `$rec` (raw `SELECT * FROM employees` row) with `dept` (department.id),
+// `comp_no` (companies.comp_id) and `actual_job` (ac_jobs.id) - no name join exists upstream -
+// so look them up here, cached per-request (via $GLOBALS, since a plain top-level `static`
+// isn't guaranteed across separate include() calls) to avoid a query per card when a page
+// lists many employees.
+if (!isset($GLOBALS['__employee_card_dept_cache'])) {
+    $GLOBALS['__employee_card_dept_cache'] = [];
+}
+if (!isset($GLOBALS['__employee_card_comp_cache'])) {
+    $GLOBALS['__employee_card_comp_cache'] = [];
+}
+if (!isset($GLOBALS['__employee_card_job_cache'])) {
+    $GLOBALS['__employee_card_job_cache'] = [];
+}
+
+$card_dept_id = isset($rec['dept']) ? (int)$rec['dept'] : 0;
+$card_comp_no = isset($rec['comp_no']) ? (int)$rec['comp_no'] : 0;
+$card_job_id = isset($rec['actual_job']) ? (int)$rec['actual_job'] : 0;
+
+$card_dept_name = '';
+if ($card_dept_id > 0) {
+    if (!array_key_exists($card_dept_id, $GLOBALS['__employee_card_dept_cache'])) {
+        $card_dept_name_resolved = '';
+        $dept_stmt = mysqli_prepare($conDB, "SELECT `dep_nme`, `dep_nme_ar` FROM `department` WHERE `id` = ? LIMIT 1");
+        if ($dept_stmt) {
+            mysqli_stmt_bind_param($dept_stmt, "i", $card_dept_id);
+            mysqli_stmt_execute($dept_stmt);
+            $dept_row = mysqli_stmt_get_result($dept_stmt)->fetch_assoc();
+            mysqli_stmt_close($dept_stmt);
+            if ($dept_row) {
+                $card_dept_name_resolved = (!empty($is_rtl) && !empty($dept_row['dep_nme_ar'])) ? $dept_row['dep_nme_ar'] : $dept_row['dep_nme'];
+            }
+        }
+        $GLOBALS['__employee_card_dept_cache'][$card_dept_id] = $card_dept_name_resolved;
+    }
+    $card_dept_name = $GLOBALS['__employee_card_dept_cache'][$card_dept_id];
+}
+
+$card_comp_name = '';
+if ($card_comp_no > 0) {
+    if (!array_key_exists($card_comp_no, $GLOBALS['__employee_card_comp_cache'])) {
+        $card_comp_name_resolved = '';
+        $comp_stmt = mysqli_prepare($conDB, "SELECT `comp_name`, `comp_name_ar` FROM `companies` WHERE `comp_id` = ? LIMIT 1");
+        if ($comp_stmt) {
+            mysqli_stmt_bind_param($comp_stmt, "i", $card_comp_no);
+            mysqli_stmt_execute($comp_stmt);
+            $comp_row = mysqli_stmt_get_result($comp_stmt)->fetch_assoc();
+            mysqli_stmt_close($comp_stmt);
+            if ($comp_row) {
+                $card_comp_name_resolved = (!empty($is_rtl) && !empty($comp_row['comp_name_ar'])) ? $comp_row['comp_name_ar'] : $comp_row['comp_name'];
+            }
+        }
+        $GLOBALS['__employee_card_comp_cache'][$card_comp_no] = $card_comp_name_resolved;
+    }
+    $card_comp_name = $GLOBALS['__employee_card_comp_cache'][$card_comp_no];
+}
+
+// Actual job title (employees.actual_job -> ac_jobs.id), same join used by view_employee.php.
+$card_job_title = '';
+if ($card_job_id > 0) {
+    if (!array_key_exists($card_job_id, $GLOBALS['__employee_card_job_cache'])) {
+        $card_job_title_resolved = '';
+        $job_stmt = mysqli_prepare($conDB, "SELECT `job`, `job_ar` FROM `ac_jobs` WHERE `id` = ? LIMIT 1");
+        if ($job_stmt) {
+            mysqli_stmt_bind_param($job_stmt, "i", $card_job_id);
+            mysqli_stmt_execute($job_stmt);
+            $job_row = mysqli_stmt_get_result($job_stmt)->fetch_assoc();
+            mysqli_stmt_close($job_stmt);
+            if ($job_row) {
+                $card_job_title_resolved = (!empty($is_rtl) && !empty($job_row['job_ar'])) ? $job_row['job_ar'] : $job_row['job'];
+            }
+        }
+        $GLOBALS['__employee_card_job_cache'][$card_job_id] = $card_job_title_resolved;
+    }
+    $card_job_title = $GLOBALS['__employee_card_job_cache'][$card_job_id];
+}
+?>
 <!-- ============================================
     NEW MODERN GUI DESIGN - Employee Card
     ============================================ -->
@@ -47,15 +126,29 @@
 
             <!-- Position/Type Badge -->
             <div class="employee-type-section">
-                <?php if(strtolower($emptype) == "manager"): ?>
-                    <span class="emp-type-badge manager"><?= __('manager') ?></span>
-                <?php else: ?>
-                    <span class="emp-type-badge"><?= __(strtolower($emptype)) ?></span>
+                <?php if (!empty($card_job_title)): ?>
+                    <span class="emp-type-badge manager"><?= htmlspecialchars($card_job_title) ?></span>
                 <?php endif; ?>
             </div>
 
+            <!-- Department / Company -->
+            <?php if (!empty($card_dept_name) || !empty($card_comp_name)): ?>
+            <div class="employee-org-row">
+                <?php if (!empty($card_dept_name)): ?>
+                    <span class="employee-org-item" title="<?= __('department') ?>">
+                        <i class="fad fa-sitemap"></i> <?= htmlspecialchars($card_dept_name) ?>
+                    </span>
+                <?php endif; ?>
+                <?php if (!empty($card_comp_name)): ?>
+                    <span class="employee-org-item" title="<?= __('company') ?>">
+                        <i class="fad fa-building"></i> <?= htmlspecialchars($card_comp_name) ?>
+                    </span>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+
             <!-- Stats Section -->
-            <?php if($emp_status == 1): ?>
+            <?php /* if($emp_status == 1): ?>
                 <div class="employee-stats">
                     <div class="stat-item">
                         <span class="stat-label"><?= __('fly') ?></span>
@@ -66,7 +159,7 @@
                         <span class="stat-value"><?= $cont_encashed ?></span>
                     </div>
                 </div>
-            <?php endif;?>
+            <?php endif; */?>
 
             <!-- Employee Details -->
             <div class="employee-details-grid">

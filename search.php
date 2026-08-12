@@ -256,6 +256,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                     <div class='alert alert-custom bg-custom text-white border-0 w-100'>"<?= htmlspecialchars($search_term) ?>" <strong><?= $total_items ?></strong> <?= __('results_are_found') ?>!</div>
                                                     <div class="row">
                                                     <?php foreach ($employees as $rec):
+                                                        $id = $rec["id"];
                                                         $name = htmlspecialchars($rec["name"]);
                                                         $emp_id = htmlspecialchars($rec["emp_id"]);
                                                         $iqama = htmlspecialchars($rec["iqama"]);

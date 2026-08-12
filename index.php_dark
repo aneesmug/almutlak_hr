@@ -12,13 +12,6 @@
  * displaying success and error messages is now handled by SweetAlert2.
  * - ADDED: The flatpickr library for a user-friendly date picker in the
  * SweetAlert2 verification step.
- * - REDESIGNED: Dark themed UI matching login_verification.php, with ambient
- * glow accents, icon-led inputs, staggered entrance animations and a
- * shimmer/press interaction on the submit button.
- * - FIXED: A failed login/registration attempt now replays correctly on
- * reload — the right field (password vs new-password) opens automatically
- * and is flagged red with a shake, instead of leaving the error banner
- * orphaned above a hidden field.
  ********************************************************************************/
 // Drop malformed/spoofed session cookies before starting: an illegal session ID
 // makes PHP fail to read the session file and log a warning every time it's sent.
@@ -84,7 +77,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
 
         <!-- PWA: Add to Home Screen support (iOS Safari + Android Chrome) -->
         <link rel="manifest" href="/manifest.json">
-        <meta name="theme-color" content="#0b0b0f">
+        <meta name="theme-color" content="#1a3c6e">
         <!-- iOS specific PWA tags -->
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -112,93 +105,24 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             body { font-family: 'Roboto', sans-serif; background: #050506; }
             #password-field-container, #new-password-container, #remember-me-container, #user-feedback-container, #forgot-password-link { display: none; }
 
-            /* ---------- ambient background glow ---------- */
-            .glow-field { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-            .glow-blob {
-                position: absolute;
-                border-radius: 9999px;
-                filter: blur(90px);
-                opacity: 0.35;
-                animation: drift 22s ease-in-out infinite;
-            }
-            .glow-blob.one { width: 480px; height: 480px; top: -140px; left: -120px; background: #1a3c6e; }
-            .glow-blob.two { width: 420px; height: 420px; bottom: -160px; right: -100px; background: #3b82f6; animation-duration: 26s; animation-delay: -6s; }
-            .glow-blob.three { width: 320px; height: 320px; top: 40%; left: 50%; background: #1d4ed8; opacity: 0.18; animation-duration: 30s; animation-delay: -12s; }
-            @keyframes drift {
-                0%, 100% { transform: translate(0, 0) scale(1); }
-                33% { transform: translate(30px, -20px) scale(1.08); }
-                66% { transform: translate(-20px, 25px) scale(0.96); }
+            .auth-card {
+                background: radial-gradient(120% 140% at 50% -10%, #1a1b22 0%, #0b0b0f 55%, #08080a 100%);
             }
 
-            /* ---------- entrance choreography ---------- */
-            @keyframes card-in {
-                from { opacity: 0; transform: translateY(14px) scale(0.98); }
-                to   { opacity: 1; transform: translateY(0) scale(1); }
+            .auth-hero {
+                background: radial-gradient(120% 140% at 0% 0%, #1a3c6e 0%, #0d1b30 60%, #08080a 100%);
             }
-            @keyframes fade-up {
-                from { opacity: 0; transform: translateY(10px); }
-                to   { opacity: 1; transform: translateY(0); }
-            }
-            @keyframes fade-in {
-                from { opacity: 0; transform: translateY(4px); }
-                to   { opacity: 1; transform: translateY(0); }
-            }
-            @keyframes float-logo {
-                0%, 100% { transform: translateY(0); }
-                50% { transform: translateY(-6px); }
-            }
-            @keyframes shake {
-                10%, 90% { transform: translateX(-1px); }
-                20%, 80% { transform: translateX(2px); }
-                30%, 50%, 70% { transform: translateX(-4px); }
-                40%, 60% { transform: translateX(4px); }
-            }
-
-            .auth-shell {
-                animation: card-in 0.55s cubic-bezier(0.16, 1, 0.3, 1);
-            }
-            .auth-card { background: radial-gradient(120% 140% at 50% -10%, #1a1b22 0%, #0b0b0f 55%, #08080a 100%); }
-            .auth-hero { background: radial-gradient(120% 140% at 0% 0%, #1a3c6e 0%, #0d1b30 60%, #08080a 100%); position: relative; overflow: hidden; }
-            .auth-hero::before {
-                content: "";
-                position: absolute;
-                inset: -40%;
-                background: radial-gradient(circle at 30% 30%, rgba(59,130,246,0.25), transparent 60%);
-                animation: drift 18s ease-in-out infinite;
-            }
-            .auth-hero > * { position: relative; }
-            .hero-logo { animation: float-logo 5s ease-in-out infinite; }
-            .hero-eyebrow { letter-spacing: 0.22em; }
-
-            .form-field { animation: fade-up 0.5s ease both; }
-            .form-field:nth-of-type(1) { animation-delay: 0.05s; }
-            .form-field:nth-of-type(2) { animation-delay: 0.11s; }
-            .form-field:nth-of-type(3) { animation-delay: 0.17s; }
 
             .field-label { color: rgba(255,255,255,0.6); }
 
-            .field-icon {
-                position: absolute;
-                left: 0.9rem;
-                top: 50%;
-                transform: translateY(-50%);
-                width: 1.1rem;
-                height: 1.1rem;
-                color: rgba(255,255,255,0.35);
-                pointer-events: none;
-                transition: color 0.2s ease;
-            }
-            .field-wrap { position: relative; }
-            .field-wrap:focus-within .field-icon { color: #3b82f6; }
-
             .field-input {
                 width: 100%;
-                padding: 0.75rem 1rem 0.75rem 2.6rem;
+                padding: 0.75rem 1rem;
                 background: rgba(255,255,255,0.03);
                 border: 1px solid rgba(255,255,255,0.1);
                 border-radius: 0.5rem;
                 color: #f5f5f7;
-                transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+                transition: border-color 0.25s ease, box-shadow 0.25s ease;
             }
             .field-input::placeholder { color: rgba(255,255,255,0.3); }
             .field-input:focus {
@@ -206,58 +130,25 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 border-color: #3b82f6;
                 box-shadow: 0 0 0 4px rgba(59,130,246,0.18), 0 0 18px rgba(59,130,246,0.3);
             }
-            .field-input.input-error { border-color: rgba(239,68,68,0.6); background: rgba(239,68,68,0.08); box-shadow: 0 0 16px rgba(239,68,68,0.25); }
-            .field-input.input-error ~ .field-icon,
-            .field-wrap:has(.input-error) .field-icon { color: #f87171; }
+            .field-input.input-error {
+                border-color: rgba(239,68,68,0.6);
+                background: rgba(239,68,68,0.08);
+                box-shadow: 0 0 16px rgba(239,68,68,0.25);
+            }
 
             .shake { animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+            @keyframes shake {
+                10%, 90% { transform: translateX(-1px); }
+                20%, 80% { transform: translateX(2px); }
+                30%, 50%, 70% { transform: translateX(-4px); }
+                40%, 60% { transform: translateX(4px); }
+            }
+
+            @keyframes fade-in {
+                from { opacity: 0; transform: translateY(4px); }
+                to   { opacity: 1; transform: translateY(0); }
+            }
             #user-feedback-container, .session-alert { animation: fade-in 0.25s ease; }
-
-            /* ---------- custom checkbox ---------- */
-            .remember-check {
-                appearance: none;
-                width: 1.05rem;
-                height: 1.05rem;
-                border-radius: 0.3rem;
-                border: 1px solid rgba(255,255,255,0.25);
-                background: rgba(255,255,255,0.03);
-                display: inline-grid;
-                place-content: center;
-                cursor: pointer;
-                transition: border-color 0.2s ease, background-color 0.2s ease;
-            }
-            .remember-check::before {
-                content: "";
-                width: 0.6rem;
-                height: 0.6rem;
-                clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 45% 62%);
-                transform: scale(0);
-                transition: transform 0.15s ease;
-                background: white;
-            }
-            .remember-check:checked { background: #3b82f6; border-color: #3b82f6; }
-            .remember-check:checked::before { transform: scale(1); }
-            .remember-check:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-
-            /* ---------- submit button shimmer + press ---------- */
-            .submit-btn {
-                position: relative;
-                overflow: hidden;
-                transition: filter 0.15s ease, transform 0.08s ease, box-shadow 0.25s ease;
-                box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.55);
-            }
-            .submit-btn::after {
-                content: "";
-                position: absolute;
-                top: 0; left: -60%;
-                width: 40%; height: 100%;
-                background: linear-gradient(115deg, transparent, rgba(255,255,255,0.35), transparent);
-                transform: skewX(-20deg);
-                transition: left 0.6s ease;
-            }
-            .submit-btn:hover::after { left: 130%; }
-            .submit-btn:hover { filter: brightness(1.08); box-shadow: 0 10px 28px -6px rgba(37, 99, 235, 0.65); }
-            .submit-btn:active { transform: translateY(1px) scale(0.99); }
 
             .store-buttons-grid {
                 display: grid;
@@ -275,7 +166,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 position: fixed;
                 inset: 0;
                 z-index: 9999;
-                background: #0b0b0f;
+                background: #1a3c6e;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
@@ -290,18 +181,13 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             .loader-spinner {
                 width: 52px;
                 height: 52px;
-                border: 5px solid rgba(255,255,255,0.15);
-                border-top-color: #3b82f6;
+                border: 5px solid rgba(255,255,255,0.2);
+                border-top-color: #ffffff;
                 border-radius: 50%;
                 animation: spin 0.8s linear infinite;
             }
             @keyframes spin {
                 to { transform: rotate(360deg); }
-            }
-
-            @media (prefers-reduced-motion: reduce) {
-                .auth-shell, .glow-blob, .auth-hero::before, .hero-logo, .form-field, .shake { animation: none !important; }
-                .submit-btn::after { display: none; }
             }
         </style>
     </head>
@@ -313,18 +199,12 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         </div>
         <div class="fixed inset-0 z-[-1]">
             <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('assets/images/login-background.webp');"></div>
-            <div class="absolute inset-0 bg-black/80"></div>
-        </div>
-        <div class="glow-field" aria-hidden="true">
-            <div class="glow-blob one"></div>
-            <div class="glow-blob two"></div>
-            <div class="glow-blob three"></div>
+            <div class="absolute inset-0 bg-black/75"></div>
         </div>
         <div class="min-h-screen flex items-center justify-center p-4">
-            <div class="auth-shell grid md:grid-cols-2 gap-0 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+            <div class="grid md:grid-cols-2 gap-0 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-white/10">
                 <div class="auth-hero hidden md:flex flex-col justify-center items-center p-12 text-white">
-                    <img src="assets/images/logo-w.png" alt="Company Logo" class="hero-logo w-60 mb-6">
-                    <p class="hero-eyebrow text-xs font-semibold text-blue-300/80 uppercase mb-3">Secure Access Portal</p>
+                    <img src="assets/images/logo-w.png" alt="Company Logo" class="w-60 mb-6">
                     <h1 class="text-4xl font-bold mb-3 text-center">Welcome Back</h1>
                     <p class="text-blue-200/80 text-center">Your central hub for all company resources and information. Please log in to continue.</p>
                 </div>
@@ -335,57 +215,45 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     <h2 class="text-3xl font-bold text-white mb-2">Login to Your Account</h2>
                     <p class="text-gray-400 mb-8">Enter your credentials to access the portal.</p>
                     <form id="login-form" action="./login.php" method="post" class="space-y-6">
-                        <div class="form-field">
+                        <div>
                             <label for="id_iqama" class="field-label block text-sm font-medium mb-1">رقم الهوية (ID / Iqama)</label>
-                            <div class="field-wrap">
-                                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M7 11.5h.01"/><circle cx="15.5" cy="11" r="1.5"/></svg>
-                                <input class="field-input" type="tel" inputmode="numeric" pattern="[0-9]*" name="id_iqama" id="id_iqama" required="" placeholder="أدخل رقم هويتك الوطنية" maxlength="10" value="<?= isset($_POST['id_iqama']) ? htmlspecialchars($_POST['id_iqama'], ENT_QUOTES) : (isset($_GET['id_iqama']) ? htmlspecialchars($_GET['id_iqama'], ENT_QUOTES) : '') ?>" >
-                            </div>
+                            <input class="field-input" type="tel" inputmode="numeric" pattern="[0-9]*" name="id_iqama" id="id_iqama" required="" placeholder="أدخل رقم هويتك الوطنية" maxlength="10" value="<?= isset($_POST['id_iqama']) ? htmlspecialchars($_POST['id_iqama'], ENT_QUOTES) : (isset($_GET['id_iqama']) ? htmlspecialchars($_GET['id_iqama'], ENT_QUOTES) : '') ?>" >
                         </div>
-                        <div id="password-field-container" class="form-field">
+                        <div id="password-field-container">
                             <div class="flex justify-between items-center">
                                 <label for="password" class="field-label block text-sm font-medium mb-1">Password</label>
                                 <a href="#" id="forgot-password-link" class="text-sm text-blue-400 hover:text-blue-300 hover:underline">Forgot Password?</a>
                             </div>
-                            <div class="field-wrap">
-                                <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
-                                <input class="field-input" type="password" name="password" id="password" placeholder="Enter your password">
-                            </div>
+                            <input class="field-input" type="password" name="password" id="password" placeholder="Enter your password">
                         </div>
-                        <div id="new-password-container" class="space-y-4 form-field">
+                        <div id="new-password-container" class="space-y-4">
                             <div class="bg-blue-500/10 border-l-4 border-blue-400 text-blue-300 p-4 rounded-md" role="alert">
                                 <p class="font-bold">Welcome!</p>
                                 <p>Please set a new password to activate your account.</p>
                             </div>
                             <div>
                                 <label for="new_password" class="field-label block text-sm font-medium mb-1">Set New Password</label>
-                                <div class="field-wrap">
-                                    <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
-                                    <input class="field-input" type="password" name="new_password" id="new_password">
-                                </div>
+                                <input class="field-input" type="password" name="new_password" id="new_password">
                             </div>
                             <div>
                                 <label for="confirm_password" class="field-label block text-sm font-medium mb-1">Confirm New Password</label>
-                                <div class="field-wrap">
-                                    <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
-                                    <input class="field-input" type="password" name="confirm_password" id="confirm_password">
-                                </div>
+                                <input class="field-input" type="password" name="confirm_password" id="confirm_password">
                             </div>
                         </div>
                         <div id="remember-me-container">
                             <div class="flex items-center">
-                                <input class="remember-check" id="remember_me" name="remember_me" type="checkbox" value="1">
+                                <input id="remember_me" name="remember_me" type="checkbox" value="1" class="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-500 rounded bg-transparent">
                                 <label for="remember_me" class="ml-2 block text-sm text-gray-300">Remember me on this device</label>
                             </div>
                         </div>
                         <div id="user-feedback-container" class="p-3 rounded-lg text-sm"></div>
                         <div>
-                            <button class="submit-btn w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0b0b0f] focus:ring-blue-500 transition duration-150" name="submit" type="submit" id="submitBtn">
+                            <button class="w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150" name="submit" type="submit" id="submitBtn">
                                 <span>تسجيل الدخول (Log In)</span>
                             </button>
                         </div>
                             <div class="store-buttons-grid">
-                            <a id="android-btn" href="assets/apk/almutlak-wms.apk" download class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-white/15 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#0b0b0f] focus:ring-emerald-500 transition duration-150" title="Get it on Google Play" aria-label="Get it on Google Play" style="display:none;">
+                            <a id="android-btn" href="assets/apk/almutlak-wms.apk" download class="w-full flex items-center justify-center gap-2 bg-black text-white py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150" title="Get it on Google Play" aria-label="Get it on Google Play" style="display:none;">
                                 <svg class="w-7 h-7 flex-shrink-0" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                                     <polygon points="30,20 300,256 30,492" fill="#00D26A"/>
                                     <polygon points="30,20 390,150 300,256" fill="#00A0FF"/>
@@ -410,27 +278,27 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                         </div>
 
                         <!-- iOS Add to Home Screen Guide (shown only on iOS) -->
-                        <div id="ios-install-banner" style="display:none;" class="mt-2 rounded-xl border border-blue-500/25 bg-blue-500/10 p-4">
-                            <p class="text-sm font-semibold text-blue-300 mb-3 flex items-center gap-2">
+                        <div id="ios-install-banner" style="display:none;" class="mt-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                            <p class="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
                                 <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                                 Install App on Your iPhone
                             </p>
-                            <ol class="text-sm text-blue-200/80 space-y-2 list-none">
+                            <ol class="text-sm text-blue-700 space-y-2 list-none">
                                 <li class="flex items-start gap-2">
-                                    <span class="font-bold text-blue-300 min-w-[20px]">1.</span>
+                                    <span class="font-bold text-blue-900 min-w-[20px]">1.</span>
                                     <span>Tap the <strong>Share</strong> button
                                         <svg class="inline w-4 h-4 mx-1 -mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-2.08V4.83L9.42 6.42 8 5l4-4zm4 5v11c0 1.1-.9 2-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h3v2H6v11h12V10h-3V8h3a2 2 0 012 2z"/></svg>
                                         at the bottom of your browser.
                                     </span>
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <span class="font-bold text-blue-300 min-w-[20px]">2.</span>
+                                    <span class="font-bold text-blue-900 min-w-[20px]">2.</span>
                                     <span>Scroll down and tap <strong>"Add to Home Screen"</strong>
                                         <svg class="inline w-4 h-4 mx-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>.
                                     </span>
                                 </li>
                                 <li class="flex items-start gap-2">
-                                    <span class="font-bold text-blue-300 min-w-[20px]">3.</span>
+                                    <span class="font-bold text-blue-900 min-w-[20px]">3.</span>
                                     <span>Tap <strong>"Add"</strong> in the top-right corner to save the app icon.</span>
                                 </li>
                             </ol>
@@ -440,7 +308,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 </div>
             </div>
         </div>
-
+        
         <script src="assets/js/jquery.min.js"></script>
         <script>
         // Hide loader when page is fully loaded
@@ -735,3 +603,4 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         </script>
     </body>
 </html>
+

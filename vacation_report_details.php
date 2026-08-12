@@ -373,11 +373,102 @@ if (mysqli_num_rows($query) == 1) {
         $total_payable = 0;
     }
 
+    // === HOLIDAY / BALANCE-DEDUCTION BREAKDOWN ===
+    // Shows which days inside the requested period are official company holidays
+    // (excluded from the balance deduction), which are weekend days (Fri/Sat by
+    // default — still counted against the balance), and the resulting deductible
+    // day count. Mirrors the exact rule used by update_vacation_balance_on_approval()
+    // in includes/helper_functions.php, so this report always matches what was
+    // actually charged to the employee's balance.
+    $holiday_breakdown = null;
+    $is_annual_vacation = ($fly_type === 'annual');
+
+    // Whether the Vacation Salary Payment (Yes/No) choice actually applied to this
+    // request. Mirrors leaveHandler.php's exact gate (lines ~1129-1157): below the
+    // minimum_days_exclusive threshold and no per-employee override, the employee was
+    // never asked - the choice is meaningless, so don't show it in the report either.
+    $meets_min_days_for_salary_choice = $is_annual_vacation
+        && (($approved_days >= $local_annual_min_days_exclusive) || $allow_vacation_salary_below_min_days);
+
+    if (!empty($request['start_date']) && !empty($request['return_date']) && $vac_type !== 'Encashed') {
+        $emp_company_id = 0;
+        $emp_dept_id = 0;
+        $company_sql = "SELECT COALESCE(c.id, e.comp_no) AS company_id, e.dept AS dept_id
+                         FROM employees e
+                         LEFT JOIN companies c ON c.comp_id = e.comp_no
+                         WHERE e.emp_id = ?";
+        if ($stmt_hc = $conDB->prepare($company_sql)) {
+            $stmt_hc->bind_param("s", $emp_id);
+            $stmt_hc->execute();
+            $hc_row = $stmt_hc->get_result()->fetch_assoc();
+            $stmt_hc->close();
+            $emp_company_id = (int)($hc_row['company_id'] ?? 0);
+            $emp_dept_id = (int)($hc_row['dept_id'] ?? 0);
+        }
+
+        $active_holidays = get_active_holidays_in_range($conDB, $request['start_date'], $request['return_date'], $emp_company_id > 0 ? $emp_company_id : null);
+
+        $vac_s = new DateTime($request['start_date']);
+        $vac_e = new DateTime($request['return_date']);
+
+        $holiday_date_set = [];
+        $holiday_list = [];
+        foreach ($active_holidays as $h) {
+            try {
+                $h_start = new DateTime($h['start_date']);
+                $h_end = new DateTime($h['end_date']);
+                $overlap_start = max($h_start, $vac_s);
+                $overlap_end = min($h_end, $vac_e);
+                if ($overlap_start <= $overlap_end) {
+                    $cur = clone $overlap_start;
+                    while ($cur <= $overlap_end) {
+                        $holiday_date_set[$cur->format('Y-m-d')] = true;
+                        $cur->modify('+1 day');
+                    }
+                    $holiday_list[] = [
+                        'name'  => $h['holiday_name'] ?? __('holiday'),
+                        'start' => $overlap_start->format('Y-m-d'),
+                        'end'   => $overlap_end->format('Y-m-d'),
+                        'days'  => (int)$overlap_start->diff($overlap_end)->days + 1,
+                    ];
+                }
+            } catch (Exception $e) {
+                // Skip malformed holiday rows.
+            }
+        }
+
+        // Weekend days are shown for transparency only — the approval logic does
+        // NOT exclude them from the balance deduction, only official holidays are.
+        $weekend_day_numbers = get_weekend_days($emp_company_id, $emp_dept_id);
+        $weekend_dates = [];
+        $cur = clone $vac_s;
+        while ($cur <= $vac_e) {
+            if (in_array((int)$cur->format('w'), $weekend_day_numbers, true)) {
+                $weekend_dates[] = $cur->format('Y-m-d');
+            }
+            $cur->modify('+1 day');
+        }
+
+        $holiday_days_count = count($holiday_date_set);
+        $weekend_days_count = count($weekend_dates);
+        $deductible_days = max(0, $applied_days - $holiday_days_count);
+
+        $holiday_breakdown = [
+            'holiday_days'     => $holiday_days_count,
+            'weekend_days'     => $weekend_days_count,
+            'deductible_days'  => $deductible_days,
+            'holidays'         => $holiday_list,
+        ];
+    }
+
     // Approval Timeline Logic - NEW CHAIN APPROVAL SYSTEM
     // Fetch approval chain for this request
     $request_inv_no = $request['request_inv_no'] ?? '';
     $current_status = $request['current_status'] ?? 'pending_approval';
     $is_cancelled_by_employee = ($current_status === 'cancelled');
+    // Rejected/cancelled requests never actually deducted balance or triggered payroll -
+    // don't show holiday/salary/payroll/payment sections as if they took effect.
+    $request_is_finalized_negatively = in_array($current_status, ['rejected', 'cancelled'], true);
 
     // Determine who actually cancelled the request (self vs HR/admin on their behalf).
     $cancelled_by_emp_id = trim((string)($request['cancelled_by'] ?? ''));
@@ -620,6 +711,18 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
 
+                                <?php if ($current_status === 'rejected'): ?>
+                                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" style="font-weight: 600;">
+                                    <i class="fa fa-times-circle"></i>
+                                    <span><?= __('request_rejected') ?? 'Request Rejected' ?> - <?= __('this_request_was_not_approved_no_impact') ?? 'This request was not approved and had no effect on payroll or vacation balance.' ?></span>
+                                </div>
+                                <?php elseif ($is_cancelled_by_employee): ?>
+                                <div class="alert alert-secondary d-flex align-items-center gap-2 mb-3" style="font-weight: 600;">
+                                    <i class="fa fa-ban"></i>
+                                    <span><?= $cancelled_by_label ?> - <?= __('this_request_was_cancelled_no_impact') ?? 'This request was cancelled and had no effect on payroll or vacation balance.' ?></span>
+                                </div>
+                                <?php endif; ?>
+
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-calendar-alt"></i><?= __('vacation_details') ?></h5>
                                     <div class="grid-details">
@@ -684,7 +787,108 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
 
-                                <?php if (!$is_encashment && !$is_non_payable_leave): ?>
+                                <?php if ($request_is_finalized_negatively): ?>
+                                <div class="report-section">
+                                    <div class="alert alert-secondary mb-0">
+                                        <i class="fa fa-info-circle"></i>
+                                        <?= __('no_holiday_salary_payroll_info_for_unfinalized_request') ?? 'Holiday deduction, vacation salary and payroll details are not shown because this request was not approved.' ?>
+                                    </div>
+                                </div>
+                                <?php else: ?>
+
+                                <?php if ($holiday_breakdown !== null && $holiday_breakdown['holiday_days'] > 0): ?>
+                                <div class="text-center mb-3 no-print">
+                                    <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleHolidayBreakdownBtn" onclick="toggleHolidayBreakdown()">
+                                        <i class="fa fa-eye mr-2"></i><?= __('view_holiday_deduction_breakdown', 'View Holiday & Balance Deduction Breakdown') ?>
+                                    </button>
+                                </div>
+                                <div id="holidayBreakdownContainer" style="display: none;">
+                                <div class="report-section">
+                                    <h5 class="section-title"><i class="fa fa-calendar-check"></i><?= __('holiday_deduction_breakdown', 'Holiday & Balance Deduction Breakdown') ?></h5>
+                                    <div class="grid-details mb-3">
+                                        <div class="detail-item"><span class="label"><?= __('total_days_requested', 'Total Days Requested') ?></span> <span class="value"><small><?= number_format($applied_days, 2); ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('official_holidays_in_period', 'Official Holidays in Period') ?></span> <span class="value"><small><?= (int)$holiday_breakdown['holiday_days']; ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('weekend_days_in_period', 'Weekend Days in Period') ?></span> <span class="value"><small><?= (int)$holiday_breakdown['weekend_days']; ?> <?= __('days') ?></small></span></div>
+                                        <div class="detail-item"><span class="label"><?= __('deductible_days_from_balance', 'Deductible Days (Charged to Balance)') ?></span> <span class="value highlight"><small><?= number_format($holiday_breakdown['deductible_days'], 2); ?> <?= __('days') ?></small></span></div>
+                                    </div>
+
+                                    <?php if (!empty($holiday_breakdown['holidays'])): ?>
+                                    <div class="payment-summary mb-3">
+                                        <ul>
+                                            <?php foreach ($holiday_breakdown['holidays'] as $hol): ?>
+                                            <li>
+                                                <div>
+                                                    <span class="label"><?= htmlspecialchars($hol['name']); ?></span>
+                                                    <small class="text-muted d-block">
+                                                        <?= $hol['start'] === $hol['end']
+                                                            ? date('d M Y', strtotime($hol['start']))
+                                                            : date('d M Y', strtotime($hol['start'])) . ' - ' . date('d M Y', strtotime($hol['end'])); ?>
+                                                    </small>
+                                                </div>
+                                                <span class="value"><?= (int)$hol['days']; ?> <?= __('day_s', 'Days') ?></span>
+                                            </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                    <?php else: ?>
+                                    <p class="text-muted mb-3"><i class="fa fa-info-circle"></i> <?= __('no_official_holidays_in_period', 'No official holidays fall within this vacation period.') ?></p>
+                                    <?php endif; ?>
+
+                                    <?php
+                                        // Contextual note mirroring the exact rule in update_vacation_balance_on_approval():
+                                        // only official holiday days are excluded from the deduction; weekends still count.
+                                        if ($is_emergency) {
+                                            $deduction_note_class = 'alert-secondary';
+                                            $deduction_note_icon = 'fa-ban';
+                                            $deduction_note_text = __('emergency_leave_no_balance_impact', 'Emergency leave does not deduct from the annual vacation balance — none of the days above affect it.');
+                                        } elseif ($is_encashment) {
+                                            $deduction_note_class = 'alert-warning';
+                                            $deduction_note_icon = 'fa-coins';
+                                            $deduction_note_text = __('encashment_full_days_deducted', 'Encashment always deducts the full requested day count from the balance; the holiday exclusion above does not apply.');
+                                        } elseif ($vac_type === 'Local Vacation' && $fly_type === 'annual') {
+                                            $deduction_note_class = 'alert-info';
+                                            $deduction_note_icon = 'fa-info-circle';
+                                            $deduction_note_text = sprintf(
+                                                __('local_annual_deduction_note', 'Official holiday days above are excluded from the balance deduction; weekend days are still counted. %s of %s days will be deducted from the balance on approval.'),
+                                                number_format($holiday_breakdown['deductible_days'], 2),
+                                                number_format($applied_days, 2)
+                                            );
+                                        } elseif ($vac_type === 'Fly' && $fly_type === 'annual') {
+                                            $deduction_note_class = 'alert-info';
+                                            $deduction_note_icon = 'fa-plane';
+                                            $deduction_note_text = sprintf(
+                                                __('fly_annual_deduction_note', 'For Fly Annual vacations, the balance is deducted on rejoin using this same holiday-exclusion rule — %s of %s days will be charged.'),
+                                                number_format($holiday_breakdown['deductible_days'], 2),
+                                                number_format($applied_days, 2)
+                                            );
+                                        } else {
+                                            $deduction_note_class = 'alert-secondary';
+                                            $deduction_note_icon = 'fa-info-circle';
+                                            $deduction_note_text = __('leave_type_no_balance_impact', 'This leave type does not deduct from the annual vacation balance.');
+                                        }
+                                    ?>
+                                    <div class="alert <?= $deduction_note_class ?> mb-0">
+                                        <i class="fa <?= $deduction_note_icon ?>"></i> <?= $deduction_note_text ?>
+                                    </div>
+                                </div>
+                                </div>
+                                <script>
+                                function toggleHolidayBreakdown() {
+                                    const container = document.getElementById('holidayBreakdownContainer');
+                                    const btn = document.getElementById('toggleHolidayBreakdownBtn');
+
+                                    if (container.style.display === 'none' || container.style.display === '') {
+                                        container.style.display = 'block';
+                                        btn.innerHTML = '<i class="fa fa-eye-slash mr-2"></i><?= __('hide_holiday_deduction_breakdown', 'Hide Holiday & Balance Deduction Breakdown') ?>';
+                                    } else {
+                                        container.style.display = 'none';
+                                        btn.innerHTML = '<i class="fa fa-eye mr-2"></i><?= __('view_holiday_deduction_breakdown', 'View Holiday & Balance Deduction Breakdown') ?>';
+                                    }
+                                }
+                                </script>
+                                <?php endif; ?>
+
+                                <?php if (!$is_encashment && !$is_non_payable_leave && $meets_min_days_for_salary_choice): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('vacation_salary_payment') ?? 'Vacation Salary Payment' ?></h5>
                                     <?php if ($vacation_salary_payment_yes): ?>
@@ -839,7 +1043,7 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                     <?php endif; ?>
                                 
-                                <?php if ($vacation_salary_type === 'end_of_service'): ?>
+                                <?php if ($vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?></h5>
                                     <div class="alert alert-info mb-0">
@@ -898,7 +1102,7 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
                                 
-                                <?php if ($is_fly_annual && $vacation_salary_type === 'end_of_service'): ?>
+                                <?php if ($is_fly_annual && $vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?? 'Vacation Salary Information' ?></h5>
                                     <div class="alert alert-info mb-0">
@@ -1014,7 +1218,9 @@ if (mysqli_num_rows($query) == 1) {
                                     <?php endif; ?>
                                 </div>
                                 <?php endif; ?>
-                                
+
+                                <?php endif; // $request_is_finalized_negatively ?>
+
                                 <div class="text-center mb-3 no-print" style="margin-top: 2rem;">
                                     <button type="button" class="btn btn-outline-primary waves-effect waves-light" id="toggleApprovalBtn" onclick="toggleApprovalStatus()">
                                         <i class="fa fa-eye mr-2"></i><?= __('view_approval_status') ?? 'View Approval Status' ?>
