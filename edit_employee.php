@@ -28,7 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'emg_name',
 			'country',
 			'dept',
-			'sectin_nme',
+			'city_id',
+			'location_id',
+			'sub_dept_id',
 			'emptype',
 			'supervisor_id',
 			'joining_date',
@@ -426,18 +428,30 @@ if (mysqli_num_rows($query) == 1) {
 												</select>
 											</div>
 											<div class="form-group col-md-2">
-												<label for="sectin_nme" class="col-form-label"><?= __("section_label") ?><span class="text-danger">*</span></label>
-												<select class="form-control sectin_nme" name="sectin_nme" id="sectin_nme" required />
+												<label for="city_id" class="col-form-label"><?= __("city_label", "City") ?><span class="text-danger">*</span></label>
+												<select class="form-control select2" name="city_id" id="city_id" required>
 												<option value=""><?= __("select_option") ?></option>
 												<?php
-												$query_dep_nme = mysqli_query($conDB, "SELECT * FROM `section` ORDER BY `section_name` REGEXP '^[^A-Za-z]' ASC, section_name");
-												while ($rec = mysqli_fetch_assoc($query_dep_nme)) {
+												$query_cities = mysqli_query($conDB, "SELECT `id`, `name_en`, `name_ar` FROM `saudi_cities` ORDER BY `name_en` ASC");
+												while ($rec = mysqli_fetch_assoc($query_cities)) {
 												?>
-													<option value="<?= $rec["id"] ?>" <?= ($rec["id"] == $emprow['sectin_id']) ? "selected=selected" : "" ?>><?= getDisplayName($rec["section_name"]) ?></option>
+													<option value="<?= $rec["id"] ?>" <?= ($rec["id"] == $emprow['city_id']) ? "selected=selected" : "" ?>><?= ($is_rtl ?? false ? $rec["name_ar"] : $rec["name_en"]) ?></option>
 												<?php } ?>
 												</select>
 											</div>
-											<div class="form-group col-md-1">
+											<div class="form-group col-md-2">
+												<label for="location_id" class="col-form-label"><?= __("location_label", "Location") ?><span class="text-danger">*</span></label>
+												<select class="form-control select2" name="location_id" id="location_id" required>
+												<option value=""><?= __("select_a_city_first", "Select a City First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
+												<label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
+												<select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
+												<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
 												<label for="emptype" class="col-form-label"><?= __("employee_type_label") ?><span class="text-danger">*</span></label>
 												<select class="form-control" name="emptype" required />
 												<option value=""><?= __("select_option") ?></option>
@@ -499,7 +513,7 @@ if (mysqli_num_rows($query) == 1) {
 												<input type="text" name="dob_h" value="<?= ($emprow['dob_h'] == "") ? $DateConv->GregorianToHijri($emprow['dob'], $format) : $emprow['dob_h'] ?>" parsley-trigger="change" class="form-control" id="dateofbirthHijri" required />
 											</div>
 
-											<div class="form-group col-md-1">
+											<div class="form-group col-md-2">
 												<label for="t_shirt_size" class="col-form-label"><?= __("t_shirt_size_label") ?></label>
 												<input type="text" name="t_shirt_size" value="<?= $emprow['t_shirt_size'] ?>" parsley-trigger="change" class="form-control" id="t_shirt_size">
 											</div>
@@ -965,7 +979,69 @@ if (mysqli_num_rows($query) == 1) {
 
 
 		<script type="text/javascript">
+			<?php
+				$all_locations_json = [];
+				$query_all_locations = mysqli_query($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC");
+				while ($rec = mysqli_fetch_assoc($query_all_locations)) { $all_locations_json[] = $rec; }
+
+				$all_sub_depts_json = [];
+				$query_all_sub_depts = mysqli_query($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC");
+				while ($rec = mysqli_fetch_assoc($query_all_sub_depts)) { $all_sub_depts_json[] = $rec; }
+			?>
+			const ALL_LOCATIONS = <?= json_encode($all_locations_json) ?>;
+			const ALL_SUB_DEPARTMENTS = <?= json_encode($all_sub_depts_json) ?>;
+			const EMP_LOCATION_ID = "<?= $emprow['location_id'] ?? '' ?>";
+			const EMP_SUB_DEPT_ID = "<?= $emprow['sub_dept_id'] ?? '' ?>";
+			const IS_RTL_LOCALE = <?= ($is_rtl ?? false) ? 'true' : 'false' ?>;
+
+			function populateLocationOptions(cityId, selectedLocationId) {
+				const $select = $('#location_id');
+				const isSelect2 = $select.hasClass('select2-hidden-accessible');
+				if (!cityId) {
+					$select.empty().append('<option value=""><?= __("select_a_city_first", "Select a City First") ?></option>');
+					if (isSelect2) $select.trigger('change');
+					return;
+				}
+				let options = '<option value=""><?= __("select_option") ?></option>';
+				ALL_LOCATIONS.filter(loc => String(loc.city_id) === String(cityId)).forEach(loc => {
+					const selected = (String(loc.id) === String(selectedLocationId)) ? 'selected' : '';
+					const label = IS_RTL_LOCALE ? loc.name_ar : loc.name_en;
+					options += `<option value="${loc.id}" ${selected}>${label}</option>`;
+				});
+				$select.html(options);
+				if (isSelect2) $select.trigger('change');
+			}
+
+			function populateSubDeptOptions(departmentId, selectedSubDeptId) {
+				const $select = $('#sub_dept_id');
+				const isSelect2 = $select.hasClass('select2-hidden-accessible');
+				if (!departmentId) {
+					$select.empty().append('<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>');
+					if (isSelect2) $select.trigger('change');
+					return;
+				}
+				let options = '<option value=""><?= __("select_option") ?></option>';
+				ALL_SUB_DEPARTMENTS.filter(sd => String(sd.department_id) === String(departmentId)).forEach(sd => {
+					const selected = (String(sd.id) === String(selectedSubDeptId)) ? 'selected' : '';
+					const label = IS_RTL_LOCALE ? sd.name_ar : sd.name_en;
+					options += `<option value="${sd.id}" ${selected}>${label}</option>`;
+				});
+				$select.html(options);
+				if (isSelect2) $select.trigger('change');
+			}
+
 			$(function() {
+
+				// Initial population based on the employee's currently saved City/Department
+				populateLocationOptions($('#city_id').val(), EMP_LOCATION_ID);
+				populateSubDeptOptions($('#department').val(), EMP_SUB_DEPT_ID);
+
+				$('#city_id').on('change', function() {
+					populateLocationOptions($(this).val(), '');
+				});
+				$('#department').on('change', function() {
+					populateSubDeptOptions($(this).val(), '');
+				});
 
 				/***************************/
 

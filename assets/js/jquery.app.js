@@ -110,6 +110,31 @@ function __(key, defaultText = '') {
     return defaultText || key;
 }
 
+// The `docu_type` table (Employee Documents dropdown) stores English-only values
+// with no Arabic column, so its options render untranslated. Map known values to
+// translation keys here (see sql/document_type_translations.sql); unknown/future
+// values fall back to a generated slug key, which just shows the raw English text
+// until someone adds a translation row for it.
+const DOC_TYPE_TRANSLATION_KEYS = {
+    'Iqama': 'doc_type_iqama',
+    'Passport': 'doc_type_passport',
+    'Passport Front': 'doc_type_passport_front',
+    'Passport Back': 'doc_type_passport_back',
+    'Company Contract': 'doc_type_company_contract',
+    'Baldia Card': 'doc_type_baldia_card',
+    'Baldia Certificate': 'doc_type_baldia_certificate',
+    'ID Card': 'doc_type_id_card',
+    'Employee file': 'doc_type_employee_file',
+};
+function docTypeToTranslationKey(docTypeValue) {
+    const trimmed = (docTypeValue || '').trim();
+    if (DOC_TYPE_TRANSLATION_KEYS[trimmed]) {
+        return DOC_TYPE_TRANSLATION_KEYS[trimmed];
+    }
+    const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return 'doc_type_' + slug;
+}
+
 
 // --- Main Script Logic (Your existing functions) ---
 $(document).ready(function() {
@@ -4100,8 +4125,11 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
-                        for (let i in res.data)
-                            options += `<option value="${res.data[i].duc_type}">${res.data[i].duc_type}</option>`;
+                        for (let i in res.data) {
+                            const docTypeVal = res.data[i].duc_type;
+                            const docTypeLabel = __(docTypeToTranslationKey(docTypeVal), docTypeVal);
+                            options += `<option value="${docTypeVal}">${docTypeLabel}</option>`;
+                        }
                             options += `<option value="Others">${__('others')}</option>`;
                         $('#docu_typ').append(options);
                     }
@@ -6366,12 +6394,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 data: {ajaxType: "emp_data", empid: empid},
                 success: function(res) {
                     if (res.status == 200) {
-                        
-                        var employeeName = res.data[0].name;
-                        var currentLang = getCurrentLanguage();
-                        translateName(employeeName, 'en', currentLang, function(translatedName) {
-                            $('input[name="name"]').val(translatedName);
-                        });
+
+                        // display_name is already translated server-side (getDisplayName()) -
+                        // avoids the client-side translateName() round trip, which can race
+                        // with translation.js's async load and silently leave the raw name.
+                        $('input[name="name"]').val(res.data[0].display_name || res.data[0].name);
 
                         $('input[name="empid"]').val(res.data[0].emp_id);
                     }
@@ -10753,6 +10780,15 @@ function initSessionTimeoutAlert() {
  * settlement records across all pages (loans, vacations, advances, etc.)
  */
 
+// Shared collapsible "Approval Chain" toggle used by the et-report style modals
+// (Employee Transfer report, Settlement details, etc).
+function toggleEtApprovalChain(headerEl) {
+    const timeline = headerEl.nextElementSibling;
+    if (!timeline) return;
+    timeline.classList.toggle('d-none');
+    headerEl.classList.toggle('et-open', !timeline.classList.contains('d-none'));
+}
+
 function viewSettlementDetails(settlementId, settlementInvNo) {
     // Show loading indicator
     Swal.fire({
@@ -10775,68 +10811,34 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
         success: function(response) {
             if (response.success) {
                 const s = response.data.settlement;
-                const isRtl = document.documentElement.getAttribute('dir') === 'rtl';
-                const formatFileSize = (bytes) => {
-                    const size = parseInt(bytes || 0, 10);
-                    if (!size) {
-                        return '0 B';
-                    }
-                    const units = ['B', 'KB', 'MB', 'GB'];
-                    const idx = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
-                    const value = size / Math.pow(1024, idx);
-                    return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
-                };
-                
-                // Build approval chain HTML
-                let approvalChainHtml = '<div style="margin-top: 15px;"><h6>' + __('approval_chain') + ':</h6><table style="width: 100%; font-size: 13px;" dir="' + (isRtl ? 'rtl' : 'ltr') + '"><tr style="background: #f5f5f5;"><th style="padding: 8px; border: 1px solid #ddd;">' + __('level') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('status') + '</th><th style="padding: 8px; border: 1px solid #ddd;">' + __('approver') + '</th></tr>';
-                if (response.data.approval_chain && response.data.approval_chain.length > 0) {
-                    response.data.approval_chain.forEach((level, idx) => {
-                        const statusBadge = level.status === 'approved' ? '<span style="background: '+ APP_COLORS.success +'; color: white; padding: 3px 8px; border-radius: 3px;">✓ ' + __('approved') + '</span>' :
-                                           level.status === 'pending' ? '<span style="background: '+ APP_COLORS.warning +'; color: black; padding: 3px 8px; border-radius: 3px;">⏳ ' + __('pending') + '</span>' :
-                                           level.status === 'rejected' ? '<span style="background: '+ APP_COLORS.danger_dark +'; color: white; padding: 3px 8px; border-radius: 3px;">✗ ' + __('rejected') + '</span>' :
-                                           '<span style="background: '+ APP_COLORS.secondary +'; color: white; padding: 3px 8px; border-radius: 3px;">' + __('awaiting') + '</span>';
-                        approvalChainHtml += `<tr><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">` + __('level') + ` ${level.approval_level}</td><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">${statusBadge}</td><td style="padding: 8px; border: 1px solid ${APP_COLORS.border};">${level.approver_name || __('not_assigned')}</td></tr>`;
-                    });
-                }
-                approvalChainHtml += '</table></div>';
-                
-                // Build report link and payment proof button based on request type
-                let reportLink = '';
-                let downloadProofButton = '';
+
+                // --- Report link + payment proof + attachments (built as et-report-actions buttons) ---
+                let actionsHtml = '';
                 const requestType = s.request_type ? s.request_type.toLowerCase() : '';
                 const requestId = response.data.settlement.related_request_id || s.id;
                 const empId = s.emp_id;
-                
+
                 if (requestType.includes('vacation')) {
-                    reportLink = '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
+                    actionsHtml += '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
                 } else if (requestType.includes('loan')) {
-                    reportLink = '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
+                    actionsHtml += '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
                 } else if (requestType.includes('resignation')) {
-                    reportLink = '<a href="./eos_pdf.php?emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_end_of_service_report') + '</a>';
+                    actionsHtml += '<a href="./eos_pdf.php?emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_end_of_service_report') + '</a>';
                 } else {
-                    reportLink = '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info" style="margin-top: 10px;"><i class="fa fa-file-chart-line"></i> ' + __('view_requests_report') + '</a>';
+                    actionsHtml += '<a href="./all_general_requests.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_requests_report') + '</a>';
                 }
-                
-                // Build payment proof download button if available
+
                 if (s.payment_reference && s.payment_reference.trim() !== '') {
-                    const proofPath = s.payment_reference;
-                    const isImage = /\.(jpg|jpeg|png|gif|bmp)$/i.test(proofPath);
-                    const buttonText = __('download_proof');
-                    const marginDir = isRtl ? 'right' : 'left';
-                    downloadProofButton = `<a href="./${proofPath}" target="_blank" class="btn btn-sm btn-primary" style="margin-top: 10px; margin-${marginDir}: 5px;"><i class="fa fa-download"></i> ${buttonText}</a>`;
+                    actionsHtml += `<a href="./${s.payment_reference}" target="_blank" class="btn btn-sm btn-primary"><i class="fa fa-download"></i> ${__('download_proof')}</a>`;
                 }
-                
-                // Build settlement attachments - use showAttachmentsModal for unified view
-                let attachmentsHtml = '';
+
                 const attachments = (response.data && response.data.attachments) ? response.data.attachments : [];
                 if (attachments.length > 0) {
-                    // Convert attachment objects to properly formatted file URLs
-                    // Settlement attachments have structure: {id, file_path, file_name, uploaded_at, ...}
                     const attachmentPaths = attachments.map(att => {
                         if (!att || !att.file_path) return '';
-                        
+
                         let filePath = att.file_path;
-                        
+
                         // If file_path doesn't contain slashes, it needs date-based path construction
                         if (filePath.indexOf('/') === -1 && att.uploaded_at) {
                             const uploadDate = new Date(att.uploaded_at);
@@ -10844,45 +10846,110 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                             const month = String(uploadDate.getMonth() + 1).padStart(2, '0');
                             filePath = 'uploads/settlement_attachments/' + year + '/' + month + '/' + filePath;
                         } else if (filePath.indexOf('/') === -1) {
-                            // Fallback if no date available
                             filePath = 'uploads/settlement_attachments/' + filePath;
                         }
-                        
+
                         return filePath;
                     }).filter(path => path.length > 0);
-                    
+
                     if (attachmentPaths.length > 0) {
                         const attachmentPathsJson = JSON.stringify(attachmentPaths).replace(/"/g, '&quot;');
-                        attachmentsHtml = '<br><h6 style="margin-top: 15px; color: ' + APP_COLORS.text_dark + '; font-weight: 600;">📎 ' + __('attachments') + ' (' + attachmentPaths.length + '):</h6>';
-                        attachmentsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="showAttachmentsModal(' + attachmentPathsJson + ', &quot;' + __('attachments') + '&quot;)" style="margin-top: 8px;"><i class="fa fa-eye"></i> ' + __('view_attachments') + '</button>';
+                        actionsHtml += '<button type="button" class="btn btn-sm btn-secondary" onclick="showAttachmentsModal(' + attachmentPathsJson + ', &quot;' + __('attachments') + '&quot;)"><i class="fa fa-paperclip"></i> ' + __('attachments') + ' (' + attachmentPaths.length + ')</button>';
                     }
                 }
-                
-                let historyHtml = '<div style="margin-top: 15px;">' + reportLink + downloadProofButton + attachmentsHtml + '</div>';
-                
-                const contentHtml = `
-                    <div style="text-align: ` + (isRtl ? 'right' : 'left') + `; font-size: 14px; direction: ` + (isRtl ? 'rtl' : 'ltr') + `;">
-                        <h5 style="margin-bottom: 15px; color: ${APP_COLORS.text_dark};">` + __('settlement_information') + `</h5>
-                        <table style="width: 100%; margin-bottom: 10px;" dir="` + (isRtl ? 'rtl' : 'ltr') + `">
-                            <tr><td style="padding: 8px; font-weight: bold; width: 35%;">` + __('settlement_id') + `:</td><td style="padding: 8px; color: ${APP_COLORS.primary}; font-weight: 600;">${htmlspecialcharsJs(s.request_inv_no)}</td></tr>
-                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('employee_name') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_name)}</td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + __('employee_id') + `:</td><td style="padding: 8px;">${htmlspecialcharsJs(s.emp_id)}</td></tr>
-                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('settlement_amount') + `:</td><td style="padding: 8px; color: ${APP_COLORS.success}; font-weight: 600;">SAR ${Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + __('settlement_method') + `:</td><td style="padding: 8px;">${s.settlement_method || __('not_available')}</td></tr>
-                            <tr style="background: ${APP_COLORS.background_light};"><td style="padding: 8px; font-weight: bold;">` + __('status') + `:</td><td style="padding: 8px;"><span style="background: ${APP_COLORS.primary}; color: white; padding: 3px 8px; border-radius: 3px;">${(s.settlement_status || '').toUpperCase()}</span></td></tr>
-                            <tr><td style="padding: 8px; font-weight: bold;">` + __('created') + `:</td><td style="padding: 8px;">${new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td></tr>
-                        </table>
-                        ${approvalChainHtml}
-                        ${historyHtml}
-                    </div>
-                `;
-                
+
+                // --- Approval chain as a timeline ---
+                const stepMeta = {
+                    approved: { icon: 'fa-check', cls: 'et-step-success', label: __('approved') },
+                    pending:  { icon: 'fa-clock', cls: 'et-step-warning', label: __('pending') },
+                    rejected: { icon: 'fa-times', cls: 'et-step-danger', label: __('rejected') },
+                    awaiting: { icon: 'fa-hourglass-half', cls: 'et-step-secondary', label: __('awaiting') }
+                };
+                let timelineHtml = '';
+                (response.data.approval_chain || []).forEach(level => {
+                    const step = stepMeta[level.status] || stepMeta.awaiting;
+                    timelineHtml += `
+                        <div class="et-timeline-item ${step.cls}">
+                            <div class="et-timeline-dot"><i class="fa ${step.icon}"></i></div>
+                            <div class="et-timeline-content">
+                                <div class="et-timeline-top">
+                                    <span class="et-timeline-level">${__('level')} ${level.approval_level}</span>
+                                    <span class="et-timeline-badge">${step.label}</span>
+                                </div>
+                                <div class="et-timeline-approver">${level.approver_name || __('not_assigned')}</div>
+                            </div>
+                        </div>`;
+                });
+
+                // --- Status pill for the header ---
+                const statusMeta = {
+                    pending_approval: { label: __('pending_approval') || __('pending'), cls: 'et-status-warning' },
+                    pending:           { label: __('pending'), cls: 'et-status-warning' },
+                    approved:          { label: __('approved'), cls: 'et-status-success' },
+                    rejected:          { label: __('rejected'), cls: 'et-status-danger' },
+                    completed:         { label: __('completed'), cls: 'et-status-primary' },
+                    cancelled:         { label: __('cancelled'), cls: 'et-status-secondary' }
+                };
+                const sMeta = statusMeta[s.settlement_status] || { label: s.settlement_status, cls: 'et-status-secondary' };
+
+                const infoRow = (icon, label, value) => `
+                    <div class="et-report-row">
+                        <div class="et-report-row-label"><i class="fa ${icon}"></i> ${label}</div>
+                        <div class="et-report-row-value">${value || 'N/A'}</div>
+                    </div>`;
+
+                const amount = 'SAR ' + Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                const createdText = new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+
+                let html = '<div class="et-report">';
+                html += `
+                    <div class="et-report-header">
+                        <div class="et-report-avatar"><i class="fa fa-user"></i></div>
+                        <div class="et-report-heading">
+                            <div class="et-report-name">${htmlspecialcharsJs(s.emp_name)}</div>
+                            <div class="et-report-subid">${__('emp_id')}: ${htmlspecialcharsJs(s.emp_id)} &bull; ${htmlspecialcharsJs(s.request_inv_no)}</div>
+                        </div>
+                        <div class="et-report-status-pill ${sMeta.cls}">${sMeta.label}</div>
+                    </div>`;
+                html += `
+                    <div class="vacation-card">
+                        <div class="vacation-card-header"><i class="fa fa-file-invoice-dollar"></i> ${__('settlement_information')}</div>
+                        ${infoRow('fa-money-bill-wave', __('settlement_amount'), amount)}
+                        ${infoRow('fa-credit-card', __('settlement_method'), s.settlement_method || __('not_available'))}
+                        ${infoRow('fa-calendar-alt', __('created'), createdText)}
+                    </div>`;
+                if (timelineHtml) {
+                    html += `
+                        <div class="vacation-card">
+                            <div class="vacation-card-header et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">
+                                <i class="fa fa-sitemap"></i> ${__('approval_chain')}
+                                <i class="fa fa-chevron-down et-timeline-chevron"></i>
+                            </div>
+                            <div class="et-timeline d-none">${timelineHtml}</div>
+                        </div>`;
+                }
+                if (actionsHtml) {
+                    html += `
+                        <div class="vacation-card">
+                            <div class="vacation-card-header"><i class="fa fa-link"></i> ${__('actions')}</div>
+                            <div class="et-report-actions">${actionsHtml}</div>
+                        </div>`;
+                }
+                html += '</div>';
+
                 Swal.fire({
                     title: __('settlement_details'),
-                    html: contentHtml,
-                    width: 700,
+                    html: html,
+                    width: '45%',
+                    padding: '20px',
                     allowOutsideClick: false,
-                    confirmButtonText: __('close')
+                    confirmButtonText: __('close'),
+                    confirmButtonColor: APP_COLORS.primary,
+                    customClass: {
+                        popup: 'vacation-modal-popup',
+                        title: 'vacation-modal-title',
+                        confirmButton: 'btn-modern-confirm'
+                    }
                 });
             } else {
                 Swal.fire(__('error'), response.message || __('failed_to_load_settlement_details'), 'error');

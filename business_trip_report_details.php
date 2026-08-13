@@ -43,7 +43,8 @@ if (mysqli_num_rows($query) == 1) {
                 e.emp_id,
                 d.dep_nme AS dept_name,
                 d.dep_nme_ar AS dept_name_ar,
-                s.section_name,
+                comp.comp_name,
+                comp.comp_name_ar,
                 fc.name_en as from_city_name_en,
                 fc.name_ar as from_city_name_ar,
                 tc.name_en as to_city_name_en,
@@ -52,7 +53,7 @@ if (mysqli_num_rows($query) == 1) {
             FROM emp_business_trip bt
             JOIN employees e ON bt.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
-            LEFT JOIN section s ON e.sectin_nme = s.id
+            LEFT JOIN companies comp ON e.comp_no = comp.comp_id
             LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id
             LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id
             LEFT JOIN countries c ON bt.destination_country = c.name
@@ -411,7 +412,7 @@ if (mysqli_num_rows($query) == 1) {
                                 <img src="<?= getAvatarImagePath($request['avatar'] ?? '', $request['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
                                 <div class="info">
                                     <h4><?= getDisplayName($request['employee_name'] ?? null); ?></h4>
-                                    <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['dept_name_ar'] : $request['dept_name']); ?><?= getDisplayName($request['section_name']) ? ' / ' . getDisplayName($request['section_name']) : '' ?></p>
+                                    <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['dept_name_ar'] : $request['dept_name']); ?><?php $btCompName = ($is_rtl ?? false) ? ($request['comp_name_ar'] ?? $request['comp_name'] ?? '') : ($request['comp_name'] ?? ''); ?><?= $btCompName ? ' / ' . getDisplayName($btCompName) : '' ?></p>
                                 </div>
                             </div>
 

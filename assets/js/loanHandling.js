@@ -544,7 +544,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
                 html: `
                     <div class="vacation-form-container text-left">
                         <div class="vacation-card">
-                            <div class="vacation-card-header"><i class="fa fa-wallet"></i> ${__('loan_balance_label') || 'Loan Balance'}</div>
+                            <div class="vacation-card-header"><i class="fa fa-wallet"></i> ${__('loan_balance') || 'Loan Balance'}</div>
                             <div class="info-row">
                                 <div class="info-field">
                                     <label>${__('remaining_balance_label') || 'Remaining Balance'}</label>

@@ -257,7 +257,16 @@ if ($can_see_all_depts) {
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
-        .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
+        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
+        .request-time-footer {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
+            border-bottom: 1px dashed #e3e6f5;
+        }
+        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .request-time-footer i { color: #a0a8c0; }
         .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
         .btn-block + .btn-block { margin-top: 0rem !important; }
         .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
@@ -391,15 +400,20 @@ if ($can_see_all_depts) {
                                                             </div>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <a href="business_trip_report_details.php?id=<?= (int)$trip['id']; ?>&emp_id=<?= urlencode((string)$trip['emp_id']); ?>" target="_blank" class="btn btn-info btn-block waves-effect">
-                                                            <i class="fa fa-eye"></i> <?= __('view_report') ?>
-                                                        </a>
-                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000;">
+                                                    <div class="card-footer">
+                                                        <div class="request-time-footer">
+                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($trip['created_at'] ?? '') : timeAgo($trip['created_at'] ?? '')) ?></span>
+                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($trip['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                        </div>
+                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000; display:flex;">
                                                             <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                                 <?= __('actions') ?> <span class="caret"></span>
                                                             </button>
                                                             <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
+                                                                <a class="dropdown-item" href="business_trip_report_details.php?id=<?= (int)$trip['id']; ?>&emp_id=<?= urlencode((string)$trip['emp_id']); ?>" target="_blank">
+                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
+                                                                </a>
+                                                                <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="business_trip_status_history.php?request_inv_no=<?= urlencode($trip['request_inv_no']); ?>" target="_blank">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>

@@ -13,6 +13,7 @@ $yearlyEOSLink = 'employee_audit_gen.php';
 $payrollLink = 'generate_payroll.php';
 $appliedVacationsLink = 'all_applied_vac.php';
 $appliedBusinessTripLink = 'all_applied_business_trip.php';
+$appliedEmployeeTransfersLink = 'all_applied_employee_transfers.php';
 $appliedSalaryIncrementLink = 'all_applied_salary_increment.php';
 $appliedLoanLink = 'all_applied_loan.php';
 $settlementsLink = 'all_settlements.php';
@@ -102,6 +103,7 @@ $page_special_access_bypass = [
     'all_applied_vac.php' => 'access_all_applied_vac',
     'all_applied_loan.php' => 'access_all_applied_loan',
     'all_applied_business_trip.php' => 'access_all_applied_business_trip',
+    'all_applied_employee_transfers.php' => 'access_all_applied_employee_transfers',
     'all_applied_salary_increment.php' => 'access_all_applied_salary_increment',
     'salary_increment_status_history.php' => 'access_salary_increment_status_history',
     'all_resignations.php' => 'access_all_resignations',
@@ -137,6 +139,8 @@ if ($user_type != 'administrator') {
     // Allow reports page for all non-employee user types.
     if ($current_page_name === 'reports.php' && !$is_employee_user_type) {
         // intentionally bypass role-based restriction
+    } elseif ($current_page_name === 'all_applied_employee_transfers.php' && function_exists('employee_transfer_user_has_stake') && employee_transfer_user_has_stake($conDB, $empid ?? '')) {
+        // intentionally bypass role-based restriction: requester or approver in this request's chain
     } elseif ($has_page_special_access_bypass) {
         // intentionally bypass role-based restriction: explicit special-access grant
     } elseif (isset($page_roles[$current_page_name])) {
@@ -158,6 +162,7 @@ $can_see_employees_payroll_page = $page_roles['generate_payroll.php'] ?? [];
 $can_see_import_iqama_page = $page_roles['import_iqama_exp.php'] ?? [];
 $can_see_applied_vac_page = $page_roles['all_applied_vac.php'] ?? [];
 $can_see_business_trip_page = $page_roles['all_applied_business_trip.php'] ?? [];
+$can_see_employee_transfers_page = $page_roles['all_applied_employee_transfers.php'] ?? [];
 $can_see_salary_increment_page = $page_roles['all_applied_salary_increment.php'] ?? [];
 $can_see_rejoin_approvals_page = $page_roles['rejoin_approvals.php'] ?? [];
 $can_see_loan_approvals_page = $page_roles['all_applied_loan.php'] ?? [];
@@ -819,6 +824,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isBusinessTripMenuBlocked && (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)))): ?>
                     <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
+                <?php endif; ?>
+                <?php if (!empty($is_system_admin) || (in_array($user_role, $can_see_employee_transfers_page) || in_array($user_type, $can_see_employee_transfers_page)) || (function_exists('employee_transfer_user_has_stake') && employee_transfer_user_has_stake($conDB, $empid ?? ''))): ?>
+                    <li><a href="<?= $appliedEmployeeTransfersLink ?>"><i class="fa fa-people-arrows"></i><span><?=__('employee_transfer_requests', 'Employee Transfers') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isSalaryIncrementMenuBlocked && (in_array($user_role, $can_see_salary_increment_page) || in_array($user_type, $can_see_salary_increment_page)))): ?>
                     <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa fa-arrow-trend-up"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>

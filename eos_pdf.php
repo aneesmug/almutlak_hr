@@ -198,8 +198,8 @@ if(mysqli_num_rows($query) == 1){
         <tr>
             <td class="label-en en" width="25%">Passport: '.$emprow['passport_number'].'</td>
             <td class="label-ar ar" width="25%">رقم الجواز</td>
-            <td class="label-en en" width="35%">Session / Area: '.$emprow['sectin_nme'].'</td>
-            <td class="label-ar ar" width="15%">الجلسة / المنطقة</td>
+            <td class="label-en en" width="35%">Company: '.$emprow['compnme'].'</td>
+            <td class="label-ar ar" width="15%">الشركة</td>
         </tr>
         <tr>
             <td class="label-en en" width="25%">Date of Birth: '.(!empty($emprow['dob']) ? format_safe_date($emprow['dob'], 'M d, Y') : '').' (Age: '.$years_age.')</td>

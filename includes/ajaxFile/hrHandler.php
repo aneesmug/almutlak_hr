@@ -142,6 +142,9 @@ if($ajaxType == 'emp_search') {
             ];
             // Always use computed $user_role from role_check.php
             if (canEmployeeSupervisorAccess($employee_data, $user_data, $user_role)) {
+                // Pre-translate the name server-side (cached, reliable) so callers don't
+                // need to round-trip through the client-side Google Translate helper.
+                $row['display_name'] = function_exists('getDisplayName') ? getDisplayName($row['name']) : $row['name'];
                 $name[] = $row;
             } else {
                 mysqli_free_result($stmt);
@@ -251,6 +254,145 @@ if($ajaxType == 'emp_search') {
         'status'    => 200
     ];
     echo json_encode($data);
+}
+// =================================================================
+// == EMPLOYEE TRANSFER REQUEST: employees filtered by job title
+// == Deliberately ignores company/department scope filters - a
+// == requesting supervisor must be able to see & pick any active
+// == employee company-wide with the chosen job, per feature spec.
+// =================================================================
+elseif($ajaxType == 'emp_by_job') {
+    // job_id may be a single ac_jobs id, or a comma-separated list of ids that all
+    // share the same job title (get_all_jobs groups duplicate titles together).
+    $job_ids_raw = trim((string)($_POST['job_id'] ?? ''));
+    $requester_emp_id = isset($_POST['requester_emp_id']) ? trim((string)$_POST['requester_emp_id']) : (string)($empid ?? '');
+
+    $job_ids = array_filter(array_map('intval', explode(',', $job_ids_raw)), function($id) { return $id > 0; });
+    if (empty($job_ids)) {
+        echo json_encode(['status' => 400, 'message' => __('invalid_job_selected', 'Please select a valid job title.')]);
+        exit;
+    }
+    $job_ids_str = implode(',', $job_ids);
+
+    $stmt = mysqli_prepare($conDB, "SELECT
+            `e`.`emp_id`, `e`.`name`, `e`.`dept`, `e`.`comp_no`, `e`.`actual_job`, `e`.`supervisor_id`,
+            `d`.`dep_nme` AS `deptnme`,
+            `c`.`comp_name` AS `compnme`,
+            `sup`.`name` AS `supervisor_name`
+        FROM `employees` `e`
+        LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+        LEFT JOIN `companies` `c` ON `c`.`comp_id` = `e`.`comp_no`
+        LEFT JOIN `employees` `sup` ON `sup`.`emp_id` = `e`.`supervisor_id`
+        WHERE `e`.`status` = 1
+          AND FIND_IN_SET(`e`.`actual_job`, ?)
+          AND (`e`.`supervisor_id` IS NULL OR `e`.`supervisor_id` != ?)
+          AND `e`.`emp_id` != ?
+        ORDER BY `e`.`name`");
+    if (!$stmt) {
+        echo json_encode(['status' => 500, 'message' => __('database_error') . ': ' . mysqli_error($conDB)]);
+        exit;
+    }
+    mysqli_stmt_bind_param($stmt, "sss", $job_ids_str, $requester_emp_id, $requester_emp_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $rows = [];
+    while ($row = mysqli_fetch_assoc($result)) {
+        $rows[] = $row;
+    }
+    if ($result) mysqli_free_result($result);
+    mysqli_stmt_close($stmt);
+
+    echo json_encode(['status' => 200, 'data' => $rows]);
+}
+// =================================================================
+// == EMPLOYEE TRANSFER REQUEST: single employee lookup, used when the
+// == request is launched from that employee's own "More Actions" menu
+// == (target already known - no job/employee picker needed).
+// =================================================================
+elseif($ajaxType == 'get_employee_transfer_target_info') {
+    $target_emp_id = trim((string)($_POST['emp_id'] ?? ''));
+
+    if ($target_emp_id === '') {
+        echo json_encode(['status' => 400, 'message' => __('invalid_employee_id', 'Invalid employee ID.')]);
+        exit;
+    }
+
+    $stmt = mysqli_prepare($conDB, "SELECT
+            `e`.`emp_id`, `e`.`name`, `e`.`dept`, `e`.`comp_no`, `e`.`actual_job`, `e`.`supervisor_id`,
+            `d`.`dep_nme` AS `deptnme`,
+            `c`.`comp_name` AS `compnme`,
+            `sup`.`name` AS `supervisor_name`
+        FROM `employees` `e`
+        LEFT JOIN `department` `d` ON `d`.`id` = `e`.`dept`
+        LEFT JOIN `companies` `c` ON `c`.`comp_id` = `e`.`comp_no`
+        LEFT JOIN `employees` `sup` ON `sup`.`emp_id` = `e`.`supervisor_id`
+        WHERE `e`.`status` = 1 AND `e`.`emp_id` = ?
+        LIMIT 1");
+    if (!$stmt) {
+        echo json_encode(['status' => 500, 'message' => __('database_error') . ': ' . mysqli_error($conDB)]);
+        exit;
+    }
+    mysqli_stmt_bind_param($stmt, "s", $target_emp_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $row = $result ? mysqli_fetch_assoc($result) : null;
+    if ($result) mysqli_free_result($result);
+    mysqli_stmt_close($stmt);
+
+    if (!$row) {
+        echo json_encode(['status' => 404, 'message' => __('employee_not_found_or_inactive', 'The selected employee was not found or is not active.')]);
+        exit;
+    }
+
+    echo json_encode(['status' => 200, 'data' => $row]);
+}
+// =================================================================
+// == EMPLOYEE TRANSFER REQUEST: full job-title list for the picker
+// =================================================================
+elseif($ajaxType == 'get_all_jobs') {
+    // Multiple ac_jobs rows can share the same title (e.g. per-department job codes) -
+    // group them so the picker shows each title once, with all its ids bundled together.
+    $job_col = ($is_rtl ?? false) ? 'job_ar' : 'job';
+    $result = mysqli_query($conDB, "SELECT GROUP_CONCAT(`id`) AS `ids`, `$job_col` AS `job_name` FROM `ac_jobs` WHERE `$job_col` IS NOT NULL AND `$job_col` != '' GROUP BY `$job_col` ORDER BY `$job_col`");
+    $rows = [];
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $rows[] = ['id' => $row['ids'], 'job_name' => $row['job_name']];
+        }
+        mysqli_free_result($result);
+    }
+    echo json_encode(['status' => 200, 'data' => $rows]);
+}
+// =================================================================
+// == EMPLOYEE TRANSFER REQUEST: "New Direct Supervisor" candidates.
+// == Restricted to admin_login accounts on the company domain
+// == (@almutlak.com), same rule used for supervisor picking in
+// == payroll_approval_handler.php.
+// =================================================================
+elseif($ajaxType == 'get_transfer_supervisor_candidates') {
+    $exclude_emp_id = isset($_POST['exclude_emp_id']) ? trim((string)$_POST['exclude_emp_id']) : '';
+
+    $sql = "SELECT al.emp_id, e.name, al.email
+            FROM `admin_login` al
+            INNER JOIN `employees` e ON e.emp_id = al.emp_id
+            WHERE al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+              AND LOWER(TRIM(al.email)) LIKE '%@almutlak.com'
+              AND e.status = 1";
+    if ($exclude_emp_id !== '') {
+        $sql .= " AND al.emp_id != '" . mysqli_real_escape_string($conDB, $exclude_emp_id) . "'";
+    }
+    $sql .= " ORDER BY e.name";
+
+    $result = mysqli_query($conDB, $sql);
+    $rows = [];
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $rows[] = $row;
+        }
+        mysqli_free_result($result);
+    }
+    echo json_encode(['status' => 200, 'data' => $rows]);
 }
 // =================================================================
 // == NEW BLOCK TO FETCH ASSIGNED ASSETS FOR AN EMPLOYEE

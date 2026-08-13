@@ -45,8 +45,16 @@
 		`bank_list`.`bnk_id` AS `bnk_id`,
 		`section`.`section_name` AS `sectin_nme`,
 		`section`.`id` AS `sectin_id`,
+		`companies`.`comp_name` AS `compnme`,
+		`companies`.`comp_name_ar` AS `compnme_ar`,
 		`department`.`dep_nme` AS `deptnme`,
 		`department`.`dep_nme_ar` AS `deptnme_ar`,
+		`saudi_cities`.`name_en` AS `cityname`,
+		`saudi_cities`.`name_ar` AS `cityname_ar`,
+		`locations`.`name_en` AS `locationname`,
+		`locations`.`name_ar` AS `locationname_ar`,
+		`sub_departments`.`name_en` AS `subdeptname`,
+		`sub_departments`.`name_ar` AS `subdeptname_ar`,
 		`contract_period`.`period` AS `period`,
 		`emp_gosi`.`gosi_no`,
 		`emp_gosi`.`amount`,
@@ -101,7 +109,11 @@
 	LEFT JOIN `countries` ON `countries`.`id` = `employees`.`country`
 	LEFT JOIN `bank_list` ON `bank_list`.`bnk_id` = `employees`.`bank_name`
 	LEFT JOIN `section` ON `section`.`id` = `employees`.`sectin_nme`
+	LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
 	LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
+	LEFT JOIN `saudi_cities` ON `saudi_cities`.`id` = `employees`.`city_id`
+	LEFT JOIN `locations` ON `locations`.`id` = `employees`.`location_id`
+	LEFT JOIN `sub_departments` ON `sub_departments`.`id` = `employees`.`sub_dept_id`
 	LEFT JOIN `contract_period` ON `contract_period`.`id` = `employees`.`vac_period`
 	LEFT JOIN `emp_gosi` ON `emp_gosi`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN `ac_jobs` ON `ac_jobs`.`id` = `employees`.`actual_job`

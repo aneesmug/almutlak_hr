@@ -1765,6 +1765,7 @@ if (!function_exists('load_email_template')) {
             'smart_request' => 'smart_request_email_template.html',
             'business_trip' => 'smart_request_email_template.html',
             'salary_increment' => 'smart_request_email_template.html',
+            'employee_transfer_request' => 'smart_request_email_template.html',
             'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
@@ -2231,6 +2232,71 @@ if (!function_exists('get_request_details_for_email')) {
                 mysqli_stmt_close($stmt);
             }
             return false;
+        } elseif ($request_type === 'employee_transfer_request') {
+            // Fetch employee transfer request details
+            // NOTE: et.emp_id = request creator; et.to_supervisor_id = new supervisor being
+            // assigned (explicitly selected, may differ from the creator); et.target_emp_id =
+            // employee being transferred.
+            $sql = "SELECT et.*,
+                           tgt.name AS target_employee_name,
+                           d.dep_nme AS department_name,
+                           c.comp_name AS company_name,
+                           j.job AS job_title,
+                           fs.name AS from_supervisor_name,
+                           ts.name AS to_supervisor_name,
+                           req.name AS requester_name
+                    FROM emp_transfers et
+                    LEFT JOIN employees tgt ON et.target_emp_id = tgt.emp_id
+                    LEFT JOIN department d ON tgt.dept = d.id
+                    LEFT JOIN companies c ON tgt.comp_no = c.comp_id
+                    LEFT JOIN ac_jobs j ON tgt.actual_job = j.id
+                    LEFT JOIN employees fs ON et.from_supervisor_id = fs.emp_id
+                    LEFT JOIN employees ts ON et.to_supervisor_id = ts.emp_id
+                    LEFT JOIN employees req ON et.emp_id = req.emp_id
+                    WHERE et.request_inv_no = ?
+                    LIMIT 1";
+
+            $stmt = mysqli_prepare($conDB, $sql);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, 's', $inv_no);
+                if (mysqli_stmt_execute($stmt)) {
+                    $result = mysqli_stmt_get_result($stmt);
+                    if ($row = mysqli_fetch_assoc($result)) {
+                        $is_temporary = (($row['transfer_type'] ?? '') === 'temporary');
+                        $type_label = $is_temporary ? 'Temporary Employee Transfer Request' : 'Permanent Employee Transfer Request';
+
+                        $template_data['REQUEST_TYPE'] = $type_label;
+                        $template_data['REQUEST_TYPE_LOWER'] = strtolower($type_label);
+                        $template_data['REQUEST_TITLE'] = $type_label . ' - ' . ($row['target_employee_name'] ?? 'N/A');
+                        $template_data['EMPLOYEE_NAME'] = $row['target_employee_name'] ?? 'N/A';
+                        $template_data['EMPLOYEE_ID'] = $row['target_emp_id'] ?? 'N/A';
+                        $template_data['DEPARTMENT'] = $row['department_name'] ?? 'N/A';
+                        $template_data['DEPARTMENT_NAME'] = $row['department_name'] ?? 'N/A';
+                        $template_data['COMPANY_NAME'] = $row['company_name'] ?? 'N/A';
+                        $template_data['JOB_TITLE'] = $row['job_title'] ?? 'N/A';
+                        $template_data['DESIGNATION'] = $row['job_title'] ?? 'N/A';
+                        $template_data['START_DATE'] = isset($row['start_date']) ? date('d M Y', strtotime($row['start_date'])) : 'N/A';
+                        $template_data['END_DATE'] = !empty($row['end_date']) ? date('d M Y', strtotime($row['end_date'])) : 'N/A';
+                        $template_data['SUBMITTED_BY'] = $row['requester_name'] ?? 'N/A';
+
+                        $duration_text = $is_temporary
+                            ? ('temporarily, from ' . $template_data['START_DATE'] . ' to ' . $template_data['END_DATE'])
+                            : 'permanently';
+                        $template_data['EMAIL_MESSAGE'] = 'A request to transfer ' . ($row['target_employee_name'] ?? 'this employee')
+                            . ' from ' . ($row['from_supervisor_name'] ?? 'their current supervisor')
+                            . ' to ' . ($row['to_supervisor_name'] ?? 'a new supervisor')
+                            . ' (' . $duration_text . ') requires your approval.';
+                        $template_data['REQUEST_URL'] = $base_url . '/all_applied_employee_transfers.php?status=my_pending';
+
+                        mysqli_free_result($result);
+                        mysqli_stmt_close($stmt);
+                        return $template_data;
+                    }
+                    if ($result) mysqli_free_result($result);
+                }
+                mysqli_stmt_close($stmt);
+            }
+            return false;
         }
 
         // Unknown request type
@@ -2363,6 +2429,7 @@ if (!function_exists('handle_approval_action')) {
                     'vacation_request' => 'Vacation Request',
                     'smart_request' => 'Smart Request',
                     'general_request' => 'General Request',
+                    'employee_transfer_request' => 'Employee Transfer Request',
                     // Extend here as new request types are added
                 ];
                 if (isset($map[$type])) return $map[$type];
@@ -2534,6 +2601,8 @@ if (!function_exists('handle_approval_action')) {
                             $notification_url = "all_applied_vac.php?status=my_pending";
                         } elseif ($request_type === 'loan_request') {
                             $notification_url = "all_applied_loan.php?status=my_pending";
+                        } elseif ($request_type === 'employee_transfer_request') {
+                            $notification_url = "all_applied_employee_transfers.php?status=my_pending";
                         } else {
                             $notification_url = "all_requests.php"; // Fallback
                         }
@@ -2604,6 +2673,8 @@ if (!function_exists('handle_approval_action')) {
                                 $notification_url = "all_applied_vac.php?status=my_pending";
                             } elseif ($request_type === 'loan_request') {
                                 $notification_url = "all_applied_loan.php?status=my_pending";
+                            } elseif ($request_type === 'employee_transfer_request') {
+                                $notification_url = "all_applied_employee_transfers.php?status=my_pending";
                             } else {
                                 $notification_url = "all_requests.php"; // Fallback
                             }
@@ -2691,6 +2762,10 @@ if (!function_exists('handle_approval_action')) {
                             // General requests go to 'waiting_for_delivery' after approval
                             // They will be marked 'completed' when all items are delivered
                             $final_status = 'waiting_for_delivery';
+                        } elseif ($request_type === 'employee_transfer_request') {
+                            // The master employees.supervisor_id update happens right below;
+                            // nothing further is pending once that's done.
+                            $final_status = 'completed';
                         }
 
                         // Update main table with final status
@@ -2827,6 +2902,62 @@ if (!function_exists('handle_approval_action')) {
                         }
                         // --- [END NEW] ---
 
+                        // --- [NEW] APPLY EMPLOYEE TRANSFER ON FINAL APPROVAL ---
+                        // Moves the target employee to their new supervisor. Applies for both
+                        // temporary and permanent transfers - a temporary one is reverted later
+                        // by cron_revert_temp_transfers.php once end_date passes.
+                        if ($request_type === 'employee_transfer_request') {
+                            $sql_get_transfer = "SELECT `target_emp_id`, `from_supervisor_id`, `to_supervisor_id` AS `new_supervisor_id`, `transfer_type`
+                                                  FROM `$main_table_name` WHERE `$inv_column_name` = ? LIMIT 1";
+                            $stmt_get_transfer = mysqli_prepare($conDB, $sql_get_transfer);
+                            if ($stmt_get_transfer) {
+                                mysqli_stmt_bind_param($stmt_get_transfer, "s", $inv_no_safe);
+                                if (mysqli_stmt_execute($stmt_get_transfer)) {
+                                    $res_transfer = mysqli_stmt_get_result($stmt_get_transfer);
+                                    if ($row_transfer = mysqli_fetch_assoc($res_transfer)) {
+                                        $target_emp_id_safe = $row_transfer['target_emp_id'];
+                                        $new_supervisor_id_safe = $row_transfer['new_supervisor_id'];
+
+                                        $stmt_move = mysqli_prepare($conDB, "UPDATE `employees` SET `supervisor_id` = ? WHERE `emp_id` = ?");
+                                        if (!$stmt_move) throw new Exception("Prepare failed (transfer employee): " . mysqli_error($conDB));
+                                        mysqli_stmt_bind_param($stmt_move, "ss", $new_supervisor_id_safe, $target_emp_id_safe);
+                                        if (!mysqli_stmt_execute($stmt_move)) throw new Exception("Execute failed (transfer employee): " . mysqli_stmt_error($stmt_move));
+                                        mysqli_stmt_close($stmt_move);
+
+                                        if (class_exists('ActivityLogger')) {
+                                            ActivityLogger::logUpdate(
+                                                'Employee Transfer',
+                                                'helper_functions.php',
+                                                $target_emp_id_safe,
+                                                ['supervisor_id' => $row_transfer['from_supervisor_id']],
+                                                ['supervisor_id' => $new_supervisor_id_safe],
+                                                "Transferred employee {$target_emp_id_safe} from supervisor {$row_transfer['from_supervisor_id']} to {$new_supervisor_id_safe} ({$row_transfer['transfer_type']}) via request {$inv_no_safe}.",
+                                                'employees'
+                                            );
+                                        }
+
+                                        // Surface old/new supervisor info back to the caller so the UI can
+                                        // show it in the approval confirmation (e.g. a SweetAlert2 dialog).
+                                        $target_details = getEmployeeDetailsForApproval($conDB, $target_emp_id_safe);
+                                        $old_sup_details = getEmployeeDetailsForApproval($conDB, $row_transfer['from_supervisor_id']);
+                                        $new_sup_details = getEmployeeDetailsForApproval($conDB, $new_supervisor_id_safe);
+                                        $result_payload['employee_transfer_applied'] = [
+                                            'target_emp_id' => $target_emp_id_safe,
+                                            'target_emp_name' => $target_details['name'] ?? null,
+                                            'old_supervisor_id' => $row_transfer['from_supervisor_id'],
+                                            'old_supervisor_name' => $old_sup_details['name'] ?? null,
+                                            'new_supervisor_id' => $new_supervisor_id_safe,
+                                            'new_supervisor_name' => $new_sup_details['name'] ?? null,
+                                            'transfer_type' => $row_transfer['transfer_type'],
+                                        ];
+                                    }
+                                    if ($res_transfer) mysqli_free_result($res_transfer);
+                                }
+                                mysqli_stmt_close($stmt_get_transfer);
+                            }
+                        }
+                        // --- [END NEW] ---
+
                         // --- [FIX] NOTIFY CREATOR OF FINAL APPROVAL ---
                         $creator_id = null;
                         $creator_id_query = mysqli_query($conDB, "SELECT emp_id FROM `$main_table_name` WHERE `$inv_column_name` = '$inv_no_safe' LIMIT 1");
@@ -2855,6 +2986,8 @@ if (!function_exists('handle_approval_action')) {
                                     $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
                                 } elseif ($request_type === 'vacation_request') {
                                     $notification_url = "my_vacations.php";
+                                } elseif ($request_type === 'employee_transfer_request') {
+                                    $notification_url = "all_applied_employee_transfers.php?status=my_requests";
                                 } else {
                                     $notification_url = "all_requests.php"; // Fallback
                                 }
@@ -2982,6 +3115,8 @@ if (!function_exists('handle_approval_action')) {
                     $notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
                 } elseif ($request_type == 'vacation_request') {
                     $notification_url = "my_vacations.php"; // <-- Adjust this URL
+                } elseif ($request_type == 'employee_transfer_request') {
+                    $notification_url = "all_applied_employee_transfers.php?status=my_requests";
                 }
 
                 $approver_notification_url = "all_applied_vac.php"; // Default for approvers
@@ -2989,6 +3124,8 @@ if (!function_exists('handle_approval_action')) {
                     $approver_notification_url = "open_request.php?id=" . urlencode($inv_no_safe);
                 } elseif ($request_type == 'vacation_request') {
                     $approver_notification_url = "all_applied_vac.php"; // <-- Adjust this URL
+                } elseif ($request_type == 'employee_transfer_request') {
+                    $approver_notification_url = "all_applied_employee_transfers.php?status=my_pending";
                 }
 
 
@@ -3077,6 +3214,146 @@ if (!function_exists('handle_approval_action')) {
             return ['status' => 'error', 'message' => $errorMessage];
         }
     } // End function handle_approval_action
+}
+
+/**
+ * =================================================================
+ * True if $empid created an employee transfer request, or ever appears in one's
+ * approval chain (past or present level). Used to let an approver/requester reach
+ * all_applied_employee_transfers.php (e.g. from a notification/email link) even
+ * though the page's default Page Access is Administrator-only - without this,
+ * nobody outside the sys admin role could ever open the page to act on a request
+ * actually routed to them.
+ *
+ * @param mysqli $conDB Database connection
+ * @param string $empid Employee ID to check
+ * @return bool
+ */
+if (!function_exists('employee_transfer_user_has_stake')) {
+    function employee_transfer_user_has_stake($conDB, $empid)
+    {
+        $empid = trim((string)$empid);
+        if ($empid === '') {
+            return false;
+        }
+
+        $stmt = mysqli_prepare($conDB, "SELECT 1 FROM `emp_transfers` et
+            WHERE et.emp_id = ?
+               OR EXISTS (
+                    SELECT 1 FROM `request_approvers` ra
+                    JOIN `approval_request_types` art ON art.id = ra.request_type_id AND art.type_name = 'employee_transfer_request'
+                    WHERE ra.request_inv_no = et.request_inv_no AND ra.approver_id = ?
+               )
+            LIMIT 1");
+        if (!$stmt) {
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt, "ss", $empid, $empid);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $has_stake = $res && mysqli_num_rows($res) > 0;
+        if ($res) mysqli_free_result($res);
+        mysqli_stmt_close($stmt);
+
+        return $has_stake;
+    }
+}
+
+/**
+ * =================================================================
+ * Reverts temporary employee transfers whose end_date has passed.
+ * Called by cron_revert_temp_transfers.php. Only reverts supervisor_id
+ * back to the original supervisor if it still equals the transfer's
+ * to-supervisor (i.e. nothing else has changed it since) - this avoids
+ * clobbering a newer manual change or a second transfer.
+ *
+ * @param mysqli $conDB Database connection
+ * @return array Summary: ['reverted' => int, 'skipped' => int, 'errors' => array]
+ */
+if (!function_exists('revert_expired_temporary_transfers')) {
+    function revert_expired_temporary_transfers($conDB)
+    {
+        $summary = ['reverted' => 0, 'skipped' => 0, 'errors' => []];
+
+        $sql = "SELECT `id`, `request_inv_no`, `to_supervisor_id` AS `new_supervisor_id`, `target_emp_id`, `from_supervisor_id`
+                FROM `emp_transfers`
+                WHERE `transfer_type` = 'temporary'
+                  AND `current_status` = 'completed'
+                  AND `end_date` IS NOT NULL
+                  AND `end_date` < CURDATE()
+                  AND `reverted_at` IS NULL";
+        $result = mysqli_query($conDB, $sql);
+        if (!$result) {
+            $summary['errors'][] = 'Query failed: ' . mysqli_error($conDB);
+            return $summary;
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            $transfer_id = (int)$row['id'];
+            $target_emp_id = $row['target_emp_id'];
+            $from_supervisor_id = $row['from_supervisor_id'];
+            $new_supervisor_id = $row['new_supervisor_id'];
+
+            // Only revert if the employee is still under the temporary supervisor -
+            // if it changed since (manual edit, another transfer), leave it alone.
+            $check_stmt = mysqli_prepare($conDB, "SELECT `supervisor_id` FROM `employees` WHERE `emp_id` = ? LIMIT 1");
+            mysqli_stmt_bind_param($check_stmt, "s", $target_emp_id);
+            mysqli_stmt_execute($check_stmt);
+            $check_res = mysqli_stmt_get_result($check_stmt);
+            $current_supervisor = $check_res && ($r = mysqli_fetch_assoc($check_res)) ? $r['supervisor_id'] : null;
+            if ($check_res) mysqli_free_result($check_res);
+            mysqli_stmt_close($check_stmt);
+
+            if ((string)$current_supervisor !== (string)$new_supervisor_id) {
+                // Someone/something else already changed it - just stamp reverted_at so we stop checking it.
+                mysqli_query($conDB, "UPDATE `emp_transfers` SET `reverted_at` = NOW() WHERE `id` = " . $transfer_id);
+                $summary['skipped']++;
+                continue;
+            }
+
+            mysqli_begin_transaction($conDB);
+            try {
+                $stmt_revert = mysqli_prepare($conDB, "UPDATE `employees` SET `supervisor_id` = ? WHERE `emp_id` = ?");
+                if (!$stmt_revert) throw new Exception(mysqli_error($conDB));
+                mysqli_stmt_bind_param($stmt_revert, "ss", $from_supervisor_id, $target_emp_id);
+                if (!mysqli_stmt_execute($stmt_revert)) throw new Exception(mysqli_stmt_error($stmt_revert));
+                mysqli_stmt_close($stmt_revert);
+
+                $stmt_stamp = mysqli_prepare($conDB, "UPDATE `emp_transfers` SET `reverted_at` = NOW() WHERE `id` = ?");
+                if (!$stmt_stamp) throw new Exception(mysqli_error($conDB));
+                mysqli_stmt_bind_param($stmt_stamp, "i", $transfer_id);
+                if (!mysqli_stmt_execute($stmt_stamp)) throw new Exception(mysqli_stmt_error($stmt_stamp));
+                mysqli_stmt_close($stmt_stamp);
+
+                mysqli_commit($conDB);
+                $summary['reverted']++;
+
+                if (function_exists('create_browser_notification')) {
+                    $msg = "Temporary transfer {$row['request_inv_no']} has ended; supervisor reverted automatically.";
+                    create_browser_notification($conDB, (int)$new_supervisor_id, "Temporary Transfer Ended", $msg, "all_applied_employee_transfers.php?status=my_requests");
+                    create_browser_notification($conDB, (int)$from_supervisor_id, "Employee Returned", $msg, "all_applied_employee_transfers.php?status=my_pending");
+                }
+
+                if (class_exists('ActivityLogger')) {
+                    ActivityLogger::logUpdate(
+                        'Employee Transfer Auto-Revert',
+                        'cron_revert_temp_transfers.php',
+                        $target_emp_id,
+                        ['supervisor_id' => $new_supervisor_id],
+                        ['supervisor_id' => $from_supervisor_id],
+                        "Auto-reverted temporary transfer {$row['request_inv_no']} for employee {$target_emp_id} back to supervisor {$from_supervisor_id}.",
+                        'employees'
+                    );
+                }
+            } catch (Exception $e) {
+                mysqli_rollback($conDB);
+                $summary['errors'][] = "Transfer #{$transfer_id} ({$row['request_inv_no']}): " . $e->getMessage();
+            }
+        }
+
+        if ($result) mysqli_free_result($result);
+        return $summary;
+    }
 }
 
 

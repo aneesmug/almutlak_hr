@@ -24,6 +24,8 @@ if (!function_exists('get_special_access_labels')) {
             'manage_global_request_blocks' => 'Manage Request Type Blocks (Global, All Employees)',
             'manage_department_settings' => 'Access App Settings - Departments Tab',
             'manage_job_title_settings' => 'Access App Settings - Job Titles Tab',
+            'manage_location_settings' => 'Access App Settings - Locations Tab',
+            'manage_sub_department_settings' => 'Access App Settings - Sub-Departments Tab',
             'payroll_checklist_upload_excel' => 'Payroll Checklist Report: Upload Payroll Excel Button',
             'payroll_checklist_review_import' => 'Payroll Checklist Report: Review Manager File & Import Button',
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
@@ -40,6 +42,7 @@ if (!function_exists('get_special_access_labels')) {
             'view_all_employees' => 'View All Employees (Cross-Department/Company Access)',
             'view_employee_banking_details' => 'Employee Master: View Banking/IBAN/GOSI Details',
             'view_employee_documents' => 'Employee Master: View Uploaded Documents (Passport/Iqama, etc.)',
+            'request_employee_transfer' => 'Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)',
         ] + get_special_access_page_labels();
     }
 }
@@ -68,6 +71,7 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_all_applied_salary_increment' => 'Access Page: All Applied Salary Increments',
             'access_salary_increment_status_history' => 'Access Page: Salary Increment Status History',
             'access_edit_employee' => 'Access Page: Edit Employee',
+            'access_all_applied_employee_transfers' => 'Access Page: All Employee Transfer Requests',
         ];
     }
 }
@@ -109,6 +113,7 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_vacation_salary_below_min_days',
                     'manage_employee_request_block',
                     'manage_employee_request_type_block',
+                    'request_employee_transfer',
                 ],
             ],
             'Vacation Visibility' => [
@@ -131,6 +136,8 @@ if (!function_exists('get_special_access_categories')) {
                 'keys' => [
                     'manage_department_settings',
                     'manage_job_title_settings',
+                    'manage_location_settings',
+                    'manage_sub_department_settings',
                     'manage_global_request_blocks',
                     'manage_loan_settings',
                     'manage_vacation_payroll_settings',
@@ -252,18 +259,18 @@ if (!function_exists('user_has_special_access')) {
 if (!function_exists('get_blockable_request_type_labels')) {
     function get_blockable_request_type_labels() {
         return [
-            'smart_request' => 'Smart Request',
-            'loan_request' => 'Loan Request',
-            'vacation_annual' => 'Vacation - Fly (Annual)',
-            'vacation_emergency' => 'Vacation - Fly (Emergency)',
-            'vacation_local' => 'Vacation - Local Vacation',
-            'vacation_encashed' => 'Vacation - Encashed',
-            'excuse_leave' => 'Leave / Excuse (Sick, Marriage, Hajj, etc.)',
-            'resignation_request' => 'Resignation Request',
-            'rejoin_request' => 'Rejoin Request',
-            'general_request' => 'General Request',
-            'business_trip' => 'Business Trip',
-            'salary_increment' => 'Salary Increment',
+            'smart_request' => __('smart_request', 'Smart Request'),
+            'loan_request' => __('loan_request', 'Loan Request'),
+            'vacation_annual' => __('vacation_annual_request_type', 'Vacation - Fly (Annual)'),
+            'vacation_emergency' => __('vacation_emergency_request_type', 'Vacation - Fly (Emergency)'),
+            'vacation_local' => __('vacation_local_request_type', 'Vacation - Local Vacation'),
+            'vacation_encashed' => __('vacation_encashed_request_type', 'Vacation - Encashed'),
+            'excuse_leave' => __('excuse_leave_request_type', 'Leave / Excuse (Sick, Marriage, Hajj, etc.)'),
+            'resignation_request' => __('resignation_request', 'Resignation Request'),
+            'rejoin_request' => __('rejoin_request', 'Rejoin Request'),
+            'general_request' => __('general_request', 'General Request'),
+            'business_trip' => __('business_trip', 'Business Trip'),
+            'salary_increment' => __('salary_increment', 'Salary Increment'),
         ];
     }
 }

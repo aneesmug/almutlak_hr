@@ -873,13 +873,17 @@ $(document).ready(function() {
         Swal.fire({
             title: __('resignation_details') || 'Resignation Details',
             html: generateResignationDetailsHTML(data),
-            icon: 'info',
-            width: '700px',
+            width: '40%',
+            padding: '20px',
+            allowOutsideClick: false,
             confirmButtonText: __('close') || 'Close',
+            confirmButtonColor: APP_COLORS.primary,
             customClass: {
-                popup: 'resignation-details-popup'
+                popup: 'vacation-modal-popup',
+                title: 'vacation-modal-title',
+                confirmButton: 'btn-modern-confirm'
             }
-        ,allowOutsideClick:false});
+        });
     });
     
     // Approve Resignation - Start Multi-Step Wizard (backup for class-based triggers)
@@ -1324,24 +1328,38 @@ function promptRejection(resignationId, empName) {
  * Generate HTML for resignation details view
  */
 function generateResignationDetailsHTML(data) {
+    const statusMeta = {
+        pending: { label: __('pending') || 'Pending', cls: 'et-status-warning' },
+        approved: { label: __('approved') || 'Approved', cls: 'et-status-success' },
+        rejected: { label: __('rejected') || 'Rejected', cls: 'et-status-danger' },
+        cancelled: { label: __('cancelled') || 'Cancelled', cls: 'et-status-secondary' }
+    };
+    const sMeta = statusMeta[data.status] || { label: data.status, cls: 'et-status-secondary' };
+
+    const infoRow = (icon, label, value) => `
+        <div class="et-report-row">
+            <div class="et-report-row-label"><i class="fa ${icon}"></i> ${label}</div>
+            <div class="et-report-row-value">${value || 'N/A'}</div>
+        </div>`;
+
     return `
-        <div class="resignation-details text-left">
-            <div class="details-section mb-3">
-                <h5 class="text-primary"><i class="fas fa-user"></i> ${__('employee_information') || 'Employee Information'}</h5>
-                <table class="table table-bordered">
-                    <tr><td><strong>${__('emp_id') || 'Employee ID'}:</strong></td><td>${data.empId}</td></tr>
-                    <tr><td><strong>${__('id_iqama') || 'ID/Iqama'}:</strong></td><td>${data.iqama}</td></tr>
-                    <tr><td><strong>${__('name') || 'Name'}:</strong></td><td>${data.name}</td></tr>
-                    <tr><td><strong>${__('designation') || 'Designation'}:</strong></td><td>${data.designation}</td></tr>
-                    <tr><td><strong>${__('department') || 'Department'}:</strong></td><td>${data.department}</td></tr>
-                </table>
+        <div class="et-report">
+            <div class="et-report-header">
+                <div class="et-report-avatar"><i class="fa fa-user"></i></div>
+                <div class="et-report-heading">
+                    <div class="et-report-name">${data.name || ''}</div>
+                    <div class="et-report-subid">${__('emp_id') || 'Employee ID'}: ${data.empId || ''} &bull; ${data.iqama || ''}</div>
+                </div>
+                <div class="et-report-status-pill ${sMeta.cls}">${sMeta.label}</div>
             </div>
-            <div class="details-section">
-                <h5 class="text-danger"><i class="fas fa-calendar-times"></i> ${__('resignation_information') || 'Resignation Information'}</h5>
-                <table class="table table-bordered">
-                    <tr><td><strong>${__('last_working_day') || 'Last Working Day'}:</strong></td><td class="text-danger font-weight-bold">${formatDate(data.lastDay)}</td></tr>
-                    <tr><td><strong>${__('status') || 'Status'}:</strong></td><td><span class="badge badge-${getStatusBadgeClass(data.status)}">${data.status.toUpperCase()}</span></td></tr>
-                </table>
+            <div class="vacation-card">
+                <div class="vacation-card-header"><i class="fa fa-id-card"></i> ${__('employee_information') || 'Employee Information'}</div>
+                ${infoRow('fa-id-badge', __('designation') || 'Designation', data.designation)}
+                ${infoRow('fa-sitemap', __('department') || 'Department', data.department)}
+            </div>
+            <div class="vacation-card">
+                <div class="vacation-card-header"><i class="fa fa-file-signature"></i> ${__('resignation_information') || 'Resignation Information'}</div>
+                ${infoRow('fa-calendar-times', __('last_working_day') || 'Last Working Day', formatDate(data.lastDay))}
             </div>
         </div>
     `;
@@ -1364,15 +1382,3 @@ function formatDate(dateString) {
     return `${day}-${month}-${year}`;
 }
 
-/**
- * Utility: Get status badge class
- */
-function getStatusBadgeClass(status) {
-    const statusMap = {
-        'pending': 'warning',
-        'approved': 'success',
-        'rejected': 'danger',
-        'cancelled': 'secondary'
-    };
-    return statusMap[status] || 'info';
-}

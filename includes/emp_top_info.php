@@ -24,16 +24,42 @@ $can_modify_employee = (
 
 // Effective request-block status for this employee (global block XOR employee override),
 // used to hide "More Actions" menu items for request types this employee cannot submit.
+// Sys admin always sees every action, regardless of block settings in
+// App Settings -> Special Access.
 $empIdForBlockCheck = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
-$isLoanBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'loan_request')['blocked'];
-$isExcuseLeaveBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'excuse_leave')['blocked'];
-$isResignationBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'resignation_request')['blocked'];
-$isVacationAnnualBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_annual')['blocked'];
-$isVacationEmergencyBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_emergency')['blocked'];
-$isVacationLocalBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
-$isVacationEncashedBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
+$isLoanBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'loan_request')['blocked'];
+$isExcuseLeaveBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'excuse_leave')['blocked'];
+$isResignationBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'resignation_request')['blocked'];
+$isVacationAnnualBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_annual')['blocked'];
+$isVacationEmergencyBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_emergency')['blocked'];
+$isVacationLocalBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_local')['blocked'];
+$isVacationEncashedBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'vacation_encashed')['blocked'];
 $isAllVacationBlocked = ($isVacationAnnualBlocked && $isVacationEmergencyBlocked && $isVacationLocalBlocked && $isVacationEncashedBlocked);
-$isBusinessTripBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'business_trip')['blocked'];
+$isBusinessTripBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'business_trip')['blocked'];
+
+// Can the current user request an Employee Transfer for this employee? Either
+// they're already a Direct Supervisor of someone (any employee), a system
+// admin, or have been explicitly granted the 'request_employee_transfer'
+// Special Access key (App Settings -> Special Access) - and this employee
+// isn't themselves and doesn't already report to them.
+$is_direct_supervisor_for_transfer = false;
+if (!empty($empid)) {
+	$sup_check_transfer = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM `employees` WHERE `supervisor_id` = '" . mysqli_real_escape_string($conDB, (string)$empid) . "' AND `status` = 1");
+	if ($sup_check_transfer && ($sup_row_transfer = mysqli_fetch_assoc($sup_check_transfer))) {
+		$is_direct_supervisor_for_transfer = ((int)$sup_row_transfer['cnt'] > 0);
+	}
+	if ($sup_check_transfer) mysqli_free_result($sup_check_transfer);
+}
+$can_request_employee_transfer = (
+	(
+		$is_direct_supervisor_for_transfer
+		|| ($is_system_admin ?? false)
+		|| user_has_special_access($conDB, $empid ?? '', 'request_employee_transfer', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+	)
+	&& $current_page_name !== 'profile.php'
+	&& (string)($emprow['empid'] ?? '') !== (string)($empid ?? '')
+	&& (string)($emprow['supervisor_id'] ?? '') !== (string)($empid ?? '')
+);
 
 // Get available vacation balance for modal actions
 $displayBalance = 0;
@@ -78,7 +104,7 @@ if ($emprow['status'] == 1) {
 			$tenureOk = false;
 		}
 	}
-	$isSalaryIncrementBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck, 'salary_increment')['blocked'];
+	$isSalaryIncrementBlocked = !($is_system_admin ?? false) && is_employee_request_blocked($conDB, $empIdForBlockCheck, 'salary_increment')['blocked'];
 
 	if (($isSupervisorOfThisEmp || $is_system_admin) && $tenureOk && !$isSalaryIncrementBlocked && $current_page_name !== 'profile.php') {
 		$deptNameForSalaryIncrement = '';
@@ -90,6 +116,11 @@ if ($emprow['status'] == 1) {
 			if ($deptNameQuery) mysqli_free_result($deptNameQuery);
 		}
 		$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"openSalaryIncrementApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['iqama'] ?? '') . "', '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', '" . htmlspecialchars($deptNameForSalaryIncrement, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['joining_date'] ?? '') . "')\" role=\"button\"><i class=\"fa fa-arrow-trend-up\"></i><span>" . __('apply_salary_increment', 'Apply Salary Increment') . "</span></div>";
+	}
+
+	// Request Employee Transfer (Direct Supervisor only, requesting someone who isn't already their report)
+	if ($can_request_employee_transfer) {
+		$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"openEmployeeTransferModal('" . htmlspecialchars((string)$empid, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['empid'], ENT_QUOTES) . "')\" role=\"button\"><i class=\"fa fa-people-arrows\"></i><span>" . __('request_employee_transfer', 'Request Employee Transfer') . "</span></div>";
 	}
 
 	// *IT ACTIONS
@@ -252,7 +283,7 @@ if ($isEmployee !== true) {
 				<!-- Employee Info -->
 				<div class="profile-header-info">
 					<h1><?= getDisplayName($emprow['name']) ?></h1>
-					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . getDisplayName($emprow["sectin_nme"])) ?></p>
+					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . (($is_rtl ?? false ? ($emprow["compnme_ar"] ?? $emprow["compnme"]) : $emprow["compnme"]) ?? '')) ?></p>
 					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
 					<p><i class="fa fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
 					<p><i class="fa fa-globe-asia"></i> <?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>

@@ -14,6 +14,7 @@
 	require_once __DIR__ . '/includes/db.php';
 	require_once __DIR__ . '/includes/session_check.php';
     require_once __DIR__ . '/includes/helper_functions.php';
+    require_once __DIR__ . '/includes/special_access_helper.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 	if(mysqli_num_rows($query) == 1){
 	include("./includes/avatar_select.php");
@@ -30,6 +31,10 @@
 			$emprow = $rec;
 		}
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
+		$canViewSalary = (
+			($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_salary_value', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
 		$hours_in_day   = 24;
 		$minutes_in_hour= 60;
 		$seconds_in_mins= 60;
@@ -379,7 +384,7 @@
                                                 <table class="table table-sm">
                                                     <tbody>
                                                         <tr><th style="width:150px;"><?=__('department_label')?>:</th><td><?=$emprow['deptnme']; ?></td></tr>
-                                                        <tr><th><?=__('section_label')?>:</th><td><?=$emprow['sectin_nme']; ?></td></tr>
+                                                        <tr><th><?=__('company_label')?>:</th><td><?=($is_rtl ?? false ? ($emprow['compnme_ar'] ?? $emprow['compnme']) : $emprow['compnme']); ?></td></tr>
                                                         <tr><th><?=__('current_position')?>:</th><td><?=($is_rtl ?? false ? $emprow['jobname_ar']:$emprow['jobname']); ?></td></tr>
                                                         <tr><th><?=__('date_hired_label')?>:</th><td><?=$emprow['joining_date']; ?></td></tr>
                                                         <tr>
@@ -400,6 +405,7 @@
                                         <div class="row two-col">
                                             <div class="col-md-6">
                                                 <h5><?=__('salary_breakdown_header')?></h5>
+                                                <?php if ($canViewSalary): ?>
                                                 <table class="table table-sm">
                                                     <tbody>
                                                     <?php
@@ -413,6 +419,9 @@
                                                     <tr class="bg-light"><th class="font-weight-bold"><?=__('total_salary_label')?>:</th><td class="font-weight-bold"><?=number_format($salary_get, 2); ?> <?=__('sar_currency')?></td></tr>
                                                     </tbody>
                                                 </table>
+                                                <?php else: ?>
+                                                <p class="text-muted"><i class="fa fa-lock"></i> <?=__('salary_hidden_no_access')?></p>
+                                                <?php endif; ?>
                                             </div>
                                             <div class="col-md-6">
                                                 <h5 ><?=__('bank_insurance_header')?></h5>

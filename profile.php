@@ -2062,8 +2062,8 @@ RTL Support
                         </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('section_name_header') ?></span>
-                        <span class="info-value"><?= getDisplayName($emprow['sectin_nme'] ?? null) ?></span>
+                        <span class="info-label"><?= __('company_label') ?></span>
+                        <span class="info-value"><?= htmlspecialchars((($is_rtl ?? false) ? ($emprow['compnme_ar'] ?? $emprow['compnme']) : $emprow['compnme']) ?? 'N/A') ?></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><?= __('sponsorship_label') ?></span>

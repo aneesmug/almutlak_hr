@@ -336,7 +336,15 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
             .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
             .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
-            .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
+            .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
+            .request-time-footer {
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                font-size: 0.78em; color: #6c757d;
+            }
+            .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+            .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+            .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+            .request-time-footer i { color: #a0a8c0; }
             .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
 			.btn-block + .btn-block{ margin-top: 0rem !important; }
             .detail-item{
@@ -422,6 +430,10 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                         <?=__('actions')?>
                                                                     </button>
                                                                     <div class="dropdown-menu dropdown-menu-right">
+                                                                        <a class="dropdown-item" href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank">
+                                                                            <i class="fa fa-file-pdf"></i> <?=__('report')?>
+                                                                        </a>
+                                                                        <div class="dropdown-divider"></div>
                                                                         <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" style="cursor: pointer;">
                                                                             <i class="fa fa-history"></i> <?=__('history')?>
                                                                         </a>
@@ -524,9 +536,10 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                             <?php endif; ?>
                                                         </div>
                                                         <div class="card-footer">
-                                                            <a href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect">
-                                                                <i class="fa fa-eye"></i> <?=__('view')?>
-                                                            </a>
+                                                            <div class="request-time-footer">
+                                                                <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($loan['created_at'] ?? '') : timeAgo($loan['created_at'] ?? '')) ?></span>
+                                                                <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($loan['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

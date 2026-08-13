@@ -22,7 +22,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     $salary = filter_var($_POST['salary'] ?? 0, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
     $joining_date = trim($_POST['joining_date'] ?? '');
     $department = trim($_POST['department'] ?? '');
-    $sectin_nme = trim($_POST['sectin_nme'] ?? '');
+    $comp_no = trim($_POST['comp_no'] ?? '');
+    $city_id = !empty($_POST['city_id']) ? (int)$_POST['city_id'] : null;
+    $location_id = !empty($_POST['location_id']) ? (int)$_POST['location_id'] : null;
+    $sub_dept_id = !empty($_POST['sub_dept_id']) ? (int)$_POST['sub_dept_id'] : null;
     $country = trim($_POST['country'] ?? '');
     $dob = trim($_POST['dob'] ?? '');
     $sex = trim($_POST['sex'] ?? 'male');
@@ -55,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 
     // --- Form Validation ---
-    if (empty($name_emp) || empty($emp_id) || empty($iqama) || empty($department) || empty($sectin_nme) || empty($salary)) {
+    if (empty($name_emp) || empty($emp_id) || empty($iqama) || empty($department) || empty($comp_no) || empty($salary)) {
         $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">Please fill out all required fields in this form!</div>";
     } else {
         // --- Database Operations with Prepared Statements ---
@@ -70,12 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
             $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">This employee no. (\"$emp_id\") is already registered!</div>";
         } else {
             // Insert new employee record
-            $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`, `fly`, `dept`, `sectin_nme`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'no', ?, ?, ?, ?, ?, ?, ?)";
-            
+            $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
             $stmt_insert = $conDB->prepare($sql);
             $stmt_insert->bind_param(
-                "ssssdssssssssss",
+                "ssssdsssssiiissss",
                 $name_emp,
                 $emp_id,
                 $iqama,
@@ -85,7 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                 $date_reg,
                 $image_path,
                 $department,
-                $sectin_nme,
+                $comp_no,
+                $city_id,
+                $location_id,
+                $sub_dept_id,
                 $country,
                 $dob,
                 $sex,
@@ -269,8 +275,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 											</select>
 											</div>
 											<div class="form-group col-md-3">
-                                                <label for="sectin_nme" class="col-form-label">Section<span class="text-danger">*</span></label>
-												<select class="form-control" name="sectin_nme" id="sectin_nme" required /></select>
+                                                <label for="comp_no" class="col-form-label"><?= __("company_label") ?><span class="text-danger">*</span></label>
+												<select class="form-control select2" name="comp_no" id="comp_no" required>
+													<option value=""><?= __("select_option") ?></option>
+													<?php
+														$query_companies = mysqli_query($conDB, "SELECT * FROM `companies` ORDER BY `comp_name` REGEXP '^[^A-Za-z]' ASC, `comp_name`");
+														while ($rec_con = mysqli_fetch_assoc($query_companies)) {
+													?>
+														<option value="<?= $rec_con["comp_id"] ?>"><?= ($is_rtl ?? false ? $rec_con["comp_name_ar"] : $rec_con["comp_name"]) ?></option>
+													<?php } ?>
+												</select>
+                                            </div>
+                                            <div class="form-group col-md-3">
+                                                <label for="city_id" class="col-form-label"><?= __("city_label", "City") ?></label>
+                                                <select class="form-control select2" name="city_id" id="city_id">
+                                                <option value=""><?= __("select_option") ?></option>
+                                                <?php
+                                                    $query_cities = mysqli_query($conDB, "SELECT `id`, `name_en`, `name_ar` FROM `saudi_cities` ORDER BY `name_en` ASC");
+                                                    while ($rec = mysqli_fetch_assoc($query_cities)) {
+                                                ?>
+                                                    <option value="<?= $rec["id"] ?>"><?= ($is_rtl ?? false ? $rec["name_ar"] : $rec["name_en"]) ?></option>
+                                                <?php } ?>
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-3">
+                                                <label for="location_id" class="col-form-label"><?= __("location_label", "Location") ?></label>
+                                                <select class="form-control select2" name="location_id" id="location_id">
+                                                <option value=""><?= __("select_a_city_first", "Select a City First") ?></option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-3">
+                                                <label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
+                                                <select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
+                                                <option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+                                                </select>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="mobile" class="col-form-label">Mobile No.</label>
@@ -371,27 +409,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 		<script type="text/javascript">
+<?php
+	$all_locations_json = [];
+	$query_all_locations = mysqli_query($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC");
+	while ($rec = mysqli_fetch_assoc($query_all_locations)) { $all_locations_json[] = $rec; }
+
+	$all_sub_depts_json = [];
+	$query_all_sub_depts = mysqli_query($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC");
+	while ($rec = mysqli_fetch_assoc($query_all_sub_depts)) { $all_sub_depts_json[] = $rec; }
+?>
+const ALL_LOCATIONS = <?= json_encode($all_locations_json) ?>;
+const ALL_SUB_DEPARTMENTS = <?= json_encode($all_sub_depts_json) ?>;
+const IS_RTL_LOCALE = <?= ($is_rtl ?? false) ? 'true' : 'false' ?>;
+
+function populateLocationOptions(cityId, selectedLocationId) {
+	const $select = $('#location_id');
+	const isSelect2 = $select.hasClass('select2-hidden-accessible');
+	if (!cityId) {
+		$select.empty().append('<option value=""><?= __("select_a_city_first", "Select a City First") ?></option>');
+		if (isSelect2) $select.trigger('change');
+		return;
+	}
+	let options = '<option value=""><?= __("select_option") ?></option>';
+	ALL_LOCATIONS.filter(loc => String(loc.city_id) === String(cityId)).forEach(loc => {
+		const selected = (String(loc.id) === String(selectedLocationId)) ? 'selected' : '';
+		const label = IS_RTL_LOCALE ? loc.name_ar : loc.name_en;
+		options += `<option value="${loc.id}" ${selected}>${label}</option>`;
+	});
+	$select.html(options);
+	if (isSelect2) $select.trigger('change');
+}
+
+function populateSubDeptOptions(departmentId, selectedSubDeptId) {
+	const $select = $('#sub_dept_id');
+	const isSelect2 = $select.hasClass('select2-hidden-accessible');
+	if (!departmentId) {
+		$select.empty().append('<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>');
+		if (isSelect2) $select.trigger('change');
+		return;
+	}
+	let options = '<option value=""><?= __("select_option") ?></option>';
+	ALL_SUB_DEPARTMENTS.filter(sd => String(sd.department_id) === String(departmentId)).forEach(sd => {
+		const selected = (String(sd.id) === String(selectedSubDeptId)) ? 'selected' : '';
+		const label = IS_RTL_LOCALE ? sd.name_ar : sd.name_en;
+		options += `<option value="${sd.id}" ${selected}>${label}</option>`;
+	});
+	$select.html(options);
+	if (isSelect2) $select.trigger('change');
+}
+
 $(document).ready(function() {
 
-    $("#department").bind("change", function() {
-        const deptData = $("#department").val();
-        $.ajax({
-                url: './includes/DepartmentSelect.php',
-                type: 'POST',
-                data: {department:deptData},
-                dataType: 'json',
-                success: (res) => {
-                    let options = '<option value="">Select Section</option>';
-                    res.data.forEach(item => {
-                        options += `<option value="${item.id}" >${item.section_name}</option>`;
-                    });
-                    $('#sectin_nme').html(options);
-                },
-                error: (xhr, status, error) => {
-                    $('#sectin_nme').html('<option value="">Error loading sections</option>');
-                    console.error('AJAX Error:', status, error);
-                }
-            });
+    $('#city_id').on('change', function() {
+        populateLocationOptions($(this).val(), '');
+    });
+    $('#department').on('change', function() {
+        populateSubDeptOptions($(this).val(), '');
     });
 
                 $('form').parsley();

@@ -112,7 +112,7 @@
             <th>Emp. ID</th>
             <th>Employee Name</th>
             <th>Department</th>
-            <th>sectin_nme</th>
+            <th>comp_no</th>
             <th>country</th>
             <th>CIVIL STATUS</th>
             <th>Sex</th>
@@ -149,7 +149,7 @@
         $emp_status = $rec["status"];
         $emp_status_fly = $rec["fly"];
         $emptype = $rec["emptype"];        
-        $sectin_nme = $rec["sectin_nme"];
+        $comp_no = $rec["comp_no"];
         $country = $rec["country"];
         $mar_status = $rec["mar_status"];
         $sex = $rec["sex"];
@@ -163,7 +163,7 @@
                     <th><?=$emp_id; ?></th>
                     <th><?=$name; ?></th>
                     <th><?=$dept; ?></th>
-                    <th><?=$sectin_nme; ?></th>
+                    <th><?=$comp_no; ?></th>
                     <th><?=$country; ?></th>
                     <th><?=$mar_status; ?></th>
                     <th><?=$sex; ?></th>

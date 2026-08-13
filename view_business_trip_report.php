@@ -34,15 +34,16 @@ if (mysqli_num_rows($query) == 1) {
                 e.emp_id,
                 d.dep_nme AS dept_name,
                 d.dep_nme_ar AS dept_name_ar,
-                s.section_name,
-                fc.name_en as from_city_name_en, 
-                fc.name_ar as from_city_name_ar, 
-                tc.name_en as to_city_name_en, 
-                tc.name_ar as to_city_name_ar 
-            FROM emp_business_trip bt 
-            LEFT JOIN employees e ON bt.emp_id = e.emp_id 
+                comp.comp_name,
+                comp.comp_name_ar,
+                fc.name_en as from_city_name_en,
+                fc.name_ar as from_city_name_ar,
+                tc.name_en as to_city_name_en,
+                tc.name_ar as to_city_name_ar
+            FROM emp_business_trip bt
+            LEFT JOIN employees e ON bt.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
-            LEFT JOIN section s ON e.sectin_nme = s.id
+            LEFT JOIN companies comp ON e.comp_no = comp.comp_id
             LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id 
             LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id 
             WHERE bt.request_inv_no = ? LIMIT 1");

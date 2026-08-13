@@ -304,9 +304,36 @@ if ($can_see_all_depts) {
             .detail-item i.fad { margin-right: 15px; width: 20px; text-align: center; font-size: 1.2em; }
             .detail-item i.duotone-info { --fa-primary-color: #4a90e2; --fa-secondary-color: #a8d0ff; --fa-secondary-opacity: 0.4; }
             .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
-            .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; overflow: visible; padding: 1rem; }
+            .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; overflow: visible; padding: 1rem; }
+            .request-time-footer {
+                display: flex; justify-content: space-between; align-items: center; gap: 8px;
+                font-size: 0.78em; color: #6c757d;
+            }
+            .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+            .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+            .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+            .request-time-footer i { color: #a0a8c0; }
             .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-            
+
+            /* --- Resignation: "View" details modal --- */
+            .et-report { text-align: left; }
+            .et-report-header { display: flex; align-items: center; gap: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 10px; padding: 18px 20px; margin-bottom: 18px; }
+            .et-report-avatar { width: 48px; height: 48px; min-width: 48px; border-radius: 50%; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+            .et-report-heading { flex: 1; min-width: 0; }
+            .et-report-name { font-size: 17px; font-weight: 700; line-height: 1.3; }
+            .et-report-subid { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+            .et-report-status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+            .et-status-warning { background: #fff3cd; color: #856404; }
+            .et-status-success { background: #d4edda; color: #155724; }
+            .et-status-danger { background: #f8d7da; color: #721c24; }
+            .et-status-primary { background: #d1ecf1; color: #0c5460; }
+            .et-status-secondary { background: #e2e3e5; color: #383d41; }
+            .et-report-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eef0f5; font-size: 13.5px; }
+            .et-report-row:last-child { border-bottom: none; }
+            .et-report-row-label { color: #858796; font-weight: 600; }
+            .et-report-row-label i { width: 16px; margin-right: 6px; color: #4e73df; }
+            .et-report-row-value { color: #3a3b45; font-weight: 600; text-align: right; }
+
             /* Action Buttons Layout */
             .request-card .card-footer .btn { flex: 1; margin: 0; }
             .request-card .card-footer .btn-group { position: relative; }
@@ -451,7 +478,6 @@ if ($can_see_all_depts) {
                                                             <span><?= htmlspecialchars($resignation['employee_name']) ?></span>
                                                             <div class="d-flex align-items-center" style="gap: 8px;">
                                                                 <span><?=__('emp_id')?>: <?= htmlspecialchars($resignation['employee_id']) ?></span>
-                                                                <?php if ($can_take_action || $can_cancel_this_resignation): ?>
                                                                 <div class="btn-group" role="group">
                                                                     <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="<?=__('actions')?>">
                                                                         <?=__('actions')?>
@@ -463,7 +489,24 @@ if ($can_see_all_depts) {
                                                                         $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
                                                                         $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
                                                                         ?>
+                                                                        <button type="button" class="dropdown-item viewResignation"
+                                                                                style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;"
+                                                                                data-id="<?= $resignation['id'] ?>"
+                                                                                data-emp-id="<?= $resignation['employee_id'] ?>"
+                                                                                data-iqama="<?= $resignation['iqama'] ?>"
+                                                                                data-name="<?= htmlspecialchars($resignation['employee_name']) ?>"
+                                                                                data-designation="<?= htmlspecialchars($resignation['designation'] ?? 'N/A') ?>"
+                                                                                data-department="<?= htmlspecialchars($resignation['department'] ?? 'N/A') ?>"
+                                                                                data-last-day="<?= $resignation['last_working_day'] ?>"
+                                                                                data-status="<?= $resignation['status'] ?>">
+                                                                            <i class="fa fa-eye"></i> <?=__('view')?>
+                                                                        </button>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item" href="resignation_report_details.php?id=<?= $resignation['id'] ?>&emp_id=<?= $resignation['employee_id'] ?>" target="_blank">
+                                                                            <i class="fa fa-file-pdf"></i> <?=__('report')?>
+                                                                        </a>
                                                                         <?php if ($can_take_action): ?>
+                                                                        <div class="dropdown-divider"></div>
                                                                         <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')">
                                                                             <i class="fa fa-check text-success"></i> <?=__('approve')?>
                                                                         </a>
@@ -472,14 +515,13 @@ if ($can_see_all_depts) {
                                                                         </a>
                                                                         <?php endif; ?>
                                                                         <?php if ($can_cancel_this_resignation): ?>
-                                                                        <?php if ($can_take_action): ?><div class="dropdown-divider"></div><?php endif; ?>
+                                                                        <div class="dropdown-divider"></div>
                                                                         <a class="dropdown-item" href="javascript:void(0);" onclick="cancelResignationAdmin(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
                                                                             <i class="fa fa-ban text-danger"></i> <?=__('cancel', 'Cancel')?>
                                                                         </a>
                                                                         <?php endif; ?>
                                                                     </div>
                                                                 </div>
-                                                                <?php endif; ?>
                                                             </div>
                                                         </div>
                                                         <div class="card-body">
@@ -554,21 +596,11 @@ if ($can_see_all_depts) {
                                                                 <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
                                                             </div>
                                                         </div>
-                                                        <div class="card-footer" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 1rem;">
-                                                            <button type="button" class="btn btn-info waves-effect viewResignation"
-                                                                    data-id="<?= $resignation['id'] ?>"
-                                                                    data-emp-id="<?= $resignation['employee_id'] ?>"
-                                                                    data-iqama="<?= $resignation['iqama'] ?>"
-                                                                    data-name="<?= htmlspecialchars($resignation['employee_name']) ?>"
-                                                                    data-designation="<?= htmlspecialchars($resignation['designation'] ?? 'N/A') ?>"
-                                                                    data-department="<?= htmlspecialchars($resignation['department'] ?? 'N/A') ?>"
-                                                                    data-last-day="<?= $resignation['last_working_day'] ?>"
-                                                                    data-status="<?= $resignation['status'] ?>">
-                                                                <i class="fa fa-eye"></i> <?= __('view') ?>
-                                                            </button>
-                                                            <a href="resignation_report_details.php?id=<?= $resignation['id'] ?>&emp_id=<?= $resignation['employee_id'] ?>" class="btn btn-primary waves-effect">
-                                                                <i class="fa fa-file-pdf"></i> <?= __('report') ?>
-                                                            </a>
+                                                        <div class="card-footer">
+                                                            <div class="request-time-footer">
+                                                                <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($resignation['created_at'] ?? '') : timeAgo($resignation['created_at'] ?? '')) ?></span>
+                                                                <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($resignation['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

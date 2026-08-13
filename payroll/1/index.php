@@ -40,13 +40,13 @@ $datechk = date('m');
             `py`.`housing`,
             `py`.`transport`,
             `py`.`other_pay`
-        ORDER BY `emp`.`sectin_nme` ASC, `emp`.`name` ASC 
+        ORDER BY `emp`.`comp_no` ASC, `emp`.`name` ASC
         ";
 		$result = $conDB->query($sql);
 		if ($result->num_rows > 0) {
 			$previous_category = "";   // To keep track of the last printed category
 			while ($row = $result->fetch_assoc()) {
-				$category = $row['sectin_nme'];
+				$category = $row['comp_no'];
 				$name = $row['name'];
 				$emp_id = $row['emp_id'];
                 $basic = $row["basic"];

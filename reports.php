@@ -1587,11 +1587,6 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
-                            id: 'sectin_nme',
-                            label: (typeof __ === 'function') ? __('sectin_nme') : 'Section',
-                            default: false
-                        },
-                        {
                             id: 'actual_job',
                             label: (typeof __ === 'function') ? __('actual_job') : 'Job Title',
                             default: true

@@ -20,7 +20,7 @@ if(isset($_POST['submit'])){
 	$allowedColumns = [
 		'name', 'emp_id', 'iqama', 'iqama_exp', 'passport_number',
 		'passport_exp', 'mobile', 'emg_mobile', 'emg_name', 'country', 'dept',
-		'sectin_nme', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
+		'city_id', 'location_id', 'sub_dept_id', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
 		'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
 		'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
 		'insurance_no', 'insurance_class', 'insurance_exp', 'iqama_exp_g', 'gosi',
@@ -387,7 +387,7 @@ if(isset($_POST['submit'])){
                                             </div>
                                         	<div class="form-group col-md-2">
 											<label for="country" class="col-form-label"><?=__('nationality') ?><span class="text-danger">*</span></label>
-											<select class="form-control" name="country" id="country" required >
+											<select class="form-control select2" name="country" id="country" required >
 												<option value=""><?=__('select_option')?></option>
 											<?php
 												$query_country = mysqli_query($conDB, "SELECT * FROM `countries` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, name");
@@ -399,7 +399,7 @@ if(isset($_POST['submit'])){
 											</div>
                                             <div class="form-group col-md-2">
 											<label for="department" class="col-form-label"><?=__('department') ?><span class="text-danger">*</span></label>
-											<select class="form-control" name="department" id="department" required >
+											<select class="form-control select2" name="department" id="department" required >
 												<option value=""><?=__('select_option')?></option>
 											<?php
 												$query_dep_nme = mysqli_query($conDB, "SELECT * FROM `department` ORDER BY `dep_nme` REGEXP '^[^A-Za-z]' ASC, dep_nme");
@@ -410,20 +410,32 @@ if(isset($_POST['submit'])){
 											</select>
 											</div>
 											<div class="form-group col-md-2">
-                                                <label for="sectin_nme" class="col-form-label"><?=__('section_label') ?><span class="text-danger">*</span></label>
-												<select class="form-control sectin_nme" name="sectin_nme" id="sectin_nme" required >
-													<option value=""><?=__('select_option')?></option>
-													<?php
-														$query_dep_nme = mysqli_query($conDB, "SELECT * FROM `section` ORDER BY `section_name` REGEXP '^[^A-Za-z]' ASC, section_name");
-														while($rec = mysqli_fetch_assoc($query_dep_nme)){ 
-													?>
-														<option value="<?=$rec["id"]?>"><?= $rec["section_name"]?></option>
-													<?php } ?>
+												<label for="city_id" class="col-form-label"><?= __("city_label", "City") ?><span class="text-danger">*</span></label>
+												<select class="form-control select2" name="city_id" id="city_id" required>
+												<option value=""><?=__('select_option')?></option>
+												<?php
+													$query_cities = mysqli_query($conDB, "SELECT `id`, `name_en`, `name_ar` FROM `saudi_cities` ORDER BY `name_en` ASC");
+													while ($rec = mysqli_fetch_assoc($query_cities)) {
+												?>
+													<option value="<?= $rec["id"] ?>"><?= ($is_rtl ?? false ? $rec["name_ar"] : $rec["name_en"]) ?></option>
+												<?php } ?>
 												</select>
-                                            </div>
-											<div class="form-group col-md-1">
+											</div>
+											<div class="form-group col-md-2">
+												<label for="location_id" class="col-form-label"><?= __("location_label", "Location") ?><span class="text-danger">*</span></label>
+												<select class="form-control select2" name="location_id" id="location_id" required>
+												<option value=""><?= __("select_a_city_first", "Select a City First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
+												<label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
+												<select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
+												<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
                                                 <label for="emptype" class="col-form-label"><?=__('employee_type_label') ?><span class="text-danger">*</span></label>
-												<select class="form-control" name="emptype" required >
+												<select class="form-control select2" name="emptype" required >
 													<option value=""><?=__('select_option')?></option>
 													<option value="Manager"><?=__('manager') ?></option>
 													<option value="Supervisor"><?=__('supervisor_option') ?></option>
@@ -452,7 +464,7 @@ if(isset($_POST['submit'])){
                                                 <label for="dateofbirthHijri" class="col-form-label"><?=__('date_of_birth') ?><span class="text-danger"> <?=__('in_hijri') ?> *</span></label>
                                                 <input type="text" name="dob_h" parsley-trigger="change" class="form-control" id="dateofbirthHijri"  required />
                                             </div>
-											<div class="form-group col-md-1">
+											<div class="form-group col-md-2">
                                                 <label for="t_shirt_size" class="col-form-label"><?=__('t_shirt_size') ?></label>
                                                 <input type="text" name="t_shirt_size" parsley-trigger="change" class="form-control" id="t_shirt_size">
                                             </div>
@@ -480,7 +492,7 @@ if(isset($_POST['submit'])){
                                             </div>
 											<div class="form-group col-md-2">
                                                 <label for="blood_type" class="col-form-label"><?=__('blood_group') ?></label>
-												<select class="form-control" name="blood_type">
+												<select class="form-control select2" name="blood_type">
 													<option value=""><?=__('select_option')?></option>
 													<option value="A+">A+</option>
 													<option value="B+">B+</option>
@@ -495,7 +507,7 @@ if(isset($_POST['submit'])){
 											<!--  -->
 											<div class="form-group col-md-2">
 												<label for="emp_sup_type" class="col-form-label"><?=__('sponsorship') ?><span class="text-danger">*</span></label>
-												<select class="form-control" name="emp_sup_type" id="emp_sup_type" required >
+												<select class="form-control select2" name="emp_sup_type" id="emp_sup_type" required >
 													<option value=""><?=__('select_option')?></option>
 													<?php
 													$query_cp = mysqli_query($conDB, "SELECT * FROM `sponsorship` ORDER BY `sponsor` REGEXP '^[^A-Za-z]' ASC, `sponsor`");
@@ -507,7 +519,7 @@ if(isset($_POST['submit'])){
                                             </div>
 											<div class="form-group col-md-2">
 												<label for="comp_no" class="col-form-label"><?=__('company') ?><span class="text-danger">*</span></label>
-												<select class="form-control" name="comp_no" id="comp_no" required />
+												<select class="form-control select2" name="comp_no" id="comp_no" required />
 													<option value=""><?=__('select_option')?></option>
 													<?php
 													$query_cp = mysqli_query($conDB, "SELECT * FROM `companies` ORDER BY `comp_name` REGEXP '^[^A-Za-z]' ASC, `comp_name`");
@@ -519,7 +531,7 @@ if(isset($_POST['submit'])){
                                             </div>
 											<div class="form-group col-md-2">
 												<label for="actual_Job" class="col-form-label"><?=__('actual_job') ?><span class="text-danger">*</span></label>
-												<select class="form-control" name="actual_Job" id="actual_Job" required >
+												<select class="form-control select2" name="actual_Job" id="actual_Job" required >
 													<option value=""><?=__('select_option')?></option>
 													<?php
 													$query_cp = mysqli_query($conDB, "SELECT * FROM `ac_jobs` ORDER BY `job` REGEXP '^[^A-Za-z]' ASC, `job`");
@@ -532,7 +544,7 @@ if(isset($_POST['submit'])){
 											<!--  -->
 											<div class="form-group col-md-2">
 												<label for="vac_period" class="col-form-label"><?=__('contract_period') ?><span class="text-danger">*</span></label>
-												<select class="form-control" name="vac_period" id="vac_period" required >
+												<select class="form-control select2" name="vac_period" id="vac_period" required >
 													<option value=""><?=__('select_option')?></option>
 													<?php
 													$query_cp = mysqli_query($conDB, "SELECT * FROM `contract_period` ORDER BY `period` REGEXP '^[^A-Za-z]' ASC, period");
@@ -552,7 +564,7 @@ if(isset($_POST['submit'])){
                                             </div>
                                             <div class="form-group col-md-2">
                                                	 <label for="bank_name" class="col-form-label"><?=__('bank_name') ?><span class="text-danger">*</span></label>
-													<select class="form-control" name="bank_name" id="bank_name" required >
+													<select class="form-control select2" name="bank_name" id="bank_name" required >
 													<?php if(empty($bank_name_get)){ ?>
 														<option value=""><?=__('select_option')?></option>
 													<?php } else { ?>
@@ -581,7 +593,7 @@ if(isset($_POST['submit'])){
                                                 <label for="payment_type" class="col-form-label">
                                                 	<?=__('salary_payment_type_label') ?><span class="text-danger">*</span>
 												</label>
-												<select class="form-control" name="payment_type" required>
+												<select class="form-control select2" name="payment_type" required>
 													<option value=""><?=__('select_option')?></option>
 													<option value="1"><?=__('bank_option')?></option>
 													<option value="2"><?=__('cash_option')?></option>
@@ -598,7 +610,7 @@ if(isset($_POST['submit'])){
 											
 											<div class="form-group col-md-2">
                                                 <label for="insurance_class" class="col-form-label"><?=__('insurance_class_label') ?></label>
-												<select class="form-control" name="insurance_class" >
+												<select class="form-control select2" name="insurance_class" >
 													<option value=""><?=__('select_option')?></option>
 													<option value="A">A</option>
 													<option value="B">B</option>
@@ -626,7 +638,7 @@ if(isset($_POST['submit'])){
                                                 <label for="probation" class="col-form-label"> 
 													<?=__('probation_period_label') ?><span class="text-danger">*</span>
 												</label>
-												<select class="form-control" name="probation" required>
+												<select class="form-control select2" name="probation" required>
 													<option value=""><?=__('select_option')?></option>
 													<option value="3 Months">3 <?=__('months') ?></option>
 													<option value="6 Months">6 <?=__('months') ?></option>
@@ -692,11 +704,12 @@ if(isset($_POST['submit'])){
         <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 		
         <script src="./plugins/bootstrap-filestyle/js/bootstrap-filestyle.min.js" type="text/javascript"></script>
+        <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 
         <!-- App js -->
 		<script src="assets/pages/jquery.form-pickers.init.js"></script>
 		<script src="assets/pages/jquery.form-hijri-pickers.init.js"></script>
-		
+
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 		
@@ -705,8 +718,64 @@ if(isset($_POST['submit'])){
 		<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.js"></script> -->
 		<!-- <script src="./assets/js/jquery.custom.validation.js"></script> -->
 <script type="text/javascript">
+<?php
+	$all_locations_json = [];
+	$query_all_locations = mysqli_query($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC");
+	while ($rec = mysqli_fetch_assoc($query_all_locations)) { $all_locations_json[] = $rec; }
+
+	$all_sub_depts_json = [];
+	$query_all_sub_depts = mysqli_query($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC");
+	while ($rec = mysqli_fetch_assoc($query_all_sub_depts)) { $all_sub_depts_json[] = $rec; }
+?>
+const ALL_LOCATIONS = <?= json_encode($all_locations_json) ?>;
+const ALL_SUB_DEPARTMENTS = <?= json_encode($all_sub_depts_json) ?>;
+const IS_RTL_LOCALE = <?= ($is_rtl ?? false) ? 'true' : 'false' ?>;
+
+function populateLocationOptions(cityId, selectedLocationId) {
+	const $select = $('#location_id');
+	const isSelect2 = $select.hasClass('select2-hidden-accessible');
+	if (!cityId) {
+		$select.empty().append('<option value=""><?= __("select_a_city_first", "Select a City First") ?></option>');
+		if (isSelect2) $select.trigger('change');
+		return;
+	}
+	let options = '<option value=""><?= __("select_option") ?></option>';
+	ALL_LOCATIONS.filter(loc => String(loc.city_id) === String(cityId)).forEach(loc => {
+		const selected = (String(loc.id) === String(selectedLocationId)) ? 'selected' : '';
+		const label = IS_RTL_LOCALE ? loc.name_ar : loc.name_en;
+		options += `<option value="${loc.id}" ${selected}>${label}</option>`;
+	});
+	$select.html(options);
+	if (isSelect2) $select.trigger('change');
+}
+
+function populateSubDeptOptions(departmentId, selectedSubDeptId) {
+	const $select = $('#sub_dept_id');
+	const isSelect2 = $select.hasClass('select2-hidden-accessible');
+	if (!departmentId) {
+		$select.empty().append('<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>');
+		if (isSelect2) $select.trigger('change');
+		return;
+	}
+	let options = '<option value=""><?= __("select_option") ?></option>';
+	ALL_SUB_DEPARTMENTS.filter(sd => String(sd.department_id) === String(departmentId)).forEach(sd => {
+		const selected = (String(sd.id) === String(selectedSubDeptId)) ? 'selected' : '';
+		const label = IS_RTL_LOCALE ? sd.name_ar : sd.name_en;
+		options += `<option value="${sd.id}" ${selected}>${label}</option>`;
+	});
+	$select.html(options);
+	if (isSelect2) $select.trigger('change');
+}
+
 $(function() {
- 
+
+	$('#city_id').on('change', function() {
+		populateLocationOptions($(this).val(), '');
+	});
+	$('#department').on('change', function() {
+		populateSubDeptOptions($(this).val(), '');
+	});
+
 	$("#vac_period").bind("change", function() {
 		$.ajax({
 			type: "GET", 

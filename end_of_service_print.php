@@ -262,7 +262,7 @@
                                                     <div class="grid-item">
                                                         <p class="detail-line"><span><strong>Employee ID:</strong> <?=$emprow['empid']; ?></span><span class="arabic-label"><strong>الرقم الوظيفي</strong></span></p>
                                                         <p class="detail-line"><span><strong>Department:</strong> <?=$emprow['deptnme']; ?></span><span class="arabic-label"><strong>القسم</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Section / Area:</strong> <?=$emprow['sectin_nme']; ?></span><span class="arabic-label"><strong>الشعبة</strong></span></p>
+                                                        <p class="detail-line"><span><strong>Company:</strong> <?=$emprow['compnme']; ?></span><span class="arabic-label"><strong>الشركة</strong></span></p>
                                                         <p class="detail-line"><span><strong>Date Hired:</strong> <?=format_safe_date($emprow['joining_date'] ?? null, 'M d, Y'); ?></span><span class="arabic-label"><strong>تاريخ التعيين</strong></span></p>
                                                         <?php if($emprow['status'] == 0): ?>
                                                         <p class="detail-line"><span><strong>Termination Date:</strong> <?=format_safe_date($emprow['ter_date'] ?? null, 'M d, Y');?></span><span class="arabic-label"><strong>تاريخ الإنهاء</strong></span></p>

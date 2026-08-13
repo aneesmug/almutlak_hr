@@ -313,7 +313,7 @@
                                             <p class="font-15"><strong>Full Name :</strong> <span class="m-l-15"><?=$emprow['name'] ?></span></p>
                                             <p class="font-15"><strong>Nationality :</strong> <span class="m-l-15"><?=$emprow['country_name'] ?></span></p>
                                             <p class="font-15"><strong>Department :</strong><span class="m-l-15"><?=$emprow['deptnme'] ?></span></p>
-                                            <p class="font-15"><strong>Section :</strong> <span class="m-l-15"><?=$emprow['sectin_nme'] ?></span></p>
+                                            <p class="font-15"><strong>Company :</strong> <span class="m-l-15"><?=($is_rtl ?? false ? ($emprow['compnme_ar'] ?? $emprow['compnme']) : $emprow['compnme']) ?></span></p>
                                             <?php if($vac_type_get <> "Encashed"){?>
                                             <p class="font-15"><strong>Replacement Person :</strong> <span class="m-l-15"><?=$replacement_per_vac_get ?></span></p>
                                             <?php } ?>

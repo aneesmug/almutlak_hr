@@ -242,7 +242,16 @@ if ($can_see_all_depts) {
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
-        .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
+        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
+        .request-time-footer {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
+            border-bottom: 1px dashed #e3e6f5;
+        }
+        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .request-time-footer i { color: #a0a8c0; }
         .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
         .btn-block + .btn-block { margin-top: 0rem !important; }
         .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
@@ -370,15 +379,20 @@ if ($can_see_all_depts) {
                                                             </div>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <button type="button" class="btn btn-info btn-block waves-effect" onclick="viewSalaryIncrementReport('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>')">
-                                                            <i class="fa fa-eye"></i> <?= __('view_report') ?>
-                                                        </button>
-                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000;">
+                                                    <div class="card-footer">
+                                                        <div class="request-time-footer">
+                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></span>
+                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                        </div>
+                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000; display:flex;">
                                                             <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                                 <?= __('actions') ?> <span class="caret"></span>
                                                             </button>
                                                             <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
+                                                                <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="viewSalaryIncrementReport('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>')">
+                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
+                                                                </button>
+                                                                <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="salary_increment_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>
@@ -777,14 +791,24 @@ if ($can_see_all_depts) {
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+            const statusMetaMap = {
+                approved:  { icon: 'fa-check', cls: 'et-status-success', label: __('approved', 'Approved') },
+                rejected:  { icon: 'fa-times', cls: 'et-status-danger', label: __('rejected', 'Rejected') },
+                cancelled: { icon: 'fa-ban', cls: 'et-status-secondary', label: __('cancelled', 'Cancelled') },
+                pending:   { icon: 'fa-hourglass-half', cls: 'et-status-warning', label: __('pending', 'Pending') },
+                awaiting:  { icon: 'fa-pause-circle', cls: 'et-status-primary', label: __('awaiting', 'Awaiting') }
+            };
             const getStatusMeta = (statusValue) => {
                 const normalized = String(statusValue || '').toLowerCase().replace(/_/g, ' ').trim();
-                if (normalized.includes('approved')) return { icon: 'fa-check-circle', cls: 'text-success', bg: '#e9f9ee', label: __('approved', 'Approved') };
-                if (normalized.includes('rejected')) return { icon: 'fa-times-circle', cls: 'text-danger', bg: '#fdeceb', label: __('rejected', 'Rejected') };
-                if (normalized.includes('cancelled')) return { icon: 'fa-ban', cls: 'text-secondary', bg: '#f1f2f4', label: __('cancelled', 'Cancelled') };
-                if (normalized.includes('pending')) return { icon: 'fa-hourglass-half', cls: 'text-warning', bg: '#fff8e6', label: __('pending', 'Pending') };
-                if (normalized.includes('awaiting')) return { icon: 'fa-pause-circle', cls: 'text-info', bg: '#e8f4fd', label: __('awaiting', 'Awaiting') };
-                return { icon: 'fa-circle', cls: 'text-secondary', bg: '#f1f2f4', label: normalized.replace(/\b\w/g, c => c.toUpperCase()) || __('unknown', 'Unknown') };
+                const key = Object.keys(statusMetaMap).find(k => normalized.includes(k));
+                return statusMetaMap[key] || { icon: 'fa-circle', cls: 'et-status-secondary', label: normalized.replace(/\b\w/g, c => c.toUpperCase()) || __('unknown', 'Unknown') };
+            };
+            // Same per-step map used by the Employee Transfer / Settlement approval-chain timelines.
+            const stepMeta = {
+                approved: { icon: 'fa-check', cls: 'et-step-success', label: __('approved', 'Approved') },
+                pending:  { icon: 'fa-clock', cls: 'et-step-warning', label: __('pending', 'Pending') },
+                rejected: { icon: 'fa-times', cls: 'et-step-danger', label: __('rejected', 'Rejected') },
+                awaiting: { icon: 'fa-hourglass-half', cls: 'et-step-secondary', label: __('awaiting', 'Awaiting') }
             };
 
             Swal.fire({
@@ -812,35 +836,41 @@ if ($can_see_all_depts) {
                     const submittedDate = req.created_at ? new Date(req.created_at.replace(' ', 'T')) : null;
                     const submittedLabel = submittedDate && !isNaN(submittedDate.getTime()) ? submittedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : (req.created_at || '-');
 
-                    let chainHtml = '<div style="padding:6px 2px;color:#8a94a6;font-size:13px;">' + (__('no_approvers', 'No approvers found')) + '</div>';
-                    if (chain.length > 0) {
-                        chainHtml = '<div style="display:flex;flex-direction:column;gap:8px;">' + chain.map(c => {
-                            const cMeta = getStatusMeta(c.status);
-                            const approverName = escapeHtml((c.approver_name && String(c.approver_name).trim() !== '') ? c.approver_name : ('Emp#' + c.approver_id));
-                            const actionDate = c.action_date ? new Date(String(c.action_date).replace(' ', 'T')) : null;
-                            const actionLabel = actionDate && !isNaN(actionDate.getTime()) ? actionDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-                            return '<div style="padding:8px 12px;background:' + cMeta.bg + ';border-radius:8px;">'
-                                + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-                                + '<span style="font-size:13px;color:#333;"><strong style="color:#667eea;">' + (__('level', 'Level')) + ' ' + c.level + '</strong> &nbsp;' + approverName + '</span>'
-                                + '<span class="' + cMeta.cls + '" style="font-size:12px;font-weight:600;white-space:nowrap;"><i class="fa ' + cMeta.icon + '"></i> ' + cMeta.label + '</span>'
-                                + '</div>'
-                                + (actionLabel ? '<div style="font-size:11px;color:#8a94a6;margin-top:4px;">' + actionLabel + '</div>' : '')
-                                + (c.note ? '<div style="font-size:12px;color:#555;margin-top:4px;">' + escapeHtml(c.note) + '</div>' : '')
-                                + '</div>';
-                        }).join('') + '</div>';
-                    }
+                    const infoRow = (icon, label, value) => `
+                        <div class="et-report-row">
+                            <div class="et-report-row-label"><i class="fa ${icon}"></i> ${label}</div>
+                            <div class="et-report-row-value">${value || 'N/A'}</div>
+                        </div>`;
+
+                    let timelineHtml = '';
+                    chain.forEach(c => {
+                        const step = stepMeta[c.status] || stepMeta.awaiting;
+                        const approverName = escapeHtml((c.approver_name && String(c.approver_name).trim() !== '') ? c.approver_name : ('Emp#' + c.approver_id));
+                        const actionDate = c.action_date ? new Date(String(c.action_date).replace(' ', 'T')) : null;
+                        const actionLabel = actionDate && !isNaN(actionDate.getTime()) ? actionDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                        timelineHtml += `
+                            <div class="et-timeline-item ${step.cls}">
+                                <div class="et-timeline-dot"><i class="fa ${step.icon}"></i></div>
+                                <div class="et-timeline-content">
+                                    <div class="et-timeline-top">
+                                        <span class="et-timeline-level">${__('level', 'Level')} ${c.level}</span>
+                                        <span class="et-timeline-badge">${step.label}</span>
+                                    </div>
+                                    <div class="et-timeline-approver">${approverName}</div>
+                                    ${actionLabel ? `<div class="et-timeline-approver">${actionLabel}</div>` : ''}
+                                    ${c.note ? `<div class="et-timeline-note"><i class="fas fa-comment"></i> ${escapeHtml(c.note)}</div>` : ''}
+                                </div>
+                            </div>`;
+                    });
 
                     const salary = res.salary_info || null;
-                    const row = (label, value, opts) => {
-                        opts = opts || {};
-                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #eef0f4;">'
-                            + '<span style="color:#8a94a6;font-size:13px;">' + label + '</span>'
-                            + '<span style="font-size:13px;' + (opts.strong ? 'font-weight:700;' : '') + (opts.color ? 'color:' + opts.color + ';' : '') + '">' + value + '</span>'
-                            + '</div>';
-                    };
-
                     let salaryHtml = '<div style="padding:6px 2px;color:#8a94a6;font-size:13px;">' + (__('no_data_found', 'No data found')) + '</div>';
                     if (salary) {
+                        const salaryIcons = {
+                            basic_salary: 'fa-money-bill-alt', housing_allowance: 'fa-home', transport_allowance: 'fa-car',
+                            food_allowance: 'fa-utensils', miscellaneous_allowance: 'fa-shapes', cashier_allowance: 'fa-cash-register',
+                            fuel_allowance: 'fa-gas-pump', telephone_allowance: 'fa-phone', other_allowance: 'fa-ellipsis-h', guard_allowance: 'fa-shield-alt'
+                        };
                         const salaryRows = [
                             ['basic_salary', 'Basic Salary', salary.basic],
                             ['housing_allowance', 'Housing Allowance', salary.housing],
@@ -853,66 +883,73 @@ if ($can_see_all_depts) {
                             ['other_allowance', 'Others', salary.other],
                             ['guard_allowance', 'Guard Allowance', salary.guard]
                         ];
-                        salaryHtml = '<div style="display:flex;flex-direction:column;gap:2px;">'
-                            + salaryRows.filter(([, , val]) => Number(val) > 0)
-                                .map(([key, fallback, val]) => row(__(key, fallback), Number(val).toFixed(2))).join('')
-                            + row(__('total_salary', 'Total salary'), Number(salary.total_salary).toFixed(2), { strong: true, color: '#667eea' })
-                            + '</div>';
+                        salaryHtml = salaryRows.filter(([, , val]) => Number(val) > 0)
+                            .map(([key, fallback, val]) => infoRow(salaryIcons[key] || 'fa-money-bill', __(key, fallback), Number(val).toFixed(2))).join('')
+                            + infoRow('fa-calculator', __('total_salary', 'Total salary'), '<strong style="color:#667eea;">' + Number(salary.total_salary).toFixed(2) + '</strong>');
                     }
 
-                    const html = `
-                        <div class="vacation-form-container" style="text-align:left;">
-                            <div class="row" style="margin:0 -8px;">
-                                <div class="col-md-6" style="padding:0 8px;">
-                                    <div class="vacation-card" style="height:100%;">
-                                        <div class="vacation-card-header"><i class="fa fa-file-alt"></i> ${__('applied_information', 'Applied Information')}</div>
-                                        <div style="display:flex;flex-direction:column;gap:2px;">
-                                            ${row(__('request_id', 'Request ID'), '<code style="font-size:13px;">' + escapeHtml(req.request_inv_no) + '</code>')}
-                                            ${row(__('employee', 'Employee'), escapeHtml(req.employee_name) + ' (' + escapeHtml(req.emp_id) + ')')}
-                                            ${row(__('department', 'Department'), escapeHtml(req.department_name || '-'))}
-                                            ${row(__('status', 'Status'), '<span class="' + statusMeta.cls + '" style="font-weight:600;font-size:13px;background:' + statusMeta.bg + ';padding:4px 10px;border-radius:20px;"><i class="fa ' + statusMeta.icon + '"></i> ' + statusMeta.label + '</span>')}
-                                            ${row(__('increment_amount', 'Increment Amount'), Number(req.increment_amount).toFixed(2), { strong: true })}
-                                            ${(req.approved_amount !== null && req.approved_amount !== undefined) ? row(__('approved_amount', 'Approved Amount'), Number(req.approved_amount).toFixed(2), { strong: true, color: '#28a745' }) : ''}
-                                            ${row(__('evaluation_score', 'Evaluation Score'), req.evaluation_score !== null ? Number(req.evaluation_score).toFixed(2) : '-')}
-                                            ${req.last_increment_date ? row(__('last_increment_date', 'Date of Last Increment (Optional)'), escapeHtml(req.last_increment_date)) : ''}
-                                            ${row(__('submitted_by', 'Submitted By'), escapeHtml(req.submitted_by_name || req.submitted_by))}
-                                            ${row(__('submitted_date', 'Submitted Date'), submittedLabel)}
-                                        </div>
-                                        ${req.reason ? `<div style="padding:8px 0 0;">
-                                            <div style="color:#8a94a6;font-size:13px;margin-bottom:4px;">${__('reason', 'Reason')}</div>
-                                            <div style="font-size:13px;color:#333;background:#f8f9fb;padding:8px 10px;border-radius:6px;">${escapeHtml(req.reason)}</div>
-                                        </div>` : ''}
-                                    </div>
-                                </div>
-                                <div class="col-md-6" style="padding:0 8px;">
-                                    <div class="vacation-card" style="height:100%;">
-                                        <div class="vacation-card-header"><i class="fa fa-money-bill-wave"></i> ${__('salary_information', 'Salary Information')}</div>
-                                        ${salaryHtml}
-                                    </div>
-                                </div>
+                    let html = '<div class="et-report">';
+                    html += `
+                        <div class="et-report-header">
+                            <div class="et-report-avatar"><i class="fa fa-arrow-trend-up"></i></div>
+                            <div class="et-report-heading">
+                                <div class="et-report-name">${escapeHtml(req.employee_name)}</div>
+                                <div class="et-report-subid">${__('emp_id', 'Employee ID')}: ${escapeHtml(req.emp_id)} &bull; ${escapeHtml(req.request_inv_no)}</div>
                             </div>
+                            <div class="et-report-status-pill ${statusMeta.cls}"><i class="fa ${statusMeta.icon}"></i> ${statusMeta.label}</div>
+                        </div>`;
 
+                    html += '<div class="row">';
+                    html += `
+                        <div class="col-md-6">
                             <div class="vacation-card">
-                                <div class="vacation-card-header" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSalaryIncrementReportChain()">
-                                    <span><i class="fa fa-sitemap"></i> ${__('approval_chain', 'Approval Chain')}</span>
-                                    <span id="siReportChainToggleIcon"><i class="fa fa-chevron-down"></i></span>
-                                </div>
-                                <div id="siReportChainBody" style="display:none;">
-                                    ${chainHtml}
-                                </div>
+                                <div class="vacation-card-header"><i class="fa fa-file-alt"></i> ${__('applied_information', 'Applied Information')}</div>
+                                ${infoRow('fa-sitemap', __('department', 'Department'), escapeHtml(req.department_name || '-'))}
+                                ${infoRow('fa-arrow-trend-up', __('increment_amount', 'Increment Amount'), Number(req.increment_amount).toFixed(2))}
+                                ${(req.approved_amount !== null && req.approved_amount !== undefined) ? infoRow('fa-check-circle', __('approved_amount', 'Approved Amount'), '<strong style="color:#28a745;">' + Number(req.approved_amount).toFixed(2) + '</strong>') : ''}
+                                ${infoRow('fa-star', __('evaluation_score', 'Evaluation Score'), req.evaluation_score !== null ? Number(req.evaluation_score).toFixed(2) : '-')}
+                                ${req.last_increment_date ? infoRow('fa-calendar-day', __('last_increment_date', 'Date of Last Increment (Optional)'), escapeHtml(req.last_increment_date)) : ''}
+                                ${infoRow('fa-user-edit', __('submitted_by', 'Submitted By'), escapeHtml(req.submitted_by_name || req.submitted_by))}
+                                ${infoRow('fa-calendar-alt', __('submitted_date', 'Submitted Date'), submittedLabel)}
                             </div>
                         </div>
-                    `;
+                        <div class="col-md-6">
+                            <div class="vacation-card">
+                                <div class="vacation-card-header"><i class="fa fa-money-bill-wave"></i> ${__('salary_information', 'Salary Information')}</div>
+                                ${salaryHtml}
+                            </div>
+                        </div>`;
+                    html += '</div>';
+
+                    if (req.reason) {
+                        html += `
+                            <div class="vacation-card">
+                                <div class="vacation-card-header"><i class="fa fa-sticky-note"></i> ${__('reason', 'Reason')}</div>
+                                <div class="et-notes-text">${escapeHtml(req.reason)}</div>
+                            </div>`;
+                    }
+
+                    if (timelineHtml) {
+                        html += `
+                            <div class="vacation-card">
+                                <div class="vacation-card-header et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">
+                                    <i class="fa fa-sitemap"></i> ${__('approval_chain', 'Approval Chain')}
+                                    <i class="fa fa-chevron-down et-timeline-chevron"></i>
+                                </div>
+                                <div class="et-timeline d-none">${timelineHtml}</div>
+                            </div>`;
+                    }
+                    html += '</div>';
 
                     Swal.fire({
-                        title: '<i class="fa fa-arrow-trend-up" style="margin-right: 8px;"></i> ' + __('salary_increment_approval_history', 'Salary Increment Approval History'),
+                        title: __('salary_increment_approval_history', 'Salary Increment Approval History'),
                         html: html,
                         showConfirmButton: false,
                         showCancelButton: true,
                         cancelButtonColor: APP_COLORS.danger_dark,
                         cancelButtonText: '<i class="fa fa-times"></i> ' + (__('close', 'Close')),
                         allowOutsideClick: false,
-                        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '75%',
+                        width: '60%',
                         padding: '20px',
                         scrollbarPadding: false,
                         customClass: {
@@ -926,15 +963,6 @@ if ($can_see_all_depts) {
                     Swal.fire('Error', 'Failed to load report.', 'error');
                 }
             });
-        }
-
-        function toggleSalaryIncrementReportChain() {
-            const body = document.getElementById('siReportChainBody');
-            const icon = document.getElementById('siReportChainToggleIcon');
-            if (!body || !icon) return;
-            const isHidden = body.style.display === 'none';
-            body.style.display = isHidden ? 'block' : 'none';
-            icon.innerHTML = isHidden ? '<i class="fa fa-chevron-up"></i>' : '<i class="fa fa-chevron-down"></i>';
         }
     </script>
 </body>

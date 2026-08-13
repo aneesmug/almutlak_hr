@@ -863,20 +863,21 @@ if (!empty($requests)) {
         }
         .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
         .request-card .card-body { padding: 1.5rem; }
-        .detail-item { display: flex; align-items: center; font-size: 1.02em; margin-bottom: .75rem; }
-        .detail-item i.fad { color: #4a90e2; margin-right: 12px; width: 20px; text-align: center; flex-shrink: 0; }
-        .detail-item strong { color: #8a94a6; min-width: 135px; display: inline-block; margin-right: 8px; }
-        .request-card .card-footer { background-color: #fafbff; border-top: 1px solid #eef; }
+        .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
+        .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
+        .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
+        .detail-item { flex-direction: <?= ($is_rtl ?? false) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl ?? false) ? 'right !important' : 'left !important' ?>; }
+        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
+        .request-time-footer {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
+            border-bottom: 1px dashed #e3e6f5;
+        }
+        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .request-time-footer i { color: #a0a8c0; }
         .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-        .request-details-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: .35rem 1.25rem;
-        }
-        .request-details-grid .detail-item {
-            margin-bottom: .35rem;
-            min-width: 0;
-        }
         .swal-payroll-details {
             text-align: left;
             border: 1px solid #e9ecef;
@@ -915,7 +916,6 @@ if (!empty($requests)) {
             text-align: right;
         }
         @media (max-width: 768px) {
-            .request-details-grid,
             .swal-details-body {
                 grid-template-columns: 1fr;
             }
@@ -1116,19 +1116,6 @@ if (!empty($requests)) {
                                             $statusText = __('completed');
                                             $statusIcon = "<i class='fa fa-badge-check text-white'></i>";
                                         }
-
-                                        $checklistBtnClass = 'btn-info';
-                                        if ($approvalStatus === 'pending_approval') {
-                                            $checklistBtnClass = 'btn-warning';
-                                        } elseif ($approvalStatus === 'approved') {
-                                            $checklistBtnClass = 'btn-success';
-                                        } elseif ($approvalStatus === 'rejected') {
-                                            $checklistBtnClass = 'btn-danger';
-                                        } elseif ($approvalStatus === 'completed') {
-                                            $checklistBtnClass = 'btn-primary';
-                                        } elseif ($approvalStatus === null) {
-                                            $checklistBtnClass = 'btn-dark';
-                                        }
                                         ?>
                                         <div class="col-lg-4 col-md-6 mb-4">
                                             <div class="card request-card h-100">
@@ -1141,7 +1128,6 @@ if (!empty($requests)) {
                                                     </div>
                                                 </div>
                                                 <div class="card-body">
-                                                    <div class="request-details-grid">
                                                         <div class="detail-item"><i class="fad fa-calendar"></i><strong><?= __('month') ?>:</strong> <?= htmlspecialchars($request['payroll_month']) ?></div>
                                                         <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?></div>
                                                         <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?> SAR</div>
@@ -1171,17 +1157,23 @@ if (!empty($requests)) {
                                                             <strong><?= __('status') ?>:</strong>
                                                             <span class="badge badge-<?= $statusClass ?> p-2"><?= $statusIcon . ' ' . $statusText ?></span>
                                                         </div>
-                                                    </div>
                                                 </div>
-                                                <div class="card-footer d-flex justify-content-between align-items-center" style="gap:0.5rem;">
-                                                    <a class="btn <?= $checklistBtnClass ?> btn-block waves-effect" href="payroll_checklist_report.php?month=<?= urlencode($request['payroll_month']) ?><?php if (!empty($request['request_inv_no'])): ?>&request_inv_no=<?= urlencode($request['request_inv_no']) ?><?php endif; ?>" target="_blank">
-                                                        <i class="fa fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Check List') ?>
-                                                    </a>
-                                                    <div class="btn-group flex-fill">
+                                                <div class="card-footer">
+                                                    <?php if (!empty($request['approval_created_at'])): ?>
+                                                    <div class="request-time-footer">
+                                                        <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($request['approval_created_at']) : timeAgo($request['approval_created_at'])) ?></span>
+                                                        <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($request['approval_created_at'], 'Y-m-d H:i:s')) ?></span>
+                                                    </div>
+                                                    <?php endif; ?>
+                                                    <div class="btn-group flex-fill" style="display:flex;">
                                                         <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                             <?= __('actions') ?> <span class="caret"></span>
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right">
+                                                            <a class="dropdown-item" href="payroll_checklist_report.php?month=<?= urlencode($request['payroll_month']) ?><?php if (!empty($request['request_inv_no'])): ?>&request_inv_no=<?= urlencode($request['request_inv_no']) ?><?php endif; ?>" target="_blank">
+                                                                <i class="fa fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Check List') ?>
+                                                            </a>
+                                                            <div class="dropdown-divider"></div>
                                                             <?php if (!empty($request['request_inv_no'])): ?>
                                                                 <a class="dropdown-item" href="payroll_status_history.php?inv_no=<?= urlencode($request['request_inv_no']) ?>" target="_blank">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>

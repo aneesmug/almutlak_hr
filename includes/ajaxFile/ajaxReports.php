@@ -645,6 +645,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         'comp_no' => 'c2.comp_name, c2.comp_name_ar',  // Select both
         'emp_sup_type' => 'sponsorship.sponsor, sponsorship.sponsor_ar',
         'vac_period' => 'contract_period.period',
+        'supervisor_id' => 'sup.name',
     ];
     
     // Build SELECT clause
@@ -783,6 +784,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
             LEFT JOIN sponsorship ON e.emp_sup_type = sponsorship.id
             LEFT JOIN contract_period ON e.vac_period = contract_period.id
             LEFT JOIN admin_login al ON e.emp_id = al.emp_id
+            LEFT JOIN employees sup ON e.supervisor_id = sup.emp_id
             WHERE $whereClause
             ORDER BY e.name";
     
@@ -853,8 +855,10 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         if (isset($row['address'])) {
             $row['address'] = getDisplayName($row['address']);
         }
-        
-        
+        if (array_key_exists('supervisor_id', $row)) {
+            $row['supervisor_id'] = !empty($row['supervisor_id']) ? getDisplayName(parseName($row['supervisor_id'])) : 'N/A';
+        }
+
         // Calculate contract expiry if requested using the helper function
         if ($needsContractExpiry) {
             if (isset($row['joining_date']) && isset($row['vac_period_id'])) {

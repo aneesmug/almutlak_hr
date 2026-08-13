@@ -60,7 +60,8 @@ if (mysqli_num_rows($query) == 1) {
                 bl.bank_name_ar,
                 d.dep_nme AS `deptname`,
                 d.dep_nme_ar AS `deptname_ar`,
-                s.section_name,
+                comp.comp_name,
+                comp.comp_name_ar,
                 c.name AS `country_name`,
                 re.name AS `replacement_person_name`,
                 cp.vac_period AS contract_vacation_days,
@@ -77,7 +78,7 @@ if (mysqli_num_rows($query) == 1) {
             LEFT JOIN employees re ON v.replacement_person = re.emp_id
             LEFT JOIN employees canceller_emp ON v.cancelled_by = canceller_emp.emp_id
             LEFT JOIN department d ON e.dept = d.id
-            LEFT JOIN section s ON e.sectin_nme = s.id
+            LEFT JOIN companies comp ON e.comp_no = comp.comp_id
             LEFT JOIN countries c ON e.country = c.id
             LEFT JOIN contract_period cp ON e.vac_period = cp.id
             WHERE v.id = ? AND v.emp_id = ?";
@@ -707,7 +708,8 @@ if (mysqli_num_rows($query) == 1) {
                                     <img src="<?= getAvatarImagePath($request['avatar'] ?? '', $request['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
                                         <h4><?= getDisplayName($request['employee_name'] ?? null); ?></h4>
-                                        <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['deptname_ar'] : $request['deptname']); ?><?= getDisplayName($request['section_name']) ? ' / ' . getDisplayName($request['section_name']) : '' ?></p>
+                                        <?php $vacCompName = ($is_rtl ?? false) ? ($request['comp_name_ar'] ?? $request['comp_name'] ?? '') : ($request['comp_name'] ?? ''); ?>
+                                        <p><?= __('employee_id') ?>: <?= display_or_na($request['emp_id'] ?? null); ?> | <?= ($is_rtl ?? false ? $request['deptname_ar'] : $request['deptname']); ?><?= $vacCompName ? ' / ' . getDisplayName($vacCompName) : '' ?></p>
                                     </div>
                                 </div>
 

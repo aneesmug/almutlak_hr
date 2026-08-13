@@ -364,10 +364,34 @@ if ($canSeeAllDepts) {
         }
 
         .request-card .card-footer {
-            background-color: #fafbff;
-            border-top: 1px solid #eef;
+            background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%);
+            border-top: 2px solid #a5b0e8;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
             overflow: visible;
         }
+
+        .request-time-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78em;
+            color: #6c757d;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed #e3e6f5;
+        }
+        .request-time-footer .rtf-ago,
+        .request-time-footer .rtf-exact {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .request-time-footer i { color: #a0a8c0; }
 
         /* Footer actions: responsive grid to avoid overflow and keep symmetry */
         .vac-actions {
@@ -757,15 +781,20 @@ if ($canSeeAllDepts) {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <a href="javascript:void(0);" class="btn btn-info btn-block waves-effect" onclick="viewSettlementDetails(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
-                                                            <i class="fa fa-eye"></i> <?= __('view') ?>
-                                                        </a>
-                                                        <div class="btn-group flex-fill">
+                                                    <div class="card-footer">
+                                                        <div class="request-time-footer">
+                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($settlement['created_at'] ?? '') : timeAgo($settlement['created_at'] ?? '')) ?></span>
+                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($settlement['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                        </div>
+                                                        <div class="btn-group flex-fill" style="display:flex;">
                                                             <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                                 <?= __('actions') ?> <span class="caret"></span>
                                                             </button>
                                                             <div class="dropdown-menu dropdown-menu-right">
+                                                                <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="viewSettlementDetails(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
+                                                                    <i class="fa fa-eye"></i> <?= __('view') ?>
+                                                                </button>
+                                                                <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="settlement_status_history.php?request_inv_no=<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>

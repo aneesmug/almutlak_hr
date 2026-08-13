@@ -212,14 +212,22 @@ if (!empty($where_clauses)) {
     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
 }
 
-// Add company filter to WHERE clause
-$company_filter = getCompanyFilterSQL('e.comp_no', true);
-$department_filter = getDepartmentFilterSQL('e.dept', true);
-$employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-if (strpos($where_sql, 'WHERE') === false) {
-    $where_sql = " WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
-} else {
-    $where_sql .= $company_filter . $department_filter . $employee_filter;
+// Add company/department/employee scope filter to WHERE clause.
+// Skip for 'my_pending' - that filter already scopes strictly to requests where
+// ra.approver_id = the current user (via the JOIN above), i.e. requests explicitly
+// assigned to them for approval. A request follows the employee's direct supervisor
+// (employees.supervisor_id) across department/company lines by design, so re-applying
+// the admin's configured company/department scope here would wrongly hide requests
+// from direct reports who sit outside that scope.
+if ($current_filter !== 'my_pending') {
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
+    if (strpos($where_sql, 'WHERE') === false) {
+        $where_sql = " WHERE 1=1" . $company_filter . $department_filter . $employee_filter;
+    } else {
+        $where_sql .= $company_filter . $department_filter . $employee_filter;
+    }
 }
 
 // Main query to select *which* vacations to show (for count and main data)
@@ -443,10 +451,34 @@ if ($can_see_all_depts) {
         }
 
         .request-card .card-footer {
-            background-color: #fafbff;
-            border-top: 1px solid #eef;
+            background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%);
+            border-top: 2px solid #a5b0e8;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
             overflow: visible;
         }
+
+        .request-time-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78em;
+            color: #6c757d;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed #e3e6f5;
+        }
+        .request-time-footer .rtf-ago,
+        .request-time-footer .rtf-exact {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
+        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
+        .request-time-footer i { color: #a0a8c0; }
 
         /* Footer actions: responsive grid to avoid overflow and keep symmetry */
         .vac-actions {
@@ -1008,15 +1040,20 @@ if ($can_see_all_depts) {
                                                         $show_payment_button = false;
                                                     }
                                                     ?>
-                                                    <div class="card-footer d-flex justify-content-between align-items-center" style="gap: 0.5rem;">
-                                                        <a href="vacation_report_details.php?id=<?= $req['id']; ?>&emp_id=<?= $req['emp_id']; ?>" target="_blank" class="btn btn-info btn-block waves-effect">
-                                                            <i class="fa fa-eye"></i> <?= __('view') ?>
-                                                        </a>
-                                                        <div class="btn-group flex-fill">
+                                                    <div class="card-footer">
+                                                        <div class="request-time-footer">
+                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></span>
+                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
+                                                        </div>
+                                                        <div class="btn-group flex-fill" style="display:flex;">
                                                             <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                                 <?= __('actions') ?> <span class="caret"></span>
                                                             </button>
                                                             <div class="dropdown-menu dropdown-menu-right">
+                                                                <a class="dropdown-item" href="vacation_report_details.php?id=<?= $req['id']; ?>&emp_id=<?= $req['emp_id']; ?>" target="_blank">
+                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
+                                                                </a>
+                                                                <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
                                                                     <i class="fa fa-history"></i> <?= __('history') ?>
                                                                 </a>

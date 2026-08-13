@@ -7546,6 +7546,45 @@ i.fa-clipboard {
   font-size: 16px;
 }
 
+/* --- Shared "report" style modal (Employee Transfer / Resignation / Settlement view) --- */
+.et-report { text-align: left; }
+.et-report-header { display: flex; align-items: center; gap: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 10px; padding: 18px 20px; margin-bottom: 18px; }
+.et-report-avatar { width: 48px; height: 48px; min-width: 48px; border-radius: 50%; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.et-report-heading { flex: 1; min-width: 0; }
+.et-report-name { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.et-report-subid { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.et-report-status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+.et-status-warning { background: #fff3cd; color: #856404; }
+.et-status-success { background: #d4edda; color: #155724; }
+.et-status-danger { background: #f8d7da; color: #721c24; }
+.et-status-primary { background: #d1ecf1; color: #0c5460; }
+.et-status-secondary { background: #e2e3e5; color: #383d41; }
+.et-report-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eef0f5; font-size: 13.5px; }
+.et-report-row:last-child { border-bottom: none; }
+.et-report-row-label { color: #858796; font-weight: 600; }
+.et-report-row-label i { width: 16px; margin-right: 8px; font-size: 16px; color: #4e73df; }
+.et-report-row-value { color: #3a3b45; font-weight: 600; text-align: right; }
+.et-report-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.et-notes-text { font-size: 13.5px; color: #3a3b45; background: #fff; border: 1px solid #e3e6f0; border-radius: 6px; padding: 10px 12px; }
+.et-timeline-note { margin-top: 6px; font-size: 12.5px; color: #e74a3b; background: #fdeeed; border-radius: 5px; padding: 6px 8px; }
+.et-timeline { display: flex; flex-direction: column; gap: 0; }
+.et-timeline-item { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
+.et-timeline-item:last-child { padding-bottom: 0; }
+.et-timeline-item:not(:last-child)::before { content: ''; position: absolute; left: 15px; top: 32px; bottom: 0; width: 2px; background: #e3e6f0; }
+.et-timeline-dot { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; z-index: 1; }
+.et-step-success .et-timeline-dot { background: #1cc88a; }
+.et-step-warning .et-timeline-dot { background: #f6c23e; }
+.et-step-danger .et-timeline-dot { background: #e74a3b; }
+.et-step-secondary .et-timeline-dot { background: #b7b9cc; }
+.et-timeline-content { flex: 1; background: #fff; border: 1px solid #e3e6f0; border-radius: 8px; padding: 10px 14px; }
+.et-timeline-top { display: flex; justify-content: space-between; align-items: center; }
+.et-timeline-level { font-weight: 700; font-size: 13px; color: #3a3b45; }
+.et-timeline-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #858796; }
+.et-timeline-approver { font-size: 13px; color: #5a5c69; margin-top: 2px; }
+.et-timeline-toggle { cursor: pointer; user-select: none; }
+.et-timeline-chevron { margin-left: auto; margin-right: 0; transition: transform 0.2s ease; font-size: 13px; }
+.et-timeline-toggle.et-open .et-timeline-chevron { transform: rotate(180deg); }
+
 .vac-radio-group {
   display: flex;
   flex-wrap: wrap;
@@ -7698,6 +7737,69 @@ i.fa-clipboard {
   .vacation-card {
     padding: 12px;
   }
+}
+
+.et-compact .vacation-card {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+.et-compact .row {
+  margin-bottom: 15px;
+}
+
+.et-summary-item {
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e3e6f0;
+  margin-bottom: 10px;
+}
+
+.et-summary-item label {
+  font-size: 11px;
+  color: #858796;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  display: block;
+  font-weight: 600;
+}
+
+.et-summary-item span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a3b45;
+}
+
+.et-date-trigger[readonly] {
+  background-color: #fff;
+  cursor: pointer;
+}
+
+.et-date-trigger[readonly]:hover {
+  border-color: #4e73df;
+  background-color: #f8f9fc;
+}
+
+.et-picker-live-days {
+  clear: both;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 8px auto 4px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: #eaf0fd;
+  color: #4e73df;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+}
+
+.et-picker-live-days.d-none {
+  display: none;
 }
 
 /* ===== HR Operations Resignation Approval Wizard ===== */

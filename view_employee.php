@@ -51,11 +51,13 @@ if (mysqli_num_rows($query) == 1) {
 			$_SESSION['error_msg'] = sprintf(
 				'<div class="col-xl-12">
 					<div class="alert alert-danger bg-danger text-white border-0" role="alert">
-						<b>Access Denied!</b> 
-						<h4>You don\'t have access to view this employee. Your access is limited to employees in your department and company.</h4>
+						<b>%s</b>
+						<h4>%s</h4>
 					</div>
-				</div>'
-			); 
+				</div>',
+				__('access_denied', 'Access Denied!'),
+				__('access_denied_employee_view_message', "You don't have access to view this employee. Your access is limited to employees in your department and company.")
+			);
 			header("Location: ./dashboard.php");
 			exit;
 		}
@@ -69,6 +71,13 @@ if (mysqli_num_rows($query) == 1) {
 			? getReplacementTempRoleCandidate($conDB, $emprow['emp_id'] ?? $emprow['empid'])
 			: null;
 		// --- END: Temporary Role Transfer ---
+
+		// Salary info visible only to sys admin, HR, or an explicitly granted
+		// 'view_employee_salary_value' special access (App Settings -> Special Access).
+		$canViewSalary = (
+			($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_salary_value', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -202,7 +211,7 @@ if (mysqli_num_rows($query) == 1) {
 
 	<head>
 		<meta charset="utf-8" />
-		<title><?= $site_title ?> - View Employee <?= $emprow['name'] ?> Details</title>
+		<title><?= $site_title ?> - <?= __('view_employee_title', 'View Employee') ?> <?= $emprow['name'] ?> <?= __('details') ?></title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 		<!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
 		<meta content="Anees Afzal" name="author" />
@@ -834,6 +843,9 @@ if (mysqli_num_rows($query) == 1) {
 						<div class="row">
 							<div class="col-xl-12">
 
+								<?php if (!$canViewSalary): ?>
+								<div class="alert alert-warning"><i class="fa fa-lock"></i> <?= __('salary_hidden_no_access') ?></div>
+								<?php else: ?>
 								<div class="row">
 									<?php foreach ($shownItems as $item): ?>
 										<div class="<?= $colsm ?>">
@@ -867,6 +879,7 @@ if (mysqli_num_rows($query) == 1) {
 										</div>
 									</div>
 								</div><!-- end row -->
+								<?php endif; ?>
 
 								<?php if ($emprow["emp_sup_type"] <> "man_power") { ?>
 
@@ -1038,7 +1051,7 @@ if (mysqli_num_rows($query) == 1) {
 																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
 																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['passport_exp'], $format); ?></span>
 																	<?php else: ?>
-																		<span class="text-muted">N/A</span>
+																		<span class="text-muted"><?= __('not_available', 'N/A') ?></span>
 																	<?php endif ?>
 																</div>
 															</div>
@@ -1101,7 +1114,7 @@ if (mysqli_num_rows($query) == 1) {
 																		<?php
 																	} else {
 																		?>
-																		<span class="text-muted">N/A</span>
+																		<span class="text-muted"><?= __('not_available', 'N/A') ?></span>
 																		<?php
 																	}
 																	?>
@@ -1112,12 +1125,24 @@ if (mysqli_num_rows($query) == 1) {
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('section_area') ?></div>
-																<div class="profile-field-value"><?= getDisplayName($emprow["sectin_nme"]) ?></div>
+																<div class="profile-field-label"><?= __('company_label') ?></div>
+																<div class="profile-field-value"><?= ($is_rtl ?? false) ? ($emprow["compnme_ar"] ?? $emprow["compnme"] ?? __('not_available', 'N/A')) : ($emprow["compnme"] ?? __('not_available', 'N/A')) ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('city_label', 'City') ?></div>
+																<div class="profile-field-value"><?= !empty($emprow["cityname"]) ? (($is_rtl ?? false) ? $emprow["cityname_ar"] : $emprow["cityname"]) : __('not_available', 'N/A') ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('location_label', 'Location') ?></div>
+																<div class="profile-field-value"><?= !empty($emprow["locationname"]) ? (($is_rtl ?? false) ? $emprow["locationname_ar"] : $emprow["locationname"]) : __('not_available', 'N/A') ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('sub_department_label', 'Sub-Department') ?></div>
+																<div class="profile-field-value"><?= !empty($emprow["subdeptname"]) ? (($is_rtl ?? false) ? $emprow["subdeptname_ar"] : $emprow["subdeptname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
-																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? 'N/A' ?></div>
+																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('actual_job') ?></div>
@@ -1158,14 +1183,6 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></div>
 																<div class="profile-field-value"><?= $allowEmergencyVacationText ?></div>
-															</div>
-															<div class="profile-field">
-																<div class="profile-field-label"><?= __('blocked_from_all_requests', 'Blocked From All Requests') ?></div>
-																<div class="profile-field-value"><?= $requestsBlockedText ?></div>
-															</div>
-															<div class="profile-field">
-																<div class="profile-field-label"><?= __('blocked_request_types', 'Blocked Request Types') ?></div>
-																<div class="profile-field-value"><?= htmlspecialchars($blockedRequestTypesText) ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>
@@ -1227,8 +1244,12 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('total_salary') ?></div>
 																<div class="profile-field-value">
-																	<?= number_format($emprow['salary'], 2); ?> <i class="icon-saudi_riyal"></i> -
-																	<?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
+																	<?php if ($canViewSalary): ?>
+																		<?= number_format($emprow['salary'], 2); ?> <i class="icon-saudi_riyal"></i> -
+																		<?= ($emprow['payment_type'] == 1 ? __('bank_transfer') : ($emprow['payment_type'] == 2 ? __('cash_payment') : __('about_to_hold'))) ?>
+																	<?php else: ?>
+																		<span class="text-muted"><i class="fa fa-lock"></i> <?= __('salary_hidden_no_access') ?></span>
+																	<?php endif; ?>
 																</div>
 															</div>
 															<div class="profile-field">
@@ -1273,7 +1294,7 @@ if (mysqli_num_rows($query) == 1) {
 																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
 																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
 																	<?php else: ?>
-																		<span class="text-muted">N/A</span>
+																		<span class="text-muted"><?= __('not_available', 'N/A') ?></span>
 																	<?php endif ?>
 																</div>
 															</div>
@@ -1472,9 +1493,9 @@ if (mysqli_num_rows($query) == 1) {
 																<tr>
 																	<th><?= __('date') ?></th>
 																	<th><?= __('event', 'Event') ?></th>
-																	<th><?= __('available_balance') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
-																	<th><?= __('used_days') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
-																	<th><?= __('remaining_balance', 'Remaining') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('available_balance') ?> (<?= __('before', 'Before') ?> &rarr; <?= __('after', 'After') ?>)</th>
+																	<th><?= __('used_days') ?> (<?= __('before', 'Before') ?> &rarr; <?= __('after', 'After') ?>)</th>
+																	<th><?= __('remaining_balance', 'Remaining') ?> (<?= __('before', 'Before') ?> &rarr; <?= __('after', 'After') ?>)</th>
 																	<th><?= __('performed_by', 'Performed By') ?></th>
 																	<th><?= __('notes') ?></th>
 																</tr>
@@ -1543,7 +1564,7 @@ if (mysqli_num_rows($query) == 1) {
 															<thead>
 																<tr>
 														<th><?= __('last_updated', 'Last Updated') ?></th>
-																	<th><?= __('available_balance') ?> (<?= __('before') ?> &rarr; <?= __('after') ?>)</th>
+																	<th><?= __('available_balance') ?> (<?= __('before', 'Before') ?> &rarr; <?= __('after', 'After') ?>)</th>
 																	<th><?= __('used_days') ?></th>
 																	<th><?= __('remaining_balance', 'Remaining') ?></th>
 																	<th><?= __('status') ?></th>
@@ -1618,7 +1639,7 @@ if (mysqli_num_rows($query) == 1) {
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('approved_amount') ?>:</td>
-																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> SAR</td>
+																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> <?= __('sar', 'SAR') ?></td>
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('installments') ?>:</td>
@@ -1626,7 +1647,7 @@ if (mysqli_num_rows($query) == 1) {
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('monthly_deduction') ?>:</td>
-																			<td class="text-warning font-weight-bold"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> SAR</td>
+																			<td class="text-warning font-weight-bold"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> <?= __('sar', 'SAR') ?></td>
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('deduction_mode') ?>:</td>
@@ -1717,7 +1738,7 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 																<div class="col-md-6">
 																	<strong><?= __('disbursement_proof') ?>:</strong>
-																	<p><a href="./assets/loan_receipts/<?= htmlspecialchars($loan_summary['disbursement_attachment']); ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> View Attachment</a></p>
+																	<p><a href="./assets/loan_receipts/<?= htmlspecialchars($loan_summary['disbursement_attachment']); ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view_attachments', 'View Attachment') ?></a></p>
 																</div>
 															</div>
 														<?php endif; ?>
@@ -1855,7 +1876,7 @@ if (mysqli_num_rows($query) == 1) {
 													<tr>
 														<th><?= __('payment_date') ?></th>
 														<th><?= __('amount') ?></th>
-														<th><?= __('payment_method') ?></th>
+														<th><?= __('payment_method', 'Payment Method') ?></th>
 														<th><?= __('receipt_id') ?></th>
 														<th><?= __('attachment') ?></th>
 														<th><?= __('note') ?></th>
@@ -1871,20 +1892,20 @@ if (mysqli_num_rows($query) == 1) {
 														$payment_method_badge = '';
 														switch ($payment_method) {
 															case 'manual':
-																$payment_method_badge = '<span class="badge badge-success"><i class="fa fa-hand-paper-o"></i> Manual</span>';
+																$payment_method_badge = '<span class="badge badge-success"><i class="fa fa-hand-paper-o"></i> ' . __('manual') . '</span>';
 																break;
 															case 'payroll':
-																$payment_method_badge = '<span class="badge badge-primary"><i class="fa fa-calendar"></i> Payroll</span>';
+																$payment_method_badge = '<span class="badge badge-primary"><i class="fa fa-calendar"></i> ' . __('payroll') . '</span>';
 																break;
 															default:
-																$payment_method_badge = '<span class="badge badge-info"><i class="fa fa-cog"></i> Auto</span>';
+																$payment_method_badge = '<span class="badge badge-info"><i class="fa fa-cog"></i> ' . __('auto', 'Auto') . '</span>';
 														}
 													?>
 														<tr>
 															<td><?= format_safe_date($payment_rec['payment_date'] ?? null, 'd, M Y'); ?></td>
-															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> SAR</td>
+															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> <?= __('sar', 'SAR') ?></td>
 															<td><?= $payment_method_badge; ?></td>
-															<td><?= !empty($payment_rec['receipt_id']) ? htmlspecialchars($payment_rec['receipt_id']) : '<span class="text-muted">N/A</span>'; ?></td>
+															<td><?= !empty($payment_rec['receipt_id']) ? htmlspecialchars($payment_rec['receipt_id']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>'; ?></td>
 															<td>
 																<?php if (!empty($payment_rec['attachment'])):
 																	// Determine file path based on payment method
@@ -1896,7 +1917,7 @@ if (mysqli_num_rows($query) == 1) {
 																?>
 																	<a href="<?= $file_path; ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view') ?></a>
 																<?php else: ?>
-																	<span class="text-muted">N/A</span>
+																	<span class="text-muted"><?= __('not_available', 'N/A') ?></span>
 																<?php endif; ?>
 															</td>
 															<td>
@@ -2032,7 +2053,7 @@ if (mysqli_num_rows($query) == 1) {
 																			</small>
 																		</div>
 																		<div class="doc-item-actions">
-																			<button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
+																			<button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download', 'Download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
 																				<i class="fa fa-download"></i>
 																			</button>
 																			<button class="btn btn-sm btn-icon btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
@@ -2053,7 +2074,7 @@ if (mysqli_num_rows($query) == 1) {
 																		<button class="btn btn-sm btn-light" id="viewer-fullscreen" title="<?= __('fullscreen') ?>">
 																			<i class="fa fa-expand"></i>
 																		</button>
-																		<button class="btn btn-sm btn-light" id="viewer-download" title="<?= __('download') ?>" style="display:none;">
+																		<button class="btn btn-sm btn-light" id="viewer-download" title="<?= __('download', 'Download') ?>" style="display:none;">
 																			<i class="fa fa-download"></i>
 																		</button>
 																		<button class="btn btn-sm btn-light" id="viewer-clear" title="<?= __('close') ?>">
@@ -2095,13 +2116,13 @@ if (mysqli_num_rows($query) == 1) {
 										<div class="tab-pane" id="attendance">
 											<div class="card-box">
 
-												<h4 class="header-title m-b-30">Attendance Record</h4>
+												<h4 class="header-title m-b-30"><?= __('attendance_record', 'Attendance Record') ?></h4>
 
 												<div class="col-4 pull-right">
 													<div class="input-group input-daterange">
-														<input type="text" id="FromDate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="From:">
-														<div class="input-group-addon">to</div>
-														<input type="text" id="Todate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="To:">
+														<input type="text" id="FromDate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="<?= __('from', 'From') ?>:">
+														<div class="input-group-addon"><?= __('to', 'to') ?></div>
+														<input type="text" id="Todate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="<?= __('to', 'To') ?>:">
 													</div>
 												</div>
 
@@ -2109,16 +2130,16 @@ if (mysqli_num_rows($query) == 1) {
 												<table id="attendance_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
-															<th>id</th>
-															<th>Emp ID.</th>
-															<th>Employee Name</th>
-															<th>Date</th>
-															<th>Check In</th>
-															<th>Check Out</th>
-															<th>Hours</th>
-															<th>Punch Type</th>
-															<th>Note</th>
-															<th>Action</th>
+															<th><?= __('id') ?></th>
+															<th><?= __('emp_id', 'Emp ID') ?>.</th>
+															<th><?= __('employee_name', 'Employee Name') ?></th>
+															<th><?= __('date') ?></th>
+															<th><?= __('check_in', 'Check In') ?></th>
+															<th><?= __('check_out', 'Check Out') ?></th>
+															<th><?= __('hours') ?></th>
+															<th><?= __('punch_type', 'Punch Type') ?></th>
+															<th><?= __('note') ?></th>
+															<th><?= __('action') ?></th>
 														</tr>
 													</thead>
 												</table>
@@ -2337,6 +2358,7 @@ if (mysqli_num_rows($query) == 1) {
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 		<script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
+		<script src="assets/js/employeeTransfer.js?t=<?= time() ?>"></script>
 		<script src="assets/js/salaryIncrement.js?t=<?= time() ?>"></script>
 		<script src="assets/js/empVacationHandle.js"></script>
 
@@ -2437,7 +2459,7 @@ if (mysqli_num_rows($query) == 1) {
 							<p class="text-muted mb-3">${__('rejoin_request_subtitle', 'Your rejoin request will be sent to your direct supervisor for approval')}</p>
 							<div class="form-group">
 								<label for="rejoinDate" class="form-label font-weight-bold">${__('rejoin_date_label', 'Actual Rejoin Date')} <span class="text-danger">*</span></label>
-								<input type="text" id="rejoinDate" class="form-control" placeholder="Select date" value="${formattedDate}">
+								<input type="text" id="rejoinDate" class="form-control" placeholder="${__('select_date', 'Select date...')}" value="${formattedDate}">
 								<small class="text-muted d-block mt-2">
 									<i class="fa fa-info-circle"></i> ${__('planned_return_text', 'Planned Return')}:<br>
 									<strong>${displayDate}</strong>
@@ -2903,7 +2925,7 @@ if (mysqli_num_rows($query) == 1) {
 							viewer.html('<pre style="padding: 20px; white-space: pre-wrap; word-wrap: break-word;">' + $('<div>').text(data).html() + '</pre>');
 						});
 					} else {
-						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> Download File</a></div>');
+						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3"><?= __('preview_not_available_for_file_type', 'Preview not available for this file type') ?></p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> <?= __('download_file', 'Download File') ?></a></div>');
 					}
 				});
 
@@ -3126,7 +3148,7 @@ if (mysqli_num_rows($query) == 1) {
 						preConfirm: () => {
 							const selectedDate = $('#view-emp-return-date-input').val();
 							if (!selectedDate) {
-								Swal.showValidationMessage('Please select a return date');
+								Swal.showValidationMessage(__('please_select_return_date', 'Please select a return date'));
 								return false;
 							}
 							return selectedDate;
@@ -3146,7 +3168,7 @@ if (mysqli_num_rows($query) == 1) {
 			$(document).ready(function() {
 
 				var buttonConfig = [];
-				var exportTitle = "Name: <?= $emprow['name'] ?>"
+				var exportTitle = "<?= __('name') ?>: <?= $emprow['name'] ?>"
 				buttonConfig.push({
 					extend: 'excel',
 					exportOptions: {
@@ -3359,7 +3381,7 @@ if (mysqli_num_rows($query) == 1) {
 					autoWidth: false, // Add this line
 					columns: [{
 							data: 'id',
-							title: 'id',
+							title: __('id'),
 						},
 						{
 							data: 'emp_id',
@@ -3405,79 +3427,79 @@ if (mysqli_num_rows($query) == 1) {
 							width: '120px',
 							render: function(data, type, row) {
 								if (type === 'display') {
-									if (!data) return '<span class="badge badge-secondary">General</span>';
+									if (!data) return '<span class="badge badge-secondary"><?= __('general', 'General') ?></span>';
 
 									// Map note types to badge colors and labels
 									const typeMap = {
 										'warning': {
 											color: 'warning',
 											icon: 'fa-exclamation-triangle',
-											label: 'Warning'
+											label: '<?= __('warning', 'Warning') ?>'
 										},
 										'sick_leave': {
 											color: 'info',
 											icon: 'fa-notes-medical',
-											label: 'Sick Leave'
+											label: '<?= __('sick_leave', 'Sick Leave') ?>'
 										},
 										'appreciation': {
 											color: 'success',
 											icon: 'fa-star',
-											label: 'Appreciation'
+											label: '<?= __('appreciation', 'Appreciation') ?>'
 										},
 										'violation': {
 											color: 'danger',
 											icon: 'fa-ban',
-											label: 'Violation'
+											label: '<?= __('violation', 'Violation') ?>'
 										},
 										'absence': {
 											color: 'dark',
 											icon: 'fa-user-slash',
-											label: 'Absence'
+											label: '<?= __('absence', 'Absence') ?>'
 										},
 										'late_arrival': {
 											color: 'warning',
 											icon: 'fa-clock',
-											label: 'Late Arrival'
+											label: '<?= __('late_arrival', 'Late Arrival') ?>'
 										},
 										'performance_review': {
 											color: 'primary',
 											icon: 'fa-chart-line',
-											label: 'Performance'
+											label: '<?= __('performance_review_label', 'Performance') ?>'
 										},
 										'training': {
 											color: 'info',
 											icon: 'fa-graduation-cap',
-											label: 'Training'
+											label: '<?= __('training', 'Training') ?>'
 										},
 										'promotion': {
 											color: 'success',
 											icon: 'fa-arrow-up',
-											label: 'Promotion'
+											label: '<?= __('promotion', 'Promotion') ?>'
 										},
 										'salary_adjustment': {
 											color: 'primary',
 											icon: 'fa-money-bill',
-											label: 'Salary'
+											label: '<?= __('salary_adjustment_label', 'Salary') ?>'
 										},
 										'disciplinary_action': {
 											color: 'danger',
 											icon: 'fa-gavel',
-											label: 'Disciplinary'
+											label: '<?= __('disciplinary_action_label', 'Disciplinary') ?>'
 										},
 										'medical_report': {
 											color: 'info',
 											icon: 'fa-file-medical',
-											label: 'Medical'
+											label: '<?= __('medical_report_label', 'Medical') ?>'
 										},
 										'general': {
 											color: 'secondary',
 											icon: 'fa-sticky-note',
-											label: 'General'
+											label: '<?= __('general', 'General') ?>'
 										},
 										'other': {
 											color: 'secondary',
 											icon: 'fa-ellipsis-h',
-											label: 'Other'
+											label: '<?= __('other', 'Other') ?>'
 										}
 									};
 
@@ -3528,11 +3550,11 @@ if (mysqli_num_rows($query) == 1) {
 											badgeColor = 'success';
 										}
 
-										return `<a href="${data}" target="_blank" class="btn btn-sm btn-${badgeColor}" title="View Attachment">
-											<i class="fa ${iconClass}"></i> View
+										return `<a href="${data}" target="_blank" class="btn btn-sm btn-${badgeColor}" title="<?= __('view_attachments', 'View Attachment') ?>">
+											<i class="fa ${iconClass}"></i> <?= __('view') ?>
 										</a>`;
 									}
-									return '<span class="text-muted"><i class="fa fa-minus"></i> No File</span>';
+									return '<span class="text-muted"><i class="fa fa-minus"></i> <?= __('no_file_text', 'No File') ?></span>';
 								}
 								return data;
 							}
@@ -3621,12 +3643,12 @@ if (mysqli_num_rows($query) == 1) {
 					if (data.status === 'success' && data.notes && data.notes.length > 0) {
 						noteTable.clear().rows.add(data.notes).draw();
 					} else {
-						noDataMessage.text(data.message || 'No notes found for this employee.').removeClass('hidden');
+						noDataMessage.text(data.message || '<?= __('no_notes_found_for_employee', 'No notes found for this employee.') ?>').removeClass('hidden');
 						noteTable.clear().draw();
 					}
 				} catch (error) {
 					console.error('Error fetching notes:', error);
-					noDataMessage.text(`An error occurred: ${error.message}`).removeClass('hidden');
+					noDataMessage.text(`<?= __('an_error_occurred', 'An error occurred') ?>: ${error.message}`).removeClass('hidden');
 					noteTable.clear().draw();
 				} finally {
 					loadingIndicator.addClass('hidden');
@@ -3753,7 +3775,7 @@ if (mysqli_num_rows($query) == 1) {
 					if (ext === 'pdf') {
 						viewer.html('<embed src="' + path + '" type="application/pdf" />');
 					} else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-						viewer.html('<img src="' + path + '" alt="Document" />');
+						viewer.html('<img src="' + path + '" alt="<?= __('document', 'Document') ?>" />');
 					} else if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
 						viewer.html('<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + path) + '"></iframe>');
 					} else if (ext === 'txt') {
@@ -3761,7 +3783,7 @@ if (mysqli_num_rows($query) == 1) {
 							viewer.html('<div style="padding: 20px; background: #fff; height: 100%; overflow: auto;"><pre style="white-space: pre-wrap; font-family: monospace;">' + data + '</pre></div>');
 						});
 					} else {
-						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3">Preview not available for this file type</p><button class="btn btn-primary mt-2" onclick="window.location.href=\'./downloadFile.php?file=' + path + '\'"><i class="fa fa-download"></i> Download File</button></div>');
+						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3"><?= __('preview_not_available_for_file_type', 'Preview not available for this file type') ?></p><button class="btn btn-primary mt-2" onclick="window.location.href=\'./downloadFile.php?file=' + path + '\'"><i class="fa fa-download"></i> <?= __('download_file', 'Download File') ?></button></div>');
 					}
 				}
 
@@ -3856,7 +3878,7 @@ if (mysqli_num_rows($query) == 1) {
 										</div>
 										<div style="flex: 1; text-align: right;">
 											<p style="margin-bottom: 10px;"><strong><?= __('evaluated_by') ?>:</strong> <span class="manager-name">${eval.manager_name}</span></p>
-											<p style="margin-bottom: 10px;"><strong><?= __('evaluation_date') ?>:</strong> ${eval.created_at ? eval.created_at.substring(0, 16).replace('T', ' ') : 'N/A'}</p>
+											<p style="margin-bottom: 10px;"><strong><?= __('evaluation_date') ?>:</strong> ${eval.created_at ? eval.created_at.substring(0, 16).replace('T', ' ') : __('not_available', 'N/A')}</p>
 											<p style="margin-bottom: 10px;"><strong><?= __('total_score') ?>:</strong> <span class="badge badge-${totalScoreBadge}" style="font-size: 14px; padding: 5px 10px;">${eval.total_score || '0'}/100</span></p>
 										</div>
 									</div>
@@ -4001,7 +4023,7 @@ if (mysqli_num_rows($query) == 1) {
 									printWindow.document.write('<!DOCTYPE html>' +
 										'<html>' +
 										'<head>' +
-										'<title>Evaluation Details - ' + eval.employee_name + '</title>' +
+										'<title><?= __('evaluation_details') ?> - ' + eval.employee_name + '</title>' +
 										'<link rel="stylesheet" href="assets/css/bootstrap.min.css">' +
 										'<style>' +
 										'body { margin: 20px; font-family: Arial, sans-serif; }' +
@@ -4031,11 +4053,11 @@ if (mysqli_num_rows($query) == 1) {
 								}
 							});
 						} else {
-							Swal.fire('Error', 'Failed to load evaluation details', 'error');
+							Swal.fire('<?= __('error') ?>', '<?= __('failed_to_load_evaluation_details', 'Failed to load evaluation details') ?>', 'error');
 						}
 					},
 					error: function() {
-						Swal.fire('Error', 'An error occurred while loading the evaluation details', 'error');
+						Swal.fire('<?= __('error') ?>', '<?= __('error_loading_evaluation_details', 'An error occurred while loading the evaluation details') ?>', 'error');
 					}
 				});
 			});
@@ -4057,9 +4079,9 @@ if (mysqli_num_rows($query) == 1) {
 							<input type="date" id="payment_date" class="form-control swal2-input" value="${new Date().toISOString().split('T')[0]}" required>
 						</div>
 						<div class="form-group">
-							<label for="payment_amount" class="font-weight-bold">${__('payment_amount')} (SAR) <span class="text-danger">*</span></label>
+							<label for="payment_amount" class="font-weight-bold">${__('payment_amount')} (${__('sar', 'SAR')}) <span class="text-danger">*</span></label>
 							<input type="number" id="payment_amount" class="form-control swal2-input" step="0.01" min="0.01" max="${remainingBalance.toFixed(2)}" placeholder="${__('max')}: ${remainingBalance.toFixed(2)}" required>
-							<small class="text-muted">${__('remaining_balance')}: ${remainingBalance.toFixed(2)} SAR</small>
+							<small class="text-muted">${__('remaining_balance')}: ${remainingBalance.toFixed(2)} ${__('sar', 'SAR')}</small>
 						</div>
 						<div class="form-group">
 							<label for="receipt_id" class="font-weight-bold">${__('receipt_number')}</label>
@@ -4188,17 +4210,17 @@ if (mysqli_num_rows($query) == 1) {
 					html: `
 					<div class="form-group text-left">
 						<label><?= __('number_of_installments') ?></label>
-						<input type="number" id="newInstallments" class="form-control" value="${currentInstallments}" min="1" max="60" placeholder="e.g. 12">
+						<input type="number" id="newInstallments" class="form-control" value="${currentInstallments}" min="1" max="60" placeholder="<?= __('installments_placeholder_example', 'e.g. 12') ?>">
 						<small class="text-muted d-block mt-1"><?= __('minimum') ?> 1, <?= __('maximum') ?> 60</small>
 						<small id="installmentsFeedback" class="text-danger d-block mt-1"></small>
 					</div>
 					<div class="form-group text-left">
-						<label><?= __('monthly_deduction') ?> (SAR)</label>
+						<label><?= __('monthly_deduction') ?> (<?= __('sar', 'SAR') ?>)</label>
 						<input type="number" id="newMonthlyDeduction" class="form-control" value="${currentMonthlyDeduction.toFixed(2)}" step="0.01" placeholder="0.00" readonly>
 						<small class="text-muted d-block mt-1"><?= __('calculated_automatically') ?></small>
 					</div>
 					<div class="alert alert-info">
-						<?= __('remaining_balance') ?>: <strong>${remaining.toFixed(2)} SAR</strong>
+						<?= __('remaining_balance') ?>: <strong>${remaining.toFixed(2)} <?= __('sar', 'SAR') ?></strong>
 					</div>
 				`,
 					showCancelButton: true,

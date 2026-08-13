@@ -3,6 +3,8 @@
     require_once __DIR__ . '/includes/special_access_helper.php';
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessLocationsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_location_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessSubDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_sub_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessRequestBlocksTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLoanSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_loan_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessVacationPayrollTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_vacation_payroll_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -335,6 +337,8 @@
         const isFullSettingsAdmin = <?= $is_system_admin ? 'true' : 'false' ?>;
         const canAccessDepartmentsTab = <?= $canAccessDepartmentsTab ? 'true' : 'false' ?>;
         const canAccessJobTitlesTab = <?= $canAccessJobTitlesTab ? 'true' : 'false' ?>;
+        const canAccessLocationsTab = <?= $canAccessLocationsTab ? 'true' : 'false' ?>;
+        const canAccessSubDepartmentsTab = <?= $canAccessSubDepartmentsTab ? 'true' : 'false' ?>;
         const canAccessRequestBlocksTab = <?= $canAccessRequestBlocksTab ? 'true' : 'false' ?>;
         const canAccessLoanSettingsTab = <?= $canAccessLoanSettingsTab ? 'true' : 'false' ?>;
         const canAccessVacationPayrollTab = <?= $canAccessVacationPayrollTab ? 'true' : 'false' ?>;
@@ -816,7 +820,7 @@
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'approval', 'request_type_blocks', 'payroll_settings'];
+            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -842,6 +846,18 @@
             // Special handling for departments configuration
             if (normalizedGroupName === 'departments') {
                 renderDepartmentsSettings();
+                return;
+            }
+
+            // Special handling for locations configuration
+            if (normalizedGroupName === 'locations') {
+                renderLocationsSettings();
+                return;
+            }
+
+            // Special handling for sub-departments configuration
+            if (normalizedGroupName === 'sub_departments') {
+                renderSubDepartmentsSettings();
                 return;
             }
 
@@ -2363,6 +2379,580 @@
             }
         }
 
+        let citiesListCache = null;
+
+        function renderLocationsSettings() {
+            let formHtml = `<div class="tab-pane active" id="group-locations" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0"><?= __('locations_management', 'Locations Management') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-location"><i class="mdi mdi-plus"></i> <?= __('add_new_location', 'Add New Location') ?></button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('manage_locations_by_city', 'Manage locations and assign each one to a city') ?></p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="location-search-input" class="form-control" placeholder="<?= __('search_locations', 'Search locations or cities') ?>" style="max-width: 400px;">`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="locations-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2"><?= __('loading') ?></span></div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            loadLocations();
+
+            const btnAddLocation = document.getElementById('btn-add-location');
+            if (btnAddLocation) btnAddLocation.addEventListener('click', showAddLocationModal);
+
+            const searchInput = document.getElementById('location-search-input');
+            if (searchInput) searchInput.addEventListener('input', function() { filterLocations(this.value); });
+        }
+
+        async function fetchCitiesList() {
+            if (citiesListCache) return citiesListCache;
+            const response = await fetch('./includes/locations_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_cities' })
+            });
+            const data = await response.json();
+            citiesListCache = (data.success && data.cities) ? data.cities : [];
+            return citiesListCache;
+        }
+
+        function citySelectOptionsHtml(cities, selectedCityId) {
+            let opts = `<option value=""><?= __('select_city', 'Select City') ?></option>`;
+            cities.forEach(city => {
+                const selected = (String(city.id) === String(selectedCityId)) ? 'selected' : '';
+                opts += `<option value="${city.id}" ${selected}>${city.name_en}</option>`;
+            });
+            return opts;
+        }
+
+        async function loadLocations() {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_locations' })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_load_locations', 'Failed to load locations') ?>');
+                const data = await response.json();
+
+                const container = document.getElementById('locations-container');
+                if (!data.success || !data.locations || data.locations.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_locations_configured_yet', 'No locations configured yet.') ?></p>';
+                    return;
+                }
+
+                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('city') ?></th><th><?= __('location_name_english', 'Location (English)') ?></th><th><?= __('location_name_arabic', 'Location (Arabic)') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
+                data.locations.forEach((loc) => {
+                    html += `
+                        <tr>
+                            <td>${loc.city_name_en || 'N/A'}</td>
+                            <td><strong>${loc.name_en || 'N/A'}</strong></td>
+                            <td><strong>${loc.name_ar || 'N/A'}</strong></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-location-btn" data-location-id="${loc.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-location-btn" data-location-id="${loc.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.edit-location-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { showEditLocationModal(this.dataset.locationId); });
+                });
+                container.querySelectorAll('.delete-location-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { deleteLocation(this.dataset.locationId); });
+                });
+            } catch (error) {
+                console.error('Error loading locations:', error);
+                document.getElementById('locations-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
+            }
+        }
+
+        async function showAddLocationModal() {
+            const cities = await fetchCitiesList();
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('add_new_location', 'Add New Location') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="location-city"><?= __('city') ?></label>
+                        <select id="location-city" class="form-control">${citySelectOptionsHtml(cities, '')}</select>
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="location-name-en"><?= __('location_name_english', 'Location (English)') ?></label>
+                        <input type="text" id="location-name-en" class="form-control">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="location-name-ar"><?= __('location_name_arabic', 'Location (Arabic)') ?></label>
+                        <input type="text" id="location-name-ar" class="form-control">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('add') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                didOpen: () => {
+                    $('#location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                },
+                preConfirm: () => {
+                    const cityId = document.getElementById('location-city').value;
+                    const nameEn = document.getElementById('location-name-en').value.trim();
+                    const nameAr = document.getElementById('location-name-ar').value.trim();
+                    if (!cityId) { Swal.showValidationMessage('<?= __('please_select_a_city', 'Please select a city') ?>'); return false; }
+                    if (!nameEn) { Swal.showValidationMessage('<?= __('location_name_in_english_is_required', 'Location name in English is required') ?>'); return false; }
+                    if (!nameAr) { Swal.showValidationMessage('<?= __('location_name_in_arabic_is_required', 'Location name in Arabic is required') ?>'); return false; }
+                    return { cityId, nameEn, nameAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) await addLocation(result.value.cityId, result.value.nameEn, result.value.nameAr);
+            });
+        }
+
+        async function addLocation(cityId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'add_location', city_id: cityId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('added') ?>', '<?= __('location_added_successfully', 'Location added successfully') ?>', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_add_location', 'Failed to add location') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function showEditLocationModal(locationId) {
+            try {
+                const [cities, response] = await Promise.all([
+                    fetchCitiesList(),
+                    fetch('./includes/locations_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'get_location', location_id: locationId })
+                    })
+                ]);
+
+                const data = await response.json();
+                if (!data.success || !data.location) {
+                    Swal.fire('<?= __('error') ?>', '<?= __('location_not_found', 'Location not found') ?>', 'error');
+                    return;
+                }
+
+                const loc = data.location;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '<?= __('edit_location', 'Edit Location') ?>',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-location-city"><?= __('city') ?></label>
+                            <select id="edit-location-city" class="form-control">${citySelectOptionsHtml(cities, loc.city_id)}</select>
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-location-name-en"><?= __('location_name_english', 'Location (English)') ?></label>
+                            <input type="text" id="edit-location-name-en" class="form-control" value="${loc.name_en || ''}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-location-name-ar"><?= __('location_name_arabic', 'Location (Arabic)') ?></label>
+                            <input type="text" id="edit-location-name-ar" class="form-control" value="${loc.name_ar || ''}">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '<?= __('update') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                    didOpen: () => {
+                        $('#edit-location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                    },
+                    preConfirm: () => {
+                        const cityId = document.getElementById('edit-location-city').value;
+                        const nameEn = document.getElementById('edit-location-name-en').value.trim();
+                        const nameAr = document.getElementById('edit-location-name-ar').value.trim();
+                        if (!cityId) { Swal.showValidationMessage('<?= __('please_select_a_city', 'Please select a city') ?>'); return false; }
+                        if (!nameEn) { Swal.showValidationMessage('<?= __('location_name_in_english_is_required', 'Location name in English is required') ?>'); return false; }
+                        if (!nameAr) { Swal.showValidationMessage('<?= __('location_name_in_arabic_is_required', 'Location name in Arabic is required') ?>'); return false; }
+                        return { cityId, nameEn, nameAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateLocation(locationId, result.value.cityId, result.value.nameEn, result.value.nameAr);
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function updateLocation(locationId, cityId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_location', location_id: locationId, city_id: cityId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('updated') ?>', '<?= __('location_updated_successfully', 'Location updated successfully') ?>', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_update_location', 'Failed to update location') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function deleteLocation(locationId) {
+            const result = await Swal.fire({
+                title: '<?= __('delete_location', 'Delete Location') ?>',
+                text: '<?= __('this_action_cannot_be_undone') ?>',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('yes_delete_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>'
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_location', location_id: locationId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('deleted') ?>', '<?= __('location_deleted_successfully', 'Location deleted successfully') ?>', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_delete_location', 'Failed to delete location') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        function filterLocations(searchTerm) {
+            const rows = document.querySelectorAll('#locations-container tbody tr');
+            const searchLower = searchTerm.toLowerCase();
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
+                else { row.style.display = 'none'; }
+            });
+            const container = document.getElementById('locations-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_locations_match_your_search', 'No locations match your search') ?>`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
+        let departmentsListCache = null;
+
+        function renderSubDepartmentsSettings() {
+            let formHtml = `<div class="tab-pane active" id="group-sub_departments" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0"><?= __('sub_departments_management', 'Sub-Departments Management') ?></h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-sub-department"><i class="mdi mdi-plus"></i> <?= __('add_new_sub_department', 'Add New Sub-Department') ?></button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4"><?= __('manage_sub_departments_by_department', 'Manage sub-departments and assign each one to a department') ?></p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="sub-department-search-input" class="form-control" placeholder="<?= __('search_sub_departments', 'Search sub-departments or departments') ?>" style="max-width: 400px;">`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="sub-departments-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2"><?= __('loading') ?></span></div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            loadSubDepartments();
+
+            const btnAdd = document.getElementById('btn-add-sub-department');
+            if (btnAdd) btnAdd.addEventListener('click', showAddSubDepartmentModal);
+
+            const searchInput = document.getElementById('sub-department-search-input');
+            if (searchInput) searchInput.addEventListener('input', function() { filterSubDepartments(this.value); });
+        }
+
+        async function fetchDepartmentsList() {
+            if (departmentsListCache) return departmentsListCache;
+            const response = await fetch('./includes/sub_departments_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_departments' })
+            });
+            const data = await response.json();
+            departmentsListCache = (data.success && data.departments) ? data.departments : [];
+            return departmentsListCache;
+        }
+
+        function departmentSelectOptionsHtml(departments, selectedDeptId) {
+            let opts = `<option value=""><?= __('select_department', 'Select Department') ?></option>`;
+            departments.forEach(dept => {
+                const selected = (String(dept.id) === String(selectedDeptId)) ? 'selected' : '';
+                opts += `<option value="${dept.id}" ${selected}>${dept.dep_nme}</option>`;
+            });
+            return opts;
+        }
+
+        async function loadSubDepartments() {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_sub_departments' })
+                });
+
+                if (!response.ok) throw new Error('<?= __('failed_to_load_sub_departments', 'Failed to load sub-departments') ?>');
+                const data = await response.json();
+
+                const container = document.getElementById('sub-departments-container');
+                if (!data.success || !data.sub_departments || data.sub_departments.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> <?= __('no_sub_departments_configured_yet', 'No sub-departments configured yet.') ?></p>';
+                    return;
+                }
+
+                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th><?= __('department_label') ?></th><th><?= __('sub_department_name_english', 'Sub-Department (English)') ?></th><th><?= __('sub_department_name_arabic', 'Sub-Department (Arabic)') ?></th><th><?= __('actions') ?></th></tr></thead><tbody>';
+                data.sub_departments.forEach((sd) => {
+                    html += `
+                        <tr>
+                            <td>${sd.dep_nme || 'N/A'}</td>
+                            <td><strong>${sd.name_en || 'N/A'}</strong></td>
+                            <td><strong>${sd.name_ar || 'N/A'}</strong></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary edit-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.edit-sub-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { showEditSubDepartmentModal(this.dataset.subDeptId); });
+                });
+                container.querySelectorAll('.delete-sub-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { deleteSubDepartment(this.dataset.subDeptId); });
+                });
+            } catch (error) {
+                console.error('Error loading sub-departments:', error);
+                document.getElementById('sub-departments-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
+            }
+        }
+
+        async function showAddSubDepartmentModal() {
+            const departments = await fetchDepartmentsList();
+            Swal.fire({
+                icon: 'info',
+                title: '<?= __('add_new_sub_department', 'Add New Sub-Department') ?>',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="sub-department-dept"><?= __('department_label') ?></label>
+                        <select id="sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, '')}</select>
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="sub-department-name-en"><?= __('sub_department_name_english', 'Sub-Department (English)') ?></label>
+                        <input type="text" id="sub-department-name-en" class="form-control">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="sub-department-name-ar"><?= __('sub_department_name_arabic', 'Sub-Department (Arabic)') ?></label>
+                        <input type="text" id="sub-department-name-ar" class="form-control">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '<?= __('add') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                didOpen: () => {
+                    $('#sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                },
+                preConfirm: () => {
+                    const departmentId = document.getElementById('sub-department-dept').value;
+                    const nameEn = document.getElementById('sub-department-name-en').value.trim();
+                    const nameAr = document.getElementById('sub-department-name-ar').value.trim();
+                    if (!departmentId) { Swal.showValidationMessage('<?= __('please_select_a_department', 'Please select a department') ?>'); return false; }
+                    if (!nameEn) { Swal.showValidationMessage('<?= __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') ?>'); return false; }
+                    if (!nameAr) { Swal.showValidationMessage('<?= __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') ?>'); return false; }
+                    return { departmentId, nameEn, nameAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) await addSubDepartment(result.value.departmentId, result.value.nameEn, result.value.nameAr);
+            });
+        }
+
+        async function addSubDepartment(departmentId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'add_sub_department', department_id: departmentId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('added') ?>', '<?= __('sub_department_added_successfully', 'Sub-department added successfully') ?>', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_add_sub_department', 'Failed to add sub-department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function showEditSubDepartmentModal(subDeptId) {
+            try {
+                const [departments, response] = await Promise.all([
+                    fetchDepartmentsList(),
+                    fetch('./includes/sub_departments_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'get_sub_department', sub_dept_id: subDeptId })
+                    })
+                ]);
+
+                const data = await response.json();
+                if (!data.success || !data.sub_department) {
+                    Swal.fire('<?= __('error') ?>', '<?= __('sub_department_not_found', 'Sub-department not found') ?>', 'error');
+                    return;
+                }
+
+                const sd = data.sub_department;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '<?= __('edit_sub_department', 'Edit Sub-Department') ?>',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-dept"><?= __('department_label') ?></label>
+                            <select id="edit-sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, sd.department_id)}</select>
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-name-en"><?= __('sub_department_name_english', 'Sub-Department (English)') ?></label>
+                            <input type="text" id="edit-sub-department-name-en" class="form-control" value="${sd.name_en || ''}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-name-ar"><?= __('sub_department_name_arabic', 'Sub-Department (Arabic)') ?></label>
+                            <input type="text" id="edit-sub-department-name-ar" class="form-control" value="${sd.name_ar || ''}">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '<?= __('update') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                    didOpen: () => {
+                        $('#edit-sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                    },
+                    preConfirm: () => {
+                        const departmentId = document.getElementById('edit-sub-department-dept').value;
+                        const nameEn = document.getElementById('edit-sub-department-name-en').value.trim();
+                        const nameAr = document.getElementById('edit-sub-department-name-ar').value.trim();
+                        if (!departmentId) { Swal.showValidationMessage('<?= __('please_select_a_department', 'Please select a department') ?>'); return false; }
+                        if (!nameEn) { Swal.showValidationMessage('<?= __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') ?>'); return false; }
+                        if (!nameAr) { Swal.showValidationMessage('<?= __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') ?>'); return false; }
+                        return { departmentId, nameEn, nameAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateSubDepartment(subDeptId, result.value.departmentId, result.value.nameEn, result.value.nameAr);
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function updateSubDepartment(subDeptId, departmentId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_sub_department', sub_dept_id: subDeptId, department_id: departmentId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('updated') ?>', '<?= __('sub_department_updated_successfully', 'Sub-department updated successfully') ?>', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_update_sub_department', 'Failed to update sub-department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        async function deleteSubDepartment(subDeptId) {
+            const result = await Swal.fire({
+                title: '<?= __('delete_sub_department', 'Delete Sub-Department') ?>',
+                text: '<?= __('this_action_cannot_be_undone') ?>',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '<?= __('yes_delete_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>'
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_sub_department', sub_dept_id: subDeptId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('<?= __('deleted') ?>', '<?= __('sub_department_deleted_successfully', 'Sub-department deleted successfully') ?>', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '<?= __('failed_to_delete_sub_department', 'Failed to delete sub-department') ?>');
+                }
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+            }
+        }
+
+        function filterSubDepartments(searchTerm) {
+            const rows = document.querySelectorAll('#sub-departments-container tbody tr');
+            const searchLower = searchTerm.toLowerCase();
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
+                else { row.style.display = 'none'; }
+            });
+            const container = document.getElementById('sub-departments-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> <?= __('no_sub_departments_match_your_search', 'No sub-departments match your search') ?>`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
         function renderDepartmentsSettings() {
             let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
@@ -3150,6 +3740,12 @@
                     if (canAccessJobTitlesTab) {
                         groupedSettings['job titles'] = [];
                     }
+                    if (canAccessLocationsTab) {
+                        groupedSettings['locations'] = [];
+                    }
+                    if (canAccessSubDepartmentsTab) {
+                        groupedSettings['sub_departments'] = [];
+                    }
                     if (canAccessRequestBlocksTab) {
                         groupedSettings['request type blocks'] = [];
                     }
@@ -3251,6 +3847,12 @@
                 }
                 if (!groupedSettings['departments']) {
                     groupedSettings['departments'] = [];
+                }
+                if (!groupedSettings['locations']) {
+                    groupedSettings['locations'] = [];
+                }
+                if (!groupedSettings['sub_departments']) {
+                    groupedSettings['sub_departments'] = [];
                 }
                 if (!groupedSettings['approval']) {
                     groupedSettings['approval'] = [];

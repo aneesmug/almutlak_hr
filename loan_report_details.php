@@ -48,7 +48,8 @@ if (mysqli_num_rows($query) == 1) {
                 bl.bank_name_ar,
                 d.dep_nme AS `deptname`,
                 d.dep_nme_ar AS `deptname_ar`,
-                s.section_name,
+                comp.comp_name,
+                comp.comp_name_ar,
                 c.name AS `country_name`,
                 rejected_by_emp.name as rejected_by_name,
                 ela.notes as rejection_notes,
@@ -59,7 +60,7 @@ if (mysqli_num_rows($query) == 1) {
             JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN bank_list bl ON e.bank_name = bl.bnk_id
             LEFT JOIN department d ON e.dept = d.id
-            LEFT JOIN section s ON e.sectin_nme = s.id
+            LEFT JOIN companies comp ON e.comp_no = comp.comp_id
             LEFT JOIN countries c ON e.country = c.id
             LEFT JOIN employees rejected_by_emp ON l.rejected_by = rejected_by_emp.emp_id
             LEFT JOIN emp_loan_approvals ela ON ela.loan_id = l.id AND ela.status = 'rejected'
@@ -330,7 +331,8 @@ if (mysqli_num_rows($query) == 1) {
                                     <img src="<?= getAvatarImagePath($loan_details['avatar'] ?? '', $loan_details['sex'] ?? 1); ?>" alt="Employee Avatar" class="avatar">
                                     <div class="info">
                                         <h4><?=getDisplayName($loan_details['employee_name']); ?></h4>
-                                        <p><?= __('employee_id_label') ?>: <?=htmlspecialchars($loan_details['emp_id']); ?> | <?=($is_rtl ?? false ? $loan_details['deptname_ar'] : $loan_details['deptname']) ; ?><?= getDisplayName(!empty($loan_details['section_name']) ? ' / ' . htmlspecialchars($loan_details['section_name']) : '') ?></p>
+                                        <?php $loanCompName = ($is_rtl ?? false) ? ($loan_details['comp_name_ar'] ?? $loan_details['comp_name'] ?? '') : ($loan_details['comp_name'] ?? ''); ?>
+                                        <p><?= __('employee_id_label') ?>: <?=htmlspecialchars($loan_details['emp_id']); ?> | <?=($is_rtl ?? false ? $loan_details['deptname_ar'] : $loan_details['deptname']) ; ?><?= $loanCompName ? ' / ' . htmlspecialchars($loanCompName) : '' ?></p>
                                     </div>
                                 </div>
                                 <div class="report-section">
