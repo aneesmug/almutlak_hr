@@ -39,6 +39,8 @@ if (!function_exists('get_special_access_labels')) {
             'manage_vacation_salary_below_min_days' => 'Employee Master: Allow Vacation Salary Payout Below Minimum Days',
             'view_employee_eos_value' => 'Employee Master: View End of Service (EOS) Estimated Value',
             'view_employee_salary_value' => 'Employee Master: View Salary',
+            'view_employee_additional_info' => 'Employee Master: View Additional Information Tab',
+            'access_ctc_report' => 'Reports: CTC (Cost To Company) Report',
             'view_all_employees' => 'View All Employees (Cross-Department/Company Access)',
             'view_employee_banking_details' => 'Employee Master: View Banking/IBAN/GOSI Details',
             'view_employee_documents' => 'Employee Master: View Uploaded Documents (Passport/Iqama, etc.)',
@@ -72,6 +74,8 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_salary_increment_status_history' => 'Access Page: Salary Increment Status History',
             'access_edit_employee' => 'Access Page: Edit Employee',
             'access_all_applied_employee_transfers' => 'Access Page: All Employee Transfer Requests',
+            'access_import_medical_insurance' => 'Access Page: Import Medical Insurance',
+            'access_import_loan_opening_balance' => 'Access Page: Import Loan Opening Balance',
         ];
     }
 }
@@ -108,6 +112,8 @@ if (!function_exists('get_special_access_categories')) {
                     'view_all_employees',
                     'view_employee_eos_value',
                     'view_employee_salary_value',
+                    'view_employee_additional_info',
+                    'access_ctc_report',
                     'view_employee_banking_details',
                     'view_employee_documents',
                     'manage_vacation_salary_below_min_days',

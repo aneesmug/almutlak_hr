@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
 require_once __DIR__ . '/includes/report_permissions_helper.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
 
 // Define who can see reports
 $can_see_reports_page = [
@@ -57,10 +58,13 @@ $all_report_options = [
     'eos' => __('calculate_end_of_service'),
     'dept_comparison' => __('dept_comparison_report'),
     'country_company_comparison' => __('country_company_comparison_report'),
+    'ctc' => __('ctc_report', 'CTC Report'),
     'custom' => __('custom_report')
 ];
 
 $current_emp_id_for_reports = (string)($_SESSION['empid'] ?? ($empid ?? ''));
+$can_view_ctc_report = ($is_system_admin ?? false)
+    || user_has_special_access($conDB, $current_emp_id_for_reports, 'access_ctc_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $allowed_report_types = get_allowed_report_types_for_user(
     $conDB,
     $current_emp_id_for_reports,
@@ -609,6 +613,9 @@ if (mysqli_num_rows($query) == 1) {
                                                             continue;
                                                         }
                                                         if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) {
+                                                            continue;
+                                                        }
+                                                        if ($report_key === 'ctc' && !$can_view_ctc_report) {
                                                             continue;
                                                         }
                                                     ?>
@@ -1320,6 +1327,7 @@ if (mysqli_num_rows($query) == 1) {
                     eos: { hide: true },
                     dept_comparison: { hide: true },
                     country_company_comparison: { hide: true },
+                    ctc: { hide: true },
                     custom: { hide: true }
                 };
 
@@ -1356,11 +1364,11 @@ if (mysqli_num_rows($query) == 1) {
                 // Report types whose backend generator accepts $companies/$countries filters
                 // (all per-employee reports) - used to show the company select2 and include
                 // it in the submitted filter payload.
-                const companyFilterReportTypes = ['employee', 'vacation', 'loan', 'salary_increment', 'salary', 'payroll', 'attendance', 'document', 'assets', 'assets_list', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'country_company_comparison'];
+                const companyFilterReportTypes = ['employee', 'vacation', 'loan', 'salary_increment', 'salary', 'payroll', 'attendance', 'document', 'assets', 'assets_list', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'country_company_comparison', 'ctc'];
 
                 // Toggle Employee Filter visibility based on report type
                 function toggleEmployeeFilter(reportType) {
-                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement'];
+                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement', 'ctc'];
                     
                     if (employeeRelatedReports.includes(reportType)) {
                         $('#employeeFilterWrapper').show();
@@ -1669,21 +1677,6 @@ if (mysqli_num_rows($query) == 1) {
                         {
                             id: 'gosi',
                             label: (typeof __ === 'function') ? __('gosi') : 'GOSI',
-                            default: false
-                        },
-                        {
-                            id: 'insurance_no',
-                            label: (typeof __ === 'function') ? __('insurance_no') : 'Insurance No',
-                            default: false
-                        },
-                        {
-                            id: 'insurance_class',
-                            label: (typeof __ === 'function') ? __('insurance_class') : 'Insurance Class',
-                            default: false
-                        },
-                        {
-                            id: 'insurance_exp',
-                            label: (typeof __ === 'function') ? __('insurance_exp') : 'Insurance Expiry',
                             default: false
                         },
                         {
@@ -2585,6 +2578,56 @@ if (mysqli_num_rows($query) == 1) {
                             label: (typeof __ === 'function') ? __('inactive_employees') : 'Inactive Employees',
                             default: false
                         }
+                    ],
+                    ctc: [
+                        { id: 'id_iqama', label: (typeof __ === 'function') ? __('id_iqama') : 'ID/Iqama', default: true },
+                        { id: 'emp_id', label: (typeof __ === 'function') ? __('emp_id') : 'EmpID', default: true },
+                        { id: 'name', label: (typeof __ === 'function') ? __('name') : 'Name', default: true },
+                        { id: 'gender', label: (typeof __ === 'function') ? __('gender') : 'Gender', default: true },
+                        { id: 'join_date', label: (typeof __ === 'function') ? __('join_date') : 'Join Date', default: true },
+                        { id: 'position', label: (typeof __ === 'function') ? __('position') : 'Position', default: true },
+                        { id: 'actual_job', label: (typeof __ === 'function') ? __('actual_job') : 'Actual Job', default: true },
+                        { id: 'department', label: (typeof __ === 'function') ? __('department') : 'Department', default: true },
+                        { id: 'birth_date', label: (typeof __ === 'function') ? __('birth_date') : 'Birth Date', default: true },
+                        { id: 'age', label: (typeof __ === 'function') ? __('age') : 'Age', default: true },
+                        { id: 'salary_grade', label: (typeof __ === 'function') ? __('salary_grade') : 'Salary Grade', default: true },
+                        { id: 'contract_type', label: (typeof __ === 'function') ? __('contract_type') : 'Contract Type', default: true },
+                        { id: 'years_contract', label: (typeof __ === 'function') ? __('years_contract') : 'Years Contract', default: true },
+                        { id: 'sub_department', label: (typeof __ === 'function') ? __('sub_department') : 'Sub-Department', default: true },
+                        { id: 'location', label: (typeof __ === 'function') ? __('location') : 'Location', default: true },
+                        { id: 'country', label: (typeof __ === 'function') ? __('country') : 'Country', default: true },
+                        { id: 'no_of_dependents', label: (typeof __ === 'function') ? __('no_of_dependents') : 'No. of Dependents', default: true },
+                        { id: 'basic', label: (typeof __ === 'function') ? __('basic') : 'BASIC', default: true },
+                        { id: 'housing', label: (typeof __ === 'function') ? __('housing') : 'HOUSE', default: true },
+                        { id: 'transport', label: (typeof __ === 'function') ? __('transport') : 'Transportation', default: true },
+                        { id: 'food', label: (typeof __ === 'function') ? __('food') : 'FOOD', default: true },
+                        { id: 'misc', label: (typeof __ === 'function') ? __('misc') : 'MISC', default: true },
+                        { id: 'cashier', label: (typeof __ === 'function') ? __('cashier') : 'CASHIER', default: true },
+                        { id: 'fuel', label: (typeof __ === 'function') ? __('fuel') : 'FUEL', default: true },
+                        { id: 'tel', label: (typeof __ === 'function') ? __('tel') : 'TEL', default: true },
+                        { id: 'other', label: (typeof __ === 'function') ? __('other') : 'OTHER', default: true },
+                        { id: 'guard', label: (typeof __ === 'function') ? __('guard') : 'GUARD', default: true },
+                        { id: 'total_salary', label: (typeof __ === 'function') ? __('total_salary') : 'TOTAL Salary', default: true },
+                        { id: 'med_insurance_amount', label: (typeof __ === 'function') ? __('med_insurance_amount') : 'Med Insurance Amount', default: true },
+                        { id: 'labour_office_expense', label: (typeof __ === 'function') ? __('labour_office_expense') : 'Labour Office Expenses', default: true },
+                        { id: 'iqama_renewal_fee', label: (typeof __ === 'function') ? __('iqama_renewal_fee') : 'Iqama Renewal', default: true },
+                        { id: 'leave_balance', label: (typeof __ === 'function') ? __('leave_balance') : 'Leave', default: true },
+                        { id: 'ticket', label: (typeof __ === 'function') ? __('ticket') : 'Ticket', default: true },
+                        { id: 'eos_until_today', label: (typeof __ === 'function') ? __('eos_until_today') : 'EOS (Until Current Day)', default: true },
+                        { id: 'total_cost', label: (typeof __ === 'function') ? __('total_cost') : 'Total Cost', default: true },
+                        { id: 'gosi', label: (typeof __ === 'function') ? __('gosi') : 'GOSI', default: true },
+                        { id: 'total_accrual', label: (typeof __ === 'function') ? __('total_accrual') : 'Total Accrual', default: true },
+                        { id: 'monthly_leave_accrual', label: (typeof __ === 'function') ? __('monthly_leave_accrual') : 'Monthly Leave Accrual', default: true },
+                        { id: 'service_days', label: (typeof __ === 'function') ? __('service_days') : 'Service Days', default: true },
+                        { id: 'sponsor', label: (typeof __ === 'function') ? __('sponsor') : 'Sponsor', default: true },
+                        { id: 'medical_class', label: (typeof __ === 'function') ? __('medical_class') : 'Medical Class', default: true },
+                        { id: 'citizen_local', label: (typeof __ === 'function') ? __('citizen_local') : 'Citizen (Local)', default: true },
+                        { id: 'direct_manager_id', label: (typeof __ === 'function') ? __('direct_manager_id') : 'Direct Manager ID', default: true },
+                        { id: 'direct_manager_name', label: (typeof __ === 'function') ? __('direct_manager_name') : 'Direct Manager Name', default: true },
+                        { id: 'location_code', label: (typeof __ === 'function') ? __('location_code') : 'Location Code', default: true },
+                        { id: 'department_code', label: (typeof __ === 'function') ? __('department_code') : 'Department Code', default: true },
+                        { id: 'mobile', label: (typeof __ === 'function') ? __('mobile') : 'Mobile', default: true },
+                        { id: 'status', label: (typeof __ === 'function') ? __('status') : 'Status', default: true }
                     ],
                     custom: [],
                     assets: [{

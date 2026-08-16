@@ -3,6 +3,9 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../evaluation_acknowledgment_handler.php';
 require_once __DIR__ . '/../report_permissions_helper.php';
+require_once __DIR__ . '/../special_access_helper.php';
+require_once __DIR__ . '/../eos_estimate_helper.php';
+require_once __DIR__ . '/../balance_calculator.php';
 // Include shared functions to ensure __() translation helper is available (robust path resolution)
 ($functionPath = (function() {
     $candidates = [
@@ -445,6 +448,14 @@ try {
         case 'country_company_comparison':
             $result = generateCountryCompanyComparisonReport($conDB, $columns, $departments, $companies, $hasFullAccess, $userDept);
             break;
+        case 'ctc':
+            $ctcHasAccess = ($is_system_admin ?? false)
+                || user_has_special_access($conDB, $current_emp_id_for_reports, 'access_ctc_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+            if (!$ctcHasAccess) {
+                throw new Exception('Unauthorized: CTC report requires elevated access');
+            }
+            $result = generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
+            break;
         case 'custom':
             $customTables = isset($_POST['customTables']) ? $_POST['customTables'] : [];
             $customDepartments = isset($_POST['customDepartments']) ? $_POST['customDepartments'] : [];
@@ -516,7 +527,6 @@ function getColumnLabel($column) {
         'blood_type' => 'Blood Type',
         'mar_status' => 'Marital Status',
         'gosi' => 'GOSI',
-        'insurance_no' => 'Insurance No',
         'status' => 'Status',
         'emp_name' => 'Employee Name',
         'comp_no' => 'Company',
@@ -1496,7 +1506,227 @@ function generateSalaryReport($conDB, $columns, $departments, $hasFullAccess, $u
 
         $data[] = $row;
     }
-    
+
+    return ['data' => $data, 'headers' => $headers];
+}
+
+// CTC (Cost To Company) Report - one row per active employee across ~48 fixed fields
+// spanning employees/emp_salary/employee_additional_info/employee_medical_insurance/
+// contract_period plus a few computed figures (age, service days, EOS estimate, GOSI,
+// vacation balance). Only requested $columns are computed/returned; the two per-employee
+// extra queries (EOS, vacation balance) only run when their column is actually selected.
+function ctc_report_get_vacation_balance_snapshot($conDB, $empId) {
+    $stmt = mysqli_prepare($conDB, "SELECT `total_days`, `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `last_updated` DESC LIMIT 1");
+    mysqli_stmt_bind_param($stmt, "s", $empId);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt)) ?: null;
+    mysqli_stmt_close($stmt);
+    return [
+        'total_days' => $row ? (float)$row['total_days'] : 0.0,
+        'available_balance' => $row ? (float)$row['available_balance'] : 0.0,
+    ];
+}
+
+function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+    global $is_rtl;
+
+    $where = ['e.status = 1'];
+
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
+    }
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
+    $whereClause = implode(' AND ', $where);
+
+    $sql = "SELECT
+            e.emp_id, e.iqama, e.name, e.sex, e.joining_date, e.dob, e.mobile, e.status, e.country, e.gosi, e.supervisor_id,
+            sec.section_name AS position_name,
+            aj.job AS actual_job_name, aj.job_ar AS actual_job_name_ar,
+            d.id AS dept_code, d.dep_nme, d.dep_nme_ar,
+            sd.name_en AS subdept_name_en, sd.name_ar AS subdept_name_ar,
+            loc.id AS location_code, loc.name_en AS location_name_en, loc.name_ar AS location_name_ar,
+            co.name AS country_name, co.name_ar AS country_name_ar,
+            sp.sponsor, sp.sponsor_ar,
+            cp.period AS contract_period_label, cp.vac_period AS contract_vac_period,
+            eai.salary_grade, eai.dependants_count, eai.ticket_fare, eai.labour_office_expense, eai.iqama_renewal_fee, eai.citizen_local_relation,
+            emi.med_insurance, emi.medical_class,
+            es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
+            (COALESCE(es.basic,0)+COALESCE(es.housing,0)+COALESCE(es.transport,0)+COALESCE(es.food,0)+COALESCE(es.misc,0)+COALESCE(es.cashier,0)+COALESCE(es.fuel,0)+COALESCE(es.tel,0)+COALESCE(es.other,0)+COALESCE(es.guard,0)) AS total_salary,
+            sup.name AS supervisor_name
+        FROM employees AS e
+        LEFT JOIN section AS sec ON e.sectin_nme = sec.id
+        LEFT JOIN ac_jobs AS aj ON e.actual_job = aj.id
+        LEFT JOIN department AS d ON e.dept = d.id
+        LEFT JOIN sub_departments AS sd ON e.sub_dept_id = sd.id
+        LEFT JOIN locations AS loc ON e.location_id = loc.id
+        LEFT JOIN countries AS co ON e.country = co.id
+        LEFT JOIN sponsorship AS sp ON e.emp_sup_type = sp.id
+        LEFT JOIN contract_period AS cp ON e.vac_period = cp.id
+        LEFT JOIN employee_additional_info AS eai ON eai.emp_id = e.emp_id
+        LEFT JOIN employee_medical_insurance AS emi ON emi.emp_id = e.emp_id AND emi.status = 'active'
+        LEFT JOIN emp_salary AS es ON e.emp_id = es.emp_id AND es.status = 1
+        LEFT JOIN employees AS sup ON sup.emp_id = e.supervisor_id
+        WHERE $whereClause
+        ORDER BY e.name";
+
+    $query = mysqli_query($conDB, $sql);
+    if (!$query) {
+        throw new Exception('CTC report query error: ' . mysqli_error($conDB));
+    }
+
+    $needsEos = in_array('eos_until_today', $columns, true);
+    $needsBalance = in_array('leave_balance', $columns, true) || in_array('total_accrual', $columns, true);
+
+    $data = [];
+    $headers = [];
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+
+    while ($srcRow = mysqli_fetch_assoc($query)) {
+        $age = null;
+        if (!empty($srcRow['dob']) && $srcRow['dob'] !== '0000-00-00') {
+            try {
+                $dob = new DateTime($srcRow['dob']);
+                $today = new DateTime('today');
+                if ($dob <= $today) {
+                    $age = $dob->diff($today)->y;
+                }
+            } catch (Exception $e) {
+            }
+        }
+
+        $serviceDays = null;
+        if (!empty($srcRow['joining_date']) && $srcRow['joining_date'] !== '0000-00-00') {
+            try {
+                $joinDate = new DateTime($srcRow['joining_date']);
+                $today = new DateTime('today');
+                if ($joinDate <= $today) {
+                    $serviceDays = $joinDate->diff($today)->days;
+                }
+            } catch (Exception $e) {
+            }
+        }
+
+        $yearsContract = null;
+        if (!empty($srcRow['contract_period_label']) && preg_match('/^\s*(\d+(?:\.\d+)?)/', $srcRow['contract_period_label'], $m)) {
+            $yearsContract = max(1, (float)$m[1]);
+        }
+
+        $monthlyLeaveAccrual = null;
+        if (!empty($srcRow['contract_vac_period']) && $yearsContract) {
+            $annualDays = (float)$srcRow['contract_vac_period'] / $yearsContract;
+            $monthlyLeaveAccrual = $annualDays / 12;
+        }
+
+        $leaveBalanceDays = 0.0;
+        $totalAccrualDays = 0.0;
+        if ($needsBalance) {
+            $balance = ctc_report_get_vacation_balance_snapshot($conDB, $srcRow['emp_id']);
+            $leaveBalanceDays = $balance['available_balance'];
+            $totalAccrualDays = $balance['total_days'];
+        }
+
+        $eosAmount = 0.0;
+        if ($needsEos) {
+            $eos = calculate_current_eos_estimate($conDB, $srcRow['emp_id'], $srcRow['joining_date']);
+            $eosAmount = $eos['success'] ? $eos['eos_amount'] : 0.0;
+        }
+
+        $gosiAmount = 0.0;
+        if ((int)($srcRow['country'] ?? 0) === 191) {
+            $gosiBase = (float)($srcRow['basic'] ?? 0) + (float)($srcRow['housing'] ?? 0);
+            $gosiAmount = round($gosiBase * (float)($srcRow['gosi'] ?? 0) / 100, 2);
+        }
+
+        $dailyRate = (float)($srcRow['total_salary'] ?? 0) / 30;
+        $leaveAccrualCost = ($monthlyLeaveAccrual ?? 0) * $dailyRate;
+        $totalCost = (float)($srcRow['total_salary'] ?? 0)
+            + ((float)($srcRow['med_insurance'] ?? 0) / 12)
+            + ((float)($srcRow['ticket_fare'] ?? 0) / 12)
+            + ((float)($srcRow['labour_office_expense'] ?? 0) / 12)
+            + ((float)($srcRow['iqama_renewal_fee'] ?? 0) / 12)
+            + $gosiAmount
+            + $leaveAccrualCost;
+
+        $useAr = !empty($is_rtl);
+        $row = [
+            'id_iqama' => $srcRow['iqama'] ?? '',
+            'emp_id' => $srcRow['emp_id'] ?? '',
+            'name' => $srcRow['name'] ?? '',
+            'gender' => ((int)($srcRow['sex'] ?? 0) === 1) ? __('male') : __('female'),
+            'join_date' => format_safe_date($srcRow['joining_date'] ?? null),
+            'position' => $srcRow['position_name'] ?? '',
+            'actual_job' => $useAr ? ($srcRow['actual_job_name_ar'] ?? $srcRow['actual_job_name'] ?? '') : ($srcRow['actual_job_name'] ?? ''),
+            'department' => $useAr ? ($srcRow['dep_nme_ar'] ?? $srcRow['dep_nme'] ?? '') : ($srcRow['dep_nme'] ?? ''),
+            'birth_date' => format_safe_date($srcRow['dob'] ?? null),
+            'age' => $age ?? '-',
+            'salary_grade' => display_or_na($srcRow['salary_grade'] ?? null),
+            'contract_type' => display_or_na($srcRow['contract_period_label'] ?? null),
+            'years_contract' => $yearsContract ?? '-',
+            'sub_department' => $useAr ? ($srcRow['subdept_name_ar'] ?? $srcRow['subdept_name_en'] ?? '') : ($srcRow['subdept_name_en'] ?? ''),
+            'location' => $useAr ? ($srcRow['location_name_ar'] ?? $srcRow['location_name_en'] ?? '') : ($srcRow['location_name_en'] ?? ''),
+            'country' => $useAr ? ($srcRow['country_name_ar'] ?? $srcRow['country_name'] ?? '') : ($srcRow['country_name'] ?? ''),
+            'no_of_dependents' => display_or_na($srcRow['dependants_count'] ?? null),
+            'basic' => number_format((float)($srcRow['basic'] ?? 0), 2),
+            'housing' => number_format((float)($srcRow['housing'] ?? 0), 2),
+            'transport' => number_format((float)($srcRow['transport'] ?? 0), 2),
+            'food' => number_format((float)($srcRow['food'] ?? 0), 2),
+            'misc' => number_format((float)($srcRow['misc'] ?? 0), 2),
+            'cashier' => number_format((float)($srcRow['cashier'] ?? 0), 2),
+            'fuel' => number_format((float)($srcRow['fuel'] ?? 0), 2),
+            'tel' => number_format((float)($srcRow['tel'] ?? 0), 2),
+            'other' => number_format((float)($srcRow['other'] ?? 0), 2),
+            'guard' => number_format((float)($srcRow['guard'] ?? 0), 2),
+            'total_salary' => number_format((float)($srcRow['total_salary'] ?? 0), 2),
+            'med_insurance_amount' => number_format((float)($srcRow['med_insurance'] ?? 0), 2),
+            'labour_office_expense' => number_format((float)($srcRow['labour_office_expense'] ?? 0), 2),
+            'iqama_renewal_fee' => number_format((float)($srcRow['iqama_renewal_fee'] ?? 0), 2),
+            'leave_balance' => number_format($leaveBalanceDays, 2),
+            'ticket' => number_format((float)($srcRow['ticket_fare'] ?? 0), 2),
+            'eos_until_today' => number_format($eosAmount, 2),
+            'total_cost' => number_format($totalCost, 2),
+            'gosi' => number_format($gosiAmount, 2),
+            'total_accrual' => number_format($totalAccrualDays, 2),
+            'monthly_leave_accrual' => number_format((float)($monthlyLeaveAccrual ?? 0), 2),
+            'service_days' => $serviceDays ?? '-',
+            'sponsor' => $useAr ? ($srcRow['sponsor_ar'] ?? $srcRow['sponsor'] ?? '') : ($srcRow['sponsor'] ?? ''),
+            'medical_class' => display_or_na($srcRow['medical_class'] ?? null),
+            'citizen_local' => display_or_na($srcRow['citizen_local_relation'] ?? null),
+            'direct_manager_id' => display_or_na($srcRow['supervisor_id'] ?? null),
+            'direct_manager_name' => display_or_na($srcRow['supervisor_name'] ?? null),
+            'location_code' => display_or_na($srcRow['location_code'] ?? null),
+            'department_code' => display_or_na($srcRow['dept_code'] ?? null),
+            'mobile' => $srcRow['mobile'] ?? '',
+            'status' => ((int)($srcRow['status'] ?? 0) === 1) ? __('active') : __('inactive'),
+        ];
+
+        $filteredRow = [];
+        foreach ($columns as $col) {
+            $filteredRow[$col] = $row[$col] ?? '';
+        }
+        $data[] = $filteredRow;
+    }
+
     return ['data' => $data, 'headers' => $headers];
 }
 

@@ -23,7 +23,7 @@ if(isset($_POST['submit'])){
 		'city_id', 'location_id', 'sub_dept_id', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
 		'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
 		'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
-		'insurance_no', 'insurance_class', 'insurance_exp', 'iqama_exp_g', 'gosi',
+		'iqama_exp_g', 'gosi',
 		'probation', 'payment_type', 'created_at','fly','comp_no','avatar'
 	];
 	// Field-specific cleaning rules
@@ -603,27 +603,6 @@ if(isset($_POST['submit'])){
                                                 <label for="address" class="col-form-label"><?=__('address') ?><span class="text-danger">*</span></label>
                                                 <input type="text" name="address" parsley-trigger="change" class="form-control" id="address" required />
                                             </div>
-											<div class="form-group col-md-2">
-                                                <label for="insurance_no" class="col-form-label"><?=__('insurance_no_label') ?></label>
-                                                <input type="text" name="insurance_no" parsley-trigger="change"  class="form-control" id="insurance_no">
-                                            </div>
-											
-											<div class="form-group col-md-2">
-                                                <label for="insurance_class" class="col-form-label"><?=__('insurance_class_label') ?></label>
-												<select class="form-control select2" name="insurance_class" >
-													<option value=""><?=__('select_option')?></option>
-													<option value="A">A</option>
-													<option value="B">B</option>
-													<option value="C">C</option>
-													<option value="CLT">CLT</option>
-													<option value="VIP">VIP</option>
-												</select>
-                                            </div>
-											<div class="form-group col-md-2">
-                                                <label for="insurance_exp" class="col-form-label"><?=__('insurance_expire_label') ?></label>
-                                                <input type="text" name="insurance_exp" parsley-trigger="change" class="form-control" id="insurance_exp">
-                                        	</div>
-
 											<div class="form-group col-md-2 noneDIV" id="gosiDiv">
                                                 <label for="gosi" class="col-form-label"><?=__('gosi') ?><span class="text-danger">*</span></label>
                                                 <div class="input-group">

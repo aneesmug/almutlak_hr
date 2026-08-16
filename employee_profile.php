@@ -31,6 +31,17 @@
 			$emprow = $rec;
 		}
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
+
+		// Insurance No / Expiry / Class are yearly-renewed - fetch the current active record
+		// from employee_medical_insurance (see view_employee.php's "Medical Insurance" section).
+		$current_medical_insurance = null;
+		$mi_stmt = mysqli_prepare($conDB, "SELECT insurance_no, medical_expiry, medical_class FROM `employee_medical_insurance` WHERE `emp_id` = ? AND `status` = 'active' LIMIT 1");
+		mysqli_stmt_bind_param($mi_stmt, "s", $emprow['empid']);
+		mysqli_stmt_execute($mi_stmt);
+		$current_medical_insurance = mysqli_fetch_assoc(mysqli_stmt_get_result($mi_stmt)) ?: null;
+		mysqli_stmt_close($mi_stmt);
+		$current_medical_class = $current_medical_insurance['medical_class'] ?? null;
+
 		$canViewSalary = (
 			($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_salary_value', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
@@ -431,9 +442,9 @@
                                                         <tr><th><?=__('iban_label')?>:</th><td><?=$emprow['iban']; ?></td></tr>
                                                         <tr><th><?=__('gosi_no_label')?>:</th><td><?=$emprow['gosi_no']; ?></td></tr>
                                                         <tr><th><?=__('gosi_payment_label')?>:</th><td><?=$emprow['amount']; ?></td></tr>
-                                                        <tr><th><?=__('insurance_no_label')?>:</th><td><?=$emprow['insurance_no'] ?></td></tr>
-                                                        <tr><th><?=__('insurance_class_label')?>:</th><td><?=$emprow['insurance_class'] ?></td></tr>
-                                                        <tr><th><?=__('insurance_expiry_label')?>:</th><td><?=$emprow['insurance_exp'] ?></td></tr>
+                                                        <tr><th><?=__('insurance_no_label')?>:</th><td><?=display_or_na($current_medical_insurance['insurance_no'] ?? null) ?></td></tr>
+                                                        <tr><th><?=__('insurance_class_label')?>:</th><td><?=display_or_na($current_medical_class) ?></td></tr>
+                                                        <tr><th><?=__('insurance_expiry_label')?>:</th><td><?=(!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00') ? format_safe_date($current_medical_insurance['medical_expiry'], 'd M, Y') : __('not_available') ?></td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>

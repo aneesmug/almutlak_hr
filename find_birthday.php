@@ -180,9 +180,6 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
     $address_get = $rec['address'];
     $emp_email_get = $rec['email'];
 
-    $insurance_no_get = $rec['insurance_no'];
-    $insurance_exp_get = $rec['insurance_exp'];
-	
 //	$times_reg = strtotime("$date_emp");
 //	$datevac = date('d, M Y', $times_reg);
  $datevac = date('d, F Y', strtotime($dob_get));

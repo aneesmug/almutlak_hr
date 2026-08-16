@@ -144,6 +144,65 @@ if (mysqli_num_rows($query) == 1) {
 			}
 		}
 		// --- END: Payroll (Payslip) History ---
+
+		// --- START: Additional Information (HR/Payroll reference fields) ---
+		// Hidden from everyone except sys admin by default; grant via App Settings ->
+		// Special Access ('view_employee_additional_info') to let specific HR/DeptHr users see it.
+		$canViewAdditionalInfo = (
+			($is_system_admin ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_additional_info', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
+		$canEditAdditionalInfo = $canViewAdditionalInfo && ($isHR || $is_system_admin || $isDeptHr);
+		$employee_additional_info = null;
+		if ($canViewSalary) {
+			$additional_info_stmt = mysqli_prepare($conDB, "SELECT * FROM `employee_additional_info` WHERE `emp_id` = ? LIMIT 1");
+			mysqli_stmt_bind_param($additional_info_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($additional_info_stmt);
+			$employee_additional_info = mysqli_fetch_assoc(mysqli_stmt_get_result($additional_info_stmt)) ?: null;
+			mysqli_stmt_close($additional_info_stmt);
+		}
+
+		// Monthly Leave Accrual is derived from the employee's contract, not manually
+		// entered - contract_period.vac_period is the TOTAL days for the full contract term
+		// (e.g. "2 Years - 30" -> 60 days = 30/year x 2 years), so divide by the year count
+		// parsed from the period label first to get the annual rate, then by 12 for monthly.
+		$monthly_leave_accrual_calculated = null;
+		if (!empty($emprow['vac_period'])) {
+			$contract_period_stmt = mysqli_prepare($conDB, "SELECT `period`, `vac_period` FROM `contract_period` WHERE `id` = ? LIMIT 1");
+			mysqli_stmt_bind_param($contract_period_stmt, "i", $emprow['vac_period']);
+			mysqli_stmt_execute($contract_period_stmt);
+			$contract_period_row = mysqli_fetch_assoc(mysqli_stmt_get_result($contract_period_stmt));
+			mysqli_stmt_close($contract_period_stmt);
+			if ($contract_period_row && (float)$contract_period_row['vac_period'] > 0) {
+				$years = 1;
+				if (preg_match('/^\s*(\d+(?:\.\d+)?)/', (string)$contract_period_row['period'], $years_match)) {
+					$years = max(1, (float)$years_match[1]);
+				}
+				$annual_days = (float)$contract_period_row['vac_period'] / $years;
+				$monthly_leave_accrual_calculated = $annual_days / 12;
+			}
+		}
+
+		// Medical Insurance / Insurance No / Medical Expiry are yearly-renewed, so they live
+		// in their own history table instead of employee_additional_info - each renewal adds
+		// a new row and the previous one flips to status='expired' (see
+		// employeeMedicalInsuranceHandler.php). The active row is what's "current" here.
+		$medical_insurance_records = [];
+		$current_medical_insurance = null;
+		if ($canViewSalary) {
+			$medical_insurance_stmt = mysqli_prepare($conDB, "SELECT id, insurance_no, med_insurance, medical_expiry, medical_class, status, created_at FROM `employee_medical_insurance` WHERE `emp_id` = ? ORDER BY `created_at` DESC, `id` DESC");
+			mysqli_stmt_bind_param($medical_insurance_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($medical_insurance_stmt);
+			$medical_insurance_records = mysqli_fetch_all(mysqli_stmt_get_result($medical_insurance_stmt), MYSQLI_ASSOC);
+			mysqli_stmt_close($medical_insurance_stmt);
+			foreach ($medical_insurance_records as $mi_row) {
+				if ($mi_row['status'] === 'active') {
+					$current_medical_insurance = $mi_row;
+					break;
+				}
+			}
+		}
+		// --- END: Additional Information ---
 		// debug($emprow);
 
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
@@ -1185,6 +1244,13 @@ if (mysqli_num_rows($query) == 1) {
 											</a>
 										</li>
 										<?php endif; ?>
+										<?php if ($canViewAdditionalInfo): ?>
+										<li class="nav-item">
+											<a href="#additionalinfo1" data-toggle="tab" aria-expanded="false" class="nav-link">
+												<i class="mdi mdi-information-outline"></i> <?= __('additional_information', 'Additional Information') ?>
+											</a>
+										</li>
+										<?php endif; ?>
 										<li class="nav-item">
 											<a href="#assets" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-cash-multiple"></i> <?= __('assets_details') ?>
@@ -1505,14 +1571,14 @@ if (mysqli_num_rows($query) == 1) {
 														<div class="profile-grid">
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('insurance_no_class') ?></div>
-																<div class="profile-field-value"><?= $emprow['insurance_no'] . " | " . $emprow['insurance_class'] ?></div>
+																<div class="profile-field-value"><?= display_or_na($current_medical_insurance['insurance_no'] ?? null) ?> | <?= display_or_na($current_medical_insurance['medical_class'] ?? null) ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('insurance_expiry') ?></div>
 																<div class="profile-field-value">
-																	<?php if ($emprow['insurance_exp']): ?>
-																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['insurance_exp']; ?></span>
-																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow['insurance_exp'], $format); ?></span>
+																	<?php if (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00'): ?>
+																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $current_medical_insurance['medical_expiry']; ?></span>
+																		<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($current_medical_insurance['medical_expiry'], $format); ?></span>
 																	<?php else: ?>
 																		<span class="text-muted"><?= __('not_available', 'N/A') ?></span>
 																	<?php endif ?>
@@ -2200,7 +2266,129 @@ if (mysqli_num_rows($query) == 1) {
 											</table>
 										</div>
 										<?php endif; ?>
+										<?php if ($canViewAdditionalInfo): ?>
 
+										<div class="tab-pane" id="additionalinfo1">
+											<div class="d-flex justify-content-between align-items-center mb-3">
+												<h4 class="header-title m-t-0"><?= __('additional_information', 'Additional Information') ?></h4>
+												<?php if ($canEditAdditionalInfo): ?>
+												<button type="button" class="btn btn-sm btn-primary editAdditionalInfoBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+													<i class="mdi mdi-pencil"></i> <?= __('edit', 'Edit') ?>
+												</button>
+												<?php endif; ?>
+											</div>
+											<div class="profile-section">
+												<div class="profile-section-body">
+													<div class="profile-grid" id="additionalInfoDisplay">
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('salary_grade', 'Salary Grade') ?></div>
+															<div class="profile-field-value" data-field="salary_grade"><?= !empty($employee_additional_info['salary_grade']) ? __('grade', 'Grade') . ' ' . htmlspecialchars($employee_additional_info['salary_grade']) : __('not_available') ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('dependants_count', 'No. of Dependants') ?></div>
+															<div class="profile-field-value" data-field="dependants_count"><?= display_or_na($employee_additional_info['dependants_count'] ?? null) ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('ticket_fare', 'Ticket') ?></div>
+															<div class="profile-field-value" data-field="ticket_fare"><?= isset($employee_additional_info['ticket_fare']) ? number_format((float)$employee_additional_info['ticket_fare'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+														</div>
+														<?php if ((int)($emprow['country'] ?? 0) !== 191): ?>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('labour_office_expense', 'Labour Office Expenses') ?></div>
+															<div class="profile-field-value" data-field="labour_office_expense"><?= isset($employee_additional_info['labour_office_expense']) ? number_format((float)$employee_additional_info['labour_office_expense'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('iqama_renewal_fee', 'Iqama Renewal Fee') ?></div>
+															<div class="profile-field-value" data-field="iqama_renewal_fee"><?= isset($employee_additional_info['iqama_renewal_fee']) ? number_format((float)$employee_additional_info['iqama_renewal_fee'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('citizen_local_relation', 'Citizen (Local)') ?></div>
+															<div class="profile-field-value" data-field="citizen_local_relation"><?= display_or_na($employee_additional_info['citizen_local_relation'] ?? null) ?></div>
+														</div>
+														<?php endif; ?>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('monthly_leave_accrual', 'Monthly Leave Accrual') ?> <small class="text-muted">(<?= __('auto_calculated', 'auto-calculated') ?>)</small></div>
+															<div class="profile-field-value"><?= $monthly_leave_accrual_calculated !== null ? number_format($monthly_leave_accrual_calculated, 2) . ' ' . __('day_s', 'Days') : __('not_available') ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('eng_council_fee', 'Saudi Engineering Council Fee') ?></div>
+															<div class="profile-field-value" data-field="eng_council_fee"><?= isset($employee_additional_info['eng_council_fee']) ? number_format((float)$employee_additional_info['eng_council_fee'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+														</div>
+														<div class="profile-field">
+															<div class="profile-field-label"><?= __('eng_council_expiry', 'Saudi Engineering Council Expiry') ?></div>
+															<div class="profile-field-value" data-field="eng_council_expiry"><?= (!empty($employee_additional_info['eng_council_expiry']) && $employee_additional_info['eng_council_expiry'] !== '0000-00-00') ? format_safe_date($employee_additional_info['eng_council_expiry'], 'd M, Y') : __('not_available') ?></div>
+														</div>
+													</div>
+												</div>
+											</div>
+
+										<div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+											<h4 class="header-title m-t-0"><?= __('medical_insurance', 'Medical Insurance') ?> <small class="text-muted">(<?= __('renews_yearly', 'renews yearly') ?>)</small></h4>
+											<?php if ($canEditAdditionalInfo): ?>
+											<button type="button" class="btn btn-sm btn-primary addMedicalInsuranceBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+												<i class="mdi mdi-plus"></i> <?= __('add_insurance', 'Add Insurance Details') ?>
+											</button>
+											<?php endif; ?>
+										</div>
+										<div class="profile-section">
+											<div class="profile-section-body">
+												<div class="profile-grid">
+													<div class="profile-field">
+														<div class="profile-field-label"><?= __('insurance_no', 'Insurance No') ?></div>
+														<div class="profile-field-value"><?= display_or_na($current_medical_insurance['insurance_no'] ?? null) ?></div>
+													</div>
+													<div class="profile-field">
+														<div class="profile-field-label"><?= __('med_insurance', 'Medical Insurance') ?></div>
+														<div class="profile-field-value"><?= isset($current_medical_insurance['med_insurance']) ? number_format((float)$current_medical_insurance['med_insurance'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+													</div>
+													<div class="profile-field">
+														<div class="profile-field-label"><?= __('medical_expiry', 'Medical Expiry') ?></div>
+														<div class="profile-field-value"><?= (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00') ? format_safe_date($current_medical_insurance['medical_expiry'], 'd M, Y') : __('not_available') ?></div>
+													</div>
+													<div class="profile-field">
+														<div class="profile-field-label"><?= __('medical_class', 'Medical Class') ?></div>
+														<div class="profile-field-value"><?= display_or_na($current_medical_insurance['medical_class'] ?? null) ?></div>
+													</div>
+												</div>
+											</div>
+										</div>
+
+										<?php if (count($medical_insurance_records) > 1): ?>
+										<h5 class="header-title mt-4"><?= __('insurance_history', 'Insurance History') ?></h5>
+										<table class="table table-striped table-bordered" style="width: 100%;">
+											<thead>
+												<tr>
+													<th><?= __('insurance_no', 'Insurance No') ?></th>
+													<th><?= __('med_insurance', 'Medical Insurance') ?></th>
+													<th><?= __('medical_expiry', 'Medical Expiry') ?></th>
+													<th><?= __('medical_class', 'Medical Class') ?></th>
+													<th><?= __('status', 'Status') ?></th>
+													<th><?= __('added_on', 'Added On') ?></th>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ($medical_insurance_records as $mi_row): ?>
+												<tr>
+													<td><?= display_or_na($mi_row['insurance_no']) ?></td>
+													<td><?= isset($mi_row['med_insurance']) ? number_format((float)$mi_row['med_insurance'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></td>
+													<td><?= (!empty($mi_row['medical_expiry']) && $mi_row['medical_expiry'] !== '0000-00-00') ? format_safe_date($mi_row['medical_expiry'], 'd M, Y') : __('not_available') ?></td>
+													<td><?= display_or_na($mi_row['medical_class']) ?></td>
+													<td>
+														<?php if ($mi_row['status'] === 'active'): ?>
+														<span class="badge badge-success"><?= __('active', 'Active') ?></span>
+														<?php else: ?>
+														<span class="badge badge-secondary"><?= __('expired', 'Expired') ?></span>
+														<?php endif; ?>
+													</td>
+													<td><?= format_safe_date($mi_row['created_at'], 'd M, Y') ?></td>
+												</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+										<?php endif; ?>
+										<?php endif; ?>
+
+										</div>
 										<div class="tab-pane" id="assets">
 											<h4 class="header-title m-t-0 m-b-30 mt-4"><?= __('assigned_assets') ?></h4>
 											<table id="assets_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
@@ -4624,6 +4812,293 @@ if (mysqli_num_rows($query) == 1) {
 							allowOutsideClick: false
 						}).then(() => {
 							location.reload();
+						});
+					}
+				});
+			});
+
+			// Additional Information edit modal. Date field opens its own SweetAlert2 popup with an INLINE calendar (not a
+			// dropdown) - a dropdown calendar gets visually clipped by the parent Swal's
+			// own scroll container. Selecting a date closes the picker and reopens the
+			// main form pre-filled with everything the user had already entered, plus the
+			// newly picked date.
+			function openAdditionalInfoModal(empId, prefill) {
+				Swal.fire({
+					title: '<?= __('edit_additional_information', 'Edit Additional Information') ?>',
+					width: '750px',
+					html: `
+					<div class="row text-left">
+						<div class="form-group col-md-6">
+							<label><?= __('salary_grade', 'Salary Grade') ?></label>
+							<select id="aiSalaryGrade" class="form-control">
+								<option value=""><?= __('not_available') ?></option>
+								${Array.from({length: 12}, (_, i) => i + 1).map(g => `<option value="${g}"><?= __('grade', 'Grade') ?> ${g}</option>`).join('')}
+							</select>
+						</div>
+						<div class="form-group col-md-6">
+							<label><?= __('dependants_count', 'No. of Dependants') ?></label>
+							<input type="number" id="aiDependantsCount" class="form-control" min="0" step="1" placeholder="0">
+						</div>
+						<div class="form-group col-md-6">
+							<label><?= __('ticket_fare', 'Ticket') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="aiTicketFare" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<?php if ((int)($emprow['country'] ?? 0) !== 191): ?>
+						<div class="form-group col-md-6">
+							<label><?= __('labour_office_expense', 'Labour Office Expenses') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="aiLabourOfficeExpense" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<div class="form-group col-md-6">
+							<label><?= __('iqama_renewal_fee', 'Iqama Renewal Fee') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="aiIqamaRenewalFee" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<div class="form-group col-md-6">
+							<label><?= __('citizen_local_relation', 'Citizen (Local)') ?></label>
+							<select id="aiCitizenLocalRelation" class="form-control">
+								<option value=""><?= __('not_available') ?></option>
+								<option value="Son"><?= __('relation_son', 'Son') ?></option>
+								<option value="Daughter"><?= __('relation_daughter', 'Daughter') ?></option>
+								<option value="Wife"><?= __('relation_wife', 'Wife') ?></option>
+								<option value="Husband"><?= __('relation_husband', 'Husband') ?></option>
+							</select>
+						</div>
+						<?php endif; ?>
+						<div class="form-group col-md-6">
+							<label><?= __('eng_council_fee', 'Saudi Engineering Council Fee') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="aiEngCouncilFee" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<div class="form-group col-md-6">
+							<label><?= __('eng_council_expiry', 'Saudi Engineering Council Expiry') ?></label>
+							<input type="text" id="aiEngCouncilExpiry" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" readonly style="cursor: pointer; background-color: #fff;">
+						</div>
+					</div>
+					`,
+					showCancelButton: true,
+					confirmButtonText: '<?= __('save', 'Save') ?>',
+					cancelButtonText: '<?= __('cancel') ?>',
+					allowOutsideClick: false,
+					didOpen: () => {
+						function fillForm(d) {
+							$('#aiSalaryGrade').val(d.salary_grade || '');
+							$('#aiDependantsCount').val(d.dependants_count ?? '');
+							$('#aiTicketFare').val(d.ticket_fare ?? '');
+							$('#aiLabourOfficeExpense').val(d.labour_office_expense ?? '');
+							$('#aiIqamaRenewalFee').val(d.iqama_renewal_fee ?? '');
+							$('#aiCitizenLocalRelation').val(d.citizen_local_relation || '');
+							$('#aiEngCouncilFee').val(d.eng_council_fee ?? '');
+							const expiryVal = (d.eng_council_expiry && d.eng_council_expiry !== '0000-00-00') ? d.eng_council_expiry : '';
+							$('#aiEngCouncilExpiry').val(expiryVal);
+						}
+
+						if (prefill) {
+							fillForm(prefill);
+						} else {
+							$.ajax({
+								url: './includes/ajaxFile/employeeAdditionalInfoHandler.php',
+								type: 'POST',
+								dataType: 'json',
+								data: { ajaxType: 'get_employee_additional_info', emp_id: empId }
+							}).done(function(resp) {
+								if (resp.status === 200 && resp.data) {
+									fillForm(resp.data);
+								}
+							});
+						}
+
+						// Opens the date picker in its own SweetAlert2 popup (see openEngCouncilExpiryPicker
+						// below) so the calendar isn't clipped by this modal's scroll container.
+						$('#aiEngCouncilExpiry').on('click', function() {
+							const snapshot = {
+								salary_grade: $('#aiSalaryGrade').val(),
+								dependants_count: $('#aiDependantsCount').val(),
+								ticket_fare: $('#aiTicketFare').val(),
+								labour_office_expense: $('#aiLabourOfficeExpense').val(),
+								iqama_renewal_fee: $('#aiIqamaRenewalFee').val(),
+								citizen_local_relation: $('#aiCitizenLocalRelation').val(),
+								eng_council_fee: $('#aiEngCouncilFee').val(),
+								eng_council_expiry: $('#aiEngCouncilExpiry').val()
+							};
+							openEngCouncilExpiryPicker(empId, snapshot);
+						});
+					},
+					preConfirm: () => {
+						return {
+							salary_grade: $('#aiSalaryGrade').val(),
+							dependants_count: $('#aiDependantsCount').val(),
+							ticket_fare: $('#aiTicketFare').val(),
+							labour_office_expense: $('#aiLabourOfficeExpense').val(),
+							iqama_renewal_fee: $('#aiIqamaRenewalFee').val(),
+							citizen_local_relation: $('#aiCitizenLocalRelation').val(),
+							eng_council_fee: $('#aiEngCouncilFee').val(),
+							eng_council_expiry: $('#aiEngCouncilExpiry').val()
+						};
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						$.ajax({
+							url: './includes/ajaxFile/employeeAdditionalInfoHandler.php',
+							type: 'POST',
+							dataType: 'json',
+							data: Object.assign({ ajaxType: 'save_employee_additional_info', emp_id: empId }, result.value),
+							success: function(resp) {
+								if (resp.status === 200) {
+									Swal.fire({
+										icon: 'success',
+										title: '<?= __('success') ?>',
+										text: resp.message || '<?= __('update_successful', 'Updated successfully') ?>'
+									}).then(() => {
+										location.reload();
+									});
+								} else {
+									Swal.fire({
+										icon: 'error',
+										title: '<?= __('error') ?>',
+										text: resp.message || '<?= __('update_failed') ?>'
+									});
+								}
+							},
+							error: function() {
+								Swal.fire({
+									icon: 'error',
+									title: '<?= __('error') ?>',
+									text: '<?= __('an_error_occurred') ?>'
+								});
+							}
+						});
+					}
+				});
+			}
+
+			// Standalone picker popup for Saudi Engineering Council Expiry - uses an INLINE
+			// calendar (bootstrap-datepicker's `inline: true`) instead of a dropdown, since a
+			// dropdown calendar gets clipped by the parent Swal's own scroll container.
+			function openEngCouncilExpiryPicker(empId, snapshot) {
+				Swal.fire({
+					title: '<?= __('select_expiry_date_placeholder') ?>',
+					html: `<input type="text" id="aiEngCouncilExpiryInline" class="form-control text-center" placeholder="YYYY-MM-DD" autocomplete="off" readonly>`,
+					width: '25%',
+					showCancelButton: true,
+					confirmButtonText: '<?= __('select', 'Select') ?>',
+					cancelButtonText: '<?= __('cancel') ?>',
+					allowOutsideClick: false,
+					didOpen: () => {
+						const $inline = $('#aiEngCouncilExpiryInline');
+						$inline.datepicker({
+							format: 'yyyy-mm-dd',
+							todayHighlight: true,
+							autoclose: true,
+							orientation: 'bottom auto'
+						});
+						if (snapshot.eng_council_expiry) {
+							$inline.datepicker('setDate', snapshot.eng_council_expiry);
+						}
+					},
+					preConfirm: () => {
+						return $('#aiEngCouncilExpiryInline').val() || '';
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						snapshot.eng_council_expiry = result.value;
+					}
+					// Reopen the main form either way, pre-filled with everything the user had
+					// already entered (cancelling the picker must not lose unsaved edits).
+					openAdditionalInfoModal(empId, snapshot);
+				});
+			}
+
+			// Handle Edit Additional Information
+			$(document).on('click', '.editAdditionalInfoBtn', function(e) {
+				e.preventDefault();
+				const empId = $(this).data('emp-id');
+				openAdditionalInfoModal(empId, null);
+			});
+
+			// Handle Add Medical Insurance (yearly renewal - always adds a new row,
+			// never overwrites; the backend flips the previous active row to 'expired')
+			$(document).on('click', '.addMedicalInsuranceBtn', function(e) {
+				e.preventDefault();
+				const empId = $(this).data('emp-id');
+
+				Swal.fire({
+					title: '<?= __('add_insurance', 'Add New Year') ?>',
+					width: '450px',
+					html: `
+					<div class="text-left">
+						<div class="form-group">
+							<label><?= __('insurance_no', 'Insurance No') ?></label>
+							<input type="text" id="miInsuranceNo" class="form-control" placeholder="<?= __('insurance_no', 'Insurance No') ?>">
+						</div>
+						<div class="form-group">
+							<label><?= __('med_insurance', 'Medical Insurance') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="miAmount" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<div class="form-group">
+							<label><?= __('medical_expiry', 'Medical Expiry') ?></label>
+							<input type="text" id="miExpiry" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" readonly>
+						</div>
+						<div class="form-group">
+							<label><?= __('medical_class', 'Medical Class') ?></label>
+							<select id="miMedicalClass" class="form-control">
+								<option value=""><?= __('not_available') ?></option>
+								${['CLT','C','B','A','A+'].map(c => `<option value="${c}">${c}</option>`).join('')}
+							</select>
+						</div>
+					</div>
+					`,
+					showCancelButton: true,
+					confirmButtonText: '<?= __('save', 'Save') ?>',
+					cancelButtonText: '<?= __('cancel') ?>',
+					allowOutsideClick: false,
+					didOpen: () => {
+						$('#miExpiry').datepicker({
+							format: 'yyyy-mm-dd',
+							todayHighlight: true,
+							autoclose: true,
+							orientation: 'bottom auto'
+						});
+					},
+					preConfirm: () => {
+						const insuranceNo = $('#miInsuranceNo').val().trim();
+						const amount = $('#miAmount').val();
+						const expiry = $('#miExpiry').val();
+						const medicalClass = $('#miMedicalClass').val();
+						if (!insuranceNo && !amount && !expiry && !medicalClass) {
+							Swal.showValidationMessage('<?= __('enter_at_least_one_field', 'Enter at least one field') ?>');
+							return false;
+						}
+						return { insurance_no: insuranceNo, med_insurance: amount, medical_expiry: expiry, medical_class: medicalClass };
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						$.ajax({
+							url: './includes/ajaxFile/employeeMedicalInsuranceHandler.php',
+							type: 'POST',
+							dataType: 'json',
+							data: Object.assign({ ajaxType: 'add_employee_medical_insurance', emp_id: empId }, result.value),
+							success: function(resp) {
+								if (resp.status === 200) {
+									Swal.fire({
+										icon: 'success',
+										title: '<?= __('success') ?>',
+										text: resp.message || '<?= __('update_successful', 'Updated successfully') ?>'
+									}).then(() => {
+										location.reload();
+									});
+								} else {
+									Swal.fire({
+										icon: 'error',
+										title: '<?= __('error') ?>',
+										text: resp.message || '<?= __('update_failed') ?>'
+									});
+								}
+							},
+							error: function() {
+								Swal.fire({
+									icon: 'error',
+									title: '<?= __('error') ?>',
+									text: '<?= __('an_error_occurred') ?>'
+								});
+							}
 						});
 					}
 				});

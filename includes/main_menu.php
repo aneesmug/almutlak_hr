@@ -44,6 +44,7 @@ $manualVacationLink = 'import_vacation_balance.php';
 $processIqamaImportLink = 'import_iqama_exp.php';
 $addManualLoanLink = 'add_manual_loan.php';
 $importLoanBalanceLink = 'import_loan_opening_balance.php';
+$importMedicalInsuranceLink = 'import_medical_insurance.php';
 $employeeSalaryReportLink = 'employee_salary_report.php';
 $employeeEvaluationLink = 'employee_evaluation.php';
 $allEmployeeEvaluationsLink = 'all_employee_evaluations.php';
@@ -116,6 +117,7 @@ $page_special_access_bypass = [
     'vacation_status_history.php' => 'access_vacation_status_history',
     'business_trip_status_history.php' => 'access_business_trip_status_history',
     'edit_employee.php' => 'access_edit_employee',
+    'import_loan_opening_balance.php' => 'access_import_loan_opening_balance',
 ];
 
 // Grant $user_role into $page_roles for any page this employee has an explicit
@@ -888,8 +890,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         $can_see_vacation_date_editor = in_array($user_role, $page_roles['vacation_dates_by_inv.php'] ?? []) || in_array($user_type, $page_roles['vacation_dates_by_inv.php'] ?? []);
         $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
+        $can_import_medical_insurance = $is_system_admin
+            || user_has_special_access($conDB, $empid ?? '', 'access_import_medical_insurance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         ?>
-        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
@@ -898,6 +902,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
                 <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_opening_balance', 'Import Loan Opening Balance') ?></span></a></li>
+                <?php endif; ?>
+                <?php if ($can_import_medical_insurance): ?>
+                <li><a href="<?= $importMedicalInsuranceLink ?>"><i class="fa fa-solid fa-file-medical"></i><span><?=__('import_medical_insurance', 'Import Medical Insurance') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($is_system_admin || $can_see_vacation_date_editor): ?>
                 <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>

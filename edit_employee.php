@@ -50,11 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'email',
 			'c_email',
 			'address',
-			'insurance_no',
 			'comp_no',
-			'insurance_exp',
 			'gosi',
-			'insurance_class',
 			'probation',
 			'payment_type',
 			'is_overtime_eligible',
@@ -664,30 +661,6 @@ if (mysqli_num_rows($query) == 1) {
 												</label>
 												<input type="address" name="address" value="<?= $emprow['address'] ?>" parsley-trigger="change" class="form-control" id="address">
 											</div>
-											<div class="form-group col-md-2">
-												<label for="insurance_no" class="col-form-label"><?= __("insurance_no_label") ?></label>
-												<input type="text" name="insurance_no" value="<?= $emprow['insurance_no'] ?>" parsley-trigger="change" class="form-control" id="insurance_no">
-											</div>
-											<div class="form-group col-md-2">
-												<label for="insurance_class" class="col-form-label"><?= __("insurance_class_label") ?>
-													<?php if ($emprow['emp_sup_type'] !== "man_power"): ?>
-														<span class="text-danger">*</span>
-													<?php endif ?>
-												</label>
-												<select class="form-control" name="insurance_class">
-													<option value=""><?= __("select_option") ?></option>
-													<option value="A" <?= ($emprow['insurance_class'] == 'A' ? 'selected' : '') ?>>A</option>
-													<option value="B" <?= ($emprow['insurance_class'] == 'B' ? 'selected' : '') ?>>B</option>
-													<option value="C" <?= ($emprow['insurance_class'] == 'C' ? 'selected' : '') ?>>C</option>
-													<option value="CLT" <?= ($emprow['insurance_class'] == 'CLT' ? 'selected' : '') ?>>CLT</option>
-													<option value="VIP" <?= ($emprow['insurance_class'] == 'VIP' ? 'selected' : '') ?>>VIP</option>
-												</select>
-											</div>
-											<div class="form-group col-md-2">
-												<label for="insurance_exp" class="col-form-label"><?= __("insurance_expire_label") ?></label>
-												<input type="text" name="insurance_exp" value="<?= $emprow['insurance_exp'] ?>" parsley-trigger="change" class="form-control" id="insurance_exp">
-											</div>
-
 											<?php if ($emprow['country'] == 191) { ?>
 												<div class="form-group col-md-2">
 													<label for="gosi" class="col-form-label"><?= __("gosi_label") ?><span class="text-danger">*</span></label>

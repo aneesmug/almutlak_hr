@@ -4,7 +4,7 @@ require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 
 $allowed = ($is_system_admin ?? false)
-    || user_has_special_access($conDB, $empid ?? '', 'access_import_loan_opening_balance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    || user_has_special_access($conDB, $empid ?? '', 'access_import_medical_insurance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 if (!$allowed) {
     header("Location: error403.php?page=" . urlencode(basename(__FILE__)));
     exit;
@@ -15,7 +15,7 @@ if (!$allowed) {
 
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - <?= __('import_loan_opening_balance', 'Import Loan Opening Balance') ?></title>
+    <title><?= $site_title ?> - <?= __('import_medical_insurance', 'Import Medical Insurance') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -62,25 +62,25 @@ if (!$allowed) {
                     <div class="row">
                         <div class="col-12">
                             <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('import_loan_opening_balance', 'Import Loan Opening Balance') ?></h4>
+                                <h4 class="header-title m-t-0 m-b-30"><?= __('import_medical_insurance', 'Import Medical Insurance') ?></h4>
 
                                 <div class="info-box">
-                                    <?= __('import_loan_opening_balance_desc', 'Bulk-import outstanding loan balances carried over from the old system. Download the template, fill in each employee\'s remaining balance, then upload it here. Imported records are marked as legacy history and will not enter the active loan approval workflow.') ?>
+                                    <?= __('import_medical_insurance_desc', 'Bulk-import medical insurance details (Insurance No, amount, expiry, class) for the yearly renewal. Download the template, fill in a row per employee, then upload it here. Each row you import becomes that employee\'s new ACTIVE record - their previous active record (if any) is automatically marked Expired, not deleted.') ?>
                                 </div>
 
-                                <a href="download_loan_opening_balance_template.php" class="btn btn-secondary mb-3">
+                                <a href="download_medical_insurance_template.php" class="btn btn-secondary mb-3">
                                     <i class="fa fa-download"></i> <?= __('download_template', 'Download Excel Template') ?>
                                 </a>
 
-                                <form id="importBalanceForm" enctype="multipart/form-data">
-                                    <input type="hidden" name="ajaxType" value="import_loan_opening_balance">
+                                <form id="importInsuranceForm" enctype="multipart/form-data">
+                                    <input type="hidden" name="ajaxType" value="bulk_import_employee_medical_insurance">
                                     <div class="form-group col-md-6 px-0">
                                         <label><?= __('excel_file', 'Excel / CSV File') ?></label>
-                                        <input type="file" name="balance_file" id="balance_file" class="form-control" accept=".csv,.xlsx,.xls" required>
+                                        <input type="file" name="insurance_file" id="insurance_file" class="form-control" accept=".csv,.xlsx,.xls" required>
                                         <small class="form-text text-muted"><?= __('supported_formats_csv_xlsx_xls', 'Supported formats: .csv, .xlsx, .xls') ?></small>
                                     </div>
                                     <button type="submit" class="btn btn-primary waves-effect waves-light" id="importBtn">
-                                        <i class="fa fa-upload"></i> <?= __('import_loans', 'Import Loans') ?>
+                                        <i class="fa fa-upload"></i> <?= __('import_medical_insurance_button', 'Import Medical Insurance') ?>
                                     </button>
                                 </form>
 
@@ -113,29 +113,29 @@ if (!$allowed) {
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td><code>employee_id</code></td>
+                                            <td><code>emp_id</code></td>
                                             <td><?= __('yes', 'Yes') ?></td>
-                                            <td><?= __('emp_id_4_digit_note', '4-digit numeric Employee ID matching an existing employee (e.g. 4020)') ?></td>
+                                            <td><?= __('emp_id_must_match_note', 'Must match an existing employee ID (e.g. 4020)') ?></td>
                                         </tr>
                                         <tr>
-                                            <td><code>opening_balance</code></td>
-                                            <td><?= __('yes', 'Yes') ?></td>
-                                            <td><?= __('outstanding_amount_must_be_gt_0', 'Outstanding amount owed by the employee (must be > 0)') ?></td>
-                                        </tr>
-                                        <tr>
-                                            <td><code>loan_type</code></td>
+                                            <td><code>insurance_no</code></td>
                                             <td><?= __('no', 'No') ?></td>
-                                            <td><?= __('loan_type_default_regular', 'One of: regular, emergency, end_of_service, housing, advance_salary. Defaults to regular') ?></td>
+                                            <td><?= __('insurance_policy_number_note', 'Insurance policy number') ?></td>
                                         </tr>
                                         <tr>
-                                            <td><code>installments</code></td>
+                                            <td><code>med_insurance</code></td>
                                             <td><?= __('no', 'No') ?></td>
-                                            <td><?= __('installments_default_12', 'Number of months used to calculate the monthly deduction. Defaults to 12') ?></td>
+                                            <td><?= __('med_insurance_amount_note', 'Medical insurance premium/amount (SAR)') ?></td>
                                         </tr>
                                         <tr>
-                                            <td><code>start_date</code></td>
+                                            <td><code>medical_expiry</code></td>
                                             <td><?= __('no', 'No') ?></td>
-                                            <td><?= __('start_date_default_today', 'Format YYYY-MM-DD. Defaults to today') ?></td>
+                                            <td><?= __('format_yyyy_mm_dd', 'Format YYYY-MM-DD') ?></td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>medical_class</code></td>
+                                            <td><?= __('no', 'No') ?></td>
+                                            <td><?= __('medical_class_options_note', 'One of: CLT, C, B, A, A+') ?></td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -159,21 +159,21 @@ if (!$allowed) {
 
     <script>
         $(document).ready(function() {
-            $('#importBalanceForm').on('submit', function(e) {
+            $('#importInsuranceForm').on('submit', function(e) {
                 e.preventDefault();
                 const formData = new FormData(this);
                 const $btn = $('#importBtn');
                 $btn.prop('disabled', true);
 
                 Swal.fire({
-                    title: 'Importing...',
+                    title: '<?= __('importing', 'Importing...') ?>',
                     allowOutsideClick: false,
                     allowEscapeKey: false,
                     didOpen: () => Swal.showLoading()
                 });
 
                 $.ajax({
-                    url: './includes/ajaxFile/ajaxLoan.php',
+                    url: './includes/ajaxFile/employeeMedicalInsuranceHandler.php',
                     type: 'POST',
                     data: formData,
                     processData: false,
@@ -187,9 +187,8 @@ if (!$allowed) {
                         });
 
                         if (typeof response.inserted !== 'undefined') {
-                            $('#insertedCount').text('Imported: ' + response.inserted);
-                            $('#skippedCount').text('Skipped: ' + response.skipped +
-                                (response.skipped_emp_ids && response.skipped_emp_ids.length ? ' (Employee IDs: ' + response.skipped_emp_ids.join(', ') + ')' : ''));
+                            $('#insertedCount').text('<?= __('imported', 'Imported') ?>: ' + response.inserted);
+                            $('#skippedCount').text('<?= __('skipped', 'Skipped') ?>: ' + response.skipped);
 
                             const $errBody = $('#errorTableBody').empty();
                             const errs = response.errors || [];

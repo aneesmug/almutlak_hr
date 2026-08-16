@@ -25,6 +25,7 @@ if (!function_exists('get_report_type_labels')) {
             'eos' => 'End of Service',
             'dept_comparison' => 'Department Comparison Report',
             'country_company_comparison' => 'Country & Company Comparison Report',
+            'ctc' => 'CTC Report',
             'custom' => 'Custom Report',
         ];
     }

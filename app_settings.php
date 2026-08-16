@@ -208,6 +208,19 @@
             display: block;
             color: #c3cad6;
         }
+        #special-access-panel {
+            position: relative;
+        }
+        #special-access-loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, .75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            border-radius: .5rem;
+        }
         .special-access-group-label {
             font-size: .72rem;
             text-transform: uppercase;
@@ -353,7 +366,6 @@
         let reportPermissionMap = {};
         let specialAccessEligibleUsers = [];
         let specialAccessMap = {};
-        let currentSpecialAccessEmpId = '';
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
@@ -497,8 +509,8 @@
             });
         }
 
-        // Report Access lives inside the Special Access editor (both the inline panel and
-        // the Swal edit modal) as one more grouped block, but it's backed by its own map
+        // Report Access lives inside the Special Access editor's Swal modal as one more
+        // grouped block, but it's backed by its own map
         // (reportPermissionMap / report_visibility_by_user) with different semantics: no
         // explicit entry for a user means "sees ALL report types" (backward-compatible
         // default from get_allowed_report_types_for_user()), not "sees none" like every
@@ -820,7 +832,7 @@
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings'];
+            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -1532,16 +1544,57 @@
             }
         }
 
-        // Report Access no longer has its own tab/select-driven panel - it's rendered inside
-        // the Special Access editor by buildReportAccessBlockHtml()/wireReportAccessBlock()
-        // (see renderSpecialAccessCheckboxes and openSpecialAccessEditModal below), and its
-        // assigned-user summary is folded into renderAssignedSpecialAccessSummary().
+        // Report Access no longer has its own tab - it's rendered inside the Special Access
+        // editor by buildReportAccessBlockHtml()/wireReportAccessBlock() (see
+        // openSpecialAccessEditModal below), and its assigned-user summary is folded into
+        // renderAssignedSpecialAccessSummary().
 
         function updateSpecialAccessHiddenValue() {
             const hidden = document.getElementById('setting-special_access_by_user');
             if (hidden) {
                 hidden.value = JSON.stringify(specialAccessMap);
             }
+        }
+
+        // Self-saves specialAccessMap/reportPermissionMap immediately, via the same generic
+        // 'update_settings' action the page-level Save Changes button uses (scoped to just
+        // these two JSON settings). This tab hides that button entirely (see
+        // SELF_SAVING_GROUPS in renderSettingsGroup) - every add/edit/remove here must go
+        // through this instead, or the change is silently lost.
+        async function saveSpecialAccessSettings() {
+            const response = await fetch('./includes/settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'update_settings',
+                    special_access_by_user: JSON.stringify(specialAccessMap),
+                    report_visibility_by_user: JSON.stringify(reportPermissionMap)
+                })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || '<?= __('could_not_save_settings') ?>');
+            }
+        }
+
+        function setSpecialAccessPanelLoading(isLoading) {
+            const overlay = document.getElementById('special-access-loading-overlay');
+            if (overlay) overlay.style.display = isLoading ? 'flex' : 'none';
+        }
+
+        // Dims the whole panel (select-user card + assigned-users table) behind a spinner
+        // overlay for a moment, then redraws the table - so after confirming the
+        // "Updated"/"Removed" message the admin sees a clear loading state, visible proof
+        // the save applied, not just an instant silent swap. A real timeout (not
+        // requestAnimationFrame) is used deliberately - rAF's callback fires and resolves
+        // its promise in a microtask that runs BEFORE the browser paints, so an
+        // immediate show-then-hide across a single rAF tick never actually renders a
+        // visible frame at all.
+        async function refreshSpecialAccessTableWithLoader() {
+            setSpecialAccessPanelLoading(true);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+            setSpecialAccessPanelLoading(false);
         }
 
         function renderAssignedSpecialAccessSummary(users) {
@@ -1658,7 +1711,7 @@
                         showCancelButton: true,
                         confirmButtonText: '<?= __('yes_remove_it') ?>',
                         cancelButtonText: '<?= __('cancel') ?>'
-                    }).then((result) => {
+                    }).then(async (result) => {
                         if (!result.isConfirmed) return;
 
                         delete specialAccessMap[empId];
@@ -1667,115 +1720,33 @@
                         updateReportPermissionHiddenValue();
                         renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
 
-                        const select = document.getElementById('special-access-user-select');
-                        if (select && select.value === empId) {
-                            renderSpecialAccessCheckboxes(empId);
+                        Swal.fire({
+                            title: '<?= __('saving', 'Saving...') ?>',
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
+                        try {
+                            await saveSpecialAccessSettings();
+                            await Swal.fire({
+                                icon: 'success',
+                                title: '<?= __('removed') ?>',
+                                text: '<?= __('your_settings_have_been_updated_successfully') ?>',
+                                confirmButtonText: '<?= __('ok', 'OK') ?>'
+                            });
+                            await refreshSpecialAccessTableWithLoader();
+                        } catch (error) {
+                            Swal.fire('<?= __('error') ?>', error.message, 'error');
                         }
                     });
                 });
             });
         }
 
-        function renderSpecialAccessCheckboxes(empId) {
-            const container = document.getElementById('special-access-checkboxes');
-            if (!container) return;
-
-            currentSpecialAccessEmpId = String(empId || '').trim();
-
-            if (!currentSpecialAccessEmpId) {
-                container.innerHTML = '<div class="special-access-empty-state"><i class="fas fa-hand-pointer"></i><?= __('select_user_to_configure_special_access') ?></div>';
-                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
-                return;
-            }
-
-            const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, currentSpecialAccessEmpId);
-            // Unlike report permissions, an employee with no explicit entry has NO special access by default.
-            const selectedTypes = hasExplicit ? normalizeSpecialAccessList(specialAccessMap[currentSpecialAccessEmpId]) : [];
-            const selectedSet = new Set(selectedTypes);
-            const safeEmpId = String(currentSpecialAccessEmpId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
-
-            let html = '<div class="d-flex justify-content-between align-items-center mb-2">';
-            html += '<small class="text-muted"><?= __('check_the_special_abilities_this_user_should_have') ?></small>';
-            html += '<div>';
-            html += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="special-access-select-all-btn"><?= __('select_all') ?></button>';
-            html += '<button type="button" class="btn btn-sm btn-outline-secondary" id="special-access-clear-all-btn"><?= __('clear_all') ?></button>';
-            html += '</div></div>';
-            html += `<div class="form-group mb-2">
-                <input type="text" class="form-control form-control-sm" id="special-access-search-input" placeholder="<?= __('search') ?>...">
-            </div>`;
-            html += `<div id="special-access-checkbox-grid">${buildSpecialAccessGroupedHtml('special-access-' + safeEmpId, selectedSet)}</div>`;
-            html += '<p class="text-muted mb-0 mt-2" id="special-access-no-match" style="display:none;"><?= __('no_matching_records_found', 'No matching records found') ?></p>';
-            html += buildReportAccessBlockHtml('special-access-' + safeEmpId, currentSpecialAccessEmpId);
-            container.innerHTML = html;
-
-            updateSpecialAccessCategoryCounts(container);
-            wireReportAccessBlock(container, 'special-access-' + safeEmpId, (mode, values) => {
-                const activeEmpId = String(currentSpecialAccessEmpId || '').trim();
-                if (!activeEmpId) return;
-                if (mode === 'default') {
-                    delete reportPermissionMap[activeEmpId];
-                } else {
-                    reportPermissionMap[activeEmpId] = normalizeReportTypeList(values);
-                }
-                updateReportPermissionHiddenValue();
-                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
-            });
-
-            const searchInput = document.getElementById('special-access-search-input');
-            if (searchInput) {
-                searchInput.addEventListener('input', function() {
-                    const term = this.value.trim().toLowerCase();
-                    let visibleCount = 0;
-                    container.querySelectorAll('.special-access-item').forEach(item => {
-                        const matches = term === '' || (item.getAttribute('data-search-label') || '').includes(term);
-                        item.style.display = matches ? '' : 'none';
-                        if (matches) visibleCount++;
-                    });
-                    const noMatch = document.getElementById('special-access-no-match');
-                    if (noMatch) noMatch.style.display = visibleCount === 0 ? '' : 'none';
-                });
-            }
-
-            function persistFromCheckboxes() {
-                const activeEmpId = String(currentSpecialAccessEmpId || '').trim();
-                if (!activeEmpId) return;
-                const checkedValues = Array.from(container.querySelectorAll('.special-access-checkbox:checked'))
-                    .map(el => el.value);
-                specialAccessMap[activeEmpId] = normalizeSpecialAccessList(checkedValues);
-                updateSpecialAccessHiddenValue();
-                updateSpecialAccessCategoryCounts(container);
-                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
-            }
-
-            container.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
-                checkbox.addEventListener('change', persistFromCheckboxes);
-            });
-
-            const selectAllBtn = document.getElementById('special-access-select-all-btn');
-            const clearAllBtn = document.getElementById('special-access-clear-all-btn');
-
-            if (selectAllBtn) {
-                selectAllBtn.addEventListener('click', function() {
-                    container.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = true; });
-                    persistFromCheckboxes();
-                });
-            }
-
-            if (clearAllBtn) {
-                clearAllBtn.addEventListener('click', function() {
-                    container.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = false; });
-                    persistFromCheckboxes();
-                });
-            }
-
-            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
-        }
-
-        // Edit button on the "Assigned users" table opens the checkbox grid inside a
-        // SweetAlert2 modal (self-contained popup) instead of scrolling the admin up to
-        // the top select-driven panel. Reuses the same catalog/state as
-        // renderSpecialAccessCheckboxes but keeps its own DOM ids so the two never clash
-        // if both happen to be present at once.
+        // Single entry point for adding/editing a user's special access + report access:
+        // a SweetAlert2 modal, opened either by picking a user from the top select or by
+        // the "Edit" button on an assigned-user card. No inline editor - every change goes
+        // through this modal's explicit Save/Cancel.
         function openSpecialAccessEditModal(empId) {
             const targetEmpId = String(empId || '').trim();
             if (!targetEmpId) return;
@@ -1866,7 +1837,7 @@
                     const reportAccessApplicable = !!popup.querySelector('.report-type-checkbox, .report-access-select-all');
                     return { abilities, reportAccessApplicable, reportAccessMode, reportAccessValues };
                 }
-            }).then((result) => {
+            }).then(async (result) => {
                 if (!result.isConfirmed) return;
 
                 const { abilities, reportAccessApplicable, reportAccessMode: finalMode, reportAccessValues: finalValues } = result.value || {};
@@ -1885,9 +1856,24 @@
 
                 renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
 
-                // Keep the top select-driven panel in sync if it's currently showing this user.
-                if (currentSpecialAccessEmpId === targetEmpId) {
-                    renderSpecialAccessCheckboxes(targetEmpId);
+                Swal.fire({
+                    title: '<?= __('saving', 'Saving...') ?>',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                try {
+                    await saveSpecialAccessSettings();
+
+                    await Swal.fire({
+                        icon: 'success',
+                        title: '<?= __('updated', 'Updated') ?>',
+                        text: '<?= __('your_settings_have_been_updated_successfully') ?>',
+                        confirmButtonText: '<?= __('ok', 'OK') ?>'
+                    });
+                    await refreshSpecialAccessTableWithLoader();
+                } catch (error) {
+                    Swal.fire('<?= __('error') ?>', error.message, 'error');
                 }
             });
         }
@@ -1986,28 +1972,37 @@
                     </div>
                     <p class="text-muted mb-3"><?= __('select_a_user_and_grant_them_specific_admin_hr_abilities') ?> <?= __('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.') ?></p>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <label for="special-access-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i><?= __('select_user') ?></label>
-                            <select id="special-access-user-select" class="form-control select2"></select>
-                            <div id="special-access-checkboxes" class="mt-3">
-                                <div class="text-center text-muted">
-                                    <div class="spinner-border spinner-border-sm" role="status"></div>
-                                    <span class="ml-2"><?= __('loading') ?></span>
-                                </div>
+                    <div id="special-access-panel">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <label for="special-access-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i><?= __('select_user') ?></label>
+                                <select id="special-access-user-select" class="form-control select2"></select>
+                                <small class="form-text text-muted"><?= __('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.') ?></small>
                             </div>
                         </div>
-                    </div>
 
-                    <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i><?= __('assigned_users') ?></h6>
-                    <div id="special-access-assigned-users-list">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2"><?= __('loading') ?></span>
+                        <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i><?= __('assigned_users') ?></h6>
+                        <div id="special-access-assigned-users-list">
+                            <div class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="ml-2"><?= __('loading') ?></span>
+                            </div>
+                        </div>
+
+                        <div id="special-access-loading-overlay">
+                            <div class="spinner-border text-primary" role="status"></div>
                         </div>
                     </div>
                 </div>
             `;
+
+            // Guarantee the loading spinner above actually paints before it gets overwritten
+            // below - fetchSpecialAccessUsers() usually resolves from cache on the very next
+            // microtask, which can otherwise skip straight past the loading frame unnoticed.
+            // A real timeout is used (not requestAnimationFrame) since rAF's promise resolves
+            // in a microtask that runs before the browser paints, so it wouldn't force a
+            // visible frame here either.
+            await new Promise(resolve => setTimeout(resolve, 300));
 
             // NOTE: specialAccessMap is intentionally NOT re-initialized from appSettings here.
             // It's seeded once in loadSettings() right after fetch, and the hidden input that
@@ -2021,13 +2016,12 @@
             const users = await fetchSpecialAccessUsers();
             specialAccessEligibleUsers = users;
             const select = document.getElementById('special-access-user-select');
-            const checkboxContainer = document.getElementById('special-access-checkboxes');
 
-            if (!select || !checkboxContainer) return;
+            if (!select) return;
 
             if (!users.length) {
                 select.innerHTML = '<option value=""><?= __('no_users_found') ?></option>';
-                checkboxContainer.innerHTML = '<p class="text-muted mb-0"><?= __('no_users_found') ?></p>';
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
                 return;
             }
 
@@ -2051,12 +2045,14 @@
             $select.off('change.specialAccess select2:select.specialAccess select2:clear.specialAccess');
             $select.on('change.specialAccess select2:select.specialAccess select2:clear.specialAccess', function() {
                 const selectedEmpId = String($select.val() || '').trim();
-                currentSpecialAccessEmpId = selectedEmpId;
-                renderSpecialAccessCheckboxes(selectedEmpId);
+                if (!selectedEmpId) return;
+                openSpecialAccessEditModal(selectedEmpId);
+                // Reset back to the placeholder - the modal is the single source of truth for
+                // editing, this select is only an entry point (works for add and edit alike).
+                $select.val('').trigger('change.select2');
             });
 
-            currentSpecialAccessEmpId = '';
-            renderSpecialAccessCheckboxes('');
+            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
         }
 
         function renderJobTitlesSettings() {
