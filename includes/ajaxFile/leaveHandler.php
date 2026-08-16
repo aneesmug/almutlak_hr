@@ -460,6 +460,16 @@ elseif ($ajaxType == 'applyVacation') {
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual'); // NEW: Track if Fly | Annual specifically
         $is_fly_emergency = ($vac_type === 'Fly' && $fly_type === 'emergency'); // NEW: Track if Fly | Emergency
 
+        // Server-side mirror of the client's flight-date requirement (jquery.app.js /
+        // employee_profile.js) - Fly + Annual only. The client check alone is bypassable
+        // (direct API call, future form changes), and a missing/zero date here otherwise
+        // silently corrupts the report/payment calculations downstream.
+        if ($is_fly_annual) {
+            if (empty($departure_date) || $departure_date === '0000-00-00' || empty($arrival_date) || $arrival_date === '0000-00-00') {
+                throw new Exception(__('flight_dates_required_validation') ?: 'Please select departure and arrival dates');
+            }
+        }
+
         if ($is_annual_vacation) {
             // Fetch employee context (supervisor + department) for role resolution
             $emp_ctx = ['supervisor_id' => null, 'dept' => null];
@@ -1145,7 +1155,8 @@ elseif ($ajaxType == 'applyVacation') {
             }
 
             $localAnnualRule = getLocalAnnualPayrollRemovalRuleConfig();
-            $meets_minimum_days = ((float)$vacdays >= (float)$localAnnualRule['minimum_days_exclusive']) || $allow_vac_salary_below_min;
+            $meets_minimum_days = ((float)$vacdays >= (float)$localAnnualRule['minimum_days_exclusive'])
+                || $allow_vac_salary_below_min;
 
             if ($meets_minimum_days) {
                 if (empty($vacation_salary_type)) {
@@ -1725,8 +1736,10 @@ elseif ($ajaxType == 'approveVacation') {
         $original_return_date = $row_inv['return_date'] ?? '';
         $original_vacdays = (float)($row_inv['vacdays'] ?? 0);
         // Payment fields that must be present before final approval
-        $has_departure = !empty($row_inv['departure_date']);
-        $has_arrival = !empty($row_inv['arrival_date']);
+        // MySQL stores an unset date as '0000-00-00' (not NULL) once written by legacy code
+        // paths - !empty() alone treats that string as "present", so exclude it explicitly.
+        $has_departure = !empty($row_inv['departure_date']) && $row_inv['departure_date'] !== '0000-00-00';
+        $has_arrival = !empty($row_inv['arrival_date']) && $row_inv['arrival_date'] !== '0000-00-00';
         $ticket_pay_val = (float)($row_inv['ticket_pay'] ?? 0);
         $permit_fee_val = (float)($row_inv['permit_fee'] ?? 0);
         mysqli_free_result($query_inv);
@@ -2186,14 +2199,14 @@ elseif ($ajaxType == 'approveVacation') {
         $update_types = "";
 
         // Check if we have dates to update
-        if (!empty($departure_date)) {
+        if (!empty($departure_date) && $departure_date !== '0000-00-00') {
             $update_fields[] = "`departure_date` = ?";
             $update_values[] = $departure_date;
             $update_types .= "s";
             $needs_update = true;
         }
 
-        if (!empty($arrival_date)) {
+        if (!empty($arrival_date) && $arrival_date !== '0000-00-00') {
             $update_fields[] = "`arrival_date` = ?";
             $update_values[] = $arrival_date;
             $update_types .= "s";
@@ -3169,8 +3182,8 @@ elseif ($ajaxType == 'updateVacationPayments') {
         // Convert empty strings to NULL for optional date fields
         $start_date_val = (!empty($start_date) ? $start_date : null);
         $return_date_val = (!empty($return_date) ? $return_date : null);
-        $departure_date_val = (!empty($departure_date) ? $departure_date : null);
-        $arrival_date_val = (!empty($arrival_date) ? $arrival_date : null);
+        $departure_date_val = (!empty($departure_date) && $departure_date !== '0000-00-00') ? $departure_date : null;
+        $arrival_date_val = (!empty($arrival_date) && $arrival_date !== '0000-00-00') ? $arrival_date : null;
 
         // Validate that start_date and return_date are within applied vacation period
         // Fetch applied dates for validation
@@ -4395,9 +4408,9 @@ elseif ($ajaxType == 'getTravelerDetails') {
             'passport_exp' => !empty($vacation['passport_exp']) ? date('d M Y', strtotime($vacation['passport_exp'])) : 'Not Provided',
             'passport_exp_raw' => $vacation['passport_exp'],
             'country_name' => !empty($vacation['country_name']) ? $vacation['country_name'] : 'Not Specified',
-            'departure_date' => !empty($vacation['departure_date']) ? date('d M Y', strtotime($vacation['departure_date'])) : 'Not Provided',
+            'departure_date' => (!empty($vacation['departure_date']) && $vacation['departure_date'] !== '0000-00-00') ? date('d M Y', strtotime($vacation['departure_date'])) : 'Not Provided',
             'departure_date_raw' => $vacation['departure_date'],
-            'arrival_date' => !empty($vacation['arrival_date']) ? date('d M Y', strtotime($vacation['arrival_date'])) : 'Not Provided',
+            'arrival_date' => (!empty($vacation['arrival_date']) && $vacation['arrival_date'] !== '0000-00-00') ? date('d M Y', strtotime($vacation['arrival_date'])) : 'Not Provided',
             'start_date' => !empty($vacation['start_date']) ? date('d M Y', strtotime($vacation['start_date'])) : 'Not Provided',
             'return_date' => !empty($vacation['return_date']) ? date('d M Y', strtotime($vacation['return_date'])) : 'Not Provided',
             'request_inv_no' => $vacation['request_inv_no'],
@@ -4501,7 +4514,8 @@ elseif ($ajaxType == 'sendTravelEmail') {
         }
 
         // Check if flight dates are available
-        if (empty($vacation['departure_date']) || empty($vacation['arrival_date'])) {
+        if (empty($vacation['departure_date']) || $vacation['departure_date'] === '0000-00-00'
+            || empty($vacation['arrival_date']) || $vacation['arrival_date'] === '0000-00-00') {
             throw new Exception(__("flight_dates_departure_and_arrival_are_required"));
         }
 

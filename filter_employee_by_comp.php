@@ -250,6 +250,74 @@ if ($total_items > 0) {
             width: 120px;
             height: 120px;
         }
+
+        /* Company employees - search toolbar */
+        .comp-search-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 10px 14px;
+            background: #f4f6f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .comp-search-field {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1 1 auto;
+        }
+
+        .comp-search-field-status {
+            flex: 0 0 auto;
+        }
+
+        .comp-search-field-status select {
+            width: auto;
+            min-width: 180px;
+        }
+
+        .comp-search-label {
+            margin: 0;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #8a94a6;
+            white-space: nowrap;
+        }
+
+        .comp-search-input {
+            position: relative;
+            display: flex;
+            align-items: center;
+            flex: 1 1 auto;
+            gap: 8px;
+        }
+
+        .comp-search-input i.mdi-magnify {
+            position: absolute;
+            left: 12px;
+            color: #94a3b8;
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        .comp-search-input input {
+            padding-left: 34px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+        }
+
+        .comp-search-input input:focus {
+            border-color: rgba(67, 97, 238, 0.5);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+        }
     </style>
 	<?php if ($is_rtl): ?>
 		<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -288,27 +356,29 @@ if ($total_items > 0) {
 
                         <!-- ** NEW ** Filter controls -->
                         <div class="row filter-controls mx-auto mb-5">
-                            <div class="col-md-6 mb-3 mb-md-0">
-                                <label for="statusFilter" class="font-weight-bold"><?=__('filter_by_status')?></label>
-                                <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                    <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>><?=__('all_option')?></option>
-                                    <option value="active" <?= $status_filter == 'active' ? 'selected' : '' ?>><?=__('active')?></option>
-                                    <option value="on_vacation" <?= $status_filter == 'on_vacation' ? 'selected' : '' ?>><?=__('on_vacations')?></option>
-                                    <option value="inactive" <?= $status_filter == 'inactive' ? 'selected' : '' ?>><?=__('inactive')?></option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="searchFilter" class="font-weight-bold"><?=__('search')?></label>
-                                <div class="input-group">
-                                    <input type="search" class="form-control" id="searchFilter" placeholder="..." value="<?=htmlspecialchars($search_term); ?>">
-                                    <div class="input-group-append">
-                                        <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
+                            <div class="col-12">
+                                <div class="comp-search-group">
+                                    <div class="comp-search-field">
+                                        <label for="searchFilter" class="comp-search-label"><?=__('search')?></label>
+                                        <div class="comp-search-input">
+                                            <i class="mdi mdi-magnify"></i>
+                                            <input type="search" class="form-control" id="searchFilter" placeholder="..." value="<?=htmlspecialchars($search_term); ?>">
+                                        </div>
+                                    </div>
+                                    <div class="comp-search-field comp-search-field-status">
+                                        <label for="statusFilter" class="comp-search-label"><?=__('filter_by_status')?></label>
+                                        <select class="form-control" id="statusFilter" onchange="applyFilters()">
+                                            <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>><?=__('all_option')?></option>
+                                            <option value="active" <?= $status_filter == 'active' ? 'selected' : '' ?>><?=__('active')?></option>
+                                            <option value="on_vacation" <?= $status_filter == 'on_vacation' ? 'selected' : '' ?>><?=__('on_vacations')?></option>
+                                            <option value="inactive" <?= $status_filter == 'inactive' ? 'selected' : '' ?>><?=__('inactive')?></option>
+                                        </select>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="row">
+                        <div class="row" id="compEmployeesCardsContainer">
                             <?php if (!empty($employees)): ?>
                                 <?php foreach ($employees as $rec): ?>
                                     <?php
@@ -319,13 +389,6 @@ if ($total_items > 0) {
                                         $emp_status = $rec["status"];
                                         $emp_status_fly = $rec["fly"];
                                         $emptype = $rec["emptype"];
-
-                                        $sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Fly'");
-                                        $cont_fly = mysqli_fetch_array($sql_count_fly)[0] ?? 0;
-
-                                        $sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Encashed'");
-                                        $cont_encashed = mysqli_fetch_array($sql_count_encashed)[0] ?? 0;
-
                                         $emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
 
                                         // Determine card status class
@@ -346,25 +409,7 @@ if ($total_items > 0) {
                         </div>
 
                         <div class="row mt-4">
-                            <div class="col-12">
-                                <?php
-                                $pagination_params = ['comp' => $company_id]; // Company is always a param
-                                if ($department_id > 0) $pagination_params['dept'] = $department_id;
-                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                if (!empty($status_filter) && $status_filter != 'all') $pagination_params['status'] = $status_filter;
-                                
-                                echo generate_pagination_controls(
-                                    $current_page,
-                                    $total_pages,
-                                    $total_items,
-                                    $items_per_page,
-                                    $limit_options,
-                                    $show_all,
-                                    $pagination_params,
-                                    $unfiltered_total_items
-                                );
-                                ?>
-                            </div>
+                            <div class="col-12" id="compEmployeesPaginationContainer"></div>
                         </div>
                     </div>
                 </div>
@@ -382,17 +427,164 @@ if ($total_items > 0) {
 	<script src="assets/js/jquery.core.js"></script>
 	<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
-        function applyFilters() {
-            const status = document.getElementById('statusFilter').value;
-            const limit = document.getElementById('limitFilter') ? document.getElementById('limitFilter').value : '<?=$items_per_page?>';
-            const search = document.getElementById('searchFilter').value;
-            const url = new URL(window.location.href);
-            url.searchParams.set('status', status);
-            url.searchParams.set('limit', limit);
-            url.searchParams.set('search', search);
-            url.searchParams.set('page', '1');
-            window.location.href = url.toString();
+        // Live AJAX company employee list - search, status filter, limit &
+        // pagination all fetch in place. Pagination is built entirely from plain
+        // <button> elements (no <a href> anywhere) so there is nothing for the
+        // browser to navigate to - clicking a page number can never reload the page.
+        let compSearchTimer = null;
+        const compCompanyId = <?= (int)$company_id ?>;
+        const compDepartmentId = <?= (int)$department_id ?>;
+        const compLimitOptions = <?= json_encode($limit_options) ?>;
+
+        function renderStandardPagination($container, opts, onPageChange, onLimitChange) {
+            $container.empty();
+            if (opts.totalItems <= 0) {
+                return;
+            }
+
+            const $wrap = $('<div class="d-md-flex justify-content-between align-items-center"></div>');
+
+            const $limitBlock = $('<div class="mb-3 mb-md-0"><div class="form-inline"></div></div>');
+            const $form = $limitBlock.find('.form-inline');
+            $form.append($('<label class="mr-2 font-weight-bold"></label>').text(__('show', 'Show') + ':'));
+            const $select = $('<select class="form-control form-control-sm" id="limitFilter"></select>');
+            compLimitOptions.forEach(function(opt) {
+                const $option = $('<option></option>').attr('value', opt).text(opt);
+                if (!opts.showAll && opts.itemsPerPage === opt) $option.prop('selected', true);
+                $select.append($option);
+            });
+            const $allOption = $('<option value="all"></option>').text(__('all_option', 'All'));
+            if (opts.showAll) $allOption.prop('selected', true);
+            $select.append($allOption);
+            $select.on('change', onLimitChange);
+            $form.append($select);
+            $form.append($('<span class="ml-2 text-muted"></span>').text(__('items_per_page', 'items per page')));
+            $wrap.append($limitBlock);
+
+            const $right = $('<div class="d-flex align-items-center justify-content-center flex-wrap"></div>');
+            let startItem = 0, endItem = 0;
+            if (!opts.showAll && opts.itemsPerPage > 0 && opts.totalPages > 0) {
+                startItem = ((opts.currentPage - 1) * opts.itemsPerPage) + 1;
+                endItem = Math.min(startItem + opts.itemsPerPage - 1, opts.totalItems);
+            } else {
+                startItem = 1;
+                endItem = opts.totalItems;
+            }
+            let showingText = __('showing', 'Showing') + ' ' + startItem + ' ' + __('to', 'to') + ' ' + endItem + ' ' + __('of', 'of') + ' ' + opts.totalItems + ' ' + __('entries', 'entries');
+            if (opts.unfilteredTotalItems > opts.totalItems) {
+                showingText += ' (' + __('filtered_from', 'filtered from') + ' ' + opts.unfilteredTotalItems + ' ' + __('entries', 'entries') + ')';
+            }
+            $right.append($('<span class="text-muted mr-3"></span>').text(showingText));
+
+            if (opts.totalPages > 1 && !opts.showAll) {
+                const $nav = $('<nav aria-label="Pagination"></nav>');
+                const $ul = $('<ul class="pagination mb-0"></ul>');
+
+                function pageButton(label, page, disabled, active) {
+                    const $li = $('<li class="page-item"></li>').toggleClass('disabled', !!disabled).toggleClass('active', !!active);
+                    const $btn = $('<button type="button" class="page-link"></button>').text(label);
+                    if (!disabled && !active) {
+                        $btn.on('click', function() { onPageChange(page); });
+                    }
+                    $li.append($btn);
+                    return $li;
+                }
+
+                $ul.append(pageButton(__('first', 'First'), 1, opts.currentPage <= 1, false));
+                $ul.append(pageButton(__('previous', 'Previous'), opts.currentPage - 1, opts.currentPage <= 1, false));
+
+                const range = 2;
+                const startRange = Math.max(1, opts.currentPage - range);
+                const endRange = Math.min(opts.totalPages, opts.currentPage + range);
+
+                if (startRange > 1) {
+                    $ul.append(pageButton('1', 1, false, false));
+                    if (startRange > 2) {
+                        $ul.append($('<li class="page-item disabled"><span class="page-link">...</span></li>'));
+                    }
+                }
+                for (let i = startRange; i <= endRange; i++) {
+                    $ul.append(pageButton(String(i), i, false, i === opts.currentPage));
+                }
+                if (endRange < opts.totalPages) {
+                    if (endRange < opts.totalPages - 1) {
+                        $ul.append($('<li class="page-item disabled"><span class="page-link">...</span></li>'));
+                    }
+                    $ul.append(pageButton(String(opts.totalPages), opts.totalPages, false, false));
+                }
+
+                $ul.append(pageButton(__('next', 'Next'), opts.currentPage + 1, opts.currentPage >= opts.totalPages, false));
+                $ul.append(pageButton(__('last', 'Last'), opts.totalPages, opts.currentPage >= opts.totalPages, false));
+
+                $nav.append($ul);
+                $right.append($nav);
+            }
+
+            $wrap.append($right);
+            $container.append($wrap);
         }
+
+        function loadCompEmployees(page) {
+            const $cards = $('#compEmployeesCardsContainer');
+            const $pagination = $('#compEmployeesPaginationContainer');
+            const status = document.getElementById('statusFilter').value;
+            const limitElement = document.getElementById('limitFilter');
+            const limit = limitElement ? limitElement.value : compLimitOptions[0];
+            const search = document.getElementById('searchFilter').value;
+
+            const lockedHeight = $cards.outerHeight();
+            if (lockedHeight) {
+                $cards.css('min-height', lockedHeight + 'px');
+            }
+            $cards.css({ opacity: 0.45, 'pointer-events': 'none' });
+
+            $.ajax({
+                url: './includes/ajaxFile/get_comp_employees_list.php',
+                type: 'POST',
+                dataType: 'json',
+                data: { comp: compCompanyId, dept: compDepartmentId, status: status, limit: limit, search: search, page: page }
+            }).done(function(response) {
+                if (!response || response.status !== 200) {
+                    return;
+                }
+                $cards.html(response.cards_html);
+                renderStandardPagination($pagination, {
+                    currentPage: response.current_page,
+                    totalPages: response.total_pages,
+                    totalItems: response.total_items,
+                    itemsPerPage: response.items_per_page,
+                    showAll: response.show_all,
+                    unfilteredTotalItems: response.unfiltered_total_items
+                }, function(newPage) { loadCompEmployees(newPage); }, function() { loadCompEmployees(1); });
+            }).always(function() {
+                $cards.css({ opacity: 1, 'pointer-events': 'auto', 'min-height': '' });
+            });
+        }
+
+        function applyFilters() {
+            loadCompEmployees(1);
+        }
+
+        document.getElementById('searchFilter').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') { applyFilters(); }
+        });
+        document.getElementById('searchFilter').addEventListener('input', function () {
+            clearTimeout(compSearchTimer);
+            compSearchTimer = setTimeout(function () {
+                loadCompEmployees(1);
+            }, 350);
+        });
+
+        // Initial paint - build pagination from the server-rendered first page's
+        // numbers without an extra AJAX round-trip.
+        renderStandardPagination($('#compEmployeesPaginationContainer'), {
+            currentPage: <?= (int)$current_page ?>,
+            totalPages: <?= (int)$total_pages ?>,
+            totalItems: <?= (int)$total_items ?>,
+            itemsPerPage: <?= (int)$items_per_page ?>,
+            showAll: <?= $show_all ? 'true' : 'false' ?>,
+            unfilteredTotalItems: <?= (int)$unfiltered_total_items ?>
+        }, function(newPage) { loadCompEmployees(newPage); }, function() { loadCompEmployees(1); });
     </script>
 </body>
 </html>

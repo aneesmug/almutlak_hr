@@ -388,6 +388,8 @@ if (mysqli_num_rows($query) == 1) {
     // request. Mirrors leaveHandler.php's exact gate (lines ~1129-1157): below the
     // minimum_days_exclusive threshold and no per-employee override, the employee was
     // never asked - the choice is meaningless, so don't show it in the report either.
+    // Applies uniformly to Fly and Local Vacation - the per-employee override
+    // (allow_vacation_salary_below_min_days) is what unlocks it below the threshold.
     $meets_min_days_for_salary_choice = $is_annual_vacation
         && (($approved_days >= $local_annual_min_days_exclusive) || $allow_vacation_salary_below_min_days);
 
@@ -738,20 +740,25 @@ if (mysqli_num_rows($query) == 1) {
                                         <div class="detail-item"><span class="label"><?= __('remaining_vacation_balance', 'Remaining Vacation Balance') ?></span> <span class="value highlight"><small><?= number_format((float)$remaining_vacation_balance, 2); ?> <?= __('days') ?></small></span></div>
                                         <?php endif; ?>
                                         <?php
+                                        // MySQL stores unset dates as '0000-00-00' (not NULL), which passes !empty()
+                                        // but produces garbage when parsed as a DateTime - treat it as no date at all.
+                                        $has_departure_date = !empty($request['departure_date']) && $request['departure_date'] !== '0000-00-00';
+                                        $has_arrival_date = !empty($request['arrival_date']) && $request['arrival_date'] !== '0000-00-00';
+
                                         // Calculate flight days if both departure and arrival dates exist
                                         $flight_days = 0;
-                                        if (!empty($request['departure_date']) && !empty($request['arrival_date'])) {
+                                        if ($has_departure_date && $has_arrival_date) {
                                             $departure_date_obj = new DateTime($request['departure_date']);
                                             $arrival_date_obj = new DateTime($request['arrival_date']);
                                             $flight_interval = $departure_date_obj->diff($arrival_date_obj);
                                             $flight_days = $flight_interval->days + 1; // Include both departure and arrival days
                                         }
                                         ?>
-                                        <?php if (!empty($request['departure_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
-                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['departure_date']) ? date('d M Y', strtotime($request['departure_date'])) : null); ?></small></span></div>
+                                        <?php if ($has_departure_date && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('departure_date') ?></span> <span class="value"><small><?= display_or_na(date('d M Y', strtotime($request['departure_date']))); ?></small></span></div>
                                         <?php endif; ?>
-                                        <?php if (!empty($request['arrival_date']) && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
-                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?= display_or_na(!empty($request['arrival_date']) ? date('d M Y', strtotime($request['arrival_date'])) : null); ?></small></span></div>
+                                        <?php if ($has_arrival_date && $request['vac_type'] === 'Fly' && $request['raw_fly_type'] === 'annual'): ?>
+                                            <div class="detail-item"><span class="label"><?= __('arrival_date') ?></span> <span class="value"><small><?= display_or_na(date('d M Y', strtotime($request['arrival_date']))); ?></small></span></div>
                                         <?php endif; ?>
                                         <?php if ($flight_days > 0 && $ticket_fee > 0): ?>
                                             <div class="detail-item"><span class="label"><?= __('flight_days') ?? 'Flight Days' ?></span> <span class="value highlight"><small><?= display_or_na($flight_days); ?> <?= __('days') ?></small></span></div>
@@ -1103,28 +1110,13 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                 </div>
                                 <?php endif; ?>
-                                
-                                <?php if ($is_fly_annual && $vacation_salary_type === 'end_of_service' && $meets_min_days_for_salary_choice): ?>
-                                <div class="report-section">
-                                    <h5 class="section-title"><i class="fa fa-info-circle"></i><?= __('vacation_salary_information') ?? 'Vacation Salary Information' ?></h5>
-                                    <div class="alert alert-info mb-0">
-                                        <i class="fa fa-piggy-bank"></i> <strong><?= __('vacation_salary_deferred_eos') ?? 'Vacation Salary Deferred to End of Service' ?></strong>
-                                        <p class="mb-2 mt-2"><?= __('employee_chosen_receive_vacation_salary_eos') ?? 'The employee has chosen to receive their vacation salary as part of their end of service settlement instead of with payroll.' ?></p>
-                                        <ul class="mb-0 pl-4">
-                                            <li><?= __('vacation_days') ?>: <strong><?= htmlspecialchars($applied_days); ?> <?= __('day_s') ?? 'Days' ?></strong></li>
-                                            <li><?= __('payment') ?>: <strong><?= __('end_of_service_settlement') ?? 'End of Service Settlement' ?></strong></li>
-                                            <li><?= __('amount_calculated_added_final_settlement') ?? 'The vacation salary amount will be calculated and added to the final settlement.' ?></li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                                
-                                <?php if (($is_fly_annual || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll'): ?>
+
+                                <?php if ((($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll'): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
                                     <div class="payment-summary">
                                         <ul>
-                                            <?php if ($is_fly_annual || $is_local_annual_removed_from_payroll): ?>
+                                            <?php if (($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>

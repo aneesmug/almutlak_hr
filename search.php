@@ -72,6 +72,7 @@ if ($current_page < 1) {
 
 $employees = [];
 $total_items = 0;
+$total_pages = 1;
 $construct = "";
 $params = [];
 $types = "";
@@ -185,6 +186,59 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 			transform: scale(1.005);
 			cursor: pointer;
 		}
+
+		/* Search employees - search toolbar (same look as filter_employee_by_dept.php) */
+		.dept-search-group {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			flex-wrap: wrap;
+			gap: 20px;
+			padding: 10px 14px;
+			background: #f4f6f9;
+			border: 1px solid #e2e8f0;
+			border-radius: 10px;
+		}
+		.dept-search-field {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			flex: 1 1 auto;
+		}
+		.dept-search-label {
+			margin: 0;
+			font-size: 0.72rem;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: .04em;
+			color: #8a94a6;
+			white-space: nowrap;
+		}
+		.dept-search-input {
+			position: relative;
+			display: flex;
+			align-items: center;
+			flex: 1 1 auto;
+			gap: 8px;
+		}
+		.dept-search-input i.mdi-magnify {
+			position: absolute;
+			left: 12px;
+			color: #94a3b8;
+			font-size: 1rem;
+			pointer-events: none;
+		}
+		.dept-search-input input {
+			padding-left: 34px;
+			border-radius: 8px;
+			border: 1px solid #e2e8f0;
+			background: #fff;
+			transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+		}
+		.dept-search-input input:focus {
+			border-color: rgba(67, 97, 238, 0.5);
+			box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+		}
 	</style>
 	<?php if ($is_rtl): ?>
 		<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -225,8 +279,14 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								<div class="row">
 									<div class="col-md-8 offset-md-2">
 										<div class="pt-3 pb-4">
-											<div class="m-t-30 text-center">
-												<h4><?= __('search_results_for') ?> "<?= htmlspecialchars($search_term) ?>"</h4>
+											<div class="dept-search-group">
+												<div class="dept-search-field">
+													<label for="searchFilter" class="dept-search-label"><?= __('search') ?></label>
+													<div class="dept-search-input">
+														<i class="mdi mdi-magnify"></i>
+														<input type="search" class="form-control" id="searchFilter" placeholder="..." value="<?= htmlspecialchars($search_term); ?>" autocomplete="off">
+													</div>
+												</div>
 											</div>
 										</div>
 									</div>
@@ -234,7 +294,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								<ul class="nav nav-tabs tabs-bordered">
 									<li class="nav-item">
 										<a href="#home" data-toggle="tab" aria-expanded="true" class="nav-link active">
-											<?= __('all_results') ?> <span class="badge badge-success ml-1"><?= $total_items ?></span>
+											<?= __('all_results') ?> <span class="badge badge-success ml-1" id="searchResultsCount"><?= $total_items ?></span>
 										</a>
 									</li>
 								</ul>
@@ -242,19 +302,21 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 									<div class="tab-pane active" id="home">
 										<div class="row">
 											<div class="col-lg-12">
+												<div class="row" id="searchCardsContainer">
                                                 <?php if (strlen($search_term) <= 1): ?>
-                                                    <div class='alert alert-danger w-100'>Sorry! there are no result for found! ( <strong>Search is too short</strong> ) </div>
+                                                    <div class="col-12"><div class='alert alert-danger w-100'>Sorry! there are no result for found! ( <strong>Search is too short</strong> ) </div></div>
                                                 <?php elseif (empty($employees)): ?>
-                                                    <div class='alert alert-danger w-100'>Sorry! there are no result for found! ( <strong><?= htmlspecialchars($search_term) ?></strong> ) </div>
-                                                    <br><br>
-                                                    <div class='alert alert-warning'>
-                                                        <strong>1.</strong> Try more general words.<br>
-                                                        <strong>2.</strong> Try different words with similar meaning.<br>
-                                                        <strong>3.</strong> Please check your spelling.
+                                                    <div class="col-12">
+                                                        <div class='alert alert-danger w-100'>Sorry! there are no result for found! ( <strong><?= htmlspecialchars($search_term) ?></strong> ) </div>
+                                                        <br>
+                                                        <div class='alert alert-warning'>
+                                                            <strong>1.</strong> Try more general words.<br>
+                                                            <strong>2.</strong> Try different words with similar meaning.<br>
+                                                            <strong>3.</strong> Please check your spelling.
+                                                        </div>
                                                     </div>
                                                 <?php else: ?>
-                                                    <div class='alert alert-custom bg-custom text-white border-0 w-100'>"<?= htmlspecialchars($search_term) ?>" <strong><?= $total_items ?></strong> <?= __('results_are_found') ?>!</div>
-                                                    <div class="row">
+                                                    <div class="col-12"><div class='alert alert-custom bg-custom text-white border-0 w-100'>"<?= htmlspecialchars($search_term) ?>" <strong><?= $total_items ?></strong> <?= __('results_are_found') ?>!</div></div>
                                                     <?php foreach ($employees as $rec):
                                                         $id = $rec["id"];
                                                         $name = htmlspecialchars($rec["name"]);
@@ -264,13 +326,6 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                         $emp_status = $rec["status"];
                                                         $emp_status_fly = $rec["fly"];
                                                         $emp_avatar = getAvatarImagePath($rec["avatar"] ?? '', $rec['sex'] ?? 1);
-                                                        $c0lor = ($emp_status == 1 && $emp_status_fly == 0 ? "bg-light" : ($emp_status_fly == 1 ? "bg-warning" : "bg-danger"));
-
-														$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Fly'");
-														$cont_fly = mysqli_fetch_array($sql_count_fly)[0] ?? 0;
-
-														$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) FROM `emp_vacation` WHERE `emp_id`='{$emp_id}' AND `note`='Encashed'");
-														$cont_encashed = mysqli_fetch_array($sql_count_encashed)[0] ?? 0;
 
 														// Determine card status class
 														$status_class = '';
@@ -284,8 +339,8 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                                     ?>
 													<?php include("./includes/employee_card.php"); ?>
                                                     <?php endforeach; ?>
-                                                    </div>
                                                 <?php endif; ?>
+												</div>
 											</div>
 										</div>
 									</div>
@@ -294,27 +349,8 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 						</div>
 					</div>
 
-                    <div class="row">
-                        <div class="col-12">
-							<?php
-								// --- ** NEW ** Updated function call ---
-								// We are now passing all the required parameters, including the filtered and unfiltered counts.
-								$pagination_params = ['search' => $search_term]; 
-								if (isset($_GET['limit'])) {
-									$pagination_params['limit'] = $_GET['limit'];
-								}
-								echo generate_pagination_controls(
-									$current_page,
-									$total_pages,
-									$total_items,
-									$items_per_page,
-									$limit_options,
-									$show_all,
-									$pagination_params,
-									$unfiltered_total_items
-								);
-								?>
-                        </div>
+                    <div class="row mt-4">
+                        <div class="col-12" id="searchPaginationContainer"></div>
                     </div>
 				</div>
 			</div>
@@ -333,5 +369,155 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<script src="./plugins/custombox/js/legacy.min.js"></script>
 	<script src="assets/js/jquery.core.js"></script>
 	<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+	<script>
+		// Live AJAX employee search - search box, limit & pagination all fetch in
+		// place. Pagination is built entirely from plain <button> elements (no
+		// <a href> anywhere) so there is nothing for the browser to navigate to.
+		let searchDebounceTimer = null;
+		const searchLimitOptions = <?= json_encode($limit_options) ?>;
+
+		function renderStandardPagination($container, opts, onPageChange, onLimitChange) {
+			$container.empty();
+			if (opts.totalItems <= 0) {
+				return;
+			}
+
+			const $wrap = $('<div class="d-md-flex justify-content-between align-items-center"></div>');
+
+			const $limitBlock = $('<div class="mb-3 mb-md-0"><div class="form-inline"></div></div>');
+			const $form = $limitBlock.find('.form-inline');
+			$form.append($('<label class="mr-2 font-weight-bold"></label>').text(__('show', 'Show') + ':'));
+			const $select = $('<select class="form-control form-control-sm" id="limitFilter"></select>');
+			searchLimitOptions.forEach(function(opt) {
+				const $option = $('<option></option>').attr('value', opt).text(opt);
+				if (!opts.showAll && opts.itemsPerPage === opt) $option.prop('selected', true);
+				$select.append($option);
+			});
+			const $allOption = $('<option value="all"></option>').text(__('all_option', 'All'));
+			if (opts.showAll) $allOption.prop('selected', true);
+			$select.append($allOption);
+			$select.on('change', onLimitChange);
+			$form.append($select);
+			$form.append($('<span class="ml-2 text-muted"></span>').text(__('items_per_page', 'items per page')));
+			$wrap.append($limitBlock);
+
+			const $right = $('<div class="d-flex align-items-center justify-content-center flex-wrap"></div>');
+			let startItem = 0, endItem = 0;
+			if (!opts.showAll && opts.itemsPerPage > 0 && opts.totalPages > 0) {
+				startItem = ((opts.currentPage - 1) * opts.itemsPerPage) + 1;
+				endItem = Math.min(startItem + opts.itemsPerPage - 1, opts.totalItems);
+			} else {
+				startItem = 1;
+				endItem = opts.totalItems;
+			}
+			let showingText = __('showing', 'Showing') + ' ' + startItem + ' ' + __('to', 'to') + ' ' + endItem + ' ' + __('of', 'of') + ' ' + opts.totalItems + ' ' + __('entries', 'entries');
+			if (opts.unfilteredTotalItems > opts.totalItems) {
+				showingText += ' (' + __('filtered_from', 'filtered from') + ' ' + opts.unfilteredTotalItems + ' ' + __('entries', 'entries') + ')';
+			}
+			$right.append($('<span class="text-muted mr-3"></span>').text(showingText));
+
+			if (opts.totalPages > 1 && !opts.showAll) {
+				const $nav = $('<nav aria-label="Pagination"></nav>');
+				const $ul = $('<ul class="pagination mb-0"></ul>');
+
+				function pageButton(label, page, disabled, active) {
+					const $li = $('<li class="page-item"></li>').toggleClass('disabled', !!disabled).toggleClass('active', !!active);
+					const $btn = $('<button type="button" class="page-link"></button>').text(label);
+					if (!disabled && !active) {
+						$btn.on('click', function() { onPageChange(page); });
+					}
+					$li.append($btn);
+					return $li;
+				}
+
+				$ul.append(pageButton(__('first', 'First'), 1, opts.currentPage <= 1, false));
+				$ul.append(pageButton(__('previous', 'Previous'), opts.currentPage - 1, opts.currentPage <= 1, false));
+
+				const range = 2;
+				const startRange = Math.max(1, opts.currentPage - range);
+				const endRange = Math.min(opts.totalPages, opts.currentPage + range);
+
+				if (startRange > 1) {
+					$ul.append(pageButton('1', 1, false, false));
+					if (startRange > 2) {
+						$ul.append($('<li class="page-item disabled"><span class="page-link">...</span></li>'));
+					}
+				}
+				for (let i = startRange; i <= endRange; i++) {
+					$ul.append(pageButton(String(i), i, false, i === opts.currentPage));
+				}
+				if (endRange < opts.totalPages) {
+					if (endRange < opts.totalPages - 1) {
+						$ul.append($('<li class="page-item disabled"><span class="page-link">...</span></li>'));
+					}
+					$ul.append(pageButton(String(opts.totalPages), opts.totalPages, false, false));
+				}
+
+				$ul.append(pageButton(__('next', 'Next'), opts.currentPage + 1, opts.currentPage >= opts.totalPages, false));
+				$ul.append(pageButton(__('last', 'Last'), opts.totalPages, opts.currentPage >= opts.totalPages, false));
+
+				$nav.append($ul);
+				$right.append($nav);
+			}
+
+			$wrap.append($right);
+			$container.append($wrap);
+		}
+
+		function loadSearchEmployees(page) {
+			const $cards = $('#searchCardsContainer');
+			const $pagination = $('#searchPaginationContainer');
+			const limitElement = document.getElementById('limitFilter');
+			const limit = limitElement ? limitElement.value : searchLimitOptions[0];
+			const search = document.getElementById('searchFilter').value;
+
+			const lockedHeight = $cards.outerHeight();
+			if (lockedHeight) {
+				$cards.css('min-height', lockedHeight + 'px');
+			}
+			$cards.css({ opacity: 0.45, 'pointer-events': 'none' });
+
+			$.ajax({
+				url: './includes/ajaxFile/get_search_employees.php',
+				type: 'POST',
+				dataType: 'json',
+				data: { search: search, limit: limit, page: page }
+			}).done(function(response) {
+				if (!response || response.status !== 200) {
+					return;
+				}
+				$cards.html(response.cards_html);
+				$('#searchResultsCount').text(response.total_items);
+				renderStandardPagination($pagination, {
+					currentPage: response.current_page,
+					totalPages: response.total_pages,
+					totalItems: response.total_items,
+					itemsPerPage: response.items_per_page,
+					showAll: response.show_all,
+					unfilteredTotalItems: response.unfiltered_total_items
+				}, function(newPage) { loadSearchEmployees(newPage); }, function() { loadSearchEmployees(1); });
+			}).always(function() {
+				$cards.css({ opacity: 1, 'pointer-events': 'auto', 'min-height': '' });
+			});
+		}
+
+		document.getElementById('searchFilter').addEventListener('input', function() {
+			clearTimeout(searchDebounceTimer);
+			searchDebounceTimer = setTimeout(function() {
+				loadSearchEmployees(1);
+			}, 350);
+		});
+
+		// Initial paint - build pagination from the server-rendered first page's
+		// numbers without an extra AJAX round-trip.
+		renderStandardPagination($('#searchPaginationContainer'), {
+			currentPage: <?= (int)$current_page ?>,
+			totalPages: <?= (int)$total_pages ?>,
+			totalItems: <?= (int)$total_items ?>,
+			itemsPerPage: <?= (int)$items_per_page ?>,
+			showAll: <?= $show_all ? 'true' : 'false' ?>,
+			unfilteredTotalItems: <?= (int)$unfiltered_total_items ?>
+		}, function(newPage) { loadSearchEmployees(newPage); }, function() { loadSearchEmployees(1); });
+	</script>
 </body>
 </html>

@@ -20,6 +20,7 @@ if (mysqli_num_rows($query) != 1) {
 
 $month_year = $_GET['month'] ?? '';
 $company = trim((string)($_GET['company'] ?? ''));
+$emp_id = trim((string)($_GET['emp_id'] ?? ''));
 
 if (!preg_match('/^\d{4}-\d{2}$/', $month_year)) {
     ob_end_clean();
@@ -37,6 +38,11 @@ $types = 's';
 if ($company !== '') {
     $sql .= " AND c.comp_name = ?";
     $params[] = $company;
+    $types .= 's';
+}
+if ($emp_id !== '') {
+    $sql .= " AND p.emp_id = ?";
+    $params[] = $emp_id;
     $types .= 's';
 }
 $sql .= " ORDER BY CAST(e.emp_id AS UNSIGNED) ASC";
@@ -197,6 +203,6 @@ foreach ($payrolls as $payroll_record) {
 
 ob_end_clean();
 
-$filename = 'Payslips_' . $month_year . ($company !== '' ? '_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $company) : '') . '.pdf';
+$filename = ($emp_id !== '' ? 'Payslip_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $emp_id) : 'Payslips') . '_' . $month_year . ($company !== '' ? '_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $company) : '') . '.pdf';
 $pdf->Output($filename, 'D');
 exit();

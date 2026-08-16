@@ -26,6 +26,13 @@ if (mysqli_num_rows($query) == 1) {
 			$emprow = $rec;
 		}
 
+		$direct_reports_count = 0;
+		$direct_reports_count_stmt = mysqli_prepare($conDB, "SELECT COUNT(*) AS total FROM `employees` WHERE `supervisor_id` = ? AND `status` = '1'");
+		mysqli_stmt_bind_param($direct_reports_count_stmt, "s", $emprow['emp_id']);
+		mysqli_stmt_execute($direct_reports_count_stmt);
+		$direct_reports_count = (int)(mysqli_stmt_get_result($direct_reports_count_stmt)->fetch_assoc()['total'] ?? 0);
+		mysqli_stmt_close($direct_reports_count_stmt);
+
 		// UNIFIED ACCESS CONTROL - Use centralized function only
 		// This function checks all permissions: admin, HR, IT, department manager, direct supervisor, self
 		
@@ -115,6 +122,28 @@ if (mysqli_num_rows($query) == 1) {
 			];
 		}
 		// --- END: Loan Summary Calculation ---
+
+		// --- START: Payroll (Payslip) History ---
+		$payroll_history = [];
+		$payroll_benefits_by_month = [];
+		if ($canViewSalary) {
+			$payroll_history_stmt = mysqli_prepare($conDB, "SELECT month_year, basic_salary, total_gross_salary, total_benefits, total_deductions, net_salary FROM `payrolls` WHERE `emp_id` = ? AND `status` = 'paid' ORDER BY `month_year` DESC");
+			mysqli_stmt_bind_param($payroll_history_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($payroll_history_stmt);
+			$payroll_history = mysqli_fetch_all(mysqli_stmt_get_result($payroll_history_stmt), MYSQLI_ASSOC);
+			mysqli_stmt_close($payroll_history_stmt);
+
+			// Itemized benefit lines (name + amount) per paid month, for the "Additional Benefits" breakdown.
+			$payroll_benefits_stmt = mysqli_prepare($conDB, "SELECT month, benefit, note FROM `payroll_benefits` WHERE `emp_id` = ? AND `status` = 1 ORDER BY `id` ASC");
+			mysqli_stmt_bind_param($payroll_benefits_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($payroll_benefits_stmt);
+			$payroll_benefits_rows = mysqli_fetch_all(mysqli_stmt_get_result($payroll_benefits_stmt), MYSQLI_ASSOC);
+			mysqli_stmt_close($payroll_benefits_stmt);
+			foreach ($payroll_benefits_rows as $benefit_row) {
+				$payroll_benefits_by_month[$benefit_row['month']][] = $benefit_row;
+			}
+		}
+		// --- END: Payroll (Payslip) History ---
 		// debug($emprow);
 
 		$salary_get = str_replace(',', '', ($emprow['basic'] + $emprow['housing'] + $emprow['transport'] + $emprow["food"] + $emprow["misc"] + $emprow["cashier"] + $emprow["fuel"] + $emprow["tel"] + $emprow["other"] + $emprow["guard"]));
@@ -762,6 +791,183 @@ if (mysqli_num_rows($query) == 1) {
 					padding: 15px;
 				}
 			}
+
+			/* Employee Detail Tabs - redesign (tab bar fused to content panel) */
+			.emp-tabs {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px;
+				list-style: none;
+				margin: 0;
+				padding: 6px 6px 0 6px;
+				background: #f4f6f9;
+				border: 1px solid rgba(67, 97, 238, 0.18);
+				border-bottom: none;
+				border-radius: 12px 12px 0 0;
+			}
+
+			.emp-tabs .nav-item {
+				flex: 1 1 auto;
+			}
+
+			.emp-tabs .nav-link {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+				white-space: nowrap;
+				padding: 10px 16px;
+				margin-bottom: 6px;
+				border-radius: 8px;
+				font-weight: 600;
+				font-size: 0.875rem;
+				color: #64748b;
+				background: transparent;
+				border: none;
+				transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
+			}
+
+			.emp-tabs .nav-link i {
+				font-size: 1rem;
+				line-height: 1;
+			}
+
+			.emp-tabs .nav-link:hover {
+				color: #1f2937;
+				background: rgba(255, 255, 255, 0.7);
+			}
+
+			.emp-tabs .nav-link.active {
+				color: #fff;
+				background: var(--primary, #4361ee);
+				box-shadow: 0 4px 10px rgba(67, 97, 238, 0.25);
+			}
+
+			.emp-tabs .nav-link .badge-count {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				min-width: 20px;
+				height: 20px;
+				padding: 0 6px;
+				border-radius: 10px;
+				font-size: 0.7rem;
+				font-weight: 700;
+				background: #ffedd5;
+				color: #c2410c;
+			}
+
+			.emp-tabs .nav-link.active .badge-count {
+				background: #ffedd5;
+				color: #c2410c;
+			}
+
+			@media (max-width: 768px) {
+				.emp-tabs {
+					overflow-x: auto;
+					flex-wrap: nowrap;
+					-webkit-overflow-scrolling: touch;
+				}
+
+				.emp-tabs .nav-item {
+					flex: 0 0 auto;
+				}
+			}
+
+			.tab-content {
+				margin: 0 0 1.5rem 0;
+				border: 1px solid rgba(67, 97, 238, 0.35);
+				border-top: none;
+				border-radius: 0 0 12px 12px;
+				background: #fff;
+				box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.08), 0 10px 28px rgba(67, 97, 238, 0.14);
+				animation: emp-tab-glow-in .2s ease;
+			}
+
+			.tab-content > .tab-pane {
+				padding: 20px;
+			}
+
+			@keyframes emp-tab-glow-in {
+				from {
+					box-shadow: 0 0 0 0 rgba(67, 97, 238, 0);
+					opacity: .7;
+				}
+				to {
+					box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.08), 0 10px 28px rgba(67, 97, 238, 0.14);
+					opacity: 1;
+				}
+			}
+
+			/* Direct Reports - search toolbar */
+			.direct-reports-search-group {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				gap: 10px;
+				min-width: 280px;
+				padding: 10px 14px;
+				background: #f4f6f9;
+				border: 1px solid #e2e8f0;
+				border-radius: 10px;
+			}
+
+			.direct-reports-search-label {
+				margin: 0;
+				font-size: 0.72rem;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: .04em;
+				color: #8a94a6;
+				white-space: nowrap;
+			}
+
+			.direct-reports-search-input {
+				position: relative;
+				display: flex;
+				align-items: center;
+				flex: 1 1 auto;
+			}
+
+			.direct-reports-search-input i.mdi-magnify {
+				position: absolute;
+				left: 12px;
+				color: #94a3b8;
+				font-size: 1rem;
+				pointer-events: none;
+			}
+
+			.direct-reports-search-input input {
+				padding-left: 34px;
+				padding-right: 30px;
+				border-radius: 8px;
+				border: 1px solid #e2e8f0;
+				background: #fff;
+				transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+			}
+
+			.direct-reports-search-input input:focus {
+				background: #fff;
+				border-color: rgba(67, 97, 238, 0.5);
+				box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+			}
+
+			.direct-reports-search-input .directReportsSearchClear {
+				position: absolute;
+				right: 10px;
+				color: #cbd5e1;
+				font-size: 1rem;
+				cursor: pointer;
+				display: none;
+			}
+
+			.direct-reports-search-input .directReportsSearchClear:hover {
+				color: #64748b;
+			}
+
+			.direct-reports-search-input input:not(:placeholder-shown) ~ .directReportsSearchClear {
+				display: block;
+			}
 		</style>
 		<?php if ($is_rtl): ?>
 			<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -954,45 +1160,59 @@ if (mysqli_num_rows($query) == 1) {
 											<?php */ ?>
 										</div>
 									</div>
-									<ul class="nav nav-pills navtab-bg nav-justified pull-in ">
+									<ul class="nav emp-tabs">
 
 										<li class="nav-item">
 											<a href="#profile1" data-toggle="tab" aria-expanded="true" class="nav-link active show">
-												<i class="fi-head mr-2"></i><?= __('profile') ?>
+												<i class="fi-head"></i><?= __('profile') ?>
 											</a>
 										</li>
 										<?php /*if($user_type <> "dept_user"){*/ ?>
 										<li class="nav-item">
 											<a href="#home1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-buffer mr-2"></i> <?= __('vacation_details') ?>
+												<i class="mdi mdi-buffer"></i> <?= __('vacation_details') ?>
 											</a>
 										</li>
 										<li class="nav-item">
 											<a href="#loan1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-cash-multiple mr-2"></i> <?= __('loan_details') ?>
+												<i class="mdi mdi-cash-multiple"></i> <?= __('loan_details') ?>
 											</a>
 										</li>
+										<?php if ($canViewSalary): ?>
+										<li class="nav-item">
+											<a href="#payroll1" data-toggle="tab" aria-expanded="false" class="nav-link">
+												<i class="mdi mdi-file-document-box"></i> <?= __('payroll_details', 'Payroll Details') ?>
+											</a>
+										</li>
+										<?php endif; ?>
 										<li class="nav-item">
 											<a href="#assets" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-cash-multiple mr-2"></i> <?= __('assets_details') ?>
+												<i class="mdi mdi-cash-multiple"></i> <?= __('assets_details') ?>
 											</a>
 										</li>
 										<li class="nav-item">
 											<a href="#documents" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-book-open-page-variant mr-2"></i> <?= __('documents') ?> <?= ($emprow['docs_count'] > 0) ? "(" . $emprow['docs_count'] . ")" : "" ?>
+												<i class="mdi mdi-book-open-page-variant"></i> <?= __('documents') ?> <?= ($emprow['docs_count'] > 0) ? "<span class='badge-count'>" . $emprow['docs_count'] . "</span>" : "" ?>
 											</a>
 										</li>
 										<li class="nav-item">
 											<a href="#noties" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-book-open-page-variant mr-2"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "(" . $emprow['empnote'] . ")" : "" ?>
+												<i class="mdi mdi-book-open-page-variant"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "<span class='badge-count'>" . $emprow['empnote'] . "</span>" : "" ?>
 											</a>
 										</li>
 										<?php  ?>
 										<li class="nav-item">
 											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-chart-line mr-2"></i> <?= __('evaluations', 'Performance Evaluations') ?>
+												<i class="mdi mdi-chart-line"></i> <?= __('evaluations', 'Performance Evaluations') ?>
 											</a>
 										</li>
+										<?php if ($direct_reports_count > 1): ?>
+										<li class="nav-item">
+											<a href="#directreports" data-toggle="tab" aria-expanded="false" class="nav-link" id="directReportsTabLink">
+												<i class="mdi mdi-account-group"></i> <?= __('direct_reports', 'Direct Reports') ?> <span class="badge-count"><?= $direct_reports_count ?></span>
+											</a>
+										</li>
+										<?php endif; ?>
 										<?php  ?>
 										<?php /*}*/ ?>
 
@@ -1936,6 +2156,51 @@ if (mysqli_num_rows($query) == 1) {
 											</table>
 										</div>
 
+										<?php if ($canViewSalary): ?>
+										<div class="tab-pane" id="payroll1">
+											<h4 class="header-title m-t-0 m-b-30"><?= __('payroll_history', 'Payroll History') ?></h4>
+											<table id="payroll_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
+												<thead>
+													<tr>
+														<th><?= __('month', 'Month') ?></th>
+														<th><?= __('total_gross_salary', 'Total Gross Salary') ?></th>
+														<th><?= __('total_benefits', 'Additional Benefits') ?></th>
+														<th><?= __('total_deductions', 'Total Deductions') ?></th>
+														<th><?= __('net_salary', 'Net Salary') ?></th>
+														<th><?= __('actions', 'Actions') ?></th>
+													</tr>
+												</thead>
+												<tbody>
+													<?php foreach ($payroll_history as $payroll_rec): ?>
+														<?php $month_benefits = $payroll_benefits_by_month[$payroll_rec['month_year']] ?? []; ?>
+														<tr>
+															<td><?= date('F Y', strtotime($payroll_rec['month_year'] . '-01')); ?></td>
+															<td><?= number_format((float)$payroll_rec['total_gross_salary'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td>
+																<?= number_format((float)$payroll_rec['total_benefits'], 2); ?> <?= __('sar', 'SAR') ?>
+																<?php if (!empty($month_benefits)): ?>
+																	<br>
+																	<?php foreach ($month_benefits as $benefit_item): ?>
+																		<span class="badge badge-light border d-inline-block mt-1 mr-1" style="font-weight: 400;">
+																			<?= htmlspecialchars($benefit_item['benefit']); ?>: <?= number_format((float)$benefit_item['note'], 2); ?>
+																		</span>
+																	<?php endforeach; ?>
+																<?php endif; ?>
+															</td>
+															<td><?= number_format((float)$payroll_rec['total_deductions'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td class="font-weight-bold text-success"><?= number_format((float)$payroll_rec['net_salary'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td>
+																<a href="./generate_bulk_payslips_pdf.php?month=<?= urlencode($payroll_rec['month_year']); ?>&emp_id=<?= urlencode($emprow['empid']); ?>" target="_blank" class="btn btn-sm btn-info">
+																	<i class="fas fa-file-pdf"></i> <?= __('download_payslip', 'Download Payslip') ?>
+																</a>
+															</td>
+														</tr>
+													<?php endforeach; ?>
+												</tbody>
+											</table>
+										</div>
+										<?php endif; ?>
+
 										<div class="tab-pane" id="assets">
 											<h4 class="header-title m-t-0 m-b-30 mt-4"><?= __('assigned_assets') ?></h4>
 											<table id="assets_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
@@ -2277,6 +2542,29 @@ if (mysqli_num_rows($query) == 1) {
 										</div>
 										<?php  ?>
 
+										<?php if ($direct_reports_count > 1): ?>
+										<div class="tab-pane" id="directreports" data-supervisor-emp-id="<?= htmlspecialchars($emprow['emp_id']) ?>" data-loaded="0">
+											<div class="card-box">
+												<div class="d-flex justify-content-between align-items-end flex-wrap mb-3 direct-reports-toolbar">
+													<h4 class="header-title m-b-0"><?= __('direct_reports', 'Direct Reports') ?></h4>
+													<div class="direct-reports-search-group mt-2 mt-md-0">
+														<label for="directReportsSearch" class="direct-reports-search-label"><?= __('search', 'Search') ?></label>
+														<div class="direct-reports-search-input">
+															<i class="mdi mdi-magnify"></i>
+															<input type="text" id="directReportsSearch" class="form-control" placeholder="<?= __('search_by_name_id_iqama_mobile', 'Name, employee ID, iqama or mobile') ?>" autocomplete="off">
+															<i class="mdi mdi-close-circle directReportsSearchClear" id="directReportsSearchClear" title="<?= __('clear', 'Clear') ?>"></i>
+														</div>
+													</div>
+												</div>
+												<div id="directReportsCards">
+													<div class="text-center text-muted p-4">
+														<i class="mdi mdi-loading mdi-spin"></i> <?= __('loading', 'Loading...') ?>
+													</div>
+												</div>
+												<div id="directReportsPagination" class="d-flex justify-content-between align-items-center mt-3"></div>
+											</div>
+										</div>
+										<?php endif; ?>
 
 									</div>
 								</div>
@@ -3249,6 +3537,29 @@ if (mysqli_num_rows($query) == 1) {
 						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
 					}
 				});
+				$('#payroll_history_tbl').DataTable({
+					columnDefs: [
+						{ orderable: false, searchable: false, targets: -1 }
+					],
+					order: [],
+					language: {
+						search: `<span>${__('search')}:</span> _INPUT_`,
+						searchPlaceholder: `${__('search')}...`,
+						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+						infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+						infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+						paginate: {
+							first: __('first'),
+							last: __('last'),
+							next: __('next'),
+							previous: __('previous')
+						},
+						emptyTable: __('no_data_available_in_table'),
+						zeroRecords: __('no_matching_records_found'),
+						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+					}
+				});
 				$('#payment_history_tbl').DataTable({
 					language: {
 						search: `<span>${__('search')}:</span> _INPUT_`,
@@ -4059,6 +4370,127 @@ if (mysqli_num_rows($query) == 1) {
 					error: function() {
 						Swal.fire('<?= __('error') ?>', '<?= __('error_loading_evaluation_details', 'An error occurred while loading the evaluation details') ?>', 'error');
 					}
+				});
+			});
+		</script>
+
+		<!-- Direct Reports Tab - AJAX pagination (no URL reload) -->
+		<script>
+			function loadDirectReports(page, search) {
+				const $pane = $('#directreports');
+				const supervisorEmpId = $pane.data('supervisor-emp-id');
+				const $cards = $('#directReportsCards');
+				const $pagination = $('#directReportsPagination');
+				if (typeof search === 'undefined') {
+					search = $('#directReportsSearch').val() || '';
+				}
+
+				// Lock current height & dim instead of collapsing to a tiny "Loading..." block -
+				// swapping to a short placeholder shrinks the page and makes the browser clamp
+				// the scroll position, which reads as an unwanted "jump to top".
+				const lockedHeight = $cards.outerHeight();
+				if (lockedHeight) {
+					$cards.css('min-height', lockedHeight + 'px');
+				}
+				$cards.css({
+					opacity: 0.45,
+					'pointer-events': 'none'
+				});
+
+				$.ajax({
+					url: './includes/ajaxFile/get_direct_reports.php',
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						supervisor_emp_id: supervisorEmpId,
+						page: page,
+						search: search
+					}
+				}).done(function(response) {
+					if (!response || response.status !== 200) {
+						$cards.html('<div class="alert alert-danger">' + (__('error_loading_data', 'Error loading data.')) + '</div>');
+						return;
+					}
+
+					if (!response.total_items) {
+						$cards.html('<div class="alert alert-info">' + (__('no_direct_reports_found', 'No employees report directly to this employee.')) + '</div>');
+						$pagination.empty();
+						return;
+					}
+
+					$cards.html('<div class="row">' + response.html + '</div>');
+					renderDirectReportsPagination(response.current_page, response.total_pages);
+				}).fail(function() {
+					$cards.html('<div class="alert alert-danger">' + (__('error_loading_data', 'Error loading data.')) + '</div>');
+				}).always(function() {
+					$cards.css({
+						opacity: 1,
+						'pointer-events': 'auto',
+						'min-height': ''
+					});
+				});
+			}
+
+			function renderDirectReportsPagination(currentPage, totalPages) {
+				const $pagination = $('#directReportsPagination');
+				$pagination.empty();
+
+				if (totalPages <= 1) {
+					return;
+				}
+
+				const $nav = $('<nav aria-label="Direct reports pagination"></nav>');
+				const $ul = $('<ul class="pagination mb-0"></ul>');
+
+				const $prev = $('<li class="page-item"></li>').toggleClass('disabled', currentPage <= 1);
+				$prev.append($('<a class="page-link" href="javascript:void(0);"></a>').text(__('previous', 'Previous')).on('click', function(e) {
+					e.preventDefault();
+					if (currentPage > 1) loadDirectReports(currentPage - 1);
+				}));
+				$ul.append($prev);
+
+				for (let i = 1; i <= totalPages; i++) {
+					const $li = $('<li class="page-item"></li>').toggleClass('active', i === currentPage);
+					$li.append($('<a class="page-link" href="javascript:void(0);"></a>').text(i).on('click', function(e) {
+						e.preventDefault();
+						if (i !== currentPage) loadDirectReports(i);
+					}));
+					$ul.append($li);
+				}
+
+				const $next = $('<li class="page-item"></li>').toggleClass('disabled', currentPage >= totalPages);
+				$next.append($('<a class="page-link" href="javascript:void(0);"></a>').text(__('next', 'Next')).on('click', function(e) {
+					e.preventDefault();
+					if (currentPage < totalPages) loadDirectReports(currentPage + 1);
+				}));
+				$ul.append($next);
+
+				$nav.append($ul);
+				$pagination.append($nav);
+			}
+
+			let directReportsSearchTimer = null;
+			$(document).ready(function() {
+				$('#directReportsTabLink').on('shown.bs.tab', function() {
+					const $pane = $('#directreports');
+					if ($pane.data('loaded') != 1) {
+						$pane.data('loaded', 1);
+						loadDirectReports(1);
+					}
+				});
+
+				$('#directReportsSearch').on('input', function() {
+					const search = $(this).val();
+					clearTimeout(directReportsSearchTimer);
+					directReportsSearchTimer = setTimeout(function() {
+						loadDirectReports(1, search);
+					}, 350);
+				});
+
+				$('#directReportsSearchClear').on('click', function() {
+					$('#directReportsSearch').val('').trigger('focus');
+					clearTimeout(directReportsSearchTimer);
+					loadDirectReports(1, '');
 				});
 			});
 		</script>

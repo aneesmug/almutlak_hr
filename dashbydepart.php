@@ -324,6 +324,139 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 font-size: 13px;
                 font-style: italic;
             }
+
+            /* Org drilldown - breadcrumb */
+            .drilldown-breadcrumb {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px;
+                padding: 12px 16px;
+                background: #fff;
+                border: 1px solid #e5e9f2;
+                border-radius: 12px;
+                box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+            }
+            .drilldown-crumb {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                max-width: 220px;
+                padding: 6px 14px;
+                border-radius: 20px;
+                background: #eef1fb;
+                color: #556ee6;
+                font-size: 0.82rem;
+                font-weight: 600;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                cursor: pointer;
+                border: 1px solid transparent;
+                transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, transform .1s ease;
+            }
+            .drilldown-crumb:hover {
+                background: #556ee6;
+                color: #fff;
+                box-shadow: 0 3px 10px rgba(85, 110, 230, 0.3);
+                transform: translateY(-1px);
+            }
+            .drilldown-crumb-root i {
+                font-size: 0.95rem;
+            }
+            .drilldown-crumb-current {
+                background: linear-gradient(135deg, #556ee6 0%, #6a7cf0 100%);
+                color: #fff;
+                cursor: default;
+                font-weight: 700;
+                box-shadow: 0 3px 10px rgba(85, 110, 230, 0.25);
+            }
+            .drilldown-crumb-current:hover {
+                background: linear-gradient(135deg, #556ee6 0%, #6a7cf0 100%);
+                color: #fff;
+                transform: none;
+                box-shadow: 0 3px 10px rgba(85, 110, 230, 0.25);
+            }
+            .drilldown-breadcrumb i.mdi-chevron-right {
+                color: #c3c9d5;
+                font-size: 1rem;
+                flex-shrink: 0;
+            }
+            @media (max-width: 767px) {
+                .drilldown-breadcrumb {
+                    flex-wrap: nowrap;
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+                .drilldown-crumb {
+                    flex-shrink: 0;
+                }
+            }
+
+            /* Org drilldown - tiles */
+            .drilldown-tile-unassigned {
+                background: linear-gradient(90deg,#6c757d 0%,#868e96 100%) !important;
+            }
+
+            /* Org drilldown - employees search toolbar (reused from filter_employee_by_comp.php) */
+            .comp-search-group {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 20px;
+                padding: 10px 14px;
+                background: #f4f6f9;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+            }
+            .comp-search-field {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                flex: 1 1 auto;
+            }
+            .comp-search-field-status {
+                flex: 0 0 auto;
+            }
+            .comp-search-field-status select {
+                width: auto;
+                min-width: 180px;
+            }
+            .comp-search-label {
+                margin: 0;
+                font-size: 0.72rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+                color: #8a94a6;
+                white-space: nowrap;
+            }
+            .comp-search-input {
+                position: relative;
+                display: flex;
+                align-items: center;
+                flex: 1 1 auto;
+                gap: 8px;
+            }
+            .comp-search-input i.mdi-magnify {
+                position: absolute;
+                left: 12px;
+                color: #94a3b8;
+                font-size: 1rem;
+                pointer-events: none;
+            }
+            .comp-search-input input {
+                padding-left: 34px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                background: #fff;
+                transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+            }
+            .comp-search-input input:focus {
+                border-color: rgba(67, 97, 238, 0.5);
+                box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
+            }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -494,38 +627,37 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                         </div>
                                     </div>
                                     <div class="tab-pane active show" id="bycompany-b1">
-                                        <!-- <div class="tab-pane" id="bydepartment-b1"> -->
-                                        <?php  ?><div class="row text-center">
+                                        <div id="drilldownBreadcrumb" class="drilldown-breadcrumb mb-3">
+                                            <span class="drilldown-crumb drilldown-crumb-root drilldown-crumb-current" data-level="companies"><i class="mdi mdi-home-variant-outline"></i> <?= __('companies') ?></span>
+                                        </div>
+
+                                        <div class="row text-center" id="drilldownTilesContainer">
 
                                             <?php
                                             // ================================================================
                                             // COMPANY-BASED ACCESS CONTROL FOR COMPANY GROUPING
                                             // ================================================================
                                             // Companies tab shows allowed companies only (no department filtering here)
-                                            // Department filtering is applied separately in Departments tab and Employee list
-                                            
-                                            // Apply only company filter for companies tab
+                                            // Department filtering is applied further down the drilldown (city/location/dept/sub-dept)
+
                                             $company_filter = getCompanyFilterSQL('employees.comp_no', true);
                                             $employee_filter = getEmployeeFilterSQL('employees.emp_id', true);
-                                            
-                                            // Query to get company grouping - only filter by allowed companies
-                                            $querygrp = mysqli_query($conDB, "SELECT 
+
+                                            $querygrp = mysqli_query($conDB, "SELECT
                                                 count(`employees`.`dept`) AS `empcountgrp`,
-                                                `employees`.`comp_no`, 
-                                                `companies`.`comp_name`, 
-                                                `companies`.`comp_name_ar`, 
+                                                `employees`.`comp_no`,
+                                                `companies`.`comp_name`,
+                                                `companies`.`comp_name_ar`,
                                                 `companies`.`comp_id`
-                                                FROM `employees` 
+                                                FROM `employees`
                                                 LEFT JOIN `companies` ON `companies`.`comp_id` = `employees`.`comp_no`
                                                 WHERE `employees`.`status` = 1" . $company_filter . $employee_filter . $fallback_dept_filter_employees . "
                                                 GROUP BY `employees`.`comp_no`");
-                                            
-                                            // $querygrp = mysqli_query($conDB, "SELECT count(`dept`) AS `empcountgrp`,`dept` FROM `employees` WHERE `emp_sup_type`='mocha' AND `status` = 1 GROUP BY `dept`");
+
                                             if ($querygrp) {
                                                 $colorArr = ["primary","success","warning","danger","info","dark"];
                                                 $colorCount = count($colorArr);
                                                 $cardIndex = 0;
-                                                // Total active employees (for percentage calculation) - only filter by company for this tab
                                                 $company_filter_total = getCompanyFilterSQL('comp_no', true);
                                                 $employee_filter_total = getEmployeeFilterSQL('emp_id', true);
                                                 $totalEmpRes = mysqli_query($conDB, "SELECT COUNT(*) AS total FROM employees WHERE status=1" . $company_filter_total . $employee_filter_total . $fallback_dept_filter_plain);
@@ -535,39 +667,49 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                     $cardColor = $colorArr[$cardIndex % $colorCount];
                                                     $compCount = (int)$rec["empcountgrp"];
                                                     $percentage = round(($compCount / $totalEmployees) * 100, 1);
-                                            ?>
-                                                <div class="col-sm-4 col-xl-3" onclick="window.location.href='company_departments_employees.php?company=<?= $rec["comp_no"] ?>'" style="cursor: pointer;">
-                                                    <div class="stats-card professional-theme" data-color="<?= $cardColor ?>">
-                                                        <div class="stats-card-icon professional-theme" data-color="<?= $cardColor ?>">
-                                                            <div class="stats-card-count-circle"><?= $compCount ?></div>
-                                                            <span class="stats-card-tooltip">Company Info</span>
-                                                            <i class="fa fa-industry"></i>
-                                                        </div>
-                                                        <div class="stats-card-content">
-                                                            <div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= ($is_rtl ?? false) ? $rec["comp_name_ar"] : $rec["comp_name"] ?></div>
-                                                            <div class="stats-card-footer">
-                                                                <span class="stats-card-percentage positive">
-                                                                    <i class="mdi mdi-trending-up"></i>
-                                                                </span>
-                                                            </div>
-                                                            <!-- Progress from company share of total employees -->
-                                                            <div style="width:100%;margin-top:18px;">
-                                                                <div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-                                                                    <div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$percentage ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-                                                                </div>
-                                                                <div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-                                                                    <?= $percentage ?>% of total employees
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <?php 
+                                                    $compLabel = ($is_rtl ?? false) ? ($rec["comp_name_ar"] ?: $rec["comp_name"]) : ($rec["comp_name"] ?: $rec["comp_name_ar"]);
+                                                    echo generate_drilldown_tile(
+                                                        $compCount,
+                                                        $compLabel ?: ('Company #' . $rec["comp_no"]),
+                                                        'fa fa-industry',
+                                                        $cardColor,
+                                                        $percentage,
+                                                        ['next-level' => 'cities', 'company' => $rec["comp_no"], 'company-name' => $compLabel]
+                                                    );
                                                     $cardIndex++;
                                                 } // end while
                                             } // end if ($querygrp)
                                             ?>
 
+                                        </div>
+
+                                        <!-- Employees toolbar - shown only once the drilldown reaches a department/sub-department with no further tiles -->
+                                        <div id="drilldownEmployeesToolbar" class="row filter-controls mx-auto mb-3 d-none" style="max-width: 800px;">
+                                            <div class="col-12">
+                                                <div class="comp-search-group">
+                                                    <div class="comp-search-field">
+                                                        <label for="drilldownSearchFilter" class="comp-search-label"><?= __('search') ?></label>
+                                                        <div class="comp-search-input">
+                                                            <i class="mdi mdi-magnify"></i>
+                                                            <input type="search" class="form-control" id="drilldownSearchFilter" placeholder="..." autocomplete="off">
+                                                        </div>
+                                                    </div>
+                                                    <div class="comp-search-field comp-search-field-status">
+                                                        <label for="drilldownStatusFilter" class="comp-search-label"><?= __('filter_by_status') ?></label>
+                                                        <select class="form-control" id="drilldownStatusFilter">
+                                                            <option value="all"><?= __('all_option') ?></option>
+                                                            <option value="active" selected><?= __('active') ?></option>
+                                                            <option value="on_vacation"><?= __('on_vacations') ?></option>
+                                                            <option value="inactive"><?= __('inactive') ?></option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row d-none" id="drilldownEmployeesCards"></div>
+                                        <div class="row mt-4 d-none" id="drilldownEmployeesPaginationRow">
+                                            <div class="col-12" id="drilldownEmployeesPagination"></div>
                                         </div>
                                     </div>
                                     <div class="tab-pane" id="bylist-b1">
@@ -906,6 +1048,206 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                     var badgeHTML = renderAllowedEmployeesCard(employeeNames);
                     container.html(badgeHTML);
                 }
+            });
+        </script>
+
+        <!-- Company -> City -> Location -> Department -> Sub-department drilldown (AJAX, no URL/reload) -->
+        <script>
+            $(document).ready(function() {
+                var drilldownRootTilesHtml = $('#drilldownTilesContainer').html();
+                var drilldownRootBreadcrumbHtml = $('#drilldownBreadcrumb').html();
+                var drilldownState = { level: 'companies' };
+                var drilldownSearchTimer = null;
+                var DRILLDOWN_STORAGE_KEY = 'orgDrilldownState';
+
+                function saveDrilldownState() {
+                    try {
+                        sessionStorage.setItem(DRILLDOWN_STORAGE_KEY, JSON.stringify(drilldownState));
+                    } catch (e) {}
+                }
+
+                function drilldownShowTiles(tilesHtml, breadcrumbHtml) {
+                    $('#drilldownTilesContainer').html(tilesHtml).removeClass('d-none');
+                    $('#drilldownEmployeesToolbar').addClass('d-none');
+                    $('#drilldownEmployeesCards').addClass('d-none').empty();
+                    $('#drilldownEmployeesPaginationRow').addClass('d-none');
+                    $('#drilldownBreadcrumb').html(breadcrumbHtml);
+                }
+
+                function drilldownShowEmployees(breadcrumbHtml) {
+                    $('#drilldownTilesContainer').addClass('d-none');
+                    $('#drilldownEmployeesToolbar').removeClass('d-none');
+                    $('#drilldownEmployeesCards').removeClass('d-none');
+                    $('#drilldownEmployeesPaginationRow').removeClass('d-none');
+                    $('#drilldownBreadcrumb').html(breadcrumbHtml);
+                }
+
+                function drilldownFetchTiles(level, params) {
+                    $.ajax({
+                        url: './includes/ajaxFile/get_org_drilldown.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: $.extend({ level: level }, params)
+                    }).done(function(response) {
+                        if (!response || response.status !== 200) {
+                            return;
+                        }
+                        drilldownState = $.extend({ level: level }, params);
+                        saveDrilldownState();
+                        drilldownShowTiles(response.tiles_html, response.breadcrumb_html);
+                    });
+                }
+
+                function renderDrilldownPagination(currentPage, totalPages) {
+                    var $pagination = $('#drilldownEmployeesPagination');
+                    $pagination.empty();
+                    if (totalPages <= 1) {
+                        return;
+                    }
+                    var $nav = $('<nav aria-label="Employees pagination"></nav>');
+                    var $ul = $('<ul class="pagination mb-0"></ul>');
+
+                    var $prev = $('<li class="page-item"></li>').toggleClass('disabled', currentPage <= 1);
+                    $prev.append($('<a class="page-link" href="javascript:void(0);"></a>').text(__('previous', 'Previous')).on('click', function(e) {
+                        e.preventDefault();
+                        if (currentPage > 1) drilldownFetchEmployees(currentPage - 1);
+                    }));
+                    $ul.append($prev);
+
+                    for (var i = 1; i <= totalPages; i++) {
+                        var $li = $('<li class="page-item"></li>').toggleClass('active', i === currentPage);
+                        $li.append($('<a class="page-link" href="javascript:void(0);"></a>').text(i).on('click', { page: i }, function(e) {
+                            e.preventDefault();
+                            var page = e.data.page;
+                            if (page !== currentPage) drilldownFetchEmployees(page);
+                        }));
+                        $ul.append($li);
+                    }
+
+                    var $next = $('<li class="page-item"></li>').toggleClass('disabled', currentPage >= totalPages);
+                    $next.append($('<a class="page-link" href="javascript:void(0);"></a>').text(__('next', 'Next')).on('click', function(e) {
+                        e.preventDefault();
+                        if (currentPage < totalPages) drilldownFetchEmployees(currentPage + 1);
+                    }));
+                    $ul.append($next);
+
+                    $nav.append($ul);
+                    $pagination.append($nav);
+                }
+
+                function drilldownFetchEmployees(page, params) {
+                    if (params) {
+                        drilldownState = $.extend({}, drilldownState, params, { level: 'employees' });
+                        if (params.search !== undefined) $('#drilldownSearchFilter').val(params.search);
+                        if (params.status !== undefined) $('#drilldownStatusFilter').val(params.status);
+                    }
+                    var $cards = $('#drilldownEmployeesCards');
+                    var search = $('#drilldownSearchFilter').val();
+                    var status = $('#drilldownStatusFilter').val();
+
+                    var lockedHeight = $cards.outerHeight();
+                    if (lockedHeight) {
+                        $cards.css('min-height', lockedHeight + 'px');
+                    }
+                    $cards.css({ opacity: 0.45, 'pointer-events': 'none' });
+
+                    var requestData = $.extend({}, drilldownState, { level: 'employees', search: search, status: status, limit: 12, page: page });
+                    drilldownState = $.extend({}, requestData);
+                    saveDrilldownState();
+
+                    $.ajax({
+                        url: './includes/ajaxFile/get_org_drilldown.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: requestData
+                    }).done(function(response) {
+                        if (!response || response.status !== 200) {
+                            return;
+                        }
+                        drilldownShowEmployees(response.breadcrumb_html);
+                        $cards.html(response.cards_html);
+                        renderDrilldownPagination(response.current_page, response.total_pages);
+                    }).always(function() {
+                        $cards.css({ opacity: 1, 'pointer-events': 'auto', 'min-height': '' });
+                    });
+                }
+
+                // Tile clicks - drill one level deeper (or straight to the employee list
+                // once a department with no sub-departments, or a sub-department, is reached).
+                $(document).on('click', '.drilldown-tile', function() {
+                    var $t = $(this);
+                    var nextLevel = $t.data('next-level');
+                    var params = {
+                        company: $t.data('company') || 0,
+                        company_name: $t.data('company-name') || '',
+                        city: $t.data('city') || 0,
+                        city_name: $t.data('city-name') || '',
+                        location: $t.data('location') || 0,
+                        location_name: $t.data('location-name') || '',
+                        dept: $t.data('dept') || 0,
+                        dept_name: $t.data('dept-name') || '',
+                        subdept: $t.data('subdept') !== undefined ? $t.data('subdept') : '',
+                        subdept_name: $t.data('subdept-name') || ''
+                    };
+                    if (nextLevel === 'employees') {
+                        drilldownFetchEmployees(1, params);
+                    } else {
+                        drilldownFetchTiles(nextLevel, params);
+                    }
+                });
+
+                // Breadcrumb clicks - jump back up to any earlier level.
+                $(document).on('click', '.drilldown-crumb[data-level]', function() {
+                    var $c = $(this);
+                    var level = $c.data('level');
+                    if (level === 'companies') {
+                        drilldownState = { level: 'companies' };
+                        saveDrilldownState();
+                        drilldownShowTiles(drilldownRootTilesHtml, drilldownRootBreadcrumbHtml);
+                        return;
+                    }
+                    var params = {
+                        company: $c.data('company') || 0,
+                        company_name: $c.data('company-name') || '',
+                        city: $c.data('city') || 0,
+                        city_name: $c.data('city-name') || '',
+                        location: $c.data('location') || 0,
+                        location_name: $c.data('location-name') || '',
+                        dept: $c.data('dept') || 0,
+                        dept_name: $c.data('dept-name') || ''
+                    };
+                    drilldownFetchTiles(level, params);
+                });
+
+                $('#drilldownSearchFilter').on('input', function() {
+                    clearTimeout(drilldownSearchTimer);
+                    drilldownSearchTimer = setTimeout(function() {
+                        drilldownFetchEmployees(1);
+                    }, 350);
+                });
+                $('#drilldownStatusFilter').on('change', function() {
+                    drilldownFetchEmployees(1);
+                });
+
+                // Restore drill position only on an actual page refresh - arriving fresh
+                // from the Dashboard (or any other link) always starts at Companies.
+                try {
+                    var navEntries = performance.getEntriesByType('navigation');
+                    var isReload = navEntries.length ? navEntries[0].type === 'reload' : (performance.navigation && performance.navigation.type === 1);
+
+                    if (!isReload) {
+                        sessionStorage.removeItem(DRILLDOWN_STORAGE_KEY);
+                    } else {
+                        var savedState = JSON.parse(sessionStorage.getItem(DRILLDOWN_STORAGE_KEY) || 'null');
+                        if (savedState && savedState.level && savedState.level !== 'companies') {
+                            if (savedState.level === 'employees') {
+                                drilldownFetchEmployees(savedState.page || 1, savedState);
+                            } else {
+                                drilldownFetchTiles(savedState.level, savedState);
+                            }
+                        }
+                    }
+                } catch (e) {}
             });
         </script>
 

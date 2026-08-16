@@ -160,14 +160,9 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                                 <h4 class="header-title m-t-0 m-b-30"><?=__('all_employees')?></h4>
                                 <div class="row" style="max-width: 800px; margin: auto;">
                                     <div class="col-md-12">
-                                        <div class="form-group">
+                                        <div class="form-group" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
                                             <label for="searchFilter" class="font-weight-bold"><?=__('search_by_name_id_mobile_iqama_id')?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                            </div>
+                                            <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>" style="background: #fff;">
                                         </div>
                                     </div>
                                 </div>
@@ -175,7 +170,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                         </div>
                     </div>
 
-					<div class="row">
+					<div class="row" id="employeesCardsContainer">
 						<?php if (!empty($employees)): ?>
 							<?php
 							foreach ($employees as $rec) {
@@ -189,13 +184,6 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 								$emp_status_fly = $rec["fly"];
 								$emptype = $rec["emptype"];
 								$sex_get = $rec["sex"];
-
-								$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' && `note`='Fly' ");
-								$cont_fly = mysqli_fetch_array($sql_count_fly)[0];
-
-								$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) `emp_id` FROM `emp_vacation` WHERE `emp_id`='" . $emp_id . "' && `note`='Encashed' ");
-								$cont_encashed = mysqli_fetch_array($sql_count_encashed)[0];
-
 
                                 $status_class = '';
                                 if ($emp_status == 1 && $emp_status_fly == 0) {
@@ -220,7 +208,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 					</div>
 
 					<div class="row">
-						<div class="col-12">
+						<div class="col-12" id="employeesPaginationContainer">
                             <?php
                                 $pagination_params = [];
 								if (!empty($search_term)) $pagination_params['search'] = $search_term;
@@ -248,16 +236,73 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<script src="assets/js/jquery.core.js"></script>
 	<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
-        function applyFilters() {
+        // Live AJAX employee list - search, limit & pagination all fetch in place,
+        // no full page reload / no ?page= navigation.
+        let employeesSearchTimer = null;
+
+        function loadEmployeesList(page) {
+            const $cards = $('#employeesCardsContainer');
+            const $pagination = $('#employeesPaginationContainer');
             const limitElement = document.getElementById('limitFilter');
             const limit = limitElement ? limitElement.value : <?= $per_page ?>;
             const search = document.getElementById('searchFilter').value;
-            const baseUrl = window.location.href.split('?')[0];
-            window.location.href = `${baseUrl}?limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
+
+            const lockedHeight = $cards.outerHeight();
+            if (lockedHeight) {
+                $cards.css('min-height', lockedHeight + 'px');
+            }
+            $cards.css({ opacity: 0.45, 'pointer-events': 'none' });
+
+            $.ajax({
+                url: './includes/ajaxFile/get_all_employees_list.php',
+                type: 'POST',
+                dataType: 'json',
+                data: { search: search, limit: limit, page: page }
+            }).done(function(response) {
+                if (!response || response.status !== 200) {
+                    return;
+                }
+                $cards.html(response.cards_html);
+                $pagination.html(response.pagination_html);
+            }).always(function() {
+                $cards.css({ opacity: 1, 'pointer-events': 'auto', 'min-height': '' });
+            });
         }
+
+        function applyFilters() {
+            loadEmployeesList(1);
+        }
+
         document.getElementById('searchFilter').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { applyFilters(); }
         });
+        document.getElementById('searchFilter').addEventListener('input', function () {
+            clearTimeout(employeesSearchTimer);
+            employeesSearchTimer = setTimeout(function () {
+                loadEmployeesList(1);
+            }, 350);
+        });
+
+        // Pagination links are rendered by the shared generate_pagination_controls()
+        // helper as plain <a href="?page=N..."> - intercept clicks so they run through
+        // AJAX instead of a full navigation.
+        $(document).on('click', '#employeesPaginationContainer .page-link', function (e) {
+            const $li = $(this).closest('.page-item');
+            if ($li.hasClass('disabled') || $li.hasClass('active')) {
+                e.preventDefault();
+                return;
+            }
+            const href = $(this).attr('href');
+            if (!href || href === '#') {
+                return;
+            }
+            e.preventDefault();
+            const page = new URL(href, window.location.href).searchParams.get('page') || 1;
+            loadEmployeesList(parseInt(page, 10));
+        });
+
+        // limitFilter select is generated by generate_pagination_controls() with
+        // onchange="applyFilters()" already wired up - applyFilters() now runs via AJAX.
         // Check for SweetAlert message from session (after edit redirect)
         <?php if (isset($_SESSION['swal_alert'])): ?>
             Swal.fire({

@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'payment_type',
 			'is_overtime_eligible',
 			'allow_emergency_vacation',
+			'allow_vacation_salary_below_min_days',
 			'requests_blocked',
 			'blocked_request_types'
 		];
@@ -746,6 +747,19 @@ if (mysqli_num_rows($query) == 1) {
 													<label for="allowEmergencyVacationNo" class="atch"><?= __('no', 'No') ?></label>
 												</div>
 												<small class="form-text text-muted"><?= __('allow_emergency_vacation_hint', 'When Yes, this employee can apply for Emergency Vacation even with a healthy balance (>1 day)') ?></small>
+											</div>
+
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('allow_vacation_salary_below_min_days', 'Allow Vacation Salary Below Min Days') ?></label>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="allowVacSalaryBelowMinYes" name="allow_vacation_salary_below_min_days" value="1" <?= ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') === '1') ? 'checked' : '' ?>>
+													<label for="allowVacSalaryBelowMinYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="allowVacSalaryBelowMinNo" name="allow_vacation_salary_below_min_days" value="0" <?= ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') !== '1') ? 'checked' : '' ?>>
+													<label for="allowVacSalaryBelowMinNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
+												<small class="form-text text-muted"><?= __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20))) ?></small>
 											</div>
 
 											<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>

@@ -13,7 +13,7 @@ $pdo = getDbConnection();
 
 try {
     // Select distinct months that already have generated/paid payroll.
-    $stmt = $pdo->query("SELECT DISTINCT month_year FROM payrolls WHERE status IN ('generated', 'paid') ORDER BY month_year DESC");
+    $stmt = $pdo->query("SELECT month_year, MAX(status = 'paid') AS has_paid FROM payrolls WHERE status IN ('generated', 'paid') GROUP BY month_year ORDER BY month_year DESC");
     $months = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $formattedMonths = [];
@@ -21,7 +21,8 @@ try {
         $date = new DateTime($month['month_year'] . '-01'); // Append '-01' to make it a valid date string
         $formattedMonths[] = [
             'value' => $month['month_year'], // e.g., "2023-01"
-            'label' => $date->format('F Y')   // e.g., "January 2023"
+            'label' => $date->format('F Y'),  // e.g., "January 2023"
+            'paid' => (bool) $month['has_paid']
         ];
     }
 

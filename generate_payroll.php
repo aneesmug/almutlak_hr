@@ -2171,7 +2171,7 @@ function updatePayrollSummaryCards() {
     $('#statCashCount').text(cashCount);
 }
 
-function updateRegenerateButtonVisibility() {
+async function updateRegenerateButtonVisibility() {
     updatePayrollSummaryCards();
 
     // Check if any employee has a generated or paid payroll status
@@ -2179,6 +2179,17 @@ function updateRegenerateButtonVisibility() {
         ? allEmployeesData.some(emp => emp.payroll_status === 'generated' || emp.payroll_status === 'paid')
         : false;
     const monthPaid = isSelectedMonthFullyPaid();
+
+    // Payslips / Payroll Summary Report must stay available for ANY month that was
+    // ever marked Paid, not just the month currently being viewed. Otherwise, mid-cycle
+    // additions to the currently viewed month (new hires, employees back from vacation
+    // who haven't been paid yet this month) make monthPaid false and hide access to an
+    // already-paid past month's payslips.
+    const months = generatedPayrollMonthsCache.length > 0
+        ? generatedPayrollMonthsCache
+        : await getGeneratedPayrollMonths();
+    generatedPayrollMonthsCache = months;
+    const anyMonthPaid = months.some(m => m && m.paid);
 
     // Show payroll follow-up actions only when payroll already exists for the selected month
     // and hasn't been marked as Paid yet.
@@ -2210,15 +2221,16 @@ function updateRegenerateButtonVisibility() {
         $('#actionGeneratePayrollBtn').removeClass('hidden').show();
     }
 
-    // Payslips are only meaningful once payroll has actually been marked Paid
-    if (monthPaid) {
+    // Payslips: available whenever ANY month has been marked Paid (the modal lets the
+    // user pick which paid month/company to export), not just the currently viewed month.
+    if (anyMonthPaid) {
         $('#actionPayslipsBtn').removeClass('hidden').show();
     } else {
         $('#actionPayslipsBtn').addClass('hidden').hide();
     }
 
-    // Payroll Summary Report (by company) is only available once the month is fully Paid
-    if (monthPaid) {
+    // Payroll Summary Report (by company): same rule as Payslips.
+    if (anyMonthPaid) {
         $('#actionPayrollSummaryReportBtn').removeClass('hidden').show();
     } else {
         $('#actionPayrollSummaryReportBtn').addClass('hidden').hide();
