@@ -2130,38 +2130,9 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
             }
         }
 
-        // Every supervisor is shown in the "also include" list, except whichever one is
-        // currently chosen as the primary recipient (can't include yourself). Already
-        // sent/merged supervisors stay selectable too - HR may need to reassign their
-        // team to a different reviewer - they just carry a warning badge (see select2
-        // templateResult below) so it's clear they were already handled once.
-        const buildAdditionalOptionsList = (primaryId) => {
-            return supervisors
-                .filter(s => String(s.supervisor_emp_id || '') !== String(primaryId || ''))
-                .map(s => {
-                    const isSent = Number(s.is_sent || 0) === 1 || s.is_sent === true;
-                    const isMerged = String(s.merged_into || '').trim() !== '';
-                    const empId = String(s.supervisor_emp_id || '');
-                    return `<option value="${empId.replace(/"/g, '&quot;')}" data-is-sent="${isSent ? '1' : '0'}" data-is-merged="${isMerged ? '1' : '0'}">${String(s.supervisor_name || 'N/A')} (${empId}) - ${Number(s.employee_count || 0)} <?= __('employees', 'Employees') ?></option>`;
-                })
-                .join('');
-        };
-
-        // Supervisors already merged into a given primary, so re-selecting that primary
-        // (e.g. for a resend) automatically shows them as still included by default.
-        const getDefaultAdditionalIdsForPrimary = (primaryId) => {
-            if (!primaryId) {
-                return [];
-            }
-            return supervisors
-                .filter(s => String(s.merged_into || '').trim() === String(primaryId))
-                .map(s => String(s.supervisor_emp_id || ''));
-        };
-
         // The select-supervisor modal can be reopened with the previous selection preserved
         // after "Preview Employees" is used, instead of forcing the user to start over.
         let preselectedSupervisorId = '';
-        let preselectedAdditionalIds = [];
         let modalResult;
         while (true) {
             let cameFromPreview = false;
@@ -2176,10 +2147,6 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                             <i class="fa fa-users"></i> <?= __('preview_employees', 'Preview Employees') ?>
                         </button>
                         <div class="small text-info mb-2"><?= __('batch_email_sent_hint_supervisor', 'Supervisors already sent a report can be selected again to resend (e.g. figures changed). Supervisors marked Assigned Elsewhere already had their employees merged into another supervisor\'s report and can\'t be selected here.') ?></div>
-                        <hr class="my-2">
-                        <label for="supervisorAdditionalSelect" class="font-weight-bold"><?= __('include_other_supervisors', 'Also Assign Other Supervisor\'s Employees') ?> <span class="text-muted font-weight-normal">(<?= __('optional', 'optional') ?>)</span></label>
-                        <select id="supervisorAdditionalSelect" class="form-control mb-2" multiple>${buildAdditionalOptionsList('')}</select>
-                        <div class="small text-muted mb-2"><?= __('include_other_supervisors_hint', 'Their employees are added into the same excel sent to the Direct Supervisor selected above. They will not receive a separate email. Supervisors marked Already Sent / Assigned Elsewhere were already handled once - selecting them here reassigns their employees to this report instead.') ?></div>
                     </div>
                 `,
                 showCancelButton: true,
@@ -2190,7 +2157,6 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                 width: '45%',
                 didOpen: () => {
                     const supervisorSelect = document.getElementById('supervisorReportSelect');
-                    const additionalSelect = document.getElementById('supervisorAdditionalSelect');
                     if (window.jQuery && typeof jQuery.fn.select2 === 'function' && supervisorSelect) {
                         const $popup = jQuery('.swal2-popup');
                         jQuery(supervisorSelect).select2({
@@ -2237,82 +2203,10 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                         });
                     }
 
-                    if (window.jQuery && typeof jQuery.fn.select2 === 'function' && additionalSelect) {
-                        const $popup = jQuery('.swal2-popup');
-                        jQuery(additionalSelect).select2({
-                            width: '100%',
-                            dropdownParent: $popup,
-                            placeholder: '<?= __('select_supervisors_optional', 'Select supervisor(s)') ?>',
-                            closeOnSelect: false,
-                            escapeMarkup: function(markup) {
-                                return markup;
-                            },
-                            templateResult: function(state) {
-                                if (!state.id) {
-                                    return state.text;
-                                }
-
-                                const optionEl = state.element || null;
-                                const isMerged = optionEl && optionEl.getAttribute('data-is-merged') === '1';
-                                const isSent = optionEl && optionEl.getAttribute('data-is-sent') === '1';
-                                const safeText = jQuery('<div>').text(state.text || '').html();
-                                const badgeHtml = isMerged
-                                    ? '<span class="badge badge-warning float-right"><?= __('assigned_to_other_supervisor', 'Assigned Elsewhere') ?></span>'
-                                    : (isSent
-                                        ? '<span class="badge badge-warning float-right"><?= __('batch_email_sent', 'Already Sent') ?></span>'
-                                        : '');
-
-                                return '<span class="d-flex justify-content-between align-items-center w-100"><span>' + safeText + '</span>' + badgeHtml + '</span>';
-                            }
-                        });
-                    }
-
-                    // Rebuild the "also include" list whenever the primary supervisor changes,
-                    // so the primary can never also be picked as an "also include" entry, and
-                    // restore whichever additional selections are still valid.
-                    const refreshAdditionalOptions = () => {
-                        if (!additionalSelect) {
-                            return;
-                        }
-                        const currentlySelected = window.jQuery
-                            ? (jQuery(additionalSelect).val() || [])
-                            : Array.from(additionalSelect.selectedOptions).map(o => o.value);
-                        const primaryId = supervisorSelect ? String(supervisorSelect.value || '').trim() : '';
-                        additionalSelect.innerHTML = buildAdditionalOptionsList(primaryId);
-                        const validIds = Array.from(additionalSelect.options).map(o => o.value);
-                        const keepSelected = currentlySelected.filter(v => validIds.includes(v));
-                        const defaultForPrimary = getDefaultAdditionalIdsForPrimary(primaryId);
-                        const finalSelected = Array.from(new Set([...keepSelected, ...defaultForPrimary]));
-                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                            jQuery(additionalSelect).val(finalSelected).trigger('change');
-                        } else {
-                            Array.from(additionalSelect.options).forEach(o => {
-                                o.selected = finalSelected.includes(o.value);
-                            });
-                        }
-                    };
-
-                    if (supervisorSelect) {
-                        supervisorSelect.addEventListener('change', refreshAdditionalOptions);
-                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                            jQuery(supervisorSelect).on('change.refreshAdditional', refreshAdditionalOptions);
-                        }
-                    }
-
                     if (supervisorSelect && preselectedSupervisorId) {
                         supervisorSelect.value = preselectedSupervisorId;
                         if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
                             jQuery(supervisorSelect).trigger('change');
-                        }
-                    }
-
-                    if (additionalSelect && preselectedAdditionalIds.length > 0) {
-                        if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                            jQuery(additionalSelect).val(preselectedAdditionalIds).trigger('change');
-                        } else {
-                            Array.from(additionalSelect.options).forEach(o => {
-                                o.selected = preselectedAdditionalIds.includes(o.value);
-                            });
                         }
                     }
 
@@ -2342,9 +2236,6 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                             // modal shows cleanly, then the loop below reopens the select modal
                             // afterwards with the same selection restored.
                             preselectedSupervisorId = supervisorId;
-                            preselectedAdditionalIds = additionalSelect
-                                ? (window.jQuery ? (jQuery(additionalSelect).val() || []) : Array.from(additionalSelect.selectedOptions).map(o => o.value))
-                                : [];
                             cameFromPreview = true;
                             Swal.close();
                         });
@@ -2352,7 +2243,6 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                 },
                 preConfirm: () => {
                     const supervisorSelect = document.getElementById('supervisorReportSelect');
-                    const additionalSelect = document.getElementById('supervisorAdditionalSelect');
                     const supervisorId = supervisorSelect ? String(supervisorSelect.value || '').trim() : '';
                     if (supervisorId === '') {
                         Swal.showValidationMessage('<?= __('direct_supervisor_required', 'Direct supervisor is required.') ?>');
@@ -2363,10 +2253,7 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
                         Swal.showValidationMessage('<?= addslashes(__('supervisor_assigned_elsewhere', 'This supervisor employees were already assigned to another supervisor report. Please select another supervisor.')) ?>');
                         return false;
                     }
-                    const additionalIds = additionalSelect
-                        ? (window.jQuery ? (jQuery(additionalSelect).val() || []) : Array.from(additionalSelect.selectedOptions).map(o => o.value))
-                        : [];
-                    return { supervisorIds: [supervisorId], includedSupervisorIds: additionalIds.filter(v => String(v) !== supervisorId) };
+                    return { supervisorIds: [supervisorId] };
                 }
             });
 
@@ -2395,7 +2282,6 @@ async function openCompanyPayrollReportModal(requestInvNo, payrollMonth) {
         sendPayload.append('request_inv_no', requestInvNo);
         sendPayload.append('month', payrollMonth);
         sendPayload.append('supervisor_ids', JSON.stringify(modalResult.value.supervisorIds || []));
-        sendPayload.append('included_supervisor_ids', JSON.stringify(modalResult.value.includedSupervisorIds || []));
 
         const sendResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
             method: 'POST',

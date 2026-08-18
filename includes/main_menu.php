@@ -59,6 +59,8 @@ $fixDoubleDeductionLink = 'fix_double_deduction.php';
 $appSettingsLink = 'app_settings.php';
 $tableJsonApiLink = 'table_json_api.php';
 $loanRejectionReport = 'loan_rejection_report.php';
+$dbExportLink = 'db_export.php';
+$dbImportRemoteLink = 'db_import_remote.php';
 
 
 // =================================================================================
@@ -118,6 +120,7 @@ $page_special_access_bypass = [
     'business_trip_status_history.php' => 'access_business_trip_status_history',
     'edit_employee.php' => 'access_edit_employee',
     'import_loan_opening_balance.php' => 'access_import_loan_opening_balance',
+    'import_iqama_exp.php' => 'access_import_iqama_exp',
 ];
 
 // Grant $user_role into $page_roles for any page this employee has an explicit
@@ -788,10 +791,6 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php */ ?>
-                <?php if (in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
-                    <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp') ?></span></a></li>
-                <?php endif; ?>
-
                 <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
@@ -893,18 +892,12 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         $can_import_medical_insurance = $is_system_admin
             || user_has_special_access($conDB, $empid ?? '', 'access_import_medical_insurance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         ?>
-        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
                 <?php if ($is_system_admin): ?>
                 <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
-                <?php endif; ?>
-                <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_opening_balance', 'Import Loan Opening Balance') ?></span></a></li>
-                <?php endif; ?>
-                <?php if ($can_import_medical_insurance): ?>
-                <li><a href="<?= $importMedicalInsuranceLink ?>"><i class="fa fa-solid fa-file-medical"></i><span><?=__('import_medical_insurance', 'Import Medical Insurance') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($is_system_admin || $can_see_vacation_date_editor): ?>
                 <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
@@ -918,11 +911,41 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if ($can_access_app_settings && !$is_system_admin): ?>
                 <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
                 <?php endif; ?>
+
+                <?php if ((in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)) || $can_import_medical_insurance || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-file-import"></i><span><?=__('import', 'Import') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
+                        <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_balance', 'Import Loan Balance') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if ($can_import_medical_insurance): ?>
+                        <li><a href="<?= $importMedicalInsuranceLink ?>"><i class="fa fa-solid fa-file-medical"></i><span><?=__('import_medical_insurance', 'Import Medical Insurance') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if (in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+                        <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp', 'Import Iqama Expiry') ?></span></a></li>
+                        <?php endif; ?>
+                    </ul>
+                </li>
+                <?php endif; ?>
+
                 <?php if ($is_system_admin): ?>
-                <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
-                <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa fa-database"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
-                <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
-                <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-plug"></i><span><?=__('api_data_sync', 'API & Data Sync') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa fa-database"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
+                        <li><a href="<?= $dbExportLink ?>" target="_blank"><i class="fa fa-file-export"></i><span><?=__('database_export_live', 'Database Export (Live)') ?></span></a></li>
+                        <li><a href="<?= $dbImportRemoteLink ?>" target="_blank"><i class="fa fa-cloud-arrow-down"></i><span><?=__('import_from_live_server', 'Import From Live Server') ?></span></a></li>
+                    </ul>
+                </li>
+                <li>
+                    <a href="javascript:void(0);"><i class="fa fa-stethoscope"></i><span><?=__('diagnostics', 'Diagnostics') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <ul class="nav-third-level" aria-expanded="false">
+                        <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
+                        <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
+                        <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                    </ul>
+                </li>
                 <?php endif; ?>
             </ul>
         </li>

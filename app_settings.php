@@ -832,7 +832,7 @@
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access'];
+            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -876,6 +876,12 @@
             // Special handling for special access configuration
             if (normalizedGroupName === 'special_access') {
                 renderSpecialAccessSettings();
+                return;
+            }
+
+            // Special handling for the product license key
+            if (normalizedGroupName === 'license') {
+                renderLicenseSettings();
                 return;
             }
 
@@ -1961,6 +1967,123 @@
             });
 
             loadBlockedTypes();
+        }
+
+        async function renderLicenseSettings() {
+            const licenseSettings = groupedSettings['license'] || [];
+            const getVal = (name) => {
+                const row = licenseSettings.find(s => s.setting_name === name);
+                return row ? row.setting_value : '';
+            };
+
+            const apiUrl = getVal('license_api_url');
+            const serialKey = getVal('license_serial_key');
+            const token = getVal('license_token');
+            const maskedKey = serialKey.length > 8 ? (serialKey.slice(0, 4) + '...' + serialKey.slice(-4)) : serialKey;
+            const maskedToken = token.length > 8 ? (token.slice(0, 4) + '...' + token.slice(-4)) : token;
+            const cacheValid = getVal('license_cache_valid') === '1';
+            const cacheStatus = getVal('license_cache_status') || 'not_configured';
+            const cacheMessage = getVal('license_cache_message') || 'No license key configured yet.';
+            const cacheExpiresAt = getVal('license_cache_expires_at');
+            const lastVerifiedAt = getVal('license_last_verified_at');
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-license" role="tabpanel">
+                    <h5 class="mb-3"><i class="fas fa-key mr-2 text-primary"></i>License</h5>
+
+                    <div class="alert ${cacheValid ? 'alert-success' : 'alert-danger'} py-2" id="license-status-banner">
+                        <strong>${cacheValid ? 'Active' : 'Inactive'}</strong> (${cacheStatus}) - ${cacheMessage}
+                        ${cacheExpiresAt ? `<div class="small font-weight-bold">Expires: ${cacheExpiresAt}</div>` : ''}
+                        ${lastVerifiedAt ? `<div class="small text-muted">Last verified: ${lastVerifiedAt}</div>` : ''}
+                    </div>
+
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Current Key</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" value="${maskedKey}" readonly disabled>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Current Token</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" value="${maskedToken}" readonly disabled>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">New Serial Key</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="license-serial-key-input" class="form-control" value="" placeholder="Leave blank to keep the current key - only fill in to replace it">
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">New Verify URL</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="license-verify-url-input" class="form-control" value="" placeholder="Leave blank to keep current - paste the full Verify URL from the license admin panel to replace it">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary" id="license-save-verify-btn">
+                        <i class="fas fa-check-circle"></i> Save & Verify
+                    </button>
+                    <span id="license-verify-spinner" class="ml-2" style="display:none;">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    </span>
+                </div>
+            `;
+
+            document.getElementById('license-save-verify-btn').addEventListener('click', async function () {
+                const key = document.getElementById('license-serial-key-input').value.trim() || serialKey;
+                const verifyUrlRaw = document.getElementById('license-verify-url-input').value.trim();
+
+                let url = apiUrl;
+                let tok = token;
+                if (verifyUrlRaw) {
+                    try {
+                        const parsed = new URL(verifyUrlRaw);
+                        tok = parsed.searchParams.get('token');
+                        url = parsed.origin + parsed.pathname;
+                    } catch (e) {
+                        Swal.fire('Invalid URL', 'Verify URL is not a valid URL.', 'warning');
+                        return;
+                    }
+                    if (!tok) {
+                        Swal.fire('Invalid URL', 'Verify URL must contain a ?token=... parameter - paste the full URL from the license admin panel.', 'warning');
+                        return;
+                    }
+                }
+                if (!url || !key || !tok) {
+                    Swal.fire('Missing info', 'Enter a serial key and Verify URL (server has no license configured yet).', 'warning');
+                    return;
+                }
+                const $btn = this;
+                $btn.disabled = true;
+                document.getElementById('license-verify-spinner').style.display = 'inline-block';
+
+                try {
+                    const response = await fetch('./includes/ajaxFile/ajaxLicenseCheck.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ api_url: url, serial_key: key, token: tok })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        Swal.fire('Error', data.message || 'Could not save the key.', 'error');
+                        return;
+                    }
+                    if (data.valid) {
+                        await Swal.fire('License Active', data.message || 'License verified successfully.', 'success');
+                    } else {
+                        Swal.fire('License Not Active', data.message || 'This key is not valid.', 'error');
+                    }
+                    await loadSettings();
+                    renderSettingsGroup('license');
+                } catch (err) {
+                    Swal.fire('Error', 'Request failed: ' + err.message, 'error');
+                } finally {
+                    $btn.disabled = false;
+                    document.getElementById('license-verify-spinner').style.display = 'none';
+                }
+            });
         }
 
         async function renderSpecialAccessSettings() {
@@ -3859,6 +3982,11 @@
                 if (!groupedSettings['payroll_settings']) {
                     groupedSettings['payroll_settings'] = [];
                 }
+                <?php if ($is_system_admin ?? false): ?>
+                if (!groupedSettings['license']) {
+                    groupedSettings['license'] = [];
+                }
+                <?php endif; ?>
 
                 // Restore last active group from localStorage if available
                 const savedGroup = localStorage.getItem('app_settings_active_group');

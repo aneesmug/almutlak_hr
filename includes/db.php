@@ -242,6 +242,18 @@ $defaultTimezone = 'Asia/Riyadh';
 date_default_timezone_set($defaultTimezone);
 mysqli_query($conDB, "SET time_zone = '+03:00'");
 
+// License enforcement lives here, not only in session_check.php: dozens of
+// ajax/api endpoints connect to the database directly without ever including
+// session_check.php, which left them fully reachable regardless of license
+// state. db.php is the one file every entry point requires, so gating here
+// closes that gap in a single place instead of chasing individual pages.
+// Must run AFTER date_default_timezone_set() above - license_enforce() compares
+// strtotime() on stored timestamps against time(), and doing that before the
+// timezone is set to Asia/Riyadh throws the elapsed-time math off by the UTC
+// offset, silently breaking the periodic recheck.
+require_once __DIR__ . '/license_check.php';
+license_enforce($conDB);
+
 // Lazy PDO connection: most pages only ever use the mysqli $conDB above and never
 // touch $pdo/db(). Connecting PDO eagerly on every request doubled DB connection
 // usage app-wide and was a direct contributor to "Too many connections". This

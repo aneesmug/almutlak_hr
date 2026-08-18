@@ -31,6 +31,7 @@ if (!function_exists('get_special_access_labels')) {
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
             'direct_rejoin_bypass_approval' => 'Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)',
             'ungenerate_payroll' => 'Payroll: Un-Generate Payroll Button',
+            'assign_payroll_supervisor' => 'Payroll: Assign Direct Supervisor for Payroll Button',
             'manage_loan_settings' => 'Access App Settings - Loan Settings Tab',
             'manage_vacation_payroll_settings' => 'Access App Settings - Vacation Payroll Settings Tab',
             'manage_overtime_settings' => 'Access App Settings - Overtime Settings Tab',
@@ -76,6 +77,7 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_all_applied_employee_transfers' => 'Access Page: All Employee Transfer Requests',
             'access_import_medical_insurance' => 'Access Page: Import Medical Insurance',
             'access_import_loan_opening_balance' => 'Access Page: Import Loan Opening Balance',
+            'access_import_iqama_exp' => 'Access Page: Import Iqama Expiry',
         ];
     }
 }
@@ -163,6 +165,7 @@ if (!function_exists('get_special_access_categories')) {
                 'keys' => [
                     'direct_rejoin_bypass_approval',
                     'ungenerate_payroll',
+                    'assign_payroll_supervisor',
                 ],
             ],
         ];

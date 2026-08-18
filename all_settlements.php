@@ -609,7 +609,10 @@ if ($canSeeAllDepts) {
                                                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                                                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                                                 
-                                                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
+                                                // Emergency vacations allowed through - working-days-before-departure
+                                                // payout only, never vacation_salary/GOSI (still gated on
+                                                // $is_settlement_payable_vacation, unaffected and still false for Emergency).
+                                                $calculate_payments = !$is_non_payable_leave && ($is_emergency || $is_settlement_payable_vacation);
                                                 
                                                 if ($calculate_payments) {
                                                     $basic_salary = (float)($settlement['basic'] ?? 0);
@@ -638,8 +641,9 @@ if ($canSeeAllDepts) {
                                                         $overtime_amount = 0;
                                                         $deduction_amount = 0;
                                                         
-                                                        // Calculate working days salary for vacations removed from payroll.
-                                                        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($settlement['start_date'])) {
+                                                        // Calculate working days salary for vacations removed from payroll,
+                                                        // and for Emergency (days actually worked before departure).
+                                                        if (($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) && !empty($settlement['start_date'])) {
                                                             try {
                                                                 $start_date_obj = new DateTime($settlement['start_date']);
                                                                 $start_day = (int)$start_date_obj->format('d');
@@ -699,10 +703,11 @@ if ($canSeeAllDepts) {
                                                         }
                                                         
                                                         // Calculate total payable - MUST MATCH vacation_report_details.php exactly.
+                                                        // Emergency included (working-days-only payout, no vacation_salary/GOSI).
                                                         if ($is_encashment) {
                                                             $payableAmount = 0;
-                                                        } elseif ($is_settlement_payable_vacation) {
-                                                            $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+                                                        } elseif ($is_settlement_payable_vacation || $is_emergency) {
+                                                            $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) ? $working_days_salary : 0;
                                                             $payableAmount = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                                                         }
                                                     }

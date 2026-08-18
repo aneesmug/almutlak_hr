@@ -1119,12 +1119,16 @@ if ($can_see_all_depts) {
                                                                 // Settlement button eligibility:
                                                                 // 1) Fly + Annual OR Encashed (existing behavior)
                                                                 // 2) Local Vacation + Annual only when days > 5 and salary type is payroll (YES)
+                                                                // 3) Fly + Emergency - pays only for days worked before departure
+                                                                //    (working_days_salary), never the vacation period itself - see
+                                                                //    getVacationDetailsForSettlement() in leaveHandler.php.
                                                                 $isAnnualFlyOrEncashed = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') || $req['vac_type'] === 'Encashed');
+                                                                $isEmergencyFly = ($req['vac_type'] === 'Fly' && $req['fly_type'] === 'emergency');
                                                                 $isLocalAnnual = ($req['vac_type'] === 'Local Vacation' && $req['fly_type'] === 'annual');
                                                                 $localVacationDays = (float)($req['vacdays'] ?? 0);
                                                                 $vacationSalaryType = strtolower(trim((string)($req['vacation_salary_type'] ?? 'payroll')));
                                                                 $isLocalAnnualSettlementEligible = ($isLocalAnnual && $localVacationDays > 5 && $vacationSalaryType === 'payroll');
-                                                                $canCreateSettlement = ($isAnnualFlyOrEncashed || $isLocalAnnualSettlementEligible);
+                                                                $canCreateSettlement = ($isAnnualFlyOrEncashed || $isEmergencyFly || $isLocalAnnualSettlementEligible);
                                                                 ?>
                                                                 <?php if (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $canCreateSettlement && !$settlementExists): ?>
                                                                     <div class="dropdown-divider"></div>

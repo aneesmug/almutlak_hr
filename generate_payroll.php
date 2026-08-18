@@ -6,6 +6,7 @@
     if (mysqli_num_rows($query) == 1) {
         include("./includes/avatar_select.php");
         $canUngeneratePayroll = user_has_special_access($conDB, $empid ?? '', 'ungenerate_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $canAssignPayrollSupervisor = user_has_special_access($conDB, $empid ?? '', 'assign_payroll_supervisor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -1019,6 +1020,11 @@
                                                             <button type="button" class="dropdown-item" id="actionGeneratePayrollBtn">
                                                                 <i class="fa fa-solid fa-calculator-simple"></i> <?= __('generate_payroll_for_selected_button') ?>
                                                             </button>
+                                                            <?php if ($canAssignPayrollSupervisor): ?>
+                                                            <button type="button" class="dropdown-item" id="actionAssignPayrollSupervisorBtn">
+                                                                <i class="fa fa-solid fa-user-tie"></i> <?= __('assign_payroll_supervisor_button', 'Assign Direct Supervisor (Payroll)') ?>
+                                                            </button>
+                                                            <?php endif; ?>
                                                             <button type="button" class="dropdown-item hidden" id="actionImportPayrollExcelBtn" style="display:none;">
                                                                 <i class="fa fa-solid fa-file-arrow-up"></i> <?= __('upload_payroll_excel') ?: 'Upload Payroll Excel' ?>
                                                             </button>
@@ -2346,6 +2352,10 @@ function addEventListeners() {
     $('#actionGeneratePayrollBtn').off('click', generatePayroll).on('click', generatePayroll);
     currentEventListeners.push(() => $('#actionGeneratePayrollBtn').off('click', generatePayroll));
 
+    // Assign Direct Supervisor (Payroll) button
+    $('#actionAssignPayrollSupervisorBtn').off('click', openAssignPayrollSupervisorModal).on('click', openAssignPayrollSupervisorModal);
+    currentEventListeners.push(() => $('#actionAssignPayrollSupervisorBtn').off('click', openAssignPayrollSupervisorModal));
+
     $('#actionImportPayrollExcelBtn').off('click', openPayrollExcelImportModal).on('click', openPayrollExcelImportModal);
     currentEventListeners.push(() => $('#actionImportPayrollExcelBtn').off('click', openPayrollExcelImportModal));
 
@@ -2415,6 +2425,193 @@ function updateGeneratePayrollButtonState() {
     // Generate Payroll for Selected only makes sense once at least one employee (any page) is checked.
     const anySelected = employeeTable.rows().nodes().to$().find('.employee-checkbox:checked').length > 0;
     $('#actionGeneratePayrollBtn').prop('disabled', !anySelected);
+}
+
+// Step 1: pick the Direct Supervisor. Step 2: multi-select which employees report their
+// payroll to that supervisor - the full active employee list (independent of the payroll
+// table's month/checkbox state), with already-assigned employees locked/disabled so a
+// given employee is only ever assigned to one payroll supervisor at a time.
+async function openAssignPayrollSupervisorModal() {
+    Swal.fire({
+        title: __('loading', 'Loading'),
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const candidatesResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'get_payroll_supervisor_candidates' }).toString()
+        });
+        const candidatesData = await candidatesResponse.json();
+        Swal.close();
+
+        if (!candidatesResponse.ok || candidatesData.status !== 'success') {
+            throw new Error(candidatesData.message || 'Failed to load supervisor candidates.');
+        }
+
+        const supervisors = Array.isArray(candidatesData.supervisors) ? candidatesData.supervisors : [];
+        if (supervisors.length === 0) {
+            throw new Error(__('no_payroll_supervisor_candidates_found', 'No supervisors available to assign.'));
+        }
+
+        const supervisorOptionsHtml = supervisors.map(s => {
+            const empId = String(s.emp_id || '');
+            return `<option value="${empId.replace(/"/g, '&quot;')}">${String(s.name || 'N/A')} (${empId})</option>`;
+        }).join('');
+
+        // Step 1 - select the Direct Supervisor
+        const step1Result = await Swal.fire({
+            title: __('select_payroll_supervisor_modal_title', 'Select Direct Supervisor'),
+            html: `
+                <div class="text-left">
+                    <label for="payrollSupervisorAssignSelect" class="font-weight-bold"><?= __('direct_supervisor', 'Direct Supervisor') ?></label>
+                    <select id="payrollSupervisorAssignSelect" class="form-control mb-2"><option value="" selected><?= __('select_direct_supervisor', 'Select Direct Supervisor') ?></option>${supervisorOptionsHtml}</select>
+                    <button type="button" id="downloadPayrollSupervisorAssignmentsBtn" class="btn btn-outline-secondary btn-sm mt-1">
+                        <i class="fa fa-solid fa-file-arrow-down"></i> <?= __('download_payroll_supervisor_assignments_button', 'Download Supervisor Assignments') ?>
+                    </button>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            confirmButtonText: __('next', 'Next'),
+            cancelButtonText: __('cancel', 'Cancel'),
+            allowOutsideClick: false,
+            width: '40%',
+            didOpen: () => {
+                const select = document.getElementById('payrollSupervisorAssignSelect');
+                if (window.jQuery && typeof jQuery.fn.select2 === 'function' && select) {
+                    jQuery(select).select2({
+                        width: '100%',
+                        dropdownParent: jQuery('.swal2-popup'),
+                        placeholder: __('select_direct_supervisor', 'Select Direct Supervisor')
+                    });
+                }
+                document.getElementById('downloadPayrollSupervisorAssignmentsBtn').addEventListener('click', downloadPayrollSupervisorAssignments);
+            },
+            preConfirm: () => {
+                const value = $('#payrollSupervisorAssignSelect').val();
+                if (!value) {
+                    Swal.showValidationMessage(__('select_direct_supervisor', 'Please select a supervisor.'));
+                    return false;
+                }
+                return value;
+            }
+        });
+
+        if (!step1Result.isConfirmed || !step1Result.value) {
+            return;
+        }
+        const selectedSupervisorEmpId = step1Result.value;
+        const selectedSupervisorLabel = supervisors.find(s => String(s.emp_id) === String(selectedSupervisorEmpId));
+
+        // Step 2 - multi-select which employees report to that supervisor
+        Swal.fire({
+            title: __('loading', 'Loading'),
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const employeesResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'get_employees_for_payroll_supervisor_assignment' }).toString()
+        });
+        const employeesData = await employeesResponse.json();
+        Swal.close();
+
+        if (!employeesResponse.ok || employeesData.status !== 'success') {
+            throw new Error(employeesData.message || 'Failed to load employees.');
+        }
+
+        const employees = Array.isArray(employeesData.employees) ? employeesData.employees : [];
+        const employeeOptionsHtml = employees.map(emp => {
+            const empId = String(emp.emp_id || '');
+            const isAlreadyAssigned = !!(emp.supervisor_emp_id && String(emp.supervisor_emp_id) !== '');
+            const disabledAttr = isAlreadyAssigned ? ' disabled="disabled"' : '';
+            const label = isAlreadyAssigned
+                ? `${String(emp.name || 'N/A')} (${empId}) - ${__('already_assigned_to', 'Already assigned to')} ${String(emp.supervisor_name || '')}`
+                : `${String(emp.name || 'N/A')} (${empId})`;
+            return `<option value="${empId.replace(/"/g, '&quot;')}"${disabledAttr}>${label}</option>`;
+        }).join('');
+
+        const step2Result = await Swal.fire({
+            title: `${__('select_employees_to_assign', 'Select Employees')} - ${selectedSupervisorLabel ? selectedSupervisorLabel.name : ''}`,
+            html: `
+                <div class="text-left">
+                    <label for="payrollEmployeesAssignSelect" class="font-weight-bold"><?= __('employees', 'Employees') ?></label>
+                    <select id="payrollEmployeesAssignSelect" class="form-control mb-2" multiple>${employeeOptionsHtml}</select>
+                    <div class="small text-muted mb-2">${__('already_assigned_employees_locked_hint', 'Employees already assigned to a payroll supervisor are locked and cannot be re-selected here.')}</div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            confirmButtonText: __('assign', 'Assign'),
+            cancelButtonText: __('cancel', 'Cancel'),
+            allowOutsideClick: false,
+            width: '55%',
+            didOpen: () => {
+                const select = document.getElementById('payrollEmployeesAssignSelect');
+                if (window.jQuery && typeof jQuery.fn.select2 === 'function' && select) {
+                    jQuery(select).select2({
+                        width: '100%',
+                        dropdownParent: jQuery('.swal2-popup'),
+                        placeholder: __('select_employees_to_assign', 'Select Employees')
+                    });
+                }
+            },
+            preConfirm: () => {
+                const values = $('#payrollEmployeesAssignSelect').val();
+                if (!values || values.length === 0) {
+                    Swal.showValidationMessage(__('please_select_one_employee_for_supervisor_assignment', 'Please select at least one employee.'));
+                    return false;
+                }
+                return values;
+            }
+        });
+
+        if (!step2Result.isConfirmed || !step2Result.value) {
+            return;
+        }
+
+        Swal.fire({
+            title: __('please_wait') || 'Please wait',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const assignResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({
+                action: 'assign_payroll_supervisor',
+                employee_ids: JSON.stringify(step2Result.value),
+                supervisor_emp_id: selectedSupervisorEmpId
+            }).toString()
+        });
+        const assignData = await assignResponse.json();
+        Swal.close();
+
+        if (!assignResponse.ok || assignData.status !== 'success') {
+            throw new Error(assignData.message || 'Failed to assign supervisor.');
+        }
+
+        await Swal.fire(__('success', 'Success'), __('payroll_supervisor_assigned_successfully') || 'Payroll supervisor assigned successfully.', 'success');
+    } catch (error) {
+        Swal.close();
+        await Swal.fire(__('error', 'Error'), error.message || 'Failed to assign payroll supervisor.', 'error');
+    }
+}
+
+function downloadPayrollSupervisorAssignments() {
+    window.open('./download_payroll_supervisor_assignments.php', '_blank');
 }
 
 async function generatePayroll() {
@@ -5080,7 +5277,7 @@ async function showPayrollDetails(empId, empName, month) {
                                 <h6 class="card-title border-bottom pb-2 mb-3">${__('basic_components_title')}</h6>
                                 <div class="row g-2">
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('basic_salary_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-wallet me-1"></i>${__('basic_salary_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 bg-light rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5088,7 +5285,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('housing_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-home me-1"></i>${__('housing_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5096,7 +5293,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('transport_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-car me-1"></i>${__('transport_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5104,7 +5301,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('food_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-utensils me-1"></i>${__('food_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5122,7 +5319,7 @@ async function showPayrollDetails(empId, empName, month) {
                                 <h6 class="card-title border-bottom pb-2 mb-3">${__('additional_components_title')}</h6>
                                 <div class="row g-2">
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('miscellaneous_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-shapes me-1"></i>${__('miscellaneous_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5130,7 +5327,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('cashier_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-cash-register me-1"></i>${__('cashier_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5138,7 +5335,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('fuel_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-gas-pump me-1"></i>${__('fuel_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5146,7 +5343,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('telephone_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-phone-alt me-1"></i>${__('telephone_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5154,7 +5351,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('guard_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-shield-alt me-1"></i>${__('guard_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5162,7 +5359,7 @@ async function showPayrollDetails(empId, empName, month) {
                                         </div>
                                     </div>
                                     <div class="col-6">
-                                        <label class="small text-muted mb-1">${__('other_allowance_label')}</label>
+                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-layer-group me-1"></i>${__('other_allowance_label')}</label>
                                         <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
                                             <input type="text" class="form-control bg-light" 
@@ -5179,7 +5376,7 @@ async function showPayrollDetails(empId, empName, month) {
                             <div class="card-body py-2">
                                 <div class="row align-items-center">
                                     <div class="col-md-8">
-                                        <h6 class="mb-0 text-primary">${__('total_gross_salary_label')}</h6>
+                                        <h6 class="mb-0 text-primary"><i class="fas fa-coins me-1"></i>${__('total_gross_salary_label')}</h6>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="input-group input-group-sm">

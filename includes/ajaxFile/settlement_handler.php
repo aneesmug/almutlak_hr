@@ -605,7 +605,10 @@ function approveSettlement($settlementManager, $currentUserId) {
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
+                // Emergency vacations allowed through - working-days-before-departure payout
+                // only, never vacation_salary/GOSI (still gated on $is_settlement_payable_vacation,
+                // unaffected and still false for Emergency).
+                $calculate_payments = !$is_non_payable_leave && ($is_emergency || $is_settlement_payable_vacation);
                 
                 if ($calculate_payments) {
                     $basic_salary = (float)($settlementData['basic'] ?? 0);
@@ -637,7 +640,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         $overtime_amount = 0;
                         $deduction_amount = 0;
                         
-                        if ($is_settlement_payable_vacation && !empty($settlementData['start_date'])) {
+                        if (($is_settlement_payable_vacation || $is_emergency) && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $start_day = (int)$start_date_obj->format('d');
@@ -693,7 +696,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                         
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
-                        } elseif ($is_settlement_payable_vacation) {
+                        } elseif ($is_settlement_payable_vacation || $is_emergency) {
                             $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
@@ -1312,7 +1315,10 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
+                // Emergency vacations allowed through - working-days-before-departure payout
+                // only, never vacation_salary/GOSI (still gated on $is_settlement_payable_vacation,
+                // unaffected and still false for Emergency).
+                $calculate_payments = !$is_non_payable_leave && ($is_emergency || $is_settlement_payable_vacation);
                 
                 if ($calculate_payments) {
                     $basic_salary = (float)($settlementData['basic'] ?? 0);
@@ -1344,7 +1350,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         $overtime_amount = 0;
                         $deduction_amount = 0;
                         
-                        if ($is_settlement_payable_vacation && !empty($settlementData['start_date'])) {
+                        if (($is_settlement_payable_vacation || $is_emergency) && !empty($settlementData['start_date'])) {
                             try {
                                 $start_date_obj = new DateTime($settlementData['start_date']);
                                 $start_day = (int)$start_date_obj->format('d');
@@ -1400,7 +1406,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                         
                         if ($is_encashment) {
                             $calculatedPayableAmount = 0;
-                        } elseif ($is_settlement_payable_vacation) {
+                        } elseif ($is_settlement_payable_vacation || $is_emergency) {
                             $calculatedPayableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                         }
                     }
@@ -1865,7 +1871,10 @@ function getSettlementDetails($settlementManager) {
                 $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
                 
                 // Calculate only if payable
-                $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
+                // Emergency vacations allowed through - working-days-before-departure payout
+                // only, never vacation_salary/GOSI (still gated on $is_settlement_payable_vacation,
+                // unaffected and still false for Emergency).
+                $calculate_payments = !$is_non_payable_leave && ($is_emergency || $is_settlement_payable_vacation);
                 
                 if ($calculate_payments && $salary) {
                     $basic_salary = (float)($salary['basic'] ?? 0);
@@ -1895,8 +1904,9 @@ function getSettlementDetails($settlementManager) {
                     $overtime_amount = 0;
                     $deduction_amount = 0;
                     
-                    // Calculate working days salary for vacations removed from payroll.
-                    if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($vacation['start_date'])) {
+                    // Calculate working days salary for vacations removed from payroll, and
+                    // for Emergency (pay for days actually worked before an emergency departure).
+                    if (($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) && !empty($vacation['start_date'])) {
                         $start_date_obj = new DateTime($vacation['start_date']);
                         $start_day = (int)$start_date_obj->format('d');
 
@@ -1946,10 +1956,11 @@ function getSettlementDetails($settlementManager) {
                     }
                     
                     // Calculate total payable - MUST MATCH vacation_report_details.php exactly.
+                    // Emergency included here too (working-days-only payout, no vacation_salary/GOSI).
                     if ($is_encashment) {
                         $calculatedPayableAmount = 0; // Handled in encashment section
-                    } elseif ($is_settlement_payable_vacation) {
-                        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+                    } elseif ($is_settlement_payable_vacation || $is_emergency) {
+                        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) ? $working_days_salary : 0;
                         $calculatedPayableAmount = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
                     } else {
                         // Local Vacation + Annual or other

@@ -451,6 +451,10 @@ require_once __DIR__ . '/role_check.php';
 $is_system_admin = ($user_type === 'administrator');
 $isGM = ($user_type === 'gm');
 
+// --- License Enforcement ---
+require_once __DIR__ . '/license_check.php';
+license_enforce($conDB);
+
 // HR Team Roles (based on user_type)
 $isHR_Manager = ($user_type === 'hr');
 $isHR_Senior_BP = ($user_type === 'hr_senior_bp');

@@ -125,6 +125,38 @@ if (!function_exists('ensurePayrollSupervisorReportDispatchTable')) {
     }
 }
 
+if (!function_exists('getLatestGeneratedPayrollMonth')) {
+    // The "Send Payroll Report by Direct Supervisor" pipeline reports each supervisor's
+    // team using the most recently generated payroll cycle system-wide, not whichever
+    // month the approval-request card it was opened from happens to be for - approval
+    // can lag behind generation, and the supervisor should always get the freshest figures.
+    function getLatestGeneratedPayrollMonth(PDO $pdo): string
+    {
+        $stmt = $pdo->query("SELECT MAX(month_year) FROM payrolls");
+        return (string)($stmt->fetchColumn() ?: '');
+    }
+}
+
+if (!function_exists('ensurePayrollSupervisorAssignmentsTable')) {
+    // Payroll-specific "who reports this employee's payroll to whom" mapping - kept
+    // separate from employees.supervisor_id (which drives vacation-approval routing in
+    // manage_employee_supervisors.php) so HR can assign a payroll reporting supervisor
+    // without disturbing the vacation approval chain.
+    function ensurePayrollSupervisorAssignmentsTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_supervisor_assignments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            emp_id VARCHAR(50) NOT NULL,
+            supervisor_emp_id VARCHAR(50) NOT NULL,
+            assigned_by VARCHAR(50) NOT NULL,
+            assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_emp_assignment (emp_id),
+            INDEX idx_supervisor_emp_id (supervisor_emp_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+    }
+}
+
 if (!function_exists('payrollSupervisorHasReportAccess')) {
     // True when this employee is the actual recipient of a "Send Payroll Report by
     // Direct Supervisor" batch for this request/month (either as the selected primary

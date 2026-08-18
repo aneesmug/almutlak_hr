@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/helper_functions.php';
 require_once __DIR__ . '/../../includes/ApprovalChainManager.php';
 require_once __DIR__ . '/../../includes/payroll_approval_helpers.php';
+require_once __DIR__ . '/../../includes/special_access_helper.php';
 
 if (empty($_SESSION['empid'])) {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
@@ -54,6 +55,18 @@ switch ($action) {
 
     case 'send_supervisor_payroll_report':
         sendSupervisorPayrollReport($pdo, $conDB, $currentUserId);
+        break;
+
+    case 'get_payroll_supervisor_candidates':
+        getPayrollSupervisorCandidates($pdo, $conDB, $currentUserId);
+        break;
+
+    case 'assign_payroll_supervisor':
+        assignPayrollSupervisorForEmployees($pdo, $conDB, $currentUserId);
+        break;
+
+    case 'get_employees_for_payroll_supervisor_assignment':
+        getEmployeesForPayrollSupervisorAssignment($pdo, $conDB, $currentUserId);
         break;
 
     case 'upload_manager_payroll_excel':
@@ -1553,6 +1566,7 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
 
     try {
         ensurePayrollSupervisorReportDispatchTable($pdo);
+        ensurePayrollSupervisorAssignmentsTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
@@ -1570,10 +1584,13 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
             throw new Exception('Payroll request not found.');
         }
 
-        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
+        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        if ($monthValue === '') {
+            throw new Exception('No generated payroll found.');
+        }
 
         $supervisorsStmt = $pdo->prepare("SELECT
-                e.supervisor_id AS supervisor_emp_id,
+                psa.supervisor_emp_id AS supervisor_emp_id,
                 sup.name AS supervisor_name,
                 al.email AS supervisor_email,
                 COUNT(DISTINCT p.emp_id) AS employee_count,
@@ -1582,19 +1599,18 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
                 MAX(dispatch.merged_into_supervisor_emp_id) AS merged_into_supervisor_emp_id
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
-            INNER JOIN employees sup ON sup.emp_id = e.supervisor_id
-            INNER JOIN admin_login al ON al.emp_id = e.supervisor_id
+            INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = e.emp_id
+            INNER JOIN employees sup ON sup.emp_id = psa.supervisor_emp_id
+            INNER JOIN admin_login al ON al.emp_id = psa.supervisor_emp_id
             LEFT JOIN payroll_supervisor_report_dispatch dispatch
                 ON dispatch.request_inv_no = :request_inv_no
                AND dispatch.payroll_month = :dispatch_month
-               AND dispatch.supervisor_emp_id = e.supervisor_id
+               AND dispatch.supervisor_emp_id = psa.supervisor_emp_id
             WHERE p.month_year = :month_year
-              AND e.supervisor_id IS NOT NULL
-              AND TRIM(e.supervisor_id) <> ''
               AND al.email IS NOT NULL
               AND TRIM(al.email) <> ''
               AND sup.status = 1
-            GROUP BY e.supervisor_id, sup.name, al.email
+            GROUP BY psa.supervisor_emp_id, sup.name, al.email
             ORDER BY sup.name ASC");
         $supervisorsStmt->execute([
             ':request_inv_no' => $requestInvNo,
@@ -1603,66 +1619,11 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
         ]);
         $supervisors = $supervisorsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Any admin_login account on the company domain (@almutlak.com) should always
-        // be selectable as a Direct Supervisor / "also include" target - not only
-        // employees who already happen to be someone's supervisor_id this month (e.g.
-        // HR Payroll/HR Senior BP staff who directly supervise their own team, or any
-        // manager with zero direct reports this particular month). Add whoever the
-        // main query above missed, using their own direct-report count (may be 0).
-        $knownSupervisorIds = array_map(static function ($row) {
-            return (string)($row['supervisor_emp_id'] ?? '');
-        }, $supervisors);
-
-        $companyEmailCandidatesStmt = $pdo->prepare("SELECT al.emp_id AS supervisor_emp_id, e.name AS supervisor_name, al.email AS supervisor_email
-            FROM admin_login al
-            INNER JOIN employees e ON e.emp_id = al.emp_id
-            WHERE al.email IS NOT NULL
-              AND TRIM(al.email) <> ''
-              AND LOWER(TRIM(al.email)) LIKE '%@almutlak.com'
-              AND e.status = 1");
-        $companyEmailCandidatesStmt->execute();
-        $companyEmailCandidates = $companyEmailCandidatesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $teamStmt = $pdo->prepare("SELECT COUNT(DISTINCT p.emp_id) AS employee_count, COALESCE(SUM(p.net_salary), 0) AS total_net_salary
-            FROM payrolls p
-            INNER JOIN employees e ON e.emp_id = p.emp_id
-            WHERE p.month_year = :month_year
-              AND e.supervisor_id = :supervisor_emp_id");
-        $candidateDispatchStmt = $pdo->prepare("SELECT sent_at, merged_into_supervisor_emp_id
-            FROM payroll_supervisor_report_dispatch
-            WHERE request_inv_no = :request_inv_no
-              AND payroll_month = :payroll_month
-              AND supervisor_emp_id = :supervisor_emp_id
-            LIMIT 1");
-
-        foreach ($companyEmailCandidates as $candidate) {
-            $candidateEmpId = (string)($candidate['supervisor_emp_id'] ?? '');
-            if ($candidateEmpId === '' || in_array($candidateEmpId, $knownSupervisorIds, true)) {
-                continue;
-            }
-
-            $teamStmt->execute([':month_year' => $monthValue, ':supervisor_emp_id' => $candidateEmpId]);
-            $teamRow = $teamStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-            $candidateDispatchStmt->execute([
-                ':request_inv_no' => $requestInvNo,
-                ':payroll_month' => $monthValue,
-                ':supervisor_emp_id' => $candidateEmpId
-            ]);
-            $candidateDispatchRow = $candidateDispatchStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-
-            $supervisors[] = [
-                'supervisor_emp_id' => $candidateEmpId,
-                'supervisor_name' => (string)($candidate['supervisor_name'] ?? 'N/A'),
-                'supervisor_email' => (string)($candidate['supervisor_email'] ?? ''),
-                'employee_count' => (int)($teamRow['employee_count'] ?? 0),
-                'total_net_salary' => (float)($teamRow['total_net_salary'] ?? 0),
-                'sent_at' => (string)($candidateDispatchRow['sent_at'] ?? ''),
-                'merged_into_supervisor_emp_id' => (string)($candidateDispatchRow['merged_into_supervisor_emp_id'] ?? '')
-            ];
-            $knownSupervisorIds[] = $candidateEmpId;
-        }
-
+        // Candidates come exclusively from payroll_supervisor_assignments now - only
+        // employees explicitly assigned as someone's payroll reporting supervisor (via
+        // "Assign Direct Supervisor (Payroll)" in generate_payroll.php) show up here.
+        // No more falling back to every @almutlak.com admin_login account regardless of
+        // whether they actually have any assigned employees.
         usort($supervisors, static function ($a, $b) {
             return strcasecmp((string)($a['supervisor_name'] ?? ''), (string)($b['supervisor_name'] ?? ''));
         });
@@ -1700,6 +1661,8 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
     $supervisorEmpId = trim((string)($_POST['supervisor_emp_id'] ?? ''));
 
     try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
             throw new Exception('Only HR Payroll and HR Senior BP can access this action.');
@@ -1716,7 +1679,10 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
             throw new Exception('Payroll request not found.');
         }
 
-        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
+        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        if ($monthValue === '') {
+            throw new Exception('No generated payroll found.');
+        }
 
         $supervisorStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
             FROM admin_login al
@@ -1738,10 +1704,10 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
                 COALESCE(c.comp_name, '') AS company_name
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
+            INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = p.emp_id AND psa.supervisor_emp_id = :supervisor_emp_id
             LEFT JOIN department d ON d.id = e.dept
             LEFT JOIN companies c ON c.comp_id = e.comp_no
             WHERE p.month_year = :month_year
-              AND e.supervisor_id = :supervisor_emp_id
             ORDER BY e.name ASC");
         $employeesStmt->execute([
             ':month_year' => $monthValue,
@@ -1761,6 +1727,197 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
                     'company' => (string)($row['company_name'] ?? '')
                 ];
             }, $employees)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// True when the current user is allowed to view/manage the payroll-specific direct
+// supervisor assignments (separate from employees.supervisor_id / vacation routing).
+// Always allowed for administrator/hr_payroll/hr_senior_bp, otherwise gated by the
+// 'assign_payroll_supervisor' Special Access key so it can be delegated per-employee.
+function currentUserCanManagePayrollSupervisorAssignments(PDO $pdo, $conDB, string $currentUserId): bool
+{
+    $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+    if (in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp', 'administrator'], true)) {
+        return true;
+    }
+
+    return user_has_special_access($conDB, $currentUserId, 'assign_payroll_supervisor', '', $currentUserRole, $currentUserRole === 'administrator');
+}
+
+// Parses employee_ids from POST as either a JSON array or a comma-separated string,
+// mirroring the supervisor_ids parsing already used by sendSupervisorPayrollReport().
+function parsePayrollEmployeeIdsFromPost($rawInput): array
+{
+    $employeeIds = [];
+    if (is_array($rawInput)) {
+        $employeeIds = $rawInput;
+    } elseif (is_string($rawInput)) {
+        $raw = trim($rawInput);
+        if ($raw !== '') {
+            if ($raw[0] === '[') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $employeeIds = $decoded;
+                }
+            }
+            if (empty($employeeIds)) {
+                $employeeIds = explode(',', $raw);
+            }
+        }
+    }
+
+    return array_values(array_unique(array_filter(array_map(static function ($value) {
+        return trim((string)$value);
+    }, $employeeIds), static function ($value) {
+        return $value !== '';
+    })));
+}
+
+function getPayrollSupervisorCandidates(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to assign payroll supervisors.');
+        }
+
+        $candidatesStmt = $pdo->prepare("SELECT al.emp_id, e.name, al.email
+            FROM admin_login al
+            INNER JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.user_type <> 'employee'
+              AND al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+              AND e.status = 1
+            ORDER BY e.name ASC");
+        $candidatesStmt->execute();
+        $candidates = $candidatesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'status' => 'success',
+            'supervisors' => array_map(static function ($row) {
+                return [
+                    'emp_id' => (string)($row['emp_id'] ?? ''),
+                    'name' => (string)($row['name'] ?? 'N/A'),
+                    'email' => (string)($row['email'] ?? '')
+                ];
+            }, $candidates)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function assignPayrollSupervisorForEmployees(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to assign payroll supervisors.');
+        }
+
+        $employeeIds = parsePayrollEmployeeIdsFromPost($_POST['employee_ids'] ?? '');
+        $supervisorEmpId = trim((string)($_POST['supervisor_emp_id'] ?? ''));
+
+        if (empty($employeeIds) || $supervisorEmpId === '') {
+            throw new Exception('Missing employees or supervisor.');
+        }
+
+        $supervisorStmt = $pdo->prepare("SELECT al.emp_id, al.email, e.name
+            FROM admin_login al
+            INNER JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id = :emp_id
+              AND al.email IS NOT NULL
+              AND TRIM(al.email) <> ''
+            LIMIT 1");
+        $supervisorStmt->execute([':emp_id' => $supervisorEmpId]);
+        $supervisor = $supervisorStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$supervisor) {
+            throw new Exception('Selected supervisor has no registered email.');
+        }
+
+        // An employee already assigned to a (any) payroll supervisor is locked - the UI
+        // disables them in the picker, and this is the server-side enforcement of that
+        // same rule so a direct API call can't silently reassign them either. Use
+        // manage_employee_supervisors.php-style explicit reassignment later if that's
+        // ever needed; for now assignment here is one-shot per employee.
+        $existingStmt = $pdo->prepare("SELECT emp_id FROM payroll_supervisor_assignments WHERE emp_id IN (" . implode(',', array_fill(0, count($employeeIds), '?')) . ")");
+        $existingStmt->execute($employeeIds);
+        $alreadyAssignedIds = array_map('strval', $existingStmt->fetchAll(PDO::FETCH_COLUMN));
+
+        $employeeIdsToAssign = array_values(array_diff($employeeIds, $alreadyAssignedIds));
+
+        $insertStmt = $pdo->prepare("INSERT INTO payroll_supervisor_assignments
+                (emp_id, supervisor_emp_id, assigned_by)
+            VALUES
+                (:emp_id, :supervisor_emp_id, :assigned_by)");
+
+        $assignedCount = 0;
+        foreach ($employeeIdsToAssign as $employeeId) {
+            $insertStmt->execute([
+                ':emp_id' => $employeeId,
+                ':supervisor_emp_id' => $supervisorEmpId,
+                ':assigned_by' => $currentUserId
+            ]);
+            $assignedCount++;
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Payroll supervisor assigned successfully.',
+            'assigned_count' => $assignedCount,
+            'skipped_already_assigned' => $alreadyAssignedIds,
+            'supervisor_name' => (string)($supervisor['name'] ?? '')
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// Full active-employee list for the "Assign Direct Supervisor (Payroll)" step-2 picker -
+// independent of any payroll month/table selection. Each row carries its current payroll
+// supervisor assignment (if any) so the frontend can lock/disable already-assigned
+// employees, since an employee can only report their payroll to one supervisor at a time.
+function getEmployeesForPayrollSupervisorAssignment(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to view payroll supervisor assignments.');
+        }
+
+        $employeesStmt = $pdo->prepare("SELECT
+                e.emp_id,
+                e.name,
+                COALESCE(d.dep_nme, '') AS department_name,
+                COALESCE(c.comp_name, '') AS company_name,
+                psa.supervisor_emp_id,
+                sup.name AS supervisor_name
+            FROM employees e
+            LEFT JOIN department d ON d.id = e.dept
+            LEFT JOIN companies c ON c.comp_id = e.comp_no
+            LEFT JOIN payroll_supervisor_assignments psa ON psa.emp_id = e.emp_id
+            LEFT JOIN employees sup ON sup.emp_id = psa.supervisor_emp_id
+            WHERE e.status = 1
+            ORDER BY e.name ASC");
+        $employeesStmt->execute();
+        $rows = $employeesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'status' => 'success',
+            'employees' => array_map(static function ($row) {
+                return [
+                    'emp_id' => (string)($row['emp_id'] ?? ''),
+                    'name' => (string)($row['name'] ?? ''),
+                    'department' => (string)($row['department_name'] ?? ''),
+                    'company' => (string)($row['company_name'] ?? ''),
+                    'supervisor_emp_id' => (string)($row['supervisor_emp_id'] ?? ''),
+                    'supervisor_name' => (string)($row['supervisor_name'] ?? '')
+                ];
+            }, $rows)
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -2768,6 +2925,7 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
 
     try {
         ensurePayrollSupervisorReportDispatchTable($pdo);
+        ensurePayrollSupervisorAssignmentsTable($pdo);
 
         $currentUserRole = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
         if (!in_array($currentUserRole, ['hr_payroll', 'hr_senior_bp'], true) && $currentUserRole !== 'administrator') {
@@ -2798,7 +2956,10 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
             throw new Exception('Supervisor reports can be sent only when payroll is pending with HR Payroll.');
         }
 
-        $monthValue = (string)($requestRow['payroll_month'] ?? $monthYear);
+        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        if ($monthValue === '') {
+            throw new Exception('No generated payroll found.');
+        }
 
         $totalStmt = $pdo->prepare("SELECT COUNT(DISTINCT emp_id) FROM payrolls WHERE month_year = :month_year");
         $totalStmt->execute([':month_year' => $monthValue]);
@@ -2870,10 +3031,11 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
                     p.status
                 FROM payrolls p
                 INNER JOIN employees e ON e.emp_id = p.emp_id
+                INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = p.emp_id
                 LEFT JOIN department d ON d.id = e.dept
                 LEFT JOIN companies c ON c.comp_id = e.comp_no
                 WHERE p.month_year = ?
-                  AND e.supervisor_id IN ($placeholders)
+                  AND psa.supervisor_emp_id IN ($placeholders)
                 ORDER BY e.name ASC");
         };
                 $benefitsStmt = $pdo->prepare("SELECT

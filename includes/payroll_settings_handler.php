@@ -45,7 +45,7 @@ function ensurePayrollParamSettings($conDB) {
         ['vacation_payroll_dropout_days', '30', 'vacation_payroll', "Vacation days after which an employee is dropped from that month's payroll generation"],
         ['overtime_monthly_hours', '240', 'overtime_settings', 'Standard monthly working hours used as the divisor for overtime hourly rate'],
         ['overtime_extra_multiplier', '0.5', 'overtime_settings', 'Extra multiplier applied to the basic-salary hourly portion of overtime pay'],
-        ['deduction_base_components', '["basic_salary","housing_allowance","transport_allowance","miscellaneous_allowance","cashier_allowance","fuel_allowance","telephone_allowance","other_allowance","guard_allowance"]', 'deduction_settings', 'Salary components summed as the base for percentage-based deductions (e.g. GOSI)'],
+        ['deduction_base_components', '["basic_salary","housing_allowance"]', 'deduction_settings', 'Salary components summed as the base for percentage-based deductions (e.g. GOSI)'],
         ['salary_increment_max_amount', '2000', 'salary_increment_settings', 'Maximum salary increment amount allowed per request'],
     ];
 

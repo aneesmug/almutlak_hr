@@ -10,8 +10,10 @@ require_once("./../../includes/session_check.php");
 require_once("./../../includes/payroll_approval_helpers.php");
 
 function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
+    global $conDB;
     $monthStart = $monthYear . '-01';
     $monthEnd = date('Y-m-t', strtotime($monthStart));
+    $localVacationMinDays = (int) get_setting_num($conDB, 'vacation_gosi_local_min_days', 20);
 
     $stmt = $pdo->prepare("SELECT v.id
         FROM emp_vacation v
@@ -33,7 +35,7 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
                 (
                     LOWER(COALESCE(v.vac_type, '')) = 'local vacation'
                     AND LOWER(COALESCE(v.fly_type, '')) = 'annual'
-                    AND COALESCE(v.vacdays, 0) >= 20
+                    AND COALESCE(v.vacdays, 0) >= :local_min_days
                     AND LOWER(COALESCE(v.vacation_salary_type, '')) = 'payroll'
                 )
           )
@@ -41,7 +43,8 @@ function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
     $stmt->execute([
         ':emp_id' => $empId,
         ':month_start' => $monthStart,
-        ':month_end' => $monthEnd
+        ':month_end' => $monthEnd,
+        ':local_min_days' => $localVacationMinDays
     ]);
 
     return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
@@ -273,6 +276,8 @@ try {
 
     $joiningDeductionPreviewAmount = 0.0;
     $joiningDeductionPreviewDays = 0;
+    $vacationReturnDeductionPreviewAmount = 0.0;
+    $vacationReturnDeductionPreviewDays = 0;
 
     if (!$payroll) {
         // If no generated payroll, fetch basic salary components
@@ -306,12 +311,98 @@ try {
                 }
             }
 
+            // Mirrors the vacation-return lookup in process_payroll.php: preview the
+            // deduction here too, so HR sees it before actually clicking Generate.
+            if ($joiningDeductionPreviewDays === 0) {
+                $stmtVacationReturnPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                        FROM emp_vacation v
+                        LEFT JOIN (
+                                SELECT rr1.vacation_id, rr1.final_approved_date
+                                FROM rejoin_requests rr1
+                                INNER JOIN (
+                                        SELECT vacation_id, MAX(id) AS latest_id
+                                        FROM rejoin_requests
+                                        WHERE status = 'approved'
+                                            AND final_approved_date IS NOT NULL
+                                        GROUP BY vacation_id
+                                ) rr_latest ON rr_latest.latest_id = rr1.id
+                        ) rr ON rr.vacation_id = v.id
+                        WHERE v.emp_id = :emp_id
+                            AND v.current_status IN ('approved', 'completed')
+                            AND v.start_date <= :month_start_upper
+                            AND COALESCE(rr.final_approved_date, v.return_date) >= :month_start_lower
+                            AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
+                        ORDER BY COALESCE(rr.final_approved_date, v.return_date) DESC
+                        LIMIT 1");
+                $stmtVacationReturnPreview->execute([
+                    ':emp_id' => $empId,
+                    ':month_start_upper' => $monthStartDate->format('Y-m-d'),
+                    ':month_start_lower' => $monthStartDate->format('Y-m-d'),
+                    ':month_end' => $monthEndDate->format('Y-m-d')
+                ]);
+                $vacationReturnPreview = $stmtVacationReturnPreview->fetch(PDO::FETCH_ASSOC);
+
+                if ($vacationReturnPreview && !empty($vacationReturnPreview['effective_return_date'])) {
+                    $effectiveReturnDatePreview = new DateTime($vacationReturnPreview['effective_return_date']);
+                    $effectiveReturnDatePreview->setTime(0, 0, 0);
+
+                    // Mirrors the chaining fix in process_payroll.php - a back-to-back
+                    // follow-on vacation (e.g. Emergency right after Annual) must extend
+                    // the previewed return date too, otherwise the preview undercounts
+                    // exactly like the un-chained generation logic used to.
+                    $stmtVacationChainNextPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                            FROM emp_vacation v
+                            LEFT JOIN (
+                                    SELECT rr1.vacation_id, rr1.final_approved_date
+                                    FROM rejoin_requests rr1
+                                    INNER JOIN (
+                                            SELECT vacation_id, MAX(id) AS latest_id
+                                            FROM rejoin_requests
+                                            WHERE status = 'approved'
+                                                AND final_approved_date IS NOT NULL
+                                            GROUP BY vacation_id
+                                    ) rr_latest ON rr_latest.latest_id = rr1.id
+                            ) rr ON rr.vacation_id = v.id
+                            WHERE v.emp_id = :emp_id
+                                AND v.current_status IN ('approved', 'completed')
+                                AND v.start_date >= :prev_return_date
+                                AND v.start_date <= :prev_return_date_plus1
+                            ORDER BY v.start_date ASC
+                            LIMIT 1");
+
+                    $chainGuardPreview = 0;
+                    while ($chainGuardPreview < 12) {
+                        $prevReturnDatePreview = clone $effectiveReturnDatePreview;
+                        $prevReturnDatePreviewPlus1 = (clone $prevReturnDatePreview)->modify('+1 day');
+                        $stmtVacationChainNextPreview->execute([
+                            ':emp_id' => $empId,
+                            ':prev_return_date' => $prevReturnDatePreview->format('Y-m-d'),
+                            ':prev_return_date_plus1' => $prevReturnDatePreviewPlus1->format('Y-m-d')
+                        ]);
+                        $chainedVacationPreview = $stmtVacationChainNextPreview->fetch(PDO::FETCH_ASSOC);
+                        if (!$chainedVacationPreview || empty($chainedVacationPreview['effective_return_date'])) {
+                            break;
+                        }
+                        $chainedReturnDatePreview = new DateTime($chainedVacationPreview['effective_return_date']);
+                        $chainedReturnDatePreview->setTime(0, 0, 0);
+                        if ($chainedReturnDatePreview <= $effectiveReturnDatePreview) {
+                            break;
+                        }
+                        $effectiveReturnDatePreview = $chainedReturnDatePreview;
+                        $chainGuardPreview++;
+                    }
+
+                    if ($effectiveReturnDatePreview >= $monthStartDate && $effectiveReturnDatePreview <= $monthEndDate) {
+                        $vacationReturnDeductionPreviewDays = max(0, ((int)$effectiveReturnDatePreview->format('d')) - 1);
+                    }
+                }
+            }
+
             foreach ($empSalaryData as $componentKey => $componentValue) {
                 $empSalaryData[$componentKey] = (float)$componentValue * $prorationFactor;
             }
 
-            $joiningDeductionPreviewAmount = round((
-                (float)$empSalaryData['basic']
+            $fullGrossPreview = (float)$empSalaryData['basic']
                 + (float)$empSalaryData['housing']
                 + (float)$empSalaryData['transport']
                 + (float)$empSalaryData['food']
@@ -320,8 +411,11 @@ try {
                 + (float)$empSalaryData['fuel']
                 + (float)$empSalaryData['tel']
                 + (float)$empSalaryData['other']
-                + (float)$empSalaryData['guard']
-            ) / 30 * $joiningDeductionPreviewDays, 2);
+                + (float)$empSalaryData['guard'];
+
+            $joiningDeductionPreviewAmount = round($fullGrossPreview / 30 * $joiningDeductionPreviewDays, 2);
+            $vacationReturnDeductionPreviewAmount = round($fullGrossPreview / 30 * $vacationReturnDeductionPreviewDays, 2);
+            $totalPreviewDeductions = $joiningDeductionPreviewAmount + $vacationReturnDeductionPreviewAmount;
 
             // Populate payroll with basic components if no generated payroll exists yet
             $payroll = [
@@ -335,10 +429,10 @@ try {
                 'telephone_allowance' => (float)$empSalaryData['tel'],
                 'other_allowance' => (float)$empSalaryData['other'],
                 'guard_allowance' => (float)$empSalaryData['guard'],
-                'total_gross_salary' => (float)$empSalaryData['basic'] + (float)$empSalaryData['housing'] + (float)$empSalaryData['transport'] + (float)$empSalaryData['food'] + (float)$empSalaryData['misc'] + (float)$empSalaryData['cashier'] + (float)$empSalaryData['fuel'] + (float)$empSalaryData['tel'] + (float)$empSalaryData['other'] + (float)$empSalaryData['guard'],
+                'total_gross_salary' => $fullGrossPreview,
                 'total_benefits' => 0.00,
-                'total_deductions' => $joiningDeductionPreviewAmount,
-                'net_salary' => ((float)$empSalaryData['basic'] + (float)$empSalaryData['housing'] + (float)$empSalaryData['transport'] + (float)$empSalaryData['food'] + (float)$empSalaryData['misc'] + (float)$empSalaryData['cashier'] + (float)$empSalaryData['fuel'] + (float)$empSalaryData['tel'] + (float)$empSalaryData['other'] + (float)$empSalaryData['guard']) - $joiningDeductionPreviewAmount,
+                'total_deductions' => $totalPreviewDeductions,
+                'net_salary' => $fullGrossPreview - $totalPreviewDeductions,
                 'status' => 'not_generated'
             ];
         } else {
@@ -363,6 +457,75 @@ try {
     $stmtDeductions->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $deductions = $stmtDeductions->fetchAll(PDO::FETCH_ASSOC);
 
+    // GOSI is system-managed and readonly in the UI, so always show the amount the
+    // current employee master (gosi% + active salary components) computes to instead
+    // of trusting a stored note that may predate a later salary/rate change.
+    if ((string)($employee['country'] ?? '') === '191' && !$skipAutoGosiDueToVacation) {
+        if (isset($empSalaryData) && is_array($empSalaryData)) {
+            $gosiSalaryComponents = $empSalaryData; // already fetched above for the not-generated preview path
+        } else {
+            $stmtGosiSalary = $pdo->prepare("SELECT basic, housing, transport, food, misc, cashier, fuel, tel, other, guard
+                FROM emp_salary WHERE emp_id = :emp_id AND status = 1");
+            $stmtGosiSalary->execute([':emp_id' => $empId]);
+            $gosiSalaryComponents = $stmtGosiSalary->fetch(PDO::FETCH_ASSOC);
+        }
+
+        if ($gosiSalaryComponents) {
+            $deductionBaseComponents = json_decode((string) get_setting($conDB, 'deduction_base_components'), true);
+            if (!is_array($deductionBaseComponents) || empty($deductionBaseComponents)) {
+                $deductionBaseComponents = ['basic_salary', 'housing_allowance'];
+            }
+            $gosiComponentMap = [
+                'basic_salary' => 'basic',
+                'housing_allowance' => 'housing',
+                'transport_allowance' => 'transport',
+                'food_allowance' => 'food',
+                'miscellaneous_allowance' => 'misc',
+                'cashier_allowance' => 'cashier',
+                'fuel_allowance' => 'fuel',
+                'telephone_allowance' => 'tel',
+                'other_allowance' => 'other',
+                'guard_allowance' => 'guard'
+            ];
+            $gosiDeductionBase = 0.0;
+            foreach ($deductionBaseComponents as $componentKey) {
+                $sourceKey = $gosiComponentMap[$componentKey] ?? null;
+                if ($sourceKey !== null && array_key_exists($sourceKey, $gosiSalaryComponents)) {
+                    $gosiDeductionBase += (float)$gosiSalaryComponents[$sourceKey];
+                }
+            }
+            $gosiAmount = round($gosiDeductionBase * ((float)($employee['gosi'] ?? 0) / 100), 2);
+
+            $gosiFound = false;
+            foreach ($deductions as &$deductionRow) {
+                if (strtoupper((string)($deductionRow['deduction'] ?? '')) === 'GOSI') {
+                    $deductionRow['note'] = number_format($gosiAmount, 2, '.', '');
+                    $gosiFound = true;
+                    break;
+                }
+            }
+            unset($deductionRow);
+
+            if (!$gosiFound && $gosiAmount > 0) {
+                $deductions[] = [
+                    'id' => null,
+                    'deduction' => 'GOSI',
+                    'note' => number_format($gosiAmount, 2, '.', ''),
+                    'calculation_type' => 'fixed',
+                    'hours' => null,
+                    'minutes' => null,
+                    'days' => null
+                ];
+            }
+        }
+    } else {
+        // Not GOSI-eligible (non-Saudi) or already deducted via a vacation payout this
+        // month - never surface a stale GOSI row in either case.
+        $deductions = array_values(array_filter($deductions, function ($d) {
+            return strtoupper((string)($d['deduction'] ?? '')) !== 'GOSI';
+        }));
+    }
+
     if (!$payroll || ($payroll['status'] ?? '') === 'not_generated') {
         if ($joiningDeductionPreviewAmount > 0 && $joiningDeductionPreviewDays > 0) {
             $deductions[] = [
@@ -373,6 +536,17 @@ try {
                 'hours' => null,
                 'minutes' => null,
                 'days' => $joiningDeductionPreviewDays
+            ];
+        }
+        if ($vacationReturnDeductionPreviewAmount > 0 && $vacationReturnDeductionPreviewDays > 0) {
+            $deductions[] = [
+                'id' => null,
+                'deduction' => 'Vacation Return Deduction (' . $vacationReturnDeductionPreviewDays . ' days)',
+                'note' => number_format($vacationReturnDeductionPreviewAmount, 2, '.', ''),
+                'calculation_type' => 'fixed',
+                'hours' => null,
+                'minutes' => null,
+                'days' => null
             ];
         }
     }

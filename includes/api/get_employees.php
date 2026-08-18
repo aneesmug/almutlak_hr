@@ -84,6 +84,10 @@ if (!empty($monthStart) && !empty($monthEnd)) {
                             AND sv.current_status IN ('approved', 'completed')
                             AND sv.start_date <= :settlement_month_end
                             AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > :settlement_month_end3
+                            )
                         )
                         OR
                         (
@@ -96,6 +100,7 @@ if (!empty($monthStart) && !empty($monthEnd)) {
     $params[':settlement_month_start'] = $monthStart;
     $params[':settlement_month_end2'] = $monthEnd;
     $params[':settlement_month_start2'] = $monthStart;
+    $params[':settlement_month_end3'] = $monthEnd;
 }
 
 if (!$can_see_all_employees && isset($user_dept)) {

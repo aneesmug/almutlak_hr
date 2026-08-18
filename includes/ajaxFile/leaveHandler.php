@@ -4151,7 +4151,12 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $net_encashment = round($encashment_amount - $encash_gosi, 2);
             $total_payable = $net_encashment;
         }
-        else if (!$is_emergency) {
+        else {
+            // Runs for Fly+Annual / Local-Annual-removed-from-payroll AND Emergency now -
+            // Emergency only gets a "working days before departure" payout (below), never
+            // vacation_salary/GOSI (those stay gated on $is_settlement_payable_vacation /
+            // $is_fly_annual|$is_local_annual_removed_from_payroll, which are unaffected
+            // and still correctly false for Emergency).
             // Get salary data
             $basic_salary = (float)($vacation_data['basic'] ?? 0);
             $total_monthly_salary = $basic_salary + 
@@ -4179,8 +4184,9 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $working_daily_rate = ($working_days_month_days > 0) ? round($total_monthly_salary / $working_days_month_days, 2) : 0;
             $hourly_rate_deduction = round(($daily_rate / 8), 2);
             
-            // Calculate working days salary for vacations removed from payroll.
-            if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($vacation_data['start_date'])) {
+            // Calculate working days salary for vacations removed from payroll, and for
+            // Emergency (pay for days actually worked before an emergency departure).
+            if (($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) && !empty($vacation_data['start_date'])) {
                 $start_date_obj = new DateTime($vacation_data['start_date']);
                 $start_day = (int)$start_date_obj->format('d');
 
@@ -4249,8 +4255,9 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             }
             
             // Calculate total payable - MUST MATCH vacation_report_details.php exactly.
-            if ($is_settlement_payable_vacation) {
-                $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+            // Emergency included here too (working-days-only payout, no vacation_salary/GOSI).
+            if ($is_settlement_payable_vacation || $is_emergency) {
+                $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) ? $working_days_salary : 0;
                 $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction, 0);
             }
         }

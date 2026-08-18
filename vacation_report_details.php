@@ -230,7 +230,10 @@ if (mysqli_num_rows($query) == 1) {
     
     // Determine if this vacation gets any payment calculation.
     // Local Annual can be payable only when it is removed from payroll by rule.
-    $calculate_payments = !$is_non_payable_leave && !$is_emergency && (!$is_local_annual || $is_local_annual_removed_from_payroll);
+    // Emergency vacations are never balance-deductible, but still get paid for
+    // days actually worked before departure (working_days_salary only - no
+    // vacation_salary/GOSI for the vacation period itself).
+    $calculate_payments = !$is_non_payable_leave && ($is_emergency || (!$is_local_annual || $is_local_annual_removed_from_payroll));
     
     // Base payroll divisor stays fixed at 30 days for all calculations except Working Days Salary
     $days_in_month = 30;
@@ -273,7 +276,7 @@ if (mysqli_num_rows($query) == 1) {
 
         // === WORKING DAYS SALARY ===
         // For vacations removed from payroll, pay salary for worked days before departure.
-        if (($is_fly_annual || $is_local_annual_removed_from_payroll) && !empty($request['start_date'])) {
+        if (($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) && !empty($request['start_date'])) {
             $start_date_obj = new DateTime($request['start_date']);
             $start_day = (int)$start_date_obj->format('d');
 
@@ -363,11 +366,11 @@ if (mysqli_num_rows($query) == 1) {
     if ($is_encashment) {
         // Encashment: Total is handled in encashment section
         $total_payable = 0;
-    } elseif ($is_fly_annual || $is_local_annual_removed_from_payroll) {
-        // Payable vacations (Fly + Annual OR Local Annual removed from payroll):
-        // Working days component applies to Fly only.
+    } elseif ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) {
+        // Payable vacations (Fly + Annual OR Local Annual removed from payroll OR Emergency):
+        // Working days component applies to Fly/Emergency only.
         // $deduction_amount already includes $other_deductions from the calculation above
-        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll) ? $working_days_salary : 0;
+        $working_component = ($is_fly_annual || $is_local_annual_removed_from_payroll || $is_emergency) ? $working_days_salary : 0;
         $total_payable = round(($working_component + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
     } else {
         // Local Vacation + Annual or other: No payment (stays in payroll)
@@ -1111,12 +1114,12 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <?php endif; ?>
 
-                                <?php if ((($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll'): ?>
+                                <?php if (((($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll) && $vacation_salary_type === 'payroll') || $is_emergency): ?>
                                 <div class="report-section">
                                     <h5 class="section-title"><i class="fa fa-money-check-alt"></i><?= __('payment_details') ?? 'Payment Details' ?></h5>
                                     <div class="payment-summary">
                                         <ul>
-                                            <?php if (($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll): ?>
+                                            <?php if (($is_fly_annual && $meets_min_days_for_salary_choice) || $is_local_annual_removed_from_payroll || $is_emergency): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
@@ -1129,6 +1132,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
                                             </li>
                                             <?php endif; ?>
+                                            <?php if (!$is_emergency): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
@@ -1136,6 +1140,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 </div>
                                                 <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
                                             </li>
+                                            <?php endif; ?>
                                             <?php if ($overtime_amount > 0): ?>
                                             <li>
                                                 <div>

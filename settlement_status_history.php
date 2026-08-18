@@ -86,7 +86,10 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
     $is_non_payable_leave = in_array($vac_type, $non_payable_leave_types);
     
-    $calculate_payments = !$is_non_payable_leave && !$is_emergency && $is_settlement_payable_vacation;
+    // Emergency vacations allowed through - working-days-before-departure payout only,
+    // never vacation_salary/GOSI (still gated on $is_settlement_payable_vacation,
+    // unaffected and still false for Emergency).
+    $calculate_payments = !$is_non_payable_leave && ($is_emergency || $is_settlement_payable_vacation);
     
     if ($calculate_payments) {
         $basic_salary = (float)($settlement['salary_basic'] ?? 0);
@@ -116,8 +119,9 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
             $other_earnings = 0;
             $deduction_amount = 0;
             
-            // Calculate working days salary for deductible payable vacations.
-            if ($is_settlement_payable_vacation && !empty($settlement['start_date'])) {
+            // Calculate working days salary for deductible payable vacations, and for
+            // Emergency (days actually worked before departure).
+            if (($is_settlement_payable_vacation || $is_emergency) && !empty($settlement['start_date'])) {
                 try {
                     $start_date_obj = new DateTime($settlement['start_date']);
                     // Exclude the start day from working-days salary (working days BEFORE departure)
@@ -171,10 +175,11 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
                 }
             }
             
-            // Calculate total payable
+            // Calculate total payable. Emergency included (working-days-only payout, no
+            // vacation_salary/GOSI - both stay 0 since their gates above are unaffected).
             if ($is_encashment) {
                 $payableAmount = 0;
-            } elseif ($is_settlement_payable_vacation) {
+            } elseif ($is_settlement_payable_vacation || $is_emergency) {
                 $payableAmount = round(($working_days_salary + $vacation_salary) + $overtime_amount + $other_earnings - $deduction_amount - $gosi_deduction);
             }
         }
