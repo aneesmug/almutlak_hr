@@ -581,7 +581,7 @@ if(isset($_POST['submit'])){
                                             </div>
                                             <div class="form-group col-md-2">
                                                 <label for="iban" class="col-form-label"><?=__('iban') ?><span class="text-danger">*</span></label>
-                                                <!-- <input type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999"> -->
+                                                <!-- <input  type="text" name="iban" class="form-control"  id="iban" data-mask="SA99 9999 9999 9999 9999 9999"> -->
                                                 <input type="text" name="iban" class="form-control" required />
                                             </div>
 
@@ -624,8 +624,6 @@ if(isset($_POST['submit'])){
 												</select>
                                             </div>
 											
-											
-
 											<div class="form-group col-md-12">
                                                 <div class="btn-group" role="group" aria-label="Edit Button">
 													<a href="./add_new_employee.php" class="btn btn-dark"><i class="fa fa-angles-left"></i> <?=__('back_button') ?></a>

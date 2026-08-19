@@ -148,12 +148,26 @@ if (!function_exists('ensurePayrollSupervisorAssignmentsTable')) {
             id INT AUTO_INCREMENT PRIMARY KEY,
             emp_id VARCHAR(50) NOT NULL,
             supervisor_emp_id VARCHAR(50) NOT NULL,
+            effective_month VARCHAR(7) NOT NULL DEFAULT '2000-01',
             assigned_by VARCHAR(50) NOT NULL,
             assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uniq_emp_assignment (emp_id),
+            UNIQUE KEY uniq_emp_month_assignment (emp_id, effective_month),
             INDEX idx_supervisor_emp_id (supervisor_emp_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // Upgrade path for installs created before assignments became month-aware: one
+        // row per employee used to mean "supervisor, always" - give existing rows a
+        // sentinel effective_month low enough to still apply to every past/future month
+        // until HR explicitly assigns a new supervisor from some later month onward.
+        $effColumnStmt = $pdo->query("SHOW COLUMNS FROM payroll_supervisor_assignments LIKE 'effective_month'");
+        $hasEffColumn = $effColumnStmt && $effColumnStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$hasEffColumn) {
+            $pdo->exec("ALTER TABLE payroll_supervisor_assignments
+                ADD COLUMN effective_month VARCHAR(7) NOT NULL DEFAULT '2000-01' AFTER supervisor_emp_id");
+            $pdo->exec("ALTER TABLE payroll_supervisor_assignments DROP INDEX uniq_emp_assignment");
+            $pdo->exec("ALTER TABLE payroll_supervisor_assignments ADD UNIQUE KEY uniq_emp_month_assignment (emp_id, effective_month)");
+        }
     }
 }
 

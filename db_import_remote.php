@@ -99,7 +99,11 @@ if (!($is_system_admin ?? false)) {
                                     <hr>
                                     <div class="row align-items-end mb-2">
                                         <div class="col-md-6">
-                                            <label class="mb-0">Tables (<span id="tableCount">0</span>)</label>
+                                            <label class="mb-0">Tables (<span id="tableCount">0</span> shown of <span id="tableTotalCount">0</span>)</label>
+                                            <div class="form-check d-inline-block ml-3">
+                                                <input class="form-check-input" type="checkbox" id="showAllTables">
+                                                <label class="form-check-label" for="showAllTables">Show all tables</label>
+                                            </div>
                                         </div>
                                         <div class="col-md-6 text-md-end">
                                             <input type="text" class="form-control form-control-sm d-inline-block" style="max-width:200px;" id="tableFilter" placeholder="Filter tables...">
@@ -114,6 +118,18 @@ if (!($is_system_admin ?? false)) {
                                         <label>Only rows changed since (optional)</label>
                                         <input type="datetime-local" class="form-control" id="sinceInput">
                                         <small class="form-text text-muted">Applies only to tables with an <code>updated_at</code>/<code>created_at</code> column.</small>
+                                    </div>
+
+                                    <div class="form-check mt-3">
+                                        <input class="form-check-input" type="checkbox" id="truncateFirst">
+                                        <label class="form-check-label" for="truncateFirst">
+                                            Truncate selected tables before import (full replace)
+                                        </label>
+                                        <small class="form-text text-muted">
+                                            Deletes all local rows in the selected tables first, then imports live data.
+                                            Use this when local and live have the same row count but different data -
+                                            a plain upsert won't catch that. Cannot be combined with "changed since".
+                                        </small>
                                     </div>
 
                                     <button type="button" class="btn btn-primary waves-effect waves-light mt-2" id="importBtn">
@@ -151,7 +167,7 @@ if (!($is_system_admin ?? false)) {
 
         function renderTableList(tables) {
             liveTables = tables;
-            $('#tableCount').text(tables.length);
+            $('#tableTotalCount').text(tables.length);
             const $wrap = $('#tableListWrap').empty();
             const $table = $('<table class="table table-sm mb-0"><thead><tr>' +
                 '<th></th><th>Table</th><th class="text-right">Local</th>' +
@@ -168,7 +184,7 @@ if (!($is_system_admin ?? false)) {
                 else if (diff < 0) { diffLabel = diff.toLocaleString(); diffClass = 'text-danger'; }
 
                 const $row = $(`
-                    <tr class="table-row">
+                    <tr class="table-row" data-diff="${diff}">
                         <td><input type="checkbox" class="table-check" value="${t.name}" ${diff !== 0 ? 'checked' : ''}></td>
                         <td>${t.name}</td>
                         <td class="text-right">${localLabel}</td>
@@ -180,14 +196,40 @@ if (!($is_system_admin ?? false)) {
             });
             $wrap.append($table);
             $('#pickerSection').show();
+            applyRowVisibility();
         }
 
-        $('#tableFilter').on('input', function() {
-            const q = $(this).val().toLowerCase();
+        // Default view: only tables with a diff. "Show all tables" reveals the rest;
+        // the text filter narrows within whichever set is currently visible-eligible.
+        function applyRowVisibility() {
+            const showAll = $('#showAllTables').is(':checked');
+            const q = $('#tableFilter').val().toLowerCase();
+            let shown = 0;
             $('.table-row').each(function() {
-                const name = $(this).find('.table-check').val().toLowerCase();
-                $(this).toggle(name.includes(q));
+                const $row = $(this);
+                const diff = parseInt($row.attr('data-diff'), 10) || 0;
+                const name = $row.find('.table-check').val().toLowerCase();
+                const matchesFilter = name.includes(q);
+                const matchesDiff = showAll || diff !== 0;
+                const visible = matchesFilter && matchesDiff;
+                $row.toggle(visible);
+                if (visible) shown++;
             });
+            $('#tableCount').text(shown);
+        }
+
+        $('#tableFilter').on('input', applyRowVisibility);
+        $('#showAllTables').on('change', applyRowVisibility);
+
+        const $sinceInput = $('#sinceInput');
+        const $truncateFirst = $('#truncateFirst');
+
+        $truncateFirst.on('change', function() {
+            if ($(this).is(':checked')) {
+                $sinceInput.val('').prop('disabled', true);
+            } else {
+                $sinceInput.prop('disabled', false);
+            }
         });
 
         $('#selectAllBtn').on('click', () => $('.table-row:visible .table-check').prop('checked', true));
@@ -241,39 +283,26 @@ if (!($is_system_admin ?? false)) {
             });
         });
 
-        $('#importBtn').on('click', function() {
-            const baseUrl = $baseUrl.val().trim();
-            const exportKey = $exportKey.val().trim();
-            const tables = $('.table-check:checked').map(function() { return this.value; }).get();
-            const since = $('#sinceInput').val();
-
-            if (!tables.length) {
-                Swal.fire('Nothing selected', 'Pick at least one table.', 'warning');
-                return;
-            }
-
-            Swal.fire({
+        function runImportStep(baseUrl, exportKey, tables, since, truncate) {
+            Swal.update({
                 title: 'Importing...',
-                text: 'Pulling ' + tables.length + ' table(s) from the live server and applying to local DB.',
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                didOpen: () => Swal.showLoading()
+                html: 'Pulling ' + tables.length + ' table(s) from the live server and applying to local DB.'
             });
 
             $.ajax({
                 url: './includes/ajaxFile/ajaxDbImportRemote.php',
                 type: 'POST',
                 dataType: 'json',
-                data: { action: 'run_import', base_url: baseUrl, export_key: exportKey, tables: tables, since: since }
+                data: { action: 'run_import', base_url: baseUrl, export_key: exportKey, tables: tables, since: since, truncate: truncate ? 1 : 0 }
             }).done(function(res) {
-                if (res.status === 'success') {
+                if (res.status === 'success' || res.status === 'warning') {
                     const counts = res.table_counts || {};
                     const rowsHtml = Object.keys(counts).map(function(t) {
                         return '<tr><td class="text-left">' + t + '</td><td class="text-right">' + counts[t].toLocaleString() + '</td></tr>';
                     }).join('');
                     Swal.fire({
-                        title: 'Imported',
-                        icon: 'success',
+                        title: res.status === 'warning' ? 'Imported with warnings' : 'Imported',
+                        icon: res.status === 'warning' ? 'warning' : 'success',
                         html: '<p>' + res.message + '</p>' +
                             (rowsHtml ? '<table class="table table-sm mb-0"><tbody>' + rowsHtml + '</tbody></table>' : '')
                     });
@@ -287,6 +316,75 @@ if (!($is_system_admin ?? false)) {
             }).fail(function() {
                 Swal.fire('Error', 'Request failed.', 'error');
             });
+        }
+
+        function doImport(baseUrl, exportKey, tables, since, truncate) {
+            Swal.fire({
+                title: truncate ? 'Truncating...' : 'Importing...',
+                html: truncate
+                    ? 'Deleting existing local rows in ' + tables.length + ' table(s) before importing.'
+                    : 'Pulling ' + tables.length + ' table(s) from the live server and applying to local DB.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            if (!truncate) {
+                runImportStep(baseUrl, exportKey, tables, since, false);
+                return;
+            }
+
+            $.ajax({
+                url: './includes/ajaxFile/ajaxDbImportRemote.php',
+                type: 'POST',
+                dataType: 'json',
+                data: { action: 'truncate_tables', base_url: baseUrl, export_key: exportKey, tables: tables }
+            }).done(function(res) {
+                if (res.status !== 'success') {
+                    Swal.fire({
+                        title: 'Truncate Error',
+                        html: (res.message || 'Truncate failed') + (res.errors ? '<br><small>' + res.errors.join('<br>') + '</small>' : ''),
+                        icon: 'error'
+                    });
+                    return;
+                }
+                runImportStep(baseUrl, exportKey, tables, since, true);
+            }).fail(function() {
+                Swal.fire('Error', 'Truncate request failed - nothing was imported.', 'error');
+            });
+        }
+
+        $('#importBtn').on('click', function() {
+            const baseUrl = $baseUrl.val().trim();
+            const exportKey = $exportKey.val().trim();
+            const tables = $('.table-check:checked').map(function() { return this.value; }).get();
+            const since = $truncateFirst.is(':checked') ? '' : $sinceInput.val();
+            const truncate = $truncateFirst.is(':checked');
+
+            if (!tables.length) {
+                Swal.fire('Nothing selected', 'Pick at least one table.', 'warning');
+                return;
+            }
+
+            if (truncate) {
+                Swal.fire({
+                    title: 'Truncate before import?',
+                    icon: 'warning',
+                    html: 'This deletes ALL local rows in <b>' + tables.length + ' table(s)</b> first, then loads live data. ' +
+                        'Any row that exists only locally will be permanently lost. This cannot be undone.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Truncate & Import',
+                    confirmButtonColor: '#dc3545',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        doImport(baseUrl, exportKey, tables, since, true);
+                    }
+                });
+                return;
+            }
+
+            doImport(baseUrl, exportKey, tables, since, false);
         });
     </script>
 </body>

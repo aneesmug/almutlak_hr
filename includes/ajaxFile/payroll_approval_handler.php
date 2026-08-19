@@ -69,6 +69,10 @@ switch ($action) {
         getEmployeesForPayrollSupervisorAssignment($pdo, $conDB, $currentUserId);
         break;
 
+    case 'get_payroll_supervisor_assignments_list':
+        getPayrollSupervisorAssignmentsList($pdo, $conDB, $currentUserId);
+        break;
+
     case 'upload_manager_payroll_excel':
         uploadManagerPayrollExcel($pdo, $conDB, $currentUserId);
         break;
@@ -1599,7 +1603,12 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
                 MAX(dispatch.merged_into_supervisor_emp_id) AS merged_into_supervisor_emp_id
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
-            INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = e.emp_id
+            INNER JOIN payroll_supervisor_assignments psa
+                ON psa.emp_id = e.emp_id
+               AND psa.effective_month = (
+                    SELECT MAX(psa2.effective_month) FROM payroll_supervisor_assignments psa2
+                    WHERE psa2.emp_id = e.emp_id AND psa2.effective_month <= :as_of_month
+               )
             INNER JOIN employees sup ON sup.emp_id = psa.supervisor_emp_id
             INNER JOIN admin_login al ON al.emp_id = psa.supervisor_emp_id
             LEFT JOIN payroll_supervisor_report_dispatch dispatch
@@ -1615,7 +1624,8 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
         $supervisorsStmt->execute([
             ':request_inv_no' => $requestInvNo,
             ':dispatch_month' => $monthValue,
-            ':month_year' => $monthValue
+            ':month_year' => $monthValue,
+            ':as_of_month' => $monthValue
         ]);
         $supervisors = $supervisorsStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1704,14 +1714,21 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
                 COALESCE(c.comp_name, '') AS company_name
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
-            INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = p.emp_id AND psa.supervisor_emp_id = :supervisor_emp_id
+            INNER JOIN payroll_supervisor_assignments psa
+                ON psa.emp_id = p.emp_id
+               AND psa.supervisor_emp_id = :supervisor_emp_id
+               AND psa.effective_month = (
+                    SELECT MAX(psa2.effective_month) FROM payroll_supervisor_assignments psa2
+                    WHERE psa2.emp_id = p.emp_id AND psa2.effective_month <= :as_of_month
+               )
             LEFT JOIN department d ON d.id = e.dept
             LEFT JOIN companies c ON c.comp_id = e.comp_no
             WHERE p.month_year = :month_year
             ORDER BY e.name ASC");
         $employeesStmt->execute([
             ':month_year' => $monthValue,
-            ':supervisor_emp_id' => $supervisorEmpId
+            ':supervisor_emp_id' => $supervisorEmpId,
+            ':as_of_month' => $monthValue
         ]);
         $employees = $employeesStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1820,6 +1837,10 @@ function assignPayrollSupervisorForEmployees(PDO $pdo, $conDB, string $currentUs
 
         $employeeIds = parsePayrollEmployeeIdsFromPost($_POST['employee_ids'] ?? '');
         $supervisorEmpId = trim((string)($_POST['supervisor_emp_id'] ?? ''));
+        $effectiveMonth = trim((string)($_POST['effective_month'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}$/', $effectiveMonth)) {
+            $effectiveMonth = date('Y-m');
+        }
 
         if (empty($employeeIds) || $supervisorEmpId === '') {
             throw new Exception('Missing employees or supervisor.');
@@ -1838,27 +1859,27 @@ function assignPayrollSupervisorForEmployees(PDO $pdo, $conDB, string $currentUs
             throw new Exception('Selected supervisor has no registered email.');
         }
 
-        // An employee already assigned to a (any) payroll supervisor is locked - the UI
-        // disables them in the picker, and this is the server-side enforcement of that
-        // same rule so a direct API call can't silently reassign them either. Use
-        // manage_employee_supervisors.php-style explicit reassignment later if that's
-        // ever needed; for now assignment here is one-shot per employee.
-        $existingStmt = $pdo->prepare("SELECT emp_id FROM payroll_supervisor_assignments WHERE emp_id IN (" . implode(',', array_fill(0, count($employeeIds), '?')) . ")");
-        $existingStmt->execute($employeeIds);
-        $alreadyAssignedIds = array_map('strval', $existingStmt->fetchAll(PDO::FETCH_COLUMN));
-
-        $employeeIdsToAssign = array_values(array_diff($employeeIds, $alreadyAssignedIds));
-
-        $insertStmt = $pdo->prepare("INSERT INTO payroll_supervisor_assignments
-                (emp_id, supervisor_emp_id, assigned_by)
+        // Assignments are effective-dated: this creates/updates the row for exactly
+        // this (employee, effective_month) pair, leaving any earlier-effective row for
+        // the same employee untouched - so past/current-month reports keep using the
+        // old supervisor while this month onward uses the new one. Re-running this for
+        // the same employee/month just updates that one row in place (e.g. picked the
+        // wrong supervisor and correcting it before anyone reports off it).
+        $upsertStmt = $pdo->prepare("INSERT INTO payroll_supervisor_assignments
+                (emp_id, supervisor_emp_id, effective_month, assigned_by)
             VALUES
-                (:emp_id, :supervisor_emp_id, :assigned_by)");
+                (:emp_id, :supervisor_emp_id, :effective_month, :assigned_by)
+            ON DUPLICATE KEY UPDATE
+                supervisor_emp_id = VALUES(supervisor_emp_id),
+                assigned_by = VALUES(assigned_by),
+                updated_at = CURRENT_TIMESTAMP");
 
         $assignedCount = 0;
-        foreach ($employeeIdsToAssign as $employeeId) {
-            $insertStmt->execute([
+        foreach ($employeeIds as $employeeId) {
+            $upsertStmt->execute([
                 ':emp_id' => $employeeId,
                 ':supervisor_emp_id' => $supervisorEmpId,
+                ':effective_month' => $effectiveMonth,
                 ':assigned_by' => $currentUserId
             ]);
             $assignedCount++;
@@ -1868,7 +1889,7 @@ function assignPayrollSupervisorForEmployees(PDO $pdo, $conDB, string $currentUs
             'status' => 'success',
             'message' => 'Payroll supervisor assigned successfully.',
             'assigned_count' => $assignedCount,
-            'skipped_already_assigned' => $alreadyAssignedIds,
+            'effective_month' => $effectiveMonth,
             'supervisor_name' => (string)($supervisor['name'] ?? '')
         ]);
     } catch (Exception $e) {
@@ -1889,6 +1910,16 @@ function getEmployeesForPayrollSupervisorAssignment(PDO $pdo, $conDB, string $cu
             throw new Exception('You are not allowed to view payroll supervisor assignments.');
         }
 
+        // Assignments are effective-dated (see ensurePayrollSupervisorAssignmentsTable):
+        // show each employee's CURRENTLY-in-effect supervisor as of the month HR is
+        // about to assign for, so they can see what they'd be changing. Employees are
+        // never locked out here - re-selecting one creates a new assignment effective
+        // from this month onward, superseding the old one without touching past months.
+        $effectiveMonth = trim((string)($_POST['effective_month'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}$/', $effectiveMonth)) {
+            $effectiveMonth = date('Y-m');
+        }
+
         $employeesStmt = $pdo->prepare("SELECT
                 e.emp_id,
                 e.name,
@@ -1899,15 +1930,21 @@ function getEmployeesForPayrollSupervisorAssignment(PDO $pdo, $conDB, string $cu
             FROM employees e
             LEFT JOIN department d ON d.id = e.dept
             LEFT JOIN companies c ON c.comp_id = e.comp_no
-            LEFT JOIN payroll_supervisor_assignments psa ON psa.emp_id = e.emp_id
+            LEFT JOIN payroll_supervisor_assignments psa
+                ON psa.emp_id = e.emp_id
+               AND psa.effective_month = (
+                    SELECT MAX(psa2.effective_month) FROM payroll_supervisor_assignments psa2
+                    WHERE psa2.emp_id = e.emp_id AND psa2.effective_month <= :as_of_month
+               )
             LEFT JOIN employees sup ON sup.emp_id = psa.supervisor_emp_id
             WHERE e.status = 1
             ORDER BY e.name ASC");
-        $employeesStmt->execute();
+        $employeesStmt->execute([':as_of_month' => $effectiveMonth]);
         $rows = $employeesStmt->fetchAll(PDO::FETCH_ASSOC);
 
         echo json_encode([
             'status' => 'success',
+            'effective_month' => $effectiveMonth,
             'employees' => array_map(static function ($row) {
                 return [
                     'emp_id' => (string)($row['emp_id'] ?? ''),
@@ -1916,6 +1953,64 @@ function getEmployeesForPayrollSupervisorAssignment(PDO $pdo, $conDB, string $cu
                     'company' => (string)($row['company_name'] ?? ''),
                     'supervisor_emp_id' => (string)($row['supervisor_emp_id'] ?? ''),
                     'supervisor_name' => (string)($row['supervisor_name'] ?? '')
+                ];
+            }, $rows)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// Same rows as download_payroll_supervisor_assignments.php (PDF), returned as JSON so
+// the "Assign Direct Supervisor (Payroll)" modal can show them inline via SweetAlert2
+// instead of forcing a file download just to check current assignments.
+function getPayrollSupervisorAssignmentsList(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to view payroll supervisor assignments.');
+        }
+
+        $effectiveMonth = trim((string)($_POST['effective_month'] ?? ''));
+        if (!preg_match('/^\d{4}-\d{2}$/', $effectiveMonth)) {
+            $effectiveMonth = date('Y-m');
+        }
+
+        $rowsStmt = $pdo->prepare("SELECT
+                e.emp_id,
+                e.name AS employee_name,
+                COALESCE(d.dep_nme, '') AS department_name,
+                COALESCE(c.comp_name, '') AS company_name,
+                sup.emp_id AS supervisor_emp_id,
+                sup.name AS supervisor_name,
+                psa.effective_month
+            FROM payroll_supervisor_assignments psa
+            INNER JOIN employees e ON e.emp_id = psa.emp_id
+            INNER JOIN employees sup ON sup.emp_id = psa.supervisor_emp_id
+            LEFT JOIN department d ON d.id = e.dept
+            LEFT JOIN companies c ON c.comp_id = e.comp_no
+            WHERE psa.effective_month = (
+                SELECT MAX(psa2.effective_month) FROM payroll_supervisor_assignments psa2
+                WHERE psa2.emp_id = psa.emp_id AND psa2.effective_month <= :as_of_month
+            )
+            ORDER BY sup.name ASC, e.name ASC");
+        $rowsStmt->execute([':as_of_month' => $effectiveMonth]);
+        $rows = $rowsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'status' => 'success',
+            'effective_month' => $effectiveMonth,
+            'assignments' => array_map(static function ($row) {
+                return [
+                    'emp_id' => (string)($row['emp_id'] ?? ''),
+                    'name' => (string)($row['employee_name'] ?? ''),
+                    'department' => (string)($row['department_name'] ?? ''),
+                    'company' => (string)($row['company_name'] ?? ''),
+                    'supervisor_emp_id' => (string)($row['supervisor_emp_id'] ?? ''),
+                    'supervisor_name' => (string)($row['supervisor_name'] ?? ''),
+                    'effective_month' => (string)($row['effective_month'] ?? '')
                 ];
             }, $rows)
         ]);
@@ -2162,6 +2257,39 @@ function findManagerPayrollUploadByFileId(array $meta, string $fileId): array
     return ['index' => -1, 'upload' => []];
 }
 
+function findManagerPayrollCheckpointFromVisibleColumn($sheet): string
+{
+    if (!$sheet) {
+        return '';
+    }
+
+    $rows = $sheet->toArray('', true, true, true);
+    if (empty($rows)) {
+        return '';
+    }
+
+    $headerRow = array_shift($rows);
+    $checkpointColumn = null;
+    foreach ($headerRow as $column => $headerValue) {
+        if (strtolower(trim((string)$headerValue)) === 'checkpoint_code') {
+            $checkpointColumn = $column;
+            break;
+        }
+    }
+    if ($checkpointColumn === null) {
+        return '';
+    }
+
+    foreach ($rows as $row) {
+        $value = strtoupper(trim((string)($row[$checkpointColumn] ?? '')));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
 function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpointCode, bool $isBenefitsSheet): array
 {
     if (!$sheet) {
@@ -2284,6 +2412,17 @@ function parseManagerUploadedPayrollFileToRows(string $filePath, string $monthYe
     $checkpointCode = '';
     if ($metadataSheet) {
         $checkpointCode = strtoupper(trim((string)$metadataSheet->getCell('A1')->getValue()));
+    }
+
+    if ($checkpointCode === '' || !preg_match('/^PAYIMP-\d{6}-[A-Z0-9]+$/', $checkpointCode)) {
+        // The __PAYROLL_IMPORT_META sheet is very-hidden and some spreadsheet tools
+        // (LibreOffice, Google Sheets export, WPS, etc.) drop very-hidden sheets when the
+        // file is edited and re-saved - fall back to the visible checkpoint_code column
+        // that's also written into every Benefits/Deductions Import row.
+        $checkpointCode = findManagerPayrollCheckpointFromVisibleColumn($benefitsSheet);
+        if ($checkpointCode === '') {
+            $checkpointCode = findManagerPayrollCheckpointFromVisibleColumn($deductionsSheet);
+        }
     }
 
     if ($checkpointCode === '' || !preg_match('/^PAYIMP-\d{6}-[A-Z0-9]+$/', $checkpointCode)) {
@@ -3031,7 +3170,12 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
                     p.status
                 FROM payrolls p
                 INNER JOIN employees e ON e.emp_id = p.emp_id
-                INNER JOIN payroll_supervisor_assignments psa ON psa.emp_id = p.emp_id
+                INNER JOIN payroll_supervisor_assignments psa
+                    ON psa.emp_id = p.emp_id
+                   AND psa.effective_month = (
+                        SELECT MAX(psa2.effective_month) FROM payroll_supervisor_assignments psa2
+                        WHERE psa2.emp_id = p.emp_id AND psa2.effective_month <= ?
+                   )
                 LEFT JOIN department d ON d.id = e.dept
                 LEFT JOIN companies c ON c.comp_id = e.comp_no
                 WHERE p.month_year = ?
@@ -3105,7 +3249,7 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
             $effectiveSupervisorIdsForRows = array_values(array_unique(array_merge([$supervisorEmpId], $includedSupervisorIds)));
 
             $payrollStmt = $buildPayrollStmtForSupervisorIds($pdo, $effectiveSupervisorIdsForRows);
-            $payrollStmt->execute(array_merge([$monthValue], $effectiveSupervisorIdsForRows));
+            $payrollStmt->execute(array_merge([$monthValue, $monthValue], $effectiveSupervisorIdsForRows));
             $rows = $payrollStmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (empty($rows)) {
@@ -3130,24 +3274,29 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
             $mainHeaders = ['#', 'Emp ID', 'Employee Name', 'Department', 'Company', 'Basic Salary', 'Benefits', 'Benefits Reason', 'Deductions', 'Deduction Reason', 'Net Salary', 'Status'];
             $mainSheet->fromArray($mainHeaders, null, 'A1');
 
+            // checkpoint_code is duplicated as a normal (visible) column on every data row
+            // in addition to the hidden __PAYROLL_IMPORT_META sheet below - some spreadsheet
+            // tools (LibreOffice, Google Sheets export, WPS, etc.) drop very-hidden sheets
+            // when the supervisor edits and re-saves the file, which otherwise makes the
+            // upload fail with "The uploaded file is not valid." even for a genuine file.
             $benefitsSheet->fromArray(
-                ['emp_id', 'benefit_hours', 'benefit_minutes', 'benefit_reason'],
+                ['emp_id', 'benefit_hours', 'benefit_minutes', 'benefit_reason', 'checkpoint_code'],
                 null,
                 'A1'
             );
             $benefitsSheet->fromArray(
-                ['1001', '6', '0', 'Project Support Benefit'],
+                ['1001', '6', '0', 'Project Support Benefit', $checkpointCode],
                 null,
                 'A2'
             );
 
             $deductionsSheet->fromArray(
-                ['emp_id', 'deduction_days', 'deduction_hours', 'deduction_minutes', 'deduction_reason'],
+                ['emp_id', 'deduction_days', 'deduction_hours', 'deduction_minutes', 'deduction_reason', 'checkpoint_code'],
                 null,
                 'A1'
             );
             $deductionsSheet->fromArray(
-                ['1001', '0', '7', '0', 'Late Arrival Deduction'],
+                ['1001', '0', '7', '0', 'Late Arrival Deduction', $checkpointCode],
                 null,
                 'A2'
             );
@@ -3201,7 +3350,8 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
                         (string)($row['emp_id'] ?? ''),
                         $hoursValue,
                         0,
-                        $benefitName
+                        $benefitName,
+                        $checkpointCode
                     ], null, 'A' . $benefitRowIndex);
                     $benefitRowIndex++;
                 }
@@ -3259,7 +3409,8 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
                         $daysValue,
                         $hoursValue,
                         0,
-                        $deductionName
+                        $deductionName,
+                        $checkpointCode
                     ], null, 'A' . $deductionRowIndex);
                     $deductionRowIndex++;
                 }

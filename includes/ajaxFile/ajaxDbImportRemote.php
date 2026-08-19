@@ -98,6 +98,66 @@ if ($action === 'test_connection') {
     exit;
 }
 
+if ($action === 'truncate_tables') {
+    $tablesRaw = $_POST['tables'] ?? [];
+    $tables = is_array($tablesRaw) ? array_values(array_filter(array_map('trim', $tablesRaw))) : [];
+    if (empty($tables)) {
+        echo json_encode(['status' => 'error', 'message' => 'Select at least one table.']);
+        exit;
+    }
+
+    $mysqli = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+    if (!$mysqli) {
+        echo json_encode(['status' => 'error', 'message' => 'Could not connect to local database: ' . mysqli_connect_error()]);
+        exit;
+    }
+
+    mysqli_query($mysqli, 'SET FOREIGN_KEY_CHECKS=0');
+
+    $localTableNames = [];
+    $namesRes = mysqli_query($mysqli, 'SHOW TABLES');
+    while ($row = mysqli_fetch_array($namesRes)) {
+        $localTableNames[$row[0]] = true;
+    }
+
+    $truncatedTables = [];
+    $skippedTables = [];
+    $errors = [];
+    foreach ($tables as $table) {
+        if (!isset($localTableNames[$table])) {
+            $skippedTables[] = $table; // doesn't exist locally yet - nothing to truncate
+            continue;
+        }
+        $ident = '`' . str_replace('`', '``', $table) . '`';
+        if (mysqli_query($mysqli, "TRUNCATE TABLE $ident")) {
+            $truncatedTables[] = $table;
+        } else {
+            $errors[] = "TRUNCATE $table: " . mysqli_error($mysqli);
+        }
+    }
+
+    mysqli_query($mysqli, 'SET FOREIGN_KEY_CHECKS=1');
+    mysqli_close($mysqli);
+
+    if (!empty($errors)) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Truncate failed.',
+            'errors' => array_slice($errors, 0, 20),
+            'truncated_tables' => $truncatedTables,
+        ]);
+        exit;
+    }
+
+    echo json_encode([
+        'status' => 'success',
+        'message' => count($truncatedTables) . ' table(s) truncated.',
+        'truncated_tables' => $truncatedTables,
+        'skipped_tables' => $skippedTables,
+    ]);
+    exit;
+}
+
 if ($action === 'run_import') {
     $tablesRaw = $_POST['tables'] ?? [];
     $tables = is_array($tablesRaw) ? array_values(array_filter(array_map('trim', $tablesRaw))) : [];
@@ -106,9 +166,15 @@ if ($action === 'run_import') {
         exit;
     }
 
+    $truncateFirst = !empty($_POST['truncate']) && $_POST['truncate'] !== '0';
+    $sinceRaw = trim((string) ($_POST['since'] ?? ''));
+    if ($truncateFirst && $sinceRaw !== '') {
+        echo json_encode(['status' => 'error', 'message' => '"Only rows changed since" cannot be combined with Truncate - a delta pull after wiping the table would delete the rest of the data.']);
+        exit;
+    }
+
     set_time_limit(0);
     $postFields = ['export_key' => $exportKey, 'tables' => implode(',', $tables)];
-    $sinceRaw = trim((string) ($_POST['since'] ?? ''));
     if ($sinceRaw !== '') {
         $postFields['since'] = $sinceRaw;
     }
@@ -127,6 +193,21 @@ if ($action === 'run_import') {
     $sql = (string) $result['body'];
     if (trim($sql) === '') {
         echo json_encode(['status' => 'error', 'message' => 'Live server returned an empty export.']);
+        exit;
+    }
+
+    // download_db_export.php always ends its output with this line once every
+    // selected table has been fully written out. If it's missing, the download was
+    // cut short (host execution/time limit, WAF, dropped connection) partway through
+    // a table's INSERT block - applying it as-is would silently import a partial
+    // table while still reporting "success", which is worse than truncate mode ever
+    // running: the truncated table would be left with less data than before.
+    if (!preg_match('/SET FOREIGN_KEY_CHECKS=1;\s*$/', $sql)) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'The download from the live server looks incomplete (it was cut off before finishing) - nothing was imported. This is usually a live-server timeout on large tables; try selecting fewer tables per run.' .
+                ($truncateFirst ? ' Any tables you already truncated are now EMPTY - re-run the import for them before using the app.' : ''),
+        ]);
         exit;
     }
 
@@ -164,9 +245,8 @@ if ($action === 'run_import') {
         $errors[] = mysqli_error($mysqli);
     }
 
-    mysqli_close($mysqli);
-
     if (!empty($errors)) {
+        mysqli_close($mysqli);
         echo json_encode([
             'status' => 'error',
             'message' => 'Import completed with errors.',
@@ -176,13 +256,41 @@ if ($action === 'run_import') {
         exit;
     }
 
+    // Verify against the actual local table, not just the SQL that was sent - if a
+    // table came back short of what the dump claimed, surface it instead of trusting
+    // a blanket "success".
+    $localCounts = [];
+    $shortfallTables = [];
+    foreach ($tables as $table) {
+        $ident = '`' . str_replace('`', '``', $table) . '`';
+        $countRes = @mysqli_query($mysqli, "SELECT COUNT(*) AS c FROM $ident");
+        if ($countRes) {
+            $localCounts[$table] = (int) mysqli_fetch_assoc($countRes)['c'];
+            if (isset($tableCounts[$table]) && $sinceRaw === '' && $localCounts[$table] < $tableCounts[$table]) {
+                $shortfallTables[] = $table;
+            }
+        }
+    }
+
+    mysqli_close($mysqli);
+
+    $message = 'Imported ' . number_format($totalRecords) . ' record(s) across ' . count($tables) . ' table(s) into local database.';
+    if ($truncateFirst) {
+        $message .= ' Tables were truncated first - local data now mirrors live exactly.';
+    }
+    if (!empty($shortfallTables)) {
+        $message .= ' WARNING: ' . implode(', ', $shortfallTables) . ' ended up with fewer local rows than the live export reported - check the import for that table.';
+    }
+
     echo json_encode([
-        'status' => 'success',
-        'message' => 'Imported ' . number_format($totalRecords) . ' record(s) across ' . count($tables) . ' table(s) into local database.',
+        'status' => empty($shortfallTables) ? 'success' : 'warning',
+        'message' => $message,
         'tables' => $tables,
         'table_counts' => $tableCounts,
+        'local_counts' => $localCounts,
         'total_records' => $totalRecords,
         'statements_run' => $statementsRun,
+        'shortfall_tables' => $shortfallTables,
     ]);
     exit;
 }

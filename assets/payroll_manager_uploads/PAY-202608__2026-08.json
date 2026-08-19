@@ -1,0 +1,19 @@
+{
+    "request_inv_no": "PAY-202608",
+    "month": "2026-08",
+    "uploads": [
+        {
+            "file_id": "fcd998ea513299920eb4",
+            "checkpoint_code": "PAYIMP-202608-BB5A1C826AB2",
+            "original_name": "payroll_2026-08_ANEES_AFZAL_MUHAMMAD_AFZAL.xlsx",
+            "stored_name": "PAY-202608__2026-08__20260819_141124__b77cd97a.xlsx",
+            "uploaded_by": "5430",
+            "uploaded_by_name": "ANEES AFZAL",
+            "uploaded_at": "2026-08-19 14:11:24",
+            "reviewed_by": "",
+            "reviewed_by_name": "",
+            "reviewed_at": "",
+            "review_note": ""
+        }
+    ]
+}

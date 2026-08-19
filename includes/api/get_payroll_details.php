@@ -329,6 +329,7 @@ try {
                         ) rr ON rr.vacation_id = v.id
                         WHERE v.emp_id = :emp_id
                             AND v.current_status IN ('approved', 'completed')
+                            AND v.request_inv_no LIKE 'VAC-%'
                             AND v.start_date <= :month_start_upper
                             AND COALESCE(rr.final_approved_date, v.return_date) >= :month_start_lower
                             AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
@@ -365,6 +366,7 @@ try {
                             ) rr ON rr.vacation_id = v.id
                             WHERE v.emp_id = :emp_id
                                 AND v.current_status IN ('approved', 'completed')
+                                AND v.request_inv_no LIKE 'VAC-%'
                                 AND v.start_date >= :prev_return_date
                                 AND v.start_date <= :prev_return_date_plus1
                             ORDER BY v.start_date ASC

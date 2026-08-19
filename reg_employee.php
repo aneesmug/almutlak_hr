@@ -115,12 +115,41 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 	<link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 	<link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-	<link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-	<link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
-	<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
-	<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-	<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-	<script src="assets/js/modernizr.min.js"></script>
+    <!-- Plugins css -->
+    <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
+    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+    <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
+    <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css">
+    <link rel="stylesheet" href="./plugins/select2/css/select2.min.css">
+
+    <!-- DataTables -->
+    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <!-- Responsive datatable examples -->
+    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+    <!-- Multi Item Selection examples -->
+    <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+
+    <link href="./plugins/summernote/summernote.min.css" rel="stylesheet" />
+
+    <!-- App css -->
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <!-- <link href="assets/css/icons.css" rel="stylesheet" type="text/css" /> -->
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Dropzone CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.css">
+
+    <script src="assets/js/modernizr.min.js"></script>
     
     <!-- SweetAlert2 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">

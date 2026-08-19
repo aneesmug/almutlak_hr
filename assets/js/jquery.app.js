@@ -74,9 +74,14 @@ loadResource('./plugins/croppie/exif.js', 'js', { async: true, defer: true }, 'h
 loadResource('./plugins/dropzone/dropzone.js', 'js', { async: true, defer: true }, 'head');
 // Time Picker
 loadResource('./plugins/bootstrap-timepicker/bootstrap-timepicker.js', 'js', { async: true, defer: true }, 'head');
-loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js', 'js', { async: true, defer: true }, 'head');
-loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js', 'js', { async: true, defer: true }, 'head');
-loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js', 'js', { async: true, defer: true }, 'head');
+// moment.js must execute before the hijri picker files below (they patch/extend the global
+// moment object with the 'iYYYY'/'iMM'/'iDD' tokens) - async:false keeps them non-blocking
+// but forces execution in declaration order, since dynamically-inserted <script> elements
+// are async by default and ignore the defer attribute otherwise.
+loadResource('./plugins/moment/moment.js', 'js', { async: false, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js', 'js', { async: false, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js', 'js', { async: false, defer: true }, 'head');
+loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js', 'js', { async: false, defer: true }, 'head');
 loadResource('./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/clockpicker/js/bootstrap-clockpicker.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/bootstrap-daterangepicker/daterangepicker.js', 'js', { async: true, defer: true }, 'head');
@@ -90,6 +95,10 @@ loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async:
 loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: true }, 'head');
+// "Add New Employee" SweetAlert2 modal (sidebar)
+loadResource('./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./plugins/autoNumeric/autoNumeric.js', 'js', { async: true, defer: true }, 'head');
+loadResource('./assets/js/newEmployeeModal.js', 'js', { defer: true }, 'head');
 
 function __(key, defaultText = '') {
     // Check if the global language object has been defined by PHP.

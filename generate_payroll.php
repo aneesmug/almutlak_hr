@@ -1425,18 +1425,21 @@ function setPayrollMonthValue(monthValue, triggerChange = true) {
     }
 }
 
-function shiftPayrollMonth(offset) {
-    const currentValue = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
-    if (!/^\d{4}-\d{2}$/.test(currentValue)) {
-        return;
+function shiftMonthValue(monthValue, offset) {
+    if (!/^\d{4}-\d{2}$/.test(monthValue || '')) {
+        return getCurrentPayrollMonthValue();
     }
 
-    const [year, month] = currentValue.split('-');
+    const [year, month] = monthValue.split('-');
     const dateCursor = new Date(Number(year), Number(month) - 1, 1);
     dateCursor.setMonth(dateCursor.getMonth() + offset);
 
-    const nextMonthValue = `${dateCursor.getFullYear()}-${String(dateCursor.getMonth() + 1).padStart(2, '0')}`;
-    setPayrollMonthValue(nextMonthValue, true);
+    return `${dateCursor.getFullYear()}-${String(dateCursor.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function shiftPayrollMonth(offset) {
+    const currentValue = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+    setPayrollMonthValue(shiftMonthValue(currentValue, offset), true);
 }
 
 function registerEmployeeStatusFilter() {
@@ -2463,13 +2466,40 @@ async function openAssignPayrollSupervisorModal() {
             return `<option value="${empId.replace(/"/g, '&quot;')}">${String(s.name || 'N/A')} (${empId})</option>`;
         }).join('');
 
-        // Step 1 - select the Direct Supervisor
+        // Step 1 - select the Direct Supervisor and the month the change takes effect
+        // from. Assignments are effective-dated: picking next month here leaves this
+        // month's (and every past month's) reporting exactly as it already is, and
+        // only reports generated for the picked month onward use the new supervisor.
+        const defaultEffectiveMonth = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
         const step1Result = await Swal.fire({
             title: __('select_payroll_supervisor_modal_title', 'Select Direct Supervisor'),
             html: `
                 <div class="text-left">
                     <label for="payrollSupervisorAssignSelect" class="font-weight-bold"><?= __('direct_supervisor', 'Direct Supervisor') ?></label>
                     <select id="payrollSupervisorAssignSelect" class="form-control mb-2"><option value="" selected><?= __('select_direct_supervisor', 'Select Direct Supervisor') ?></option>${supervisorOptionsHtml}</select>
+                    <label class="font-weight-bold"><?= __('effective_from_month_label', 'Effective From') ?></label>
+                    <div class="payroll-month-card payroll-filter-card-shared mb-1">
+                        <div class="payroll-month-header">
+                            <span class="payroll-month-label"><?= __('effective_from_month_label', 'Effective From') ?></span>
+                            <span id="payrollSupervisorEffectiveMonthLabel" class="payroll-month-value">--</span>
+                        </div>
+                        <div class="payroll-month-controls">
+                            <button type="button" id="prevSupervisorEffectiveMonthBtn" class="btn payroll-month-btn" title="Previous month">
+                                <i class="mdi mdi-chevron-left"></i>
+                            </button>
+                            <input type="month" id="payrollSupervisorEffectiveMonth" class="form-control payroll-month-input" value="${defaultEffectiveMonth}">
+                            <button type="button" id="nextSupervisorEffectiveMonthBtn" class="btn payroll-month-btn" title="Next month">
+                                <i class="mdi mdi-chevron-right"></i>
+                            </button>
+                            <button type="button" id="currentSupervisorEffectiveMonthBtn" class="btn btn-outline-primary payroll-month-today-btn" title="Current month">
+                                <?= __('today') ?: 'Current' ?>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-2"><?= __('effective_from_month_hint', 'Once assigned, a supervisor carries forward automatically to every future month - you only need this when a new employee needs assigning, or an existing one needs to change starting a specific month.') ?></div>
+                    <button type="button" id="viewPayrollSupervisorAssignmentsBtn" class="btn btn-outline-primary btn-sm mt-1">
+                        <i class="fa fa-solid fa-list"></i> <?= __('view_payroll_supervisor_assignments_button', 'View Assignments') ?>
+                    </button>
                     <button type="button" id="downloadPayrollSupervisorAssignmentsBtn" class="btn btn-outline-secondary btn-sm mt-1">
                         <i class="fa fa-solid fa-file-arrow-down"></i> <?= __('download_payroll_supervisor_assignments_button', 'Download Supervisor Assignments') ?>
                     </button>
@@ -2490,22 +2520,61 @@ async function openAssignPayrollSupervisorModal() {
                         placeholder: __('select_direct_supervisor', 'Select Direct Supervisor')
                     });
                 }
-                document.getElementById('downloadPayrollSupervisorAssignmentsBtn').addEventListener('click', downloadPayrollSupervisorAssignments);
+                document.getElementById('downloadPayrollSupervisorAssignmentsBtn').addEventListener('click', function() {
+                    downloadPayrollSupervisorAssignments($('#payrollSupervisorEffectiveMonth').val());
+                });
+                document.getElementById('viewPayrollSupervisorAssignmentsBtn').addEventListener('click', function() {
+                    // SweetAlert2 has one shared popup instance - firing a second modal
+                    // while this one is still open would resolve THIS modal's own
+                    // pending promise with garbage. Close it first (the outer await
+                    // resolves with isConfirmed:false and the flow just returns), then
+                    // open the assignments view as its own independent modal. Reopen
+                    // "Assign Direct Supervisor (Payroll)" afterward to continue assigning.
+                    const month = $('#payrollSupervisorEffectiveMonth').val();
+                    Swal.close();
+                    setTimeout(() => viewPayrollSupervisorAssignments(month), 100);
+                });
+
+                const $effectiveMonthInput = $('#payrollSupervisorEffectiveMonth');
+                const $effectiveMonthLabel = $('#payrollSupervisorEffectiveMonthLabel');
+                const refreshEffectiveMonthLabel = () => {
+                    $effectiveMonthLabel.text(formatPayrollMonthValue($effectiveMonthInput.val()));
+                };
+                refreshEffectiveMonthLabel();
+                $effectiveMonthInput.on('change', refreshEffectiveMonthLabel);
+                $('#prevSupervisorEffectiveMonthBtn').on('click', function() {
+                    $effectiveMonthInput.val(shiftMonthValue($effectiveMonthInput.val(), -1));
+                    refreshEffectiveMonthLabel();
+                });
+                $('#nextSupervisorEffectiveMonthBtn').on('click', function() {
+                    $effectiveMonthInput.val(shiftMonthValue($effectiveMonthInput.val(), 1));
+                    refreshEffectiveMonthLabel();
+                });
+                $('#currentSupervisorEffectiveMonthBtn').on('click', function() {
+                    $effectiveMonthInput.val(getCurrentPayrollMonthValue());
+                    refreshEffectiveMonthLabel();
+                });
             },
             preConfirm: () => {
                 const value = $('#payrollSupervisorAssignSelect').val();
+                const effectiveMonth = $('#payrollSupervisorEffectiveMonth').val();
                 if (!value) {
                     Swal.showValidationMessage(__('select_direct_supervisor', 'Please select a supervisor.'));
                     return false;
                 }
-                return value;
+                if (!effectiveMonth) {
+                    Swal.showValidationMessage(__('please_select_effective_month', 'Please select the effective month.'));
+                    return false;
+                }
+                return { supervisorEmpId: value, effectiveMonth: effectiveMonth };
             }
         });
 
         if (!step1Result.isConfirmed || !step1Result.value) {
             return;
         }
-        const selectedSupervisorEmpId = step1Result.value;
+        const selectedSupervisorEmpId = step1Result.value.supervisorEmpId;
+        const selectedEffectiveMonth = step1Result.value.effectiveMonth;
         const selectedSupervisorLabel = supervisors.find(s => String(s.emp_id) === String(selectedSupervisorEmpId));
 
         // Step 2 - multi-select which employees report to that supervisor
@@ -2520,7 +2589,7 @@ async function openAssignPayrollSupervisorModal() {
         const employeesResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-            body: new URLSearchParams({ action: 'get_employees_for_payroll_supervisor_assignment' }).toString()
+            body: new URLSearchParams({ action: 'get_employees_for_payroll_supervisor_assignment', effective_month: selectedEffectiveMonth }).toString()
         });
         const employeesData = await employeesResponse.json();
         Swal.close();
@@ -2532,12 +2601,13 @@ async function openAssignPayrollSupervisorModal() {
         const employees = Array.isArray(employeesData.employees) ? employeesData.employees : [];
         const employeeOptionsHtml = employees.map(emp => {
             const empId = String(emp.emp_id || '');
-            const isAlreadyAssigned = !!(emp.supervisor_emp_id && String(emp.supervisor_emp_id) !== '');
-            const disabledAttr = isAlreadyAssigned ? ' disabled="disabled"' : '';
-            const label = isAlreadyAssigned
-                ? `${String(emp.name || 'N/A')} (${empId}) - ${__('already_assigned_to', 'Already assigned to')} ${String(emp.supervisor_name || '')}`
+            const isCurrentlyAssigned = !!(emp.supervisor_emp_id && String(emp.supervisor_emp_id) !== '');
+            const isSameSupervisor = isCurrentlyAssigned && String(emp.supervisor_emp_id) === String(selectedSupervisorEmpId);
+            const selectedAttr = isSameSupervisor ? ' selected="selected"' : '';
+            const label = isCurrentlyAssigned
+                ? `${String(emp.name || 'N/A')} (${empId}) - ${__('currently_assigned_to', 'Currently')}: ${String(emp.supervisor_name || '')}`
                 : `${String(emp.name || 'N/A')} (${empId})`;
-            return `<option value="${empId.replace(/"/g, '&quot;')}"${disabledAttr}>${label}</option>`;
+            return `<option value="${empId.replace(/"/g, '&quot;')}"${selectedAttr}>${label}</option>`;
         }).join('');
 
         const step2Result = await Swal.fire({
@@ -2546,7 +2616,7 @@ async function openAssignPayrollSupervisorModal() {
                 <div class="text-left">
                     <label for="payrollEmployeesAssignSelect" class="font-weight-bold"><?= __('employees', 'Employees') ?></label>
                     <select id="payrollEmployeesAssignSelect" class="form-control mb-2" multiple>${employeeOptionsHtml}</select>
-                    <div class="small text-muted mb-2">${__('already_assigned_employees_locked_hint', 'Employees already assigned to a payroll supervisor are locked and cannot be re-selected here.')}</div>
+                    <div class="small text-muted mb-2">${__('reassign_employees_effective_month_hint', 'Employees already assigned to a supervisor can still be picked - doing so changes their supervisor starting the effective month you chose, without affecting earlier months.')}</div>
                 </div>
             `,
             showCancelButton: true,
@@ -2593,7 +2663,8 @@ async function openAssignPayrollSupervisorModal() {
             body: new URLSearchParams({
                 action: 'assign_payroll_supervisor',
                 employee_ids: JSON.stringify(step2Result.value),
-                supervisor_emp_id: selectedSupervisorEmpId
+                supervisor_emp_id: selectedSupervisorEmpId,
+                effective_month: selectedEffectiveMonth
             }).toString()
         });
         const assignData = await assignResponse.json();
@@ -2610,8 +2681,78 @@ async function openAssignPayrollSupervisorModal() {
     }
 }
 
-function downloadPayrollSupervisorAssignments() {
-    window.open('./download_payroll_supervisor_assignments.php', '_blank');
+function downloadPayrollSupervisorAssignments(effectiveMonth) {
+    const month = effectiveMonth || $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+    window.open('./download_payroll_supervisor_assignments.php?effective_month=' + encodeURIComponent(month), '_blank');
+}
+
+async function viewPayrollSupervisorAssignments(effectiveMonth) {
+    const month = effectiveMonth || $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+
+    Swal.fire({
+        title: __('loading', 'Loading'),
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'get_payroll_supervisor_assignments_list', effective_month: month }).toString()
+        });
+        const data = await response.json();
+        Swal.close();
+
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.message || 'Failed to load assignments.');
+        }
+
+        const assignments = Array.isArray(data.assignments) ? data.assignments : [];
+        const rowsHtml = assignments.map(row => `
+            <tr>
+                <td>${escapeHtml(row.emp_id)}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.department)}</td>
+                <td>${escapeHtml(row.company)}</td>
+                <td>${escapeHtml(row.supervisor_emp_id)}</td>
+                <td>${escapeHtml(row.supervisor_name)}</td>
+                <td>${escapeHtml(row.effective_month)}</td>
+            </tr>
+        `).join('');
+
+        const tableHtml = assignments.length ? `
+            <div class="table-responsive" style="max-height:50vh;overflow-y:auto;">
+                <table class="table table-sm table-bordered table-striped mb-0">
+                    <thead class="thead-light" style="position:sticky;top:0;">
+                        <tr>
+                            <th><?= __('emp_id', 'Emp ID') ?></th>
+                            <th><?= __('name', 'Emp Name') ?></th>
+                            <th><?= __('department', 'Department') ?></th>
+                            <th><?= __('company', 'Company') ?></th>
+                            <th><?= __('supervisor_emp_id', 'Supervisor Emp ID') ?></th>
+                            <th><?= __('direct_supervisor', 'Direct Supervisor') ?></th>
+                            <th><?= __('effective_from_month_label', 'Effective From') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            </div>
+        ` : `<div class="text-center text-muted py-3"><?= __('no_data_available_in_table', 'No data available') ?></div>`;
+
+        Swal.fire({
+            title: `<?= __('download_payroll_supervisor_assignments_button', 'Payroll Supervisor Assignments') ?> - ${escapeHtml(formatPayrollMonthValue(month))}`,
+            html: tableHtml,
+            width: '75%',
+            confirmButtonText: __('close', 'Close'),
+            confirmButtonColor: '#6c757d'
+        });
+    } catch (error) {
+        Swal.close();
+        await Swal.fire(__('error', 'Error'), error.message || 'Failed to load assignments.', 'error');
+    }
 }
 
 async function generatePayroll() {

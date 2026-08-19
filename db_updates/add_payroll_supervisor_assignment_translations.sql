@@ -14,7 +14,14 @@ INSERT INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUES
 ('already_assigned_to', 'en', 'Already assigned to'),
 ('already_assigned_employees_locked_hint', 'en', 'Employees already assigned to a payroll supervisor are locked and cannot be re-selected here.'),
 ('download_payroll_supervisor_assignments_button', 'en', 'Download Supervisor Assignments'),
-('supervisor_emp_id', 'en', 'Supervisor Emp ID')
+('supervisor_emp_id', 'en', 'Supervisor Emp ID'),
+('effective_from_month_label', 'en', 'Effective From'),
+('effective_from_month_hint', 'en', 'Once assigned, a supervisor carries forward automatically to every future month - you only need this when a new employee needs assigning, or an existing one needs to change starting a specific month.'),
+('please_select_effective_month', 'en', 'Please select the effective month.'),
+('currently_assigned_to', 'en', 'Currently'),
+('reassign_employees_effective_month_hint', 'en', 'Employees already assigned to a supervisor can still be picked - doing so changes their supervisor starting the effective month you chose, without affecting earlier months.'),
+('effective_as_of_month', 'en', 'As of'),
+('view_payroll_supervisor_assignments_button', 'en', 'View Assignments')
 ON DUPLICATE KEY UPDATE `translation` = VALUES(`translation`);
 
 INSERT INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUES
@@ -27,5 +34,12 @@ INSERT INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUES
 ('already_assigned_to', 'ar', 'معيّن بالفعل إلى'),
 ('already_assigned_employees_locked_hint', 'ar', 'الموظفون المعيّنون بالفعل لمشرف رواتب مقفلون ولا يمكن اختيارهم هنا مرة أخرى.'),
 ('download_payroll_supervisor_assignments_button', 'ar', 'تنزيل تعيينات المشرفين'),
-('supervisor_emp_id', 'ar', 'رقم المشرف الوظيفي')
+('supervisor_emp_id', 'ar', 'رقم المشرف الوظيفي'),
+('effective_from_month_label', 'ar', 'ساري من'),
+('effective_from_month_hint', 'ar', 'بمجرد التعيين، يستمر المشرف تلقائيًا لكل الأشهر القادمة - تحتاج هذا فقط عند تعيين موظف جديد أو تغيير مشرف موظف حالي ابتداءً من شهر معيّن.'),
+('please_select_effective_month', 'ar', 'يرجى اختيار شهر السريان'),
+('currently_assigned_to', 'ar', 'حاليًا'),
+('reassign_employees_effective_month_hint', 'ar', 'يمكن اختيار الموظفين المعيّنين بالفعل لمشرف آخر - سيتغير المشرف بدءًا من الشهر الذي اخترته دون التأثير على الأشهر السابقة.'),
+('effective_as_of_month', 'ar', 'اعتبارًا من'),
+('view_payroll_supervisor_assignments_button', 'ar', 'عرض التعيينات')
 ON DUPLICATE KEY UPDATE `translation` = VALUES(`translation`);

@@ -1738,6 +1738,96 @@ code {
   background-color: #ffffff;
 }
 
+/* =============
+   Field group card (label + icon + input, grouped)
+============= */
+.emp-field-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d0e0ef;
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.emp-field-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.emp-field-control {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.emp-field-icon {
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid #cbdbeb;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1e293b;
+  font-size: 16px;
+}
+.emp-field-control .form-control {
+  min-height: 40px;
+  border: 1px solid #cbdbeb;
+  border-radius: 10px;
+  font-weight: 600;
+  background: #ffffff;
+}
+.emp-field-control .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 0.12rem rgba(59, 130, 246, 0.2);
+}
+/* select2 sizing only so it fits the grid column - its own default skin is untouched */
+.emp-field-control .select2-container {
+  width: 100% !important;
+}
+.emp-field-control-multi {
+  grid-template-columns: 40px 1fr 1fr;
+}
+/* Hijri calendar popup renders behind SweetAlert2's popup (z-index 1060) otherwise */
+.calendars-popup {
+  z-index: 100000 !important;
+}
+
+/* Tab-style radio group (segmented control) */
+.emp-tab-group {
+  display: inline-flex;
+  border: 1px solid #cbdbeb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+.emp-tab-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+.emp-tab-label {
+  margin: 0;
+  padding: 9px 20px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+  user-select: none;
+}
+.emp-tab-input:checked + .emp-tab-label {
+  background: #3b82f6;
+  color: #ffffff;
+}
+.emp-tab-input:focus-visible + .emp-tab-label {
+  box-shadow: 0 0 0 0.12rem rgba(59, 130, 246, 0.35);
+}
+
 /* Card */
 .card {
   border: none;
