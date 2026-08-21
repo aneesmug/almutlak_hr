@@ -187,13 +187,21 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                         <div class="col-xl-12">
                             <div class="card-box">
                                 <h4 class="header-title m-t-0 m-b-30"><?=__('all_employees')?></h4>
-                                <div class="row" style="max-width: 800px; margin: auto;">
-                                    <div class="col-md-12">
-                                        <div class="form-group" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+                                <div class="row align-items-stretch" style="max-width: 1000px; margin: auto;">
+                                    <div class="col-md-9 d-flex">
+                                        <div class="form-group w-100 mb-0 d-flex flex-column justify-content-between" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
                                             <label for="searchFilter" class="font-weight-bold"><?=__('search_by_name_id_mobile_iqama_id')?></label>
                                             <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>" style="background: #fff;">
                                         </div>
                                     </div>
+                                    <?php if (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page)): ?>
+                                        <div class="col-md-3 d-flex mt-2 mt-md-0">
+                                            <div class="form-group w-100 mb-0 d-flex flex-column justify-content-between" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+                                                <label class="font-weight-bold d-block"><?=__('add_new_employee_modal_title', 'Add New Employee') ?></label>
+                                                <button type="button" class="btn btn-primary btn-block" onclick="openNewEmployeeTypeModal()"><i class="fa fa-user-plus"></i> <?=__('new_employee') ?></button>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>

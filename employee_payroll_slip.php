@@ -70,6 +70,23 @@ $all_payrolls = $stmt->get_result();
     <link href="./assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="./assets/css/style.min.css" rel="stylesheet" type="text/css" />
     <style>
+        /* style.min.css (linked above) isn't present on disk, so the shared
+           Saudi Riyal icon font/class it would normally pull in never loads here -
+           define it directly so <i class="icon-saudi_riyal"></i> renders. */
+        @font-face {
+            font-family: 'saudi_riyal';
+            src: url('./assets/fonts/saudi_riyal.woff2') format('woff2'),
+                url('./assets/fonts/saudi_riyal.woff') format('woff'),
+                url('./assets/fonts/saudi_riyal.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        .icon-saudi_riyal::before {
+            content: "\e900";
+            font-family: 'saudi_riyal' !important;
+            font-size: inherit;
+            color: inherit;
+        }
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -302,9 +319,9 @@ $all_payrolls = $stmt->get_result();
                                         <div class="col-md-6">
                                             <div class="employee-details-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
                                                 <h6><i class="fa fa-money"></i> <?= __('salary_summary', 'Salary Summary') ?></h6>
-                                                <p><i class="fa fa-coins"></i> <strong><?= __('basic_salary', 'Basic Salary') ?>:</strong> <?= number_format($payroll_record['basic_salary'] ?? 0, 2) ?> SAR</p>
-                                                <p><i class="fa fa-chart-line"></i> <strong><?= __('gross_salary', 'Gross Salary') ?>:</strong> <?= number_format($payroll_record['total_gross_salary'] ?? 0, 2) ?> SAR</p>
-                                                <p><i class="fa fa-wallet"></i> <strong><?= __('net_salary', 'Net Salary') ?>:</strong> <?= number_format($payroll_record['net_salary'] ?? 0, 2) ?> SAR</p>
+                                                <p><i class="fa fa-coins"></i> <strong><?= __('basic_salary', 'Basic Salary') ?>:</strong> <i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['basic_salary'] ?? 0, 2) ?></p>
+                                                <p><i class="fa fa-chart-line"></i> <strong><?= __('gross_salary', 'Gross Salary') ?>:</strong> <i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['total_gross_salary'] ?? 0, 2) ?></p>
+                                                <p><i class="fa fa-wallet"></i> <strong><?= __('net_salary', 'Net Salary') ?>:</strong> <i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['net_salary'] ?? 0, 2) ?></p>
                                             </div>
                                         </div>
                                     </div>
@@ -316,72 +333,72 @@ $all_payrolls = $stmt->get_result();
                                             <?php if (isset($payroll_record['basic_salary']) && $payroll_record['basic_salary'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-primary"></i> <?= __('basic_salary', 'Basic Salary') ?></span>
-                                                    <span><?= number_format($payroll_record['basic_salary'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['basic_salary'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['housing_allowance']) && $payroll_record['housing_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-info"></i> <?= __('housing_allowance', 'Housing Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['housing_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['housing_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['transport_allowance']) && $payroll_record['transport_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-success"></i> <?= __('transport_allowance', 'Transport Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['transport_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['transport_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['food_allowance']) && $payroll_record['food_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-warning"></i> <?= __('food_allowance', 'Food Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['food_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['food_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['miscellaneous_allowance']) && $payroll_record['miscellaneous_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-secondary"></i> <?= __('miscellaneous_allowance', 'Miscellaneous Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['miscellaneous_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['miscellaneous_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['cashier_allowance']) && $payroll_record['cashier_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-primary"></i> <?= __('cashier_allowance', 'Cashier Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['cashier_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['cashier_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['fuel_allowance']) && $payroll_record['fuel_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-danger"></i> <?= __('fuel_allowance', 'Fuel Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['fuel_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['fuel_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['telephone_allowance']) && $payroll_record['telephone_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-info"></i> <?= __('telephone_allowance', 'Telephone Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['telephone_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['telephone_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['other_allowance']) && $payroll_record['other_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-success"></i> <?= __('other_allowance', 'Other Allowances') ?></span>
-                                                    <span><?= number_format($payroll_record['other_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['other_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['guard_allowance']) && $payroll_record['guard_allowance'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-warning"></i> <?= __('guard_allowance', 'Guard Allowance') ?></span>
-                                                    <span><?= number_format($payroll_record['guard_allowance'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['guard_allowance'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <?php if (isset($payroll_record['total_benefits']) && $payroll_record['total_benefits'] > 0): ?>
                                                 <div class="payroll-row">
                                                     <span><i class="fa fa-circle text-primary"></i> <?= __('total_benefits', 'Additional Benefits') ?></span>
-                                                    <span><?= number_format($payroll_record['total_benefits'], 2) ?> SAR</span>
+                                                    <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['total_benefits'], 2) ?></span>
                                                 </div>
                                             <?php endif; ?>
                                             <div class="payroll-total-row">
                                                 <span><i class="fa fa-calculator"></i> <?= __('total_gross_salary', 'Total Gross Salary') ?></span>
-                                                <span><?= number_format($payroll_record['total_gross_salary'] ?? 0, 2) ?> SAR</span>
+                                                <span><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['total_gross_salary'] ?? 0, 2) ?></span>
                                             </div>
                                         </div>
                                     </div>
@@ -403,15 +420,15 @@ $all_payrolls = $stmt->get_result();
                                                 ?>
                                                     <div class="payroll-row">
                                                         <span><i class="fa fa-circle text-danger"></i> <?= htmlspecialchars($ded['note'] ?: 'Deduction') ?></span>
-                                                        <span><?= number_format($ded['deduction'], 2) ?> SAR</span>
+                                                        <span><i class="icon-saudi_riyal"></i> <?= number_format($ded['deduction'], 2) ?></span>
                                                     </div>
-                                                <?php 
+                                                <?php
                                                     endif;
-                                                endwhile; 
+                                                endwhile;
                                                 ?>
                                                 <div class="payroll-total-row" style="background: linear-gradient(135deg, #ffe5e5 0%, #fff0e5 100%);">
                                                     <span><i class="fa fa-minus-circle"></i> <?= __('total_deductions', 'Total Deductions') ?></span>
-                                                    <span style="color: #d32f2f;"><?= number_format($payroll_record['total_deductions'] ?? 0, 2) ?> SAR</span>
+                                                    <span style="color: #d32f2f;"><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['total_deductions'] ?? 0, 2) ?></span>
                                                 </div>
                                             </div>
                                         </div>
@@ -420,7 +437,7 @@ $all_payrolls = $stmt->get_result();
                                     <!-- NET SALARY -->
                                     <div class="net-salary-card">
                                         <div class="label"><i class="fa fa-hand-holding-usd"></i> <?= __('net_salary', 'NET SALARY (Take Home)') ?></div>
-                                        <div class="amount"><?= number_format($payroll_record['net_salary'] ?? 0, 2) ?> SAR</div>
+                                        <div class="amount"><i class="icon-saudi_riyal"></i> <?= number_format($payroll_record['net_salary'] ?? 0, 2) ?></div>
                                     </div>
 
                                     <div class="text-muted small mt-4">

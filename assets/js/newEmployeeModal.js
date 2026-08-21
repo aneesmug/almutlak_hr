@@ -61,23 +61,9 @@ function newEmpPopulateSubDepts(departmentId, $target, selectedId) {
     if ($target.hasClass('select2-hidden-accessible')) $target.trigger('change');
 }
 
-function newEmpWireHijriPair(gregorianId, hijriId) {
-    const $g = $('#' + gregorianId);
-    const $h = $('#' + hijriId);
-    if (!$g.length || !$h.length || typeof $g.datepicker !== 'function' || typeof $h.hijriDatePicker !== 'function' || typeof moment === 'undefined') {
-        return;
-    }
-    $g.datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true }).on('changeDate', function(e) {
-        const hijriDate = moment(e.date).format('iYYYY-iMM-iDD');
-        $h.val(hijriDate).hijriDatePicker('setDate', hijriDate);
-    });
-    $h.hijriDatePicker({ format: 'iYYYY-iMM-iDD', hijri: true, showSwitcher: false }).on('dp.change', function(e) {
-        if (e.date) {
-            const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-            $g.val(gregorianDate).datepicker('update', gregorianDate);
-        }
-    });
-}
+// newEmpDatePickerModal / newEmpWireDatepicker / newEmpWireHijriPair / newEmpHijriCalendarHtml /
+// newEmpWireHijriCalendar now live in jquery.app.js (loaded on every admin page), so any page
+// can wire a date field the same way this form does, not just this modal.
 
 function newEmpFieldset(labelKey, fallback, inputHtml, colClass, icon, required) {
     return `<div class="form-group ${colClass || 'col-md-3'}">
@@ -89,13 +75,6 @@ function newEmpFieldset(labelKey, fallback, inputHtml, colClass, icon, required)
             </div>
         </div>
     </div>`;
-}
-
-function newEmpWireDatepicker(id) {
-    const $el = $('#' + id);
-    if ($el.length && typeof $el.datepicker === 'function') {
-        $el.datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true });
-    }
 }
 
 function newEmpFixMaskCaret(id) {
@@ -123,8 +102,19 @@ function newEmpValidateRequired(fields) {
     return true;
 }
 
+function newEmpEnsureJqueryBrowserShim() {
+    // bootstrap-inputmask.min.js reads the legacy jQuery.browser.msie property (removed in
+    // jQuery 1.9+). jquery.app.js normally shims this in with `jQuery.browser = {}`, but since
+    // this plugin now loads asynchronously it can fire before that shim runs (or after jQuery
+    // gets re-assigned elsewhere), leaving jQuery.browser undefined and throwing on focus.
+    if (window.jQuery && !jQuery.browser) {
+        jQuery.browser = {};
+    }
+}
+
 function newEmpApplyMasks(iqamaId, mobileId) {
     if (window.jQuery && typeof jQuery.fn.inputmask === 'function') {
+        newEmpEnsureJqueryBrowserShim();
         if (iqamaId) $('#' + iqamaId).inputmask({ mask: '9999999999' });
         if (mobileId) $('#' + mobileId).inputmask({ mask: '0599999999' });
     }
@@ -132,6 +122,7 @@ function newEmpApplyMasks(iqamaId, mobileId) {
 
 function newEmpApplyIbanMask(ibanId) {
     if (window.jQuery && typeof jQuery.fn.inputmask === 'function' && ibanId) {
+        newEmpEnsureJqueryBrowserShim();
         $('#' + ibanId).inputmask({ mask: 'SA99 9999 9999 9999 9999 9999' });
     }
 }
@@ -212,6 +203,7 @@ async function openNewEmployeeTypeModal() {
             showConfirmButton: false,
             showCancelButton: true,
             cancelButtonText: __('cancel', 'Cancel'),
+            allowOutsideClick: false,
             didOpen: () => {
                 document.getElementById('newEmpTypeCompany').addEventListener('click', () => { selectedType = 'company'; Swal.close(); });
                 document.getElementById('newEmpTypeManPower').addEventListener('click', () => { selectedType = 'man_power'; Swal.close(); });
@@ -271,8 +263,8 @@ function openCompanyStep1(data, w) {
             ${newEmpFieldset('passport_no', 'Passport no', `<input type="text" id="cePassportNumber" class="form-control" value="${escapeHtml(w.passport_number || '')}">`, 'col-md-3', 'fa-passport')}
             ${newEmpFieldset('passport_expiry', 'Passport expiry', `<input type="text" id="cePassportExp" class="form-control" value="${escapeHtml(w.passport_exp || '')}">`, 'col-md-3', 'fa-calendar-alt')}
             ${newEmpFieldset('mobile', 'Mobile', `<input type="text" id="ceMobile" class="form-control" value="${escapeHtml(w.mobile || '')}" required>`, 'col-md-3', 'fa-phone', true)}
-            ${newEmpFieldset('emergency_mobile_no_label', 'Emergency Mobile No.', `<input type="text" id="ceEmgMobile" class="form-control" value="${escapeHtml(w.emg_mobile || '')}" required>`, 'col-md-3', 'fa-phone-alt', true)}
-            ${newEmpFieldset('emergency_contact_name_label', 'Emergency Contact Name', `<input type="text" id="ceEmgName" class="form-control" value="${escapeHtml(w.emg_name || '')}" required>`, 'col-md-3', 'fa-user-friends', true)}
+            ${newEmpFieldset('emergency_mobile_no_label', 'Emergency Mobile No.', `<input type="text" id="ceEmgMobile" class="form-control" value="${escapeHtml(w.emg_mobile || '')}">`, 'col-md-3', 'fa-phone-alt')}
+            ${newEmpFieldset('emergency_contact_name_label', 'Emergency Contact Name', `<input type="text" id="ceEmgName" class="form-control" value="${escapeHtml(w.emg_name || '')}">`, 'col-md-3', 'fa-user-friends')}
             ${newEmpFieldset('nationality', 'Nationality', `<select id="ceCountry" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.countries, 'id', 'name', 'name', true, w.country)}</select>`, 'col-md-3', 'fa-flag', true)}
             ${newEmpFieldCard(`${__('date_of_birth', 'Date of birth')} <span class="text-danger">${__('in_gregorian', 'In Gregorian')} *</span>`, 'col-md-3', 'fa-calendar-alt', `<input type="text" id="ceDob" class="form-control" value="${escapeHtml(w.dob || '')}" required>`)}
             ${newEmpFieldCard(`${__('date_of_birth', 'Date of birth')} <span class="text-danger">${__('in_hijri', 'In Hijri')} *</span>`, 'col-md-3', 'fa-calendar-alt', `<input type="text" id="ceDobH" class="form-control" value="${escapeHtml(w.dob_h || '')}" required>`)}
@@ -295,11 +287,12 @@ function openCompanyStep1(data, w) {
         allowOutsideClick: false,
         didOpen: () => {
             newEmpInitSelect2();
-            newEmpWireHijriPair('ceIqamaExpG', 'ceIqamaExp');
-            newEmpWireHijriPair('ceDob', 'ceDobH');
+            const ctx1 = { data, w, collect: newEmpCollectBasicInfo, reopen: openCompanyStep1 };
+            newEmpWireHijriPair('ceIqamaExpG', 'ceIqamaExp', 'iqama_exp_g', 'iqama_exp', ctx1);
+            newEmpWireHijriPair('ceDob', 'ceDobH', 'dob', 'dob_h', ctx1);
+            newEmpWireDatepicker('cePassportExp', 'passport_exp', ctx1);
             newEmpApplyMasks('ceIqama', 'ceMobile');
             newEmpApplyAutoNumeric();
-            newEmpWireDatepicker('cePassportExp');
             newEmpFixMaskCaret('ceIqama');
             newEmpFixMaskCaret('ceMobile');
         },
@@ -311,8 +304,6 @@ function openCompanyStep1(data, w) {
                 ceIqamaExpG: __('iqama_id_expiry', 'Iqama / ID expiry'),
                 ceIqamaExp: __('iqama_id_expiry', 'Iqama / ID expiry'),
                 ceMobile: __('mobile', 'Mobile'),
-                ceEmgMobile: __('emergency_mobile_no_label', 'Emergency Mobile No.'),
-                ceEmgName: __('emergency_contact_name_label', 'Emergency Contact Name'),
                 ceCountry: __('nationality', 'Nationality'),
                 ceDob: __('date_of_birth', 'Date of birth'),
                 ceDobH: __('date_of_birth', 'Date of birth')
@@ -356,7 +347,7 @@ function openCompanyStep2(data, w) {
             ${newEmpFieldset('location_label', 'Location', `<select id="ceLocationId" class="form-control new-emp-select2" required><option value="">${__('select_a_city_first', 'Select a City First')}</option></select>`, 'col-md-3', 'fa-map-marker-alt', true)}
             ${newEmpFieldset('sub_department_label', 'Sub-Department', `<select id="ceSubDeptId" class="form-control new-emp-select2"><option value="">${__('select_a_department_first', 'Select a Department First')}</option></select>`, 'col-md-3', 'fa-sitemap')}
             ${newEmpFieldset('employee_type_label', 'Employee Type', `<select id="ceEmptype" class="form-control new-emp-select2" required><option value="">${__('select_option', 'Select')}</option>${emptypeOptions}</select>`, 'col-md-3', 'fa-user-tag', true)}
-            ${newEmpFieldset('direct_supervisor', 'Direct Supervisor', `<select id="ceSupervisorId" class="form-control new-emp-select2"><option value="">${__('select_option', 'Select')}</option>${(data.supervisors || []).map(s => `<option value="${String(s.emp_id).replace(/"/g, '&quot;')}" ${String(w.supervisor_id) === String(s.emp_id) ? 'selected' : ''}>${escapeHtml(s.name)} (${escapeHtml(s.emptype)})</option>`).join('')}</select>`, 'col-md-3', 'fa-user-tie')}
+            ${newEmpFieldset('direct_supervisor', 'Direct Supervisor', `<select id="ceSupervisorId" class="form-control new-emp-select2" required><option value="">${__('select_option', 'Select')}</option>${(data.supervisors || []).map(s => `<option value="${String(s.emp_id).replace(/"/g, '&quot;')}" ${String(w.supervisor_id) === String(s.emp_id) ? 'selected' : ''}>${escapeHtml(s.name)} (${escapeHtml(s.emptype)})</option>`).join('')}</select>`, 'col-md-3', 'fa-user-tie', true)}
             ${newEmpFieldset('joining_date', 'Joining date', `<input type="text" id="ceJoiningDate" class="form-control" value="${escapeHtml(w.joining_date || '')}" required>`, 'col-md-3', 'fa-calendar-alt', true)}
             ${newEmpFieldset('sponsorship', 'Sponsorship', `<select id="ceEmpSupType" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.sponsorships, 'id', 'sponsor', 'sponsor_ar', true, w.emp_sup_type)}</select>`, 'col-md-3', 'fa-handshake', true)}
             ${newEmpFieldset('company_label', 'Company', `<select id="ceCompNo" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.companies, 'comp_id', 'comp_name', 'comp_name_ar', true, w.comp_no)}</select>`, 'col-md-3', 'fa-building', true)}
@@ -381,7 +372,7 @@ function openCompanyStep2(data, w) {
         allowOutsideClick: false,
         didOpen: () => {
             newEmpInitSelect2();
-            newEmpWireDatepicker('ceJoiningDate');
+            newEmpWireDatepicker('ceJoiningDate', 'joining_date', { data, w, collect: newEmpCollectEmploymentInfo, reopen: openCompanyStep2 });
             if (w.city_id) newEmpPopulateLocations(w.city_id, $('#ceLocationId'), w.location_id);
             if (w.department) newEmpPopulateSubDepts(w.department, $('#ceSubDeptId'), w.sub_dept_id);
 
@@ -405,6 +396,7 @@ function openCompanyStep2(data, w) {
                 ceCityId: __('city_label', 'City'),
                 ceLocationId: __('location_label', 'Location'),
                 ceEmptype: __('employee_type_label', 'Employee Type'),
+                ceSupervisorId: __('direct_supervisor', 'Direct Supervisor'),
                 ceJoiningDate: __('joining_date', 'Joining date'),
                 ceEmpSupType: __('sponsorship', 'Sponsorship'),
                 ceCompNo: __('company_label', 'Company'),
@@ -539,30 +531,58 @@ function openCompanyStep3(data, w) {
 // ---------------------------------------------------------------------------
 // Man Power
 // ---------------------------------------------------------------------------
-function openManPowerEmployeeModal(data) {
+function newEmpCollectManPower() {
+    const avatarFile = document.getElementById('mpAvatar').files[0];
+    return {
+        name: $('#mpName').val(),
+        iqama: $('#mpIqama').val(),
+        iqama_exp_g: $('#mpIqamaExpG').val(),
+        iqama_exp_hijri: $('#mpIqamaExpHijri').val(),
+        country: $('#mpCountry').val(),
+        department: $('#mpDepartment').val(),
+        comp_no: $('#mpCompNo').val(),
+        city_id: $('#mpCityId').val(),
+        location_id: $('#mpLocationId').val(),
+        sub_dept_id: $('#mpSubDeptId').val(),
+        mobile: $('#mpMobile').val(),
+        joining_date: $('#mpJoiningDate').val(),
+        salary: $('#mpSalary').val(),
+        dob: $('#mpDob').val(),
+        sex: $('input[name=mpSex]:checked').val(),
+        // File objects can't be reassigned into a fresh <input type="file">'s value for
+        // security reasons; keep the picked File itself and restore it via DataTransfer
+        // (see didOpen below) whenever this modal gets re-fired (e.g. after using the
+        // date picker), so choosing an avatar doesn't get wiped out.
+        avatarFile: avatarFile || (window.NEW_EMP_MP_AVATAR_FILE || null)
+    };
+}
+
+function openManPowerEmployeeModal(data, w) {
+    w = w || {};
+    window.NEW_EMP_MP_AVATAR_FILE = w.avatarFile || null;
     const html = `
     <form id="newManPowerForm" class="text-left" enctype="multipart/form-data">
         <div class="card-box">
         <div class="form-row">
-            ${newEmpFieldset('employee_name', 'Employee Name', `<input type="text" id="mpName" class="form-control" required>`, 'col-md-3', 'fa-user', true)}
-            ${newEmpFieldset('employee_id', 'Employee ID', `<input type="text" id="mpEmpId" class="form-control" value="${escapeHtml(data.next_emp_id)}" required>`, 'col-md-2', 'fa-id-badge', true)}
-            ${newEmpFieldset('iqama_id', 'Iqama', `<input type="text" id="mpIqama" class="form-control" required>`, 'col-md-2', 'fa-id-card', true)}
-            ${newEmpFieldCard(`${__('iqama_id_expiry', 'Iqama / ID expiry')} <span class="text-danger">${__('in_hijri', 'In Hijri')}</span>`, 'col-md-2', 'fa-calendar-alt', `<input type="text" id="mpIqamaExpHijri" class="form-control">`)}
-            ${newEmpFieldset('nationality', 'Nationality', `<select id="mpCountry" class="form-control new-emp-select2">${newEmpOptionsHtml(data.countries, 'id', 'name', 'name', true)}</select>`, 'col-md-3', 'fa-flag')}
-            ${newEmpFieldset('department', 'Department', `<select id="mpDepartment" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.departments, 'id', 'dep_nme', 'dep_nme_ar', true)}</select>`, 'col-md-3', 'fa-sitemap', true)}
-            ${newEmpFieldset('company_label', 'Company', `<select id="mpCompNo" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.companies, 'comp_id', 'comp_name', 'comp_name_ar', true)}</select>`, 'col-md-3', 'fa-building', true)}
-            ${newEmpFieldset('city_label', 'City', `<select id="mpCityId" class="form-control new-emp-select2">${newEmpOptionsHtml(data.cities, 'id', 'name_en', 'name_ar', true)}</select>`, 'col-md-3', 'fa-city')}
+            ${newEmpFieldset('employee_name', 'Employee Name', `<input type="text" id="mpName" class="form-control" value="${escapeHtml(w.name || '')}" required>`, 'col-md-3', 'fa-user', true)}
+            ${newEmpFieldset('employee_id', 'Employee ID', `<input type="text" id="mpEmpId" class="form-control" value="${escapeHtml(w.emp_id || data.next_emp_id)}" required>`, 'col-md-2', 'fa-id-badge', true)}
+            ${newEmpFieldset('iqama_id', 'Iqama', `<input type="text" id="mpIqama" class="form-control" value="${escapeHtml(w.iqama || '')}" required>`, 'col-md-2', 'fa-id-card', true)}
+            ${newEmpFieldCard(`${__('iqama_id_expiry', 'Iqama / ID expiry')} <span class="text-danger">${__('in_hijri', 'In Hijri')}</span>`, 'col-md-2', 'fa-calendar-alt', `<input type="text" id="mpIqamaExpHijri" class="form-control" value="${escapeHtml(w.iqama_exp_hijri || '')}">`)}
+            ${newEmpFieldset('nationality', 'Nationality', `<select id="mpCountry" class="form-control new-emp-select2">${newEmpOptionsHtml(data.countries, 'id', 'name', 'name', true, w.country)}</select>`, 'col-md-3', 'fa-flag')}
+            ${newEmpFieldset('department', 'Department', `<select id="mpDepartment" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.departments, 'id', 'dep_nme', 'dep_nme_ar', true, w.department)}</select>`, 'col-md-3', 'fa-sitemap', true)}
+            ${newEmpFieldset('company_label', 'Company', `<select id="mpCompNo" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.companies, 'comp_id', 'comp_name', 'comp_name_ar', true, w.comp_no)}</select>`, 'col-md-3', 'fa-building', true)}
+            ${newEmpFieldset('city_label', 'City', `<select id="mpCityId" class="form-control new-emp-select2">${newEmpOptionsHtml(data.cities, 'id', 'name_en', 'name_ar', true, w.city_id)}</select>`, 'col-md-3', 'fa-city')}
             ${newEmpFieldset('location_label', 'Location', `<select id="mpLocationId" class="form-control new-emp-select2"><option value="">${__('select_a_city_first', 'Select a City First')}</option></select>`, 'col-md-3', 'fa-map-marker-alt')}
             ${newEmpFieldset('sub_department_label', 'Sub-Department', `<select id="mpSubDeptId" class="form-control new-emp-select2"><option value="">${__('select_a_department_first', 'Select a Department First')}</option></select>`, 'col-md-3', 'fa-sitemap')}
-            ${newEmpFieldset('mobile', 'Mobile No.', `<input type="text" id="mpMobile" class="form-control">`, 'col-md-3', 'fa-phone')}
-            ${newEmpFieldset('joining_date', 'Joining Date', `<input type="text" id="mpJoiningDate" class="form-control">`, 'col-md-3', 'fa-calendar-alt')}
-            ${newEmpFieldset('salary', 'Salary', `<input type="text" id="mpSalary" class="form-control autonumber" data-v-max="25000" data-v-min="0" required>`, 'col-md-3', 'fa-money-bill-wave', true)}
-            ${newEmpFieldset('date_of_birth', 'Date of Birth', `<input type="text" id="mpDob" class="form-control">`, 'col-md-3', 'fa-calendar-alt')}
-            ${newEmpFieldCard(`${__('gender', 'Gender')} <span class="text-danger">*</span>`, 'col-md-3', 'fa-venus-mars', newEmpTabGroup('mpSex', [{ value: 'male', label: __('male', 'Male') }, { value: 'female', label: __('female', 'Female') }], 'male'))}
+            ${newEmpFieldset('mobile', 'Mobile No.', `<input type="text" id="mpMobile" class="form-control" value="${escapeHtml(w.mobile || '')}">`, 'col-md-3', 'fa-phone')}
+            ${newEmpFieldset('joining_date', 'Joining Date', `<input type="text" id="mpJoiningDate" class="form-control" value="${escapeHtml(w.joining_date || '')}">`, 'col-md-3', 'fa-calendar-alt')}
+            ${newEmpFieldset('salary', 'Salary', `<input type="text" id="mpSalary" class="form-control autonumber" data-v-max="25000" data-v-min="0" value="${escapeHtml(w.salary || '')}" required>`, 'col-md-3', 'fa-money-bill-wave', true)}
+            ${newEmpFieldset('date_of_birth', 'Date of Birth', `<input type="text" id="mpDob" class="form-control" value="${escapeHtml(w.dob || '')}">`, 'col-md-3', 'fa-calendar-alt')}
+            ${newEmpFieldCard(`${__('gender', 'Gender')} <span class="text-danger">*</span>`, 'col-md-3', 'fa-venus-mars', newEmpTabGroup('mpSex', [{ value: 'male', label: __('male', 'Male') }, { value: 'female', label: __('female', 'Female') }], w.sex === 'female' ? 'female' : 'male'))}
             ${newEmpFieldset('add_employee_picture', 'Add Employee Picture', `<input type="file" id="mpAvatar" class="form-control" accept="image/png,image/jpeg,image/gif">`, 'col-md-3', 'fa-camera')}
         </div>
         </div>
-        <input type="hidden" id="mpIqamaExpG">
+        <input type="hidden" id="mpIqamaExpG" value="${escapeHtml(w.iqama_exp_g || '')}">
     </form>`;
 
     Swal.fire({
@@ -577,15 +597,26 @@ function openManPowerEmployeeModal(data) {
         showLoaderOnConfirm: true,
         didOpen: () => {
             newEmpInitSelect2();
-            newEmpWireHijriPair('mpIqamaExpG', 'mpIqamaExpHijri');
+            const mpCtx = { data, w, collect: newEmpCollectManPower, reopen: openManPowerEmployeeModal };
+            newEmpWireHijriPair('mpIqamaExpG', 'mpIqamaExpHijri', 'iqama_exp_g', 'iqama_exp_hijri', mpCtx);
+            newEmpWireDatepicker('mpJoiningDate', 'joining_date', mpCtx);
             newEmpApplyMasks('mpIqama', 'mpMobile');
             newEmpApplyAutoNumeric();
             newEmpFixMaskCaret('mpIqama');
             newEmpFixMaskCaret('mpMobile');
-            newEmpWireDatepicker('mpJoiningDate');
 
+            if (w.city_id) newEmpPopulateLocations(w.city_id, $('#mpLocationId'), w.location_id);
+            if (w.department) newEmpPopulateSubDepts(w.department, $('#mpSubDeptId'), w.sub_dept_id);
             $('#mpCityId').on('change', function() { newEmpPopulateLocations($(this).val(), $('#mpLocationId'), ''); });
             $('#mpDepartment').on('change', function() { newEmpPopulateSubDepts($(this).val(), $('#mpSubDeptId'), ''); });
+
+            if (w.avatarFile && window.DataTransfer) {
+                try {
+                    const dt = new DataTransfer();
+                    dt.items.add(w.avatarFile);
+                    document.getElementById('mpAvatar').files = dt.files;
+                } catch (e) { /* ignore: browser without DataTransfer file support */ }
+            }
         },
         preConfirm: async () => {
             const requiredMap = { mpName: 'Employee name', mpEmpId: 'Employee ID', mpIqama: 'Iqama', mpDepartment: 'Department', mpCompNo: 'Company', mpSalary: 'Salary' };

@@ -57,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'is_overtime_eligible',
 			'allow_emergency_vacation',
 			'allow_vacation_salary_below_min_days',
+			'other_income_enabled',
 			'requests_blocked',
 			'blocked_request_types'
 		];
@@ -733,6 +734,19 @@ if (mysqli_num_rows($query) == 1) {
 													<label for="allowVacSalaryBelowMinNo" class="atch"><?= __('no', 'No') ?></label>
 												</div>
 												<small class="form-text text-muted"><?= __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20))) ?></small>
+											</div>
+
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('other_income_enabled', 'Show Other Income Block') ?></label>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="otherIncomeEnabledYes" name="other_income_enabled" value="1" <?= ((string)($emprow['other_income_enabled'] ?? '1') === '1') ? 'checked' : '' ?>>
+													<label for="otherIncomeEnabledYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="otherIncomeEnabledNo" name="other_income_enabled" value="0" <?= ((string)($emprow['other_income_enabled'] ?? '1') !== '1') ? 'checked' : '' ?>>
+													<label for="otherIncomeEnabledNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
+												<small class="form-text text-muted"><?= __('other_income_enabled_hint', "When Yes, the Other Income section is available on this employee's profile. When No, it is hidden for everyone regardless of Special Access.") ?></small>
 											</div>
 
 											<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>

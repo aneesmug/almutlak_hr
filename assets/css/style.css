@@ -1795,6 +1795,146 @@ code {
   z-index: 100000 !important;
 }
 
+/* Date field readonly trigger for the nested date-picker SweetAlert2 modal */
+.emp-dp-trigger {
+  cursor: pointer;
+  background-color: #ffffff !important;
+}
+/* Nested date-picker modal body (single inline calendar) */
+.emp-dp-wrap {
+  display: flex;
+  justify-content: center;
+}
+/* Force compact cell sizing - inside the SweetAlert2 popup the inline bootstrap-datepicker
+   inherits a larger ambient font-size than its usual dropdown-popup usage elsewhere in the
+   app, so its 20px-wide cells (bootstrap-datepicker.min.css) wrap 2-digit days onto 2 lines */
+.emp-dp-wrap .datepicker {
+  font-size: 13px;
+}
+.emp-dp-wrap .datepicker table {
+  width: 100%;
+}
+.emp-dp-wrap .datepicker td,
+.emp-dp-wrap .datepicker th {
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
+  padding: 0;
+}
+/* Self-built Hijri month calendar (see newEmpHijriCalendarHtml) */
+.emp-hijri-cal {
+  width: 100%;
+}
+.emp-hijri-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.emp-hijri-nav {
+  border: none;
+  background: #eef2f7;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #3b82f6;
+}
+.emp-hijri-nav:hover {
+  background: #e2e8f0;
+}
+.emp-hijri-cal-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+}
+.emp-hijri-cal-table th {
+  padding: 6px 0;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 13px;
+}
+.emp-hijri-cal-table td {
+  padding: 8px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.emp-hijri-cal-table td.emp-hijri-day:hover {
+  background: #eef2f7;
+}
+.emp-hijri-cal-table td.emp-hijri-day-selected {
+  background: #3b82f6;
+  color: #ffffff;
+  font-weight: 600;
+}
+/* Self-built Gregorian range calendar (see newEmpRangeCalendarHtml) */
+.emp-range-cal {
+  width: 100%;
+}
+.emp-range-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.emp-range-nav {
+  border: none;
+  background: #eef2f7;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #3b82f6;
+}
+.emp-range-nav:hover {
+  background: #e2e8f0;
+}
+.emp-range-cal-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+}
+.emp-range-cal-table th {
+  padding: 6px 0;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 13px;
+}
+.emp-range-cal-table td {
+  padding: 8px 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+.emp-range-cal-table td.emp-range-day:hover {
+  background: #eef2f7;
+}
+.emp-range-cal-table td.emp-range-day-in {
+  background: #dbeafe;
+}
+.emp-range-cal-table td.emp-range-day-start,
+.emp-range-cal-table td.emp-range-day-end {
+  background: #3b82f6;
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 6px;
+}
+.emp-range-cal-summary {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #1e293b;
+}
+
 /* Tab-style radio group (segmented control) */
 .emp-tab-group {
   display: inline-flex;

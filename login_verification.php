@@ -113,11 +113,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
     if (strlen($submitted_otp) !== 6) {
         $error_message = __('otp_error_invalid_format');
     } else {
-        $query = "SELECT * FROM `admin_login` WHERE `id_iqama`=? LIMIT 1";
+        $query = "SELECT a.*, e.name AS employee_name FROM `admin_login` a LEFT JOIN `employees` e ON a.emp_id = e.emp_id WHERE a.`id_iqama`=? LIMIT 1";
         $stmt = mysqli_prepare($conDB, $query);
         mysqli_stmt_bind_param($stmt, "s", $user_id);
         mysqli_stmt_execute($stmt);
         $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+
+        if ($user && !empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
         if ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp'])) {
             session_regenerate_id(true);

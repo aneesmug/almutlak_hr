@@ -27,12 +27,14 @@ try {
     $user_id = $_SESSION['otp_verification']['user_id'];
 
     // 2. Fetch User's Email from Database
-    $query = "SELECT `fullname`, `email` FROM `admin_login` WHERE `id_iqama`=? LIMIT 1";
+    $query = "SELECT a.`fullname`, a.`email`, e.`name` AS employee_name FROM `admin_login` a LEFT JOIN `employees` e ON a.emp_id = e.emp_id WHERE a.`id_iqama`=? LIMIT 1";
     $stmt = mysqli_prepare($conDB, $query);
     mysqli_stmt_bind_param($stmt, "s", $user_id);
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
     $user = mysqli_fetch_assoc($result);
+
+    if ($user && !empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
     if (!$user || empty($user['email'])) {
         throw new Exception('Could not find a registered email for this user.');
@@ -73,11 +75,22 @@ try {
         $domainName = $_SERVER['HTTP_HOST'];
         $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
         
+        // Build per-digit boxes so the code is easy to read/select in any mail client (Outlook's Word engine ignores <input>)
+        $otpDigitCells = '';
+        $otpDigits = str_split((string)$otp);
+        foreach ($otpDigits as $i => $digit) {
+            if ($i > 0) {
+                $otpDigitCells .= '<td style="width:10px;font-size:0;line-height:0;">&nbsp;</td>';
+            }
+            $otpDigitCells .= '<td style="background-color:#2a2a2a;border:1px solid #444444;border-radius:6px;width:40px;height:52px;text-align:center;vertical-align:middle;font-family:\'Inter\',Arial,sans-serif;font-size:30px;font-weight:700;color:#ffffff;">' . htmlspecialchars($digit) . '</td>';
+        }
+
         // Replace placeholders with variables
         $replacements = [
             '{{LOGO_URL}}' => $logoUrl,
             '{{USER_FULLNAME}}' => htmlspecialchars($user['fullname']),
             '{{OTP_CODE}}' => $otp,
+            '{{OTP_DIGIT_CELLS}}' => $otpDigitCells,
             '{{EMAIL_HEADING}}' => __('email_heading'),
             '{{EMAIL_GREETING}}' => __('email_greeting'),
             '{{EMAIL_VERIFICATION_CODE_LABEL}}' => __('email_verification_code_label'),

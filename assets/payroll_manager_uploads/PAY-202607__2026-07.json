@@ -1,0 +1,45 @@
+{
+    "request_inv_no": "PAY-202607",
+    "month": "2026-07",
+    "uploads": [
+        {
+            "file_id": "1425cbca7c47a2ad38a9",
+            "checkpoint_code": "PAYIMP-202607-D1A96B57205C",
+            "original_name": "payroll_2026-07_.xlsx",
+            "stored_name": "PAY-202607__2026-07__20260721_160022__72da9c61.xlsx",
+            "uploaded_by": "4133",
+            "uploaded_by_name": "ISSA TAMOTOMA",
+            "uploaded_at": "2026-07-21 16:00:22",
+            "reviewed_by": "3431",
+            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
+            "reviewed_at": "2026-07-22 11:15:25",
+            "review_note": "Reviewed by HR Payroll and imported to payroll."
+        },
+        {
+            "file_id": "1e83025a4a14f29fc5fd",
+            "checkpoint_code": "PAYIMP-202607-5124F3830123",
+            "original_name": "Copy of payroll_2026-07_AHMED_SABER_AHMED_AYTALLAH.xlsx",
+            "stored_name": "PAY-202607__2026-07__20260720_140939__6c397290.xlsx",
+            "uploaded_by": "5455",
+            "uploaded_by_name": "HAIFAA ALMALKI",
+            "uploaded_at": "2026-07-20 14:09:39",
+            "reviewed_by": "3431",
+            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
+            "reviewed_at": "2026-07-21 12:55:13",
+            "review_note": "Reviewed by HR Payroll and imported to payroll."
+        },
+        {
+            "file_id": "1809f4326bf0f85cf517",
+            "checkpoint_code": "PAYIMP-202607-1018EAB8A1AB",
+            "original_name": "PAYROLL_2026-07_AHMED_MOHD_MESSELHY_SHALABY.xlsx",
+            "stored_name": "PAY-202607__2026-07__20260719_155110__ea6bb60e.xlsx",
+            "uploaded_by": "5261",
+            "uploaded_by_name": "AHMED SHALABY",
+            "uploaded_at": "2026-07-19 15:51:10",
+            "reviewed_by": "3431",
+            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
+            "reviewed_at": "2026-07-21 13:55:36",
+            "review_note": "Reviewed by HR Payroll and imported to payroll."
+        }
+    ]
+}

@@ -1028,24 +1028,24 @@ if (mysqli_num_rows($query) == 1) {
                                                         <span class="label"><?= __('daily_salary_rate') ?? 'Daily Salary Rate' ?></span>
                                                         <small class="text-muted d-block"><?= __('monthly_salary_divided_30') ?? 'Monthly salary ÷ 30 days' ?></small>
                                                     </div>
-                                                    <span class="value"><?= number_format($daily_rate_display, 2); ?> SAR</span>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($daily_rate_display, 2); ?></span>
                                                 </li>
                                                 <li>
                                                     <div>
                                                         <span class="label"><?= __('gross_encashment_amount') ?? 'Gross Encashment Amount' ?></span>
                                                         <small class="text-muted d-block"><?= __('days_x_daily_rate') ?? 'Days × Daily Rate' ?></small>
                                                     </div>
-                                                    <span class="value"><?= number_format($encashment_amount, 2); ?> SAR</span>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($encashment_amount, 2); ?></span>
                                                 </li>
                                                 <?php if ($encash_gosi > 0): ?>
                                                 <li>
                                                     <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'], 1); ?>%)</span>
-                                                    <span class="value text-danger">-<?= number_format($encash_gosi, 2); ?> SAR</span>
+                                                    <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?= number_format($encash_gosi, 2); ?></span>
                                                 </li>
                                                 <?php endif; ?>
                                                 <li class="total-payable">
                                                     <span class="label"><?= __('total_encashment_payment') ?? 'Total Encashment Payment' ?></span>
-                                                    <span class="value"><?= number_format($net_encashment, 2); ?> SAR</span>
+                                                    <span class="value"><i class="icon-saudi_riyal"></i> <?= number_format($net_encashment, 2); ?></span>
                                                 </li>
                                             </ul>
                                         </div>
@@ -1124,30 +1124,30 @@ if (mysqli_num_rows($query) == 1) {
                                                 <div>
                                                     <span class="label"><?= __('working_days_salary') ?? 'Working Days Salary' ?></span>
                                                     <?php if ($is_full_working_month): ?>
-                                                    <small class="text-muted d-block"><?= __('full_month_worked') ?? 'Full month worked' ?> (<?= htmlspecialchars($working_days); ?>/<?= htmlspecialchars($working_days_month_days); ?> <?= __('days') ?? 'days' ?>) = <?= number_format($total_monthly_salary, 2); ?> SAR</small>
+                                                    <small class="text-muted d-block"><?= __('full_month_worked') ?? 'Full month worked' ?> (<?= htmlspecialchars($working_days); ?>/<?= htmlspecialchars($working_days_month_days); ?> <?= __('days') ?? 'days' ?>) = <i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?></small>
                                                     <?php else: ?>
-                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <?= number_format($working_days_daily_rate_display, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $working_days_divisor_display; ?> <?= __('days') ?? 'days' ?>)</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($working_days ?? 0); ?> <?= __('days') ?? 'days' ?> × <i class="icon-saudi_riyal"></i> <?= number_format($working_days_daily_rate_display, 2); ?>/day (<i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?> ÷ <?= $working_days_divisor_display; ?> <?= __('days') ?? 'days' ?>)</small>
                                                     <?php endif; ?>
                                                 </div>
-                                                <span class="value"><?=number_format($working_days_salary, 2); ?> SAR</span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($working_days_salary, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if (!$is_emergency): ?>
                                             <li>
                                                 <div>
                                                     <span class="label"><?= __('vacation_salary') ?? 'Vacation Salary' ?><?php if ($salaries_earned > 1): ?> <span style="color: #28a745; font-weight: 700;">x<?= (int)$salaries_earned ?></span><?php endif; ?></span>
-                                                    <small class="text-muted d-block"><?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?> × <?= number_format($daily_rate, 2); ?> SAR/day (<?= number_format($total_monthly_salary, 2); ?> SAR ÷ <?= $days_in_month; ?> days)</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($applied_days); ?> <?= __('days') ?? 'days' ?> × <i class="icon-saudi_riyal"></i> <?= number_format($daily_rate, 2); ?>/day (<i class="icon-saudi_riyal"></i> <?= number_format($total_monthly_salary, 2); ?> ÷ <?= $days_in_month; ?> days)</small>
                                                 </div>
-                                                <span class="value"><?=number_format($vacation_salary, 2); ?> SAR</span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($vacation_salary, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($overtime_amount > 0): ?>
                                             <li>
                                                 <div>
                                                     <span class="label text-success"><?= __('overtime_payment') ?? 'Overtime Payment' ?></span>
-                                                    <small class="text-muted d-block"><?= htmlspecialchars($overtime_hours) ?> <?= __('hours') ?? 'hours' ?> @ <?= number_format($overtimeHourlyRate ?? 0, 2) ?> SAR/hr</small>
+                                                    <small class="text-muted d-block"><?= htmlspecialchars($overtime_hours) ?> <?= __('hours') ?? 'hours' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($overtimeHourlyRate ?? 0, 2) ?>/hr</small>
                                                 </div>
-                                                <span class="value text-success">+<?=number_format($overtime_amount, 2); ?> SAR</span>
+                                                <span class="value text-success">+<i class="icon-saudi_riyal"></i> <?=number_format($overtime_amount, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($other_earnings > 0): ?>
@@ -1156,7 +1156,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     <span class="label text-success"><?= __('other_earnings') ?? 'Other Earnings' ?></span>
                                                     <small class="text-muted d-block"><?= __('other_earnings_manual_adjustment') ?? 'Manual other earnings adjustment' ?></small>
                                                 </div>
-                                                <span class="value text-success">+<?=number_format($other_earnings, 2); ?> SAR</span>
+                                                <span class="value text-success">+<i class="icon-saudi_riyal"></i> <?=number_format($other_earnings, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($ticket_fee > 0): ?>
@@ -1165,7 +1165,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     <span class="label"><?= __('ticket_payment') ?? 'Ticket Payment' ?></span>
                                                     <small class="text-muted d-block"><?= __('ticket_fares_will_not_be_added_in_total_payable_amount') ?? 'Ticket fares will not be added in total payable amount.' ?></small>
                                                 </div>
-                                                <span class="value"><?=number_format($ticket_fee, 2); ?> SAR</span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($ticket_fee, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($permit_fee > 0): ?>
@@ -1174,7 +1174,7 @@ if (mysqli_num_rows($query) == 1) {
                                                     <span class="label"><?= __('permit_fee') ?? 'Permit Fee' ?></span>
                                                     <small class="text-muted d-block"><?= __('permit_fees_will_not_be_added_in_total_payable_amount') ?? 'Permit fees will not be added in total payable amount.' ?></small>
                                                 </div>
-                                                <span class="value"><?=number_format($permit_fee, 2); ?> SAR</span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($permit_fee, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($deduction_amount > 0): ?>
@@ -1183,11 +1183,11 @@ if (mysqli_num_rows($query) == 1) {
                                                     <span class="label text-danger"><?= __('deductions') ?? 'Deductions' ?></span>
                                                     <small class="text-muted d-block">
                                                         <?php if ($deduction_hours > 0): ?>
-                                                            <?= htmlspecialchars($deduction_hours) ?> <?= __('hours') ?? 'hours' ?> @ <?= number_format($hourlyRateDeduction ?? 0, 2) ?> SAR/hr
+                                                            <?= htmlspecialchars($deduction_hours) ?> <?= __('hours') ?? 'hours' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($hourlyRateDeduction ?? 0, 2) ?>/hr
                                                         <?php endif; ?>
                                                         <?php if ($deduction_days > 0): ?>
                                                             <?php if ($deduction_hours > 0) echo ' + '; ?>
-                                                            <?= htmlspecialchars($deduction_days) ?> <?= __('days') ?? 'days' ?> @ <?= number_format($dailyRateDeduction ?? 0, 2) ?> SAR/day
+                                                            <?= htmlspecialchars($deduction_days) ?> <?= __('days') ?? 'days' ?> @ <i class="icon-saudi_riyal"></i> <?= number_format($dailyRateDeduction ?? 0, 2) ?>/day
                                                         <?php endif; ?>
                                                         <?php if ($other_deductions > 0): ?>
                                                             <?php if ($deduction_hours > 0 || $deduction_days > 0) echo ' + '; ?>
@@ -1195,18 +1195,18 @@ if (mysqli_num_rows($query) == 1) {
                                                         <?php endif; ?>
                                                     </small>
                                                 </div>
-                                                <span class="value text-danger">-<?=number_format($deduction_amount, 2); ?> SAR</span>
+                                                <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?=number_format($deduction_amount, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <?php if ($gosi_deduction > 0): ?>
                                             <li>
                                                 <span class="label text-danger"><?= __('gosi_deduction') ?? 'GOSI Deduction' ?> (<?= number_format($request['gosi'] ?? 0, 1); ?>%)</span>
-                                                <span class="value text-danger">-<?=number_format($gosi_deduction, 2); ?> SAR</span>
+                                                <span class="value text-danger">-<i class="icon-saudi_riyal"></i> <?=number_format($gosi_deduction, 2); ?></span>
                                             </li>
                                             <?php endif; ?>
                                             <li class="total-payable">
                                                 <span class="label"><?= __('total_payable') ?? 'Total Payable' ?></span>
-                                                <span class="value"><?=number_format($total_payable, 2); ?> SAR</span>
+                                                <span class="value"><i class="icon-saudi_riyal"></i> <?=number_format($total_payable, 2); ?></span>
                                             </li>
                                         </ul>
                                     </div>

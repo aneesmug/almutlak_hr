@@ -63,7 +63,7 @@ function approveLoanRequest(loanId, role, requestedAmount, userType, approvalLev
                     <div class="form-group">
                         <label for="final_approved_amount">${__('final_approved_amount_sar') || 'Final Approved Amount (SAR)'} <span class="text-danger">*</span></label>
                         <input type="number" step="0.01" id="final_approved_amount" name="final_approved_amount" class="form-control" placeholder="${__('enter_amount_actually_paid') || 'Enter amount actually paid'}" value="${requestedAmount}" required>
-                        <small class="form-text text-muted">${__('requested_amount') || 'Requested Amount'}: ${parseFloat(requestedAmount).toFixed(2)} SAR</small>
+                        <small class="form-text text-muted">${__('requested_amount') || 'Requested Amount'}: <i class="icon-saudi_riyal"></i> ${parseFloat(requestedAmount).toFixed(2)}</small>
                     </div>
                     <div class="form-group">
                         <label for="payment_proof">${__('payment_proof_document') || 'Payment Proof Document'} <span class="text-danger">*</span></label>
@@ -543,12 +543,12 @@ async function modifyAndApproveLoan(loanId, currentAmount, currentInstallments, 
                 html: `
                     <div class="alert alert-info text-left">
                         <h6 class="alert-heading">${__('end_of_service_benefit')}</h6>
-                        <p class="mb-0">${__('total_calculated')} <strong>${endOfService.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
+                        <p class="mb-0">${__('total_calculated')} <strong><i class="icon-saudi_riyal"></i> ${endOfService.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
                         <hr>
-                        <p class="mb-0">${__('max_loan_amount_40_percent')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
+                        <p class="mb-0">${__('max_loan_amount_40_percent')} <strong><i class="icon-saudi_riyal"></i> ${maxLoanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
                     </div>
                     <div class="alert alert-warning text-left">
-                        <strong>${__('applied_amount')}:</strong> <span class="text-dark">${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span><br>
+                        <strong>${__('applied_amount')}:</strong> <span class="text-dark"><i class="icon-saudi_riyal"></i> ${currentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><br>
                         <small class="text-muted">${__('original_employee_request')}</small>
                     </div>
                     <form id="modifyLoanForm" class="text-left">
@@ -711,12 +711,12 @@ async function modifyAndApproveLoanHRAssistant(loanId, currentAmount, currentIns
                 html: `
                     <div class="alert alert-info text-left">
                         <h6 class="alert-heading">${__('end_of_service_benefit')}</h6>
-                        <p class="mb-0">${__('total_calculated')} <strong>${endOfService.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
+                        <p class="mb-0">${__('total_calculated')} <strong><i class="icon-saudi_riyal"></i> ${endOfService.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
                         <hr>
-                        <p class="mb-0">${__('max_loan_amount_40_percent')} <strong>${maxLoanAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong></p>
+                        <p class="mb-0">${__('max_loan_amount_40_percent')} <strong><i class="icon-saudi_riyal"></i> ${maxLoanAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
                     </div>
                     <div class="alert alert-warning text-left">
-                        <strong>${__('applied_amount')}:</strong> <span class="text-dark">${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span><br>
+                        <strong>${__('applied_amount')}:</strong> <span class="text-dark"><i class="icon-saudi_riyal"></i> ${currentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><br>
                         <small class="text-muted">${__('original_employee_request')}</small>
                     </div>
                     <form id="modifyLoanFormHR" class="text-left">

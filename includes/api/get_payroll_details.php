@@ -445,7 +445,7 @@ try {
     }
 
     // 3. Fetch specific benefits for the month
-    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note, hours, minutes, type_id FROM payroll_benefits
+    $stmtBenefits = $pdo->prepare("SELECT id, benefit, note, hours, minutes, type_id, calculation_type FROM payroll_benefits
         WHERE emp_id = :emp_id AND month = :month_year
     ");
     $stmtBenefits->execute([':emp_id' => $empId, ':month_year' => $monthYear]);

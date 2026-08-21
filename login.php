@@ -52,7 +52,7 @@ try {
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
         
         $emp_id = $employee_data['emp_id'] ?? null;
-        $fullname = $employee_data['fullname'] ?? 'N/A';
+        $fullname = $employee_data['name'] ?? 'N/A';
         $email = $employee_data['email'] ?? null;
         $dept = $employee_data['dept'] ?? null;
         
@@ -72,7 +72,7 @@ try {
 
     } else {
         // === FLOW 2: EXISTING USER LOGIN ===
-        $query = "SELECT * FROM `admin_login` WHERE `id_iqama`=? LIMIT 1";
+        $query = "SELECT a.*, e.name AS employee_name FROM `admin_login` a LEFT JOIN `employees` e ON a.emp_id = e.emp_id WHERE a.`id_iqama`=? LIMIT 1";
         $stmt = mysqli_prepare($conDB, $query);
         mysqli_stmt_bind_param($stmt, "s", $id_iqama);
         mysqli_stmt_execute($stmt);
@@ -80,6 +80,7 @@ try {
 
         if (!$user) { throw new Exception('This ID is not registered. Please contact support.'); }
         if ($user['status'] != 1) { throw new Exception('Your account is inactive. Please contact support.'); }
+        if (!empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
         // Only 'employee' user_type requires password authentication
         // All other user types (administrator, gm, hr_senior_bp, hr_operations, etc.) use OTP
@@ -153,11 +154,22 @@ try {
                 $logoUrl = 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png'; // Use white logo for dark theme
                 // $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
                 
+                // Build per-digit boxes so the code is easy to read/select in any mail client (Outlook's Word engine ignores <input>)
+                $otpDigitCells = '';
+                $otpDigits = str_split((string)$otp);
+                foreach ($otpDigits as $i => $digit) {
+                    if ($i > 0) {
+                        $otpDigitCells .= '<td style="width:10px;font-size:0;line-height:0;">&nbsp;</td>';
+                    }
+                    $otpDigitCells .= '<td style="background-color:#2a2a2a;border:1px solid #444444;border-radius:6px;width:40px;height:52px;text-align:center;vertical-align:middle;font-family:\'Inter\',Arial,sans-serif;font-size:30px;font-weight:700;color:#ffffff;">' . htmlspecialchars($digit) . '</td>';
+                }
+
                 // Replace placeholders with variables
                 $replacements = [
                     '{{LOGO_URL}}' => $logoUrl,
                     '{{USER_FULLNAME}}' => htmlspecialchars($user['fullname']),
                     '{{OTP_CODE}}' => $otp,
+                    '{{OTP_DIGIT_CELLS}}' => $otpDigitCells,
                     '{{EMAIL_HEADING}}' => __('email_heading'),
                     '{{EMAIL_GREETING}}' => __('email_greeting'),
                     '{{EMAIL_VERIFICATION_CODE_LABEL}}' => __('email_verification_code_label'),

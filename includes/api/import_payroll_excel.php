@@ -178,6 +178,11 @@ function addPayrollImportSkip(array &$summary, int $rowNumber, string $reason, s
     $message = buildPayrollImportSkipMessage($rowNumber, $reason, $empId);
     $summary['skipped_rows']++;
     $summary['skipped_details'][] = $message;
+    $summary['skipped_items'][] = [
+        'row' => $rowNumber,
+        'emp_id' => $empId,
+        'reason' => $reason,
+    ];
 
     if ($includeInErrors) {
         $summary['errors'][] = $message;
@@ -452,6 +457,7 @@ $summary = [
     'updated_payrolls' => 0,
     'skipped_rows' => 0,
     'skipped_details' => [],
+    'skipped_items' => [],
     'errors' => [],
 ];
 
@@ -761,6 +767,7 @@ try {
         $touchedPayrolls[$empId . '|' . $monthYear] = [$empId, $monthYear];
     }
 
+    $totalBenefitsAmount = 0.0;
     foreach ($pendingBenefits as $pendingBenefit) {
         upsertPayrollBenefit(
             $pdo,
@@ -773,8 +780,10 @@ try {
             (int)$pendingBenefit['hours'],
             (int)$pendingBenefit['minutes']
         );
+        $totalBenefitsAmount += (float)$pendingBenefit['amount'];
     }
 
+    $totalDeductionsAmount = 0.0;
     foreach ($pendingDeductions as $pendingDeduction) {
         upsertPayrollDeduction(
             $pdo,
@@ -788,6 +797,7 @@ try {
             (int)$pendingDeduction['minutes'],
             (int)$pendingDeduction['days']
         );
+        $totalDeductionsAmount += (float)$pendingDeduction['amount'];
     }
 
     foreach ($touchedPayrolls as $payrollKey => $parts) {
@@ -812,11 +822,17 @@ try {
             'updated_payrolls' => 0,
             'skipped_rows' => $summary['skipped_rows'],
             'skipped_details' => $summary['skipped_details'],
+            'skipped_items' => $summary['skipped_items'],
         ]);
         exit();
     }
 
     $pdo->commit();
+
+    $skippedEmpIds = array_values(array_unique(array_filter(array_map(
+        static fn(array $item) => $item['emp_id'],
+        $summary['skipped_items']
+    ), static fn($empId) => $empId !== '')));
 
     echo json_encode([
         'status' => 'success',
@@ -825,9 +841,15 @@ try {
         'processed_rows' => $summary['processed_rows'],
         'imported_benefits' => $summary['imported_benefits'],
         'imported_deductions' => $summary['imported_deductions'],
+        'benefits_records_count' => count($pendingBenefits),
+        'deductions_records_count' => count($pendingDeductions),
+        'total_benefits_amount' => number_format($totalBenefitsAmount, 2, '.', ''),
+        'total_deductions_amount' => number_format($totalDeductionsAmount, 2, '.', ''),
         'updated_payrolls' => $summary['updated_payrolls'],
         'skipped_rows' => $summary['skipped_rows'],
         'skipped_details' => $summary['skipped_details'],
+        'skipped_items' => $summary['skipped_items'],
+        'skipped_emp_ids' => $skippedEmpIds,
         'errors' => $summary['errors'],
     ]);
 } catch (Throwable $e) {

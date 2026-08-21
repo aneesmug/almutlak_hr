@@ -282,8 +282,8 @@ $(document).on('click', '.applyLoan', async function(e) {
                                     `<b>${__('eos_cumulative_cap_reached_title') || 'EOS Loan Cap Reached'}</b><br>` +
                                     (message || __('not_eligible')) + '<br>' +
                                     `${__('active_eos_total_label') || 'Your active EOS loans total'}: <b>` +
-                                    (resp.message_data && resp.message_data.active_eos_total ? resp.message_data.active_eos_total.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }) : '-') +
-                                    `</b> / <b>20,000 SAR</b>`
+                                    (resp.message_data && resp.message_data.active_eos_total ? '<i class="icon-saudi_riyal"></i> ' + resp.message_data.active_eos_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-') +
+                                    `</b> / <b><i class="icon-saudi_riyal"></i> 20,000</b>`
                                 ).show();
                             } else {
                                 eligibilityInfo.addClass('alert-danger').text(message || __('not_eligible')).show();
@@ -312,8 +312,8 @@ $(document).on('click', '.applyLoan', async function(e) {
                             eosCard.show();
                             const eosTotal = Number(resp.eos_benefit) || 0;
                             const eosMax = Number(resp.max_amount) || (eosTotal * 0.4);
-                            $('#eos_total_span').text(eosTotal.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
-                            $('#eos_max_span').text(eosMax.toLocaleString('en-US', { style: 'currency', currency: 'SAR' }));
+                            $('#eos_total_span').html('<i class="icon-saudi_riyal"></i> ' + eosTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                            $('#eos_max_span').html('<i class="icon-saudi_riyal"></i> ' + eosMax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                             
                             // If EOS is more than 20,000, cap the loan to 20,000
                             if (eosTotal > 20000) {
@@ -469,7 +469,7 @@ $(document).on('click', '.applyLoan', async function(e) {
                                 </div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
                                     <span><strong>Amount:</strong></span>
-                                    <span>${Number(pendingLoan.loan_amount).toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</span>
+                                    <span><i class="icon-saudi_riyal"></i> ${Number(pendingLoan.loan_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
                                     <span><strong>Status:</strong></span>
@@ -765,8 +765,8 @@ $(document).on('click', '.addManualLoan', function(e) {
             title: __('add_manual_loan', 'Add Manual Loan'),
             html: `
                 <div class="alert alert-info text-left">
-                    ${__('current_loan_amount', 'Current loan amount')}: <strong>${currentAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong><br>
-                    ${__('remaining_balance', 'Remaining Balance')}: <strong>${currentRemaining.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</strong>
+                    ${__('current_loan_amount', 'Current loan amount')}: <strong><i class="icon-saudi_riyal"></i> ${currentAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><br>
+                    ${__('remaining_balance', 'Remaining Balance')}: <strong><i class="icon-saudi_riyal"></i> ${currentRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>
                 <form id="manualLoanTopupForm" class="text-left">
                     <div class="form-group">

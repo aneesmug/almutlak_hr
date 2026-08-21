@@ -975,7 +975,7 @@ function openBusinessTripOtherAllowanceModal(tripId, employeeName) {
                 <table class="table table-sm mb-0">
                     <thead><tr><th>${__('comment') || 'Comment'}</th><th class="text-right">${__('amount') || 'Amount'}</th></tr></thead>
                     <tbody>
-                        ${existingItems.map(it => `<tr><td>${$('<div>').text(it.description).html()}</td><td class="text-right">${Number(it.amount || 0).toFixed(2)}</td></tr>`).join('')}
+                        ${existingItems.map(it => `<tr><td>${$('<div>').text(it.description).html()}</td><td class="text-right"><i class="icon-saudi_riyal"></i> ${Number(it.amount || 0).toFixed(2)}</td></tr>`).join('')}
                     </tbody>
                 </table>
             </div>

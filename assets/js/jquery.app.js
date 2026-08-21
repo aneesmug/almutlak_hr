@@ -62,6 +62,11 @@ function loadResource(src, type = 'js', attributes = {}, position = 'head') {
 // Include shared AJAX error handling utilities
 loadResource('./assets/js/ajaxErrorHandling.js', 'js', {}, 'head');
 
+// Hijri datepicker CSS (JS is loaded further below; without this CSS the picker
+// popup renders unstyled/invisible on pages that don't hardcode it themselves)
+loadResource('./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css', 'css');
+loadResource('./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css', 'css');
+
 //Sweet Alert v2.0
 // $("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
 loadResource('https://cdn.jsdelivr.net/npm/sweetalert2@11', 'js', { async: true, defer: true }, 'head');
@@ -117,6 +122,285 @@ function __(key, defaultText = '') {
     }
     // If the key is not found, return the default text or the key itself.
     return defaultText || key;
+}
+
+// ---------------------------------------------------------------------------
+// Global date picker (Gregorian + Hijri) - opens as its own SweetAlert2 modal.
+// Usable from any page: newEmpWireDatepicker('someInputId') for a plain Gregorian
+// field, or newEmpWireHijriPair('gregorianId', 'hijriId') for a synced pair. Pass a
+// `ctx` ({data, w, collect, reopen}) only if the field lives in a re-openable
+// SweetAlert2 wizard step (see assets/js/newEmployeeModal.js for a full example).
+// ---------------------------------------------------------------------------
+
+// Small self-built Hijri month calendar (moment-hijri only, no third-party widget).
+// The bundled hijri picker plugin's own "inline" mode turned out to always still render
+// itself as an absolutely-positioned dropdown internally (its place() function only skips
+// that positioning math for a bare <div> target with no linked <input>, and even then its
+// widget never actually appeared - not worth chasing further), so building the grid
+// directly here is both simpler and reliable.
+function newEmpHijriCalendarHtml(viewMoment, selectedHijri) {
+    const monthStart = viewMoment.clone().startOf('iMonth');
+    const daysInMonth = viewMoment.clone().endOf('iMonth').iDate();
+    const startWeekday = monthStart.day();
+    const dayNames = ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'];
+    const cells = [];
+    for (let i = 0; i < startWeekday; i++) cells.push('<td></td>');
+    for (let d = 1; d <= daysInMonth; d++) {
+        const cellHijri = monthStart.clone().add(d - 1, 'day').format('iYYYY-iMM-iDD');
+        const selectedClass = cellHijri === selectedHijri ? ' emp-hijri-day-selected' : '';
+        cells.push(`<td class="emp-hijri-day${selectedClass}" data-hijri="${cellHijri}">${d}</td>`);
+    }
+    let rowsHtml = '';
+    for (let i = 0; i < cells.length; i += 7) {
+        rowsHtml += `<tr>${cells.slice(i, i + 7).join('')}</tr>`;
+    }
+    return `<div class="emp-hijri-cal">
+        <div class="emp-hijri-cal-header">
+            <button type="button" class="emp-hijri-nav" data-dir="-1">&laquo;</button>
+            <span class="emp-hijri-cal-title">${viewMoment.format('iMMMM iYYYY')}</span>
+            <button type="button" class="emp-hijri-nav" data-dir="1">&raquo;</button>
+        </div>
+        <table class="emp-hijri-cal-table">
+            <thead><tr>${dayNames.map(n => `<th>${n}</th>`).join('')}</tr></thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+    </div>`;
+}
+
+function newEmpWireHijriCalendar($container, initialHijri, onSelect) {
+    let viewMoment = initialHijri ? moment(initialHijri, 'iYYYY-iMM-iDD') : moment();
+    let selectedHijri = initialHijri || null;
+    const render = () => $container.html(newEmpHijriCalendarHtml(viewMoment, selectedHijri));
+    render();
+    $container.on('click', '.emp-hijri-nav', function() {
+        viewMoment = viewMoment.clone().add(parseInt($(this).data('dir'), 10), 'iMonth');
+        render();
+    });
+    $container.on('click', '.emp-hijri-day', function() {
+        selectedHijri = $(this).data('hijri');
+        viewMoment = moment(selectedHijri, 'iYYYY-iMM-iDD');
+        render();
+        onSelect(selectedHijri);
+    });
+}
+
+// Generic date picker opened as its own separate SweetAlert2 modal. SweetAlert2 only ever
+// shows one popup at a time, so opening this while another modal is showing replaces it -
+// the caller's `ctx` (below) re-fires that modal afterwards so it looks like the picker sat
+// on top. Gregorian fields get the proven-reliable bootstrap-datepicker inline calendar;
+// Hijri fields get the custom grid above - both keep the sibling representation in sync
+// via moment.js.
+function newEmpDatePickerModal(opts) {
+    opts = opts || {};
+    const isHijri = !!opts.isHijri;
+    let selectedGregorian = null;
+    let selectedHijri = null;
+    if (opts.value && typeof moment !== 'undefined') {
+        if (isHijri) {
+            selectedHijri = opts.value;
+            selectedGregorian = moment(opts.value, 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
+        } else {
+            selectedGregorian = opts.value;
+            selectedHijri = moment(opts.value, 'YYYY-MM-DD').format('iYYYY-iMM-iDD');
+        }
+    }
+    return Swal.fire({
+        title: opts.title || __('select_date', 'Select Date'),
+        html: `<div class="emp-dp-wrap"><div id="empDpCal"></div></div>`,
+        width: '26em',
+        showCancelButton: true,
+        confirmButtonText: __('select_option', 'Select'),
+        cancelButtonText: __('cancel', 'Cancel'),
+        didOpen: () => {
+            if (isHijri) {
+                newEmpWireHijriCalendar($('#empDpCal'), selectedHijri, function(hijriVal) {
+                    selectedHijri = hijriVal;
+                    selectedGregorian = moment(hijriVal, 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
+                });
+            } else {
+                const $cal = $('#empDpCal');
+                $cal.datepicker({ format: 'yyyy-mm-dd' }).on('changeDate', function(e) {
+                    selectedGregorian = moment(e.date).format('YYYY-MM-DD');
+                    selectedHijri = moment(e.date).format('iYYYY-iMM-iDD');
+                });
+                if (selectedGregorian) $cal.datepicker('update', selectedGregorian);
+            }
+        },
+        preConfirm: () => {
+            if (!selectedGregorian) {
+                Swal.showValidationMessage(__('please_select_a_date', 'Please select a date'));
+                return false;
+            }
+            return { gregorian: selectedGregorian, hijri: selectedHijri || '' };
+        }
+    });
+}
+
+// ctx (optional): { data, w, collect, reopen } - when given, the field's parent modal is
+// treated as a re-openable wizard step: its current values are snapshotted into `w` right
+// before the picker opens (its DOM is about to be replaced), and `reopen(data, w)` re-fires
+// it afterwards either way, so the picker always "returns" to where the user was.
+function newEmpWireDatepicker(id, key, ctx) {
+    const $el = $('#' + id);
+    if (!$el.length || typeof jQuery.fn.datepicker !== 'function') return;
+    $el.prop('readonly', true).addClass('emp-dp-trigger').on('click', function() {
+        if (ctx) Object.assign(ctx.w, ctx.collect());
+        newEmpDatePickerModal({ value: $el.val() }).then(function(result) {
+            if (ctx) {
+                if (result.isConfirmed) ctx.w[key] = result.value.gregorian;
+                ctx.reopen(ctx.data, ctx.w);
+            } else if (result.isConfirmed) {
+                $el.val(result.value.gregorian);
+            }
+        });
+    });
+}
+
+function newEmpWireHijriPair(gregorianId, hijriId, gKey, hKey, ctx) {
+    const $g = $('#' + gregorianId);
+    const $h = $('#' + hijriId);
+    if (!$g.length || !$h.length || typeof jQuery.fn.datepicker !== 'function' || typeof moment === 'undefined') {
+        return;
+    }
+    const applyResult = function(result) {
+        if (ctx) {
+            if (result.isConfirmed) {
+                ctx.w[gKey] = result.value.gregorian;
+                ctx.w[hKey] = result.value.hijri;
+            }
+            ctx.reopen(ctx.data, ctx.w);
+        } else if (result.isConfirmed) {
+            $g.val(result.value.gregorian);
+            $h.val(result.value.hijri);
+        }
+    };
+    $g.prop('readonly', true).addClass('emp-dp-trigger').on('click', function() {
+        if (ctx) Object.assign(ctx.w, ctx.collect());
+        newEmpDatePickerModal({ value: $g.val() }).then(applyResult);
+    });
+    $h.prop('readonly', true).addClass('emp-dp-trigger').on('click', function() {
+        if (ctx) Object.assign(ctx.w, ctx.collect());
+        newEmpDatePickerModal({ value: $h.val(), isHijri: true }).then(applyResult);
+    });
+}
+
+// Self-built Gregorian range calendar (same reasoning as newEmpHijriCalendarHtml above -
+// full control beats fighting a third-party widget's positioning/highlighting quirks inside
+// a SweetAlert2 popup). Click once for the start date, click again for the end date; a third
+// click starts a new range. Clicking a date before the current start swaps them.
+function newEmpRangeCalendarHtml(viewMoment, startDate, endDate) {
+    const monthStart = viewMoment.clone().startOf('month');
+    const daysInMonth = viewMoment.daysInMonth();
+    const startWeekday = monthStart.day();
+    const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const cells = [];
+    for (let i = 0; i < startWeekday; i++) cells.push('<td></td>');
+    for (let d = 1; d <= daysInMonth; d++) {
+        const cellDate = monthStart.clone().date(d).format('YYYY-MM-DD');
+        let cls = '';
+        if (cellDate === startDate) cls += ' emp-range-day-start';
+        if (cellDate === endDate) cls += ' emp-range-day-end';
+        if (startDate && endDate && cellDate > startDate && cellDate < endDate) cls += ' emp-range-day-in';
+        cells.push(`<td class="emp-range-day${cls}" data-date="${cellDate}">${d}</td>`);
+    }
+    let rowsHtml = '';
+    for (let i = 0; i < cells.length; i += 7) {
+        rowsHtml += `<tr>${cells.slice(i, i + 7).join('')}</tr>`;
+    }
+    return `<div class="emp-range-cal">
+        <div class="emp-range-cal-header">
+            <button type="button" class="emp-range-nav" data-dir="-1">&laquo;</button>
+            <span class="emp-range-cal-title">${viewMoment.format('MMMM YYYY')}</span>
+            <button type="button" class="emp-range-nav" data-dir="1">&raquo;</button>
+        </div>
+        <table class="emp-range-cal-table">
+            <thead><tr>${dayNames.map(n => `<th>${n}</th>`).join('')}</tr></thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+        <div class="emp-range-cal-summary">
+            <span>${__('start_date', 'Start')}: <b>${startDate || '-'}</b></span>
+            <span>${__('end_date', 'End')}: <b>${endDate || '-'}</b></span>
+        </div>
+    </div>`;
+}
+
+function newEmpWireRangeCalendar($container, initialStart, initialEnd, onChange) {
+    let viewMoment = initialStart ? moment(initialStart, 'YYYY-MM-DD') : moment();
+    let startDate = initialStart || null;
+    let endDate = initialEnd || null;
+    const render = () => $container.html(newEmpRangeCalendarHtml(viewMoment, startDate, endDate));
+    render();
+    $container.on('click', '.emp-range-nav', function() {
+        viewMoment = viewMoment.clone().add(parseInt($(this).data('dir'), 10), 'month');
+        render();
+    });
+    $container.on('click', '.emp-range-day', function() {
+        const clicked = $(this).data('date');
+        if (!startDate || endDate) {
+            startDate = clicked;
+            endDate = null;
+        } else if (clicked < startDate) {
+            endDate = startDate;
+            startDate = clicked;
+        } else {
+            endDate = clicked;
+        }
+        render();
+        onChange(startDate, endDate);
+    });
+}
+
+// Same shape/usage as newEmpDatePickerModal above, but returns a {start, end} range.
+function newEmpDateRangePickerModal(opts) {
+    opts = opts || {};
+    let startDate = opts.startValue || null;
+    let endDate = opts.endValue || null;
+    return Swal.fire({
+        title: opts.title || __('select_date_range', 'Select Date Range'),
+        html: `<div class="emp-dp-wrap"><div id="empDpRangeCal"></div></div>`,
+        width: '28em',
+        showCancelButton: true,
+        confirmButtonText: __('select_option', 'Select'),
+        cancelButtonText: __('cancel', 'Cancel'),
+        didOpen: () => {
+            newEmpWireRangeCalendar($('#empDpRangeCal'), startDate, endDate, function(s, e) {
+                startDate = s;
+                endDate = e;
+            });
+        },
+        preConfirm: () => {
+            if (!startDate || !endDate) {
+                Swal.showValidationMessage(__('please_select_a_date_range', 'Please select a start and end date'));
+                return false;
+            }
+            return { start: startDate, end: endDate };
+        }
+    });
+}
+
+// Same ctx convention as newEmpWireHijriPair - pass {data, w, collect, reopen} only if
+// startId/endId live inside a re-openable SweetAlert2 wizard step.
+function newEmpWireDateRangePicker(startId, endId, startKey, endKey, ctx) {
+    const $s = $('#' + startId);
+    const $e = $('#' + endId);
+    if (!$s.length || !$e.length || typeof moment === 'undefined') return;
+    const openPicker = function() {
+        if (ctx) Object.assign(ctx.w, ctx.collect());
+        newEmpDateRangePickerModal({ startValue: $s.val(), endValue: $e.val() }).then(function(result) {
+            if (ctx) {
+                if (result.isConfirmed) {
+                    ctx.w[startKey] = result.value.start;
+                    ctx.w[endKey] = result.value.end;
+                }
+                ctx.reopen(ctx.data, ctx.w);
+            } else if (result.isConfirmed) {
+                $s.val(result.value.start);
+                $e.val(result.value.end);
+            }
+        });
+    };
+    $s.prop('readonly', true).addClass('emp-dp-trigger').on('click', openPicker);
+    $e.prop('readonly', true).addClass('emp-dp-trigger').on('click', openPicker);
 }
 
 // The `docu_type` table (Employee Documents dropdown) stores English-only values
@@ -7031,25 +7315,25 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                 <div style="display: flex; justify-content: space-between; padding: 4px 0;">
                                     <span class="text-success font-weight-bold">${__('overtime_hours') || 'Overtime Amount'}:</span>
-                                    <span class="text-success font-weight-bold">+<span id="calc_overtime_amount">0.00</span> SAR</span>
+                                    <span class="text-success font-weight-bold">+<i class="icon-saudi_riyal"></i> <span id="calc_overtime_amount">0.00</span></span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; padding: 4px 0;">
                                     <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
-                                    <span class="text-danger font-weight-bold">-<span id="calc_deduction_amount">0.00</span> SAR</span>
+                                    <span class="text-danger font-weight-bold">-<i class="icon-saudi_riyal"></i> <span id="calc_deduction_amount">0.00</span></span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; padding: 4px 0;">
                                     <span class="text-danger font-weight-bold">${__('other_deductions') || 'Other Deductions'}:</span>
-                                    <span class="text-danger font-weight-bold">-<span id="calc_other_deductions">0.00</span> SAR</span>
+                                    <span class="text-danger font-weight-bold">-<i class="icon-saudi_riyal"></i> <span id="calc_other_deductions">0.00</span></span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; padding: 4px 0;">
                                     <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
-                                    <span class="text-success font-weight-bold">+<span id="calc_other_earnings">0.00</span> SAR</span>
+                                    <span class="text-success font-weight-bold">+<i class="icon-saudi_riyal"></i> <span id="calc_other_earnings">0.00</span></span>
                                 </div>
                             </div>
                             <hr style="margin: 10px 0;">
                             <div style="display: flex; justify-content: center; padding: 8px 0;">
                                 <span class="font-weight-bold text-info">${__('net_adjustment') || 'Net Adjustment'}:&nbsp;</span>
-                                <span class="font-weight-bold text-info" id="calc_net_adjustment">0.00 SAR</span>
+                                <span class="font-weight-bold text-info"><i class="icon-saudi_riyal"></i> <span id="calc_net_adjustment">0.00</span></span>
                             </div>
                         </div>
                         
@@ -7151,7 +7435,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         document.getElementById('calc_deduction_amount').textContent = deductionAmount.toFixed(2);
                         document.getElementById('calc_other_deductions').textContent = otherDeductions.toFixed(2);
                         document.getElementById('calc_other_earnings').textContent = otherEarnings.toFixed(2);
-                        document.getElementById('calc_net_adjustment').textContent = netAdjustment.toFixed(2) + ' SAR';
+                        document.getElementById('calc_net_adjustment').textContent = netAdjustment.toFixed(2);
                     };
                     
                     // Attach event listeners - DO NOT call calculatePayroll on willOpen
@@ -10907,7 +11191,7 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                         <div class="et-report-row-value">${value || 'N/A'}</div>
                     </div>`;
 
-                const amount = 'SAR ' + Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                const amount = '<i class="icon-saudi_riyal"></i> ' + Math.round(parseFloat(s.calculated_payable_amount || s.settlement_amount || 0)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
                 const createdText = new Date(s.created_at).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
 
                 let html = '<div class="et-report">';

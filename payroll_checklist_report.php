@@ -1122,6 +1122,12 @@ foreach ($employees as $employee) {
             font-size: 15px;
             font-weight: 700;
         }
+        .detail-panel-benefits { border-color: #bfe6c9; }
+        .detail-panel-benefits h5 { background: #eaf8ee; color: #1f8b3c; border-bottom-color: #bfe6c9; }
+        .detail-panel-benefits .line-items-two-col li { background: #f2fbf4; border-color: #d6f0dc; }
+        .detail-panel-deductions { border-color: #f5c6c6; }
+        .detail-panel-deductions h5 { background: #fdecec; color: #c43636; border-bottom-color: #f5c6c6; }
+        .detail-panel-deductions .line-items-two-col li { background: #fdf3f3; border-color: #f6dcdc; }
         .detail-list {
             list-style: none;
             padding: 0;
@@ -1405,10 +1411,10 @@ foreach ($employees as $employee) {
 
         <div class="summary-grid">
             <div class="summary-card"><div class="summary-label"><?= __('employees', 'Employees') ?></div><div class="summary-value" id="summaryEmployeesValue"><?= (int)$summary['employees'] ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('total_gross_salary_label', 'Gross Total') ?></div><div class="summary-value" id="summaryGrossValue"><?= number_format($summary['gross'], 2) ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('benefits_total', 'Benefits Total') ?></div><div class="summary-value" id="summaryBenefitsValue"><?= number_format($summary['benefits'], 2) ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('deductions_total', 'Deductions Total') ?></div><div class="summary-value" id="summaryDeductionsValue"><?= number_format($summary['deductions'], 2) ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('net_salary_label', 'Net Total') ?></div><div class="summary-value" id="summaryNetValue"><?= number_format($summary['net'], 2) ?></div></div>
+            <div class="summary-card"><div class="summary-label"><?= __('total_gross_salary_label', 'Gross Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryGrossValue"><?= number_format($summary['gross'], 2) ?></span></div></div>
+            <div class="summary-card"><div class="summary-label"><?= __('benefits_total', 'Benefits Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryBenefitsValue"><?= number_format($summary['benefits'], 2) ?></span></div></div>
+            <div class="summary-card"><div class="summary-label"><?= __('deductions_total', 'Deductions Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryDeductionsValue"><?= number_format($summary['deductions'], 2) ?></span></div></div>
+            <div class="summary-card"><div class="summary-label"><?= __('net_salary_label', 'Net Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryNetValue"><?= number_format($summary['net'], 2) ?></span></div></div>
             <div class="summary-card"><div class="summary-label"><?= __('calculation_conflicts', 'Calculation Conflicts') ?><i class="fas fa-info-circle text-muted ml-1" data-toggle="tooltip" data-placement="top" title="<?= htmlspecialchars(__('calculation_conflicts_tooltip', 'Employees where Net Salary does not match (Gross + Benefits - Deductions).'), ENT_QUOTES) ?>" style="cursor: help;"></i></div><div class="summary-value" id="summaryMismatchValue" style="color: <?= $summary['mismatch_count'] > 0 ? '#c43636' : '#1f8b3c' ?>;"><?= (int)$summary['mismatch_count'] ?></div></div>
             <?php if ($canCheckPayrollChecklistEmployees): ?>
                 <div class="summary-card"><div class="summary-label"><?= __('checked_by_me', 'Checked By Me') ?></div><div class="summary-value" id="checkedEmployeesValue"><?= (int)$checkedEmployeesCount ?> / <?= (int)$summary['employees'] ?></div></div>
@@ -1496,10 +1502,10 @@ foreach ($employees as $employee) {
                                     <td><?= htmlspecialchars((string)$employee['emp_id']) ?></td>
                                     <td><?= htmlspecialchars(getDisplayName((string)($employee['employee_name'] ?? ''))) ?></td>
                                     <td><?= htmlspecialchars(getDisplayName((string)(($is_rtl ?? false) ? ($employee['department_name_ar'] ?? $employee['department_name'] ?? 'N/A') : ($employee['department_name'] ?? $employee['department_name_ar'] ?? 'N/A')))) ?></td>
-                                    <td><?= number_format((float)($employee['total_gross_salary'] ?? 0), 2) ?></td>
-                                    <td><?= number_format((float)($employee['total_benefits'] ?? 0), 2) ?></td>
-                                    <td><?= number_format((float)($employee['total_deductions'] ?? 0), 2) ?></td>
-                                    <td><?= number_format((float)($employee['net_salary'] ?? 0), 2) ?></td>
+                                    <td data-order="<?= (float)($employee['total_gross_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_gross_salary'] ?? 0), 2) ?></td>
+                                    <td data-order="<?= (float)($employee['total_benefits'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_benefits'] ?? 0), 2) ?></td>
+                                    <td data-order="<?= (float)($employee['total_deductions'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_deductions'] ?? 0), 2) ?></td>
+                                    <td data-order="<?= (float)($employee['net_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['net_salary'] ?? 0), 2) ?></td>
                                     <td class="<?= abs($difference) < 0.01 ? 'diff-zero' : 'diff-positive' ?>"><?= number_format($difference, 2) ?></td>
                                     <td class="print-hide-status"><span class="pill-badge <?= $statusBadge ?>"><i class="fas <?= $statusIcon ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst($statusValue))) ?></span></td>
                                     <td class="text-center print-hide-status">
@@ -2373,8 +2379,9 @@ foreach ($employees as $employee) {
                 return `<div style="padding:16px;color:#6b8296;">${esc(emptyText)}</div>`;
             }
 
+            const amountColor = itemNameKey === 'benefit' ? '#1f8b3c' : '#c43636';
             return `<ul class="line-items-two-col">${items.map(item => {
-                const title = `${esc(item[itemNameKey] || '')}: ${fmt(item.note || 0)}`;
+                const title = `${esc(item[itemNameKey] || '')}: <span style="color:${amountColor};"><i class="icon-saudi_riyal"></i> ${fmt(item.note || 0)}</span>`;
                 const meta = [];
                 if (Number(item.days || 0) > 0) meta.push(`${esc(item.days)} <?= addslashes(__('days', 'Days')) ?>`);
                 if (Number(item.hours || 0) > 0) meta.push(`${esc(item.hours)} <?= addslashes(__('hours', 'Hours')) ?>`);
@@ -2403,7 +2410,7 @@ foreach ($employees as $employee) {
                 const item = items[i];
                 html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eef3f7; border-right: ${(i + 1) % 2 === 0 ? 'none' : '1px solid #eef3f7'};">
                     <span style="color: #637b90; font-weight: 600; min-width: 80px; font-size: 13px;">${esc(item.label)}</span>
-                    <span style="color: #173247; font-weight: 700; text-align: right; min-width: 80px; font-size: 13px;">${item.isText ? esc(String(item.value)) : fmt(item.value)}</span>
+                    <span style="color: #173247; font-weight: 700; text-align: right; min-width: 80px; font-size: 13px;">${item.isText ? esc(String(item.value)) : `<i class="icon-saudi_riyal"></i> ${fmt(item.value)}`}</span>
                 </div>`;
             }
             html += '</div>';
@@ -2511,12 +2518,12 @@ foreach ($employees as $employee) {
                 ${feedbackHtml}
                 <div class="calc-grid">
                     <div class="calc-box"><div class="calc-title"><?= addslashes(__('salary_payment_type_label', 'Payment Type')) ?></div><div class="calc-value">${esc(getPaymentTypeLabel(emp.payment_type))}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('total_gross_salary_label', 'Gross Salary')) ?></div><div class="calc-value">${fmt(emp.total_gross_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('benefits_total', 'Benefits')) ?></div><div class="calc-value">${fmt(emp.total_benefits)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('deductions_total', 'Deductions')) ?></div><div class="calc-value">${fmt(emp.total_deductions)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('expected_net_salary', 'Expected Net')) ?></div><div class="calc-value">${fmt(emp.expected_net_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('net_salary_label', 'Actual Net')) ?></div><div class="calc-value">${fmt(emp.net_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('difference', 'Difference')) ?></div><div class="calc-value ${diffClass}">${fmt(emp.net_difference)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('total_gross_salary_label', 'Gross Salary')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_gross_salary)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('benefits_total', 'Benefits')) ?></div><div class="calc-value" style="color:#1f8b3c;"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_benefits)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('deductions_total', 'Deductions')) ?></div><div class="calc-value" style="color:#c43636;"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_deductions)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('expected_net_salary', 'Expected Net')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.expected_net_salary)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('net_salary_label', 'Actual Net')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.net_salary)}</div></div>
+                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('difference', 'Difference')) ?></div><div class="calc-value ${diffClass}"><i class="icon-saudi_riyal"></i> ${fmt(emp.net_difference)}</div></div>
                 </div>
                 <div class="details-grid">
                     <div class="detail-panel">
@@ -2532,11 +2539,11 @@ foreach ($employees as $employee) {
                             <li><span class="label"><?= addslashes(__('iqama', 'Iqama')) ?></span><span class="value">${esc(emp.iqama || 'N/A')}</span></li>
                         </ul>
                     </div>
-                    <div class="detail-panel">
+                    <div class="detail-panel detail-panel-benefits">
                         <h5><i class="fas fa-plus-circle"></i> <?= addslashes(__('benefits_section', 'Benefits')) ?></h5>
                         ${buildItemsList(emp.benefits_list, 'benefit', '<?= addslashes(__('no_benefits_added', 'No benefits added')) ?>')}
                     </div>
-                    <div class="detail-panel">
+                    <div class="detail-panel detail-panel-deductions">
                         <h5><i class="fas fa-minus-circle"></i> <?= addslashes(__('deductions_section', 'Deductions')) ?></h5>
                         ${buildItemsList(emp.deductions_list, 'deduction', '<?= addslashes(__('no_deductions_added', 'No deductions added')) ?>')}
                     </div>
@@ -3316,12 +3323,30 @@ foreach ($employees as $employee) {
         }
 
         function collectReviewedPayrollImportRows() {
-            const benefitRowElements = document.querySelectorAll('#payrollImportBenefitsTable tbody tr[data-row-index]');
-            const deductionRowElements = document.querySelectorAll('#payrollImportDeductionsTable tbody tr[data-row-index]');
+            // These tables are paginated DataTables (pageLength: 10) - a plain
+            // querySelectorAll only sees the CURRENTLY RENDERED page's <tr> elements,
+            // since DataTables removes off-page rows from the DOM on each draw. That
+            // silently limited every import to whatever page happened to be showing
+            // (page 1 = the first 10 rows) instead of every reviewed row. Read through
+            // the DataTable API instead, which holds every row regardless of page.
+            const benefitRowElements = payrollImportBenefitsDataTable
+                ? payrollImportBenefitsDataTable.rows().nodes().toArray()
+                : document.querySelectorAll('#payrollImportBenefitsTable tbody tr[data-row-index]');
+            const deductionRowElements = payrollImportDeductionsDataTable
+                ? payrollImportDeductionsDataTable.rows().nodes().toArray()
+                : document.querySelectorAll('#payrollImportDeductionsTable tbody tr[data-row-index]');
+
+            // Rows not on the currently-shown page are detached from the live document by
+            // DataTables (only the active page's <tr>s stay attached), so a fresh
+            // document.querySelector() by row-index would come back null for them even
+            // though the node itself still exists. Look them up from the node lists above
+            // instead of re-querying the document.
+            const benefitRowByIndex = new Map(Array.from(benefitRowElements).map((el) => [el.dataset.rowIndex, el]));
+            const deductionRowByIndex = new Map(Array.from(deductionRowElements).map((el) => [el.dataset.rowIndex, el]));
 
             const rowIndexes = Array.from(new Set([
-                ...Array.from(benefitRowElements).map((el) => el.dataset.rowIndex),
-                ...Array.from(deductionRowElements).map((el) => el.dataset.rowIndex)
+                ...benefitRowByIndex.keys(),
+                ...deductionRowByIndex.keys()
             ]));
 
             const getFieldValue = (row, field) => {
@@ -3331,8 +3356,8 @@ foreach ($employees as $employee) {
             };
 
             return rowIndexes.map((rowIndex) => {
-                const benefitRow = document.querySelector(`#payrollImportBenefitsTable tbody tr[data-row-index="${rowIndex}"]`);
-                const deductionRow = document.querySelector(`#payrollImportDeductionsTable tbody tr[data-row-index="${rowIndex}"]`);
+                const benefitRow = benefitRowByIndex.get(rowIndex);
+                const deductionRow = deductionRowByIndex.get(rowIndex);
 
                 return normalizeReviewedPayrollImportRow({
                     checkpoint_code: getFieldValue(benefitRow, 'checkpoint_code') || getFieldValue(deductionRow, 'checkpoint_code'),
@@ -3910,18 +3935,48 @@ foreach ($employees as $employee) {
                 }
 
                 const skippedDetails = Array.isArray(result.skipped_details) ? result.skipped_details : [];
-                const successHtml = skippedDetails.length > 0
-                    ? `<p>${escapePayrollImportHtml(result.message || 'Payroll imported successfully from manager upload.')}</p>
-                       <p><strong>Imported:</strong> ${Number(result.processed_rows || 0)} row(s) &nbsp; <strong>Skipped:</strong> ${Number(result.skipped_rows || 0)} row(s)</p>
-                       <div style="max-height:200px; overflow:auto; text-align:left; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">
-                           <ul style="margin:0; padding-left:18px;">${skippedDetails.map((detail) => `<li>${escapePayrollImportHtml(String(detail))}</li>`).join('')}</ul>
+                const skippedItems = Array.isArray(result.skipped_items) ? result.skipped_items : [];
+                const skippedEmpIds = Array.isArray(result.skipped_emp_ids) ? result.skipped_emp_ids : [];
+                const skippedCount = Number(result.skipped_rows || 0);
+                const fmtAmount = (value) => Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                const skippedReasonRows = (skippedItems.length > 0 ? skippedItems : skippedDetails.map((detail) => ({ reason: detail })))
+                    .map((item) => {
+                        const empLabel = item.emp_id ? `<span class="pill-badge pill-secondary" style="margin-right:8px;">Emp ${escapePayrollImportHtml(String(item.emp_id))}</span>` : '';
+                        return `<li style="margin-bottom:6px;">${empLabel}${escapePayrollImportHtml(String(item.reason || ''))}</li>`;
+                    }).join('');
+
+                const skippedSectionHtml = skippedCount > 0
+                    ? `<div class="list-card" style="margin-top:16px;">
+                           <div class="list-card-header">
+                               <p class="list-card-title"><i class="fas fa-triangle-exclamation" style="color:#ad7b00;"></i> Skipped Rows</p>
+                               <span class="pill-badge pill-warning">${skippedCount} skipped${skippedEmpIds.length > 0 ? ' &middot; ' + skippedEmpIds.length + ' employee(s)' : ''}</span>
+                           </div>
+                           <div style="max-height:240px; overflow:auto; padding:12px 16px;">
+                               <ul style="margin:0; padding-left:0; list-style:none; color:#5d7286; font-size:13px;">${skippedReasonRows}</ul>
+                           </div>
                        </div>`
-                    : (result.message || 'Payroll imported successfully from manager upload.');
+                    : '';
+
+                const successHtml = `
+                    <div style="text-align:left;">
+                        <p style="color:#5d7286; margin-bottom:16px;">${escapePayrollImportHtml(result.message || 'Payroll imported successfully from manager upload.')}</p>
+                        <div class="calc-grid" style="margin-bottom:0;">
+                            <div class="calc-box"><div class="calc-title"><i class="fas fa-list-check"></i> Records Imported</div><div class="calc-value">${Number(result.processed_rows || 0)}</div></div>
+                            <div class="calc-box"><div class="calc-title"><i class="fas fa-users"></i> Employees Updated</div><div class="calc-value">${Number(result.updated_payrolls || 0)}</div></div>
+                            <div class="calc-box"><div class="calc-title"><i class="fas fa-gift"></i> Benefits Imported</div><div class="calc-value" style="color:#1f8b3c;">${Number(result.benefits_records_count || 0)} <span style="font-size:13px; font-weight:600; color:#70859a;">records</span></div><div style="font-size:13px; color:#70859a; margin-top:2px;"><i class="icon-saudi_riyal"></i> ${fmtAmount(result.total_benefits_amount)} total</div></div>
+                            <div class="calc-box"><div class="calc-title"><i class="fas fa-minus-circle"></i> Deductions Imported</div><div class="calc-value" style="color:#c43636;">${Number(result.deductions_records_count || 0)} <span style="font-size:13px; font-weight:600; color:#70859a;">records</span></div><div style="font-size:13px; color:#70859a; margin-top:2px;"><i class="icon-saudi_riyal"></i> ${fmtAmount(result.total_deductions_amount)} total</div></div>
+                        </div>
+                        ${skippedSectionHtml}
+                    </div>`;
 
                 await Swal.fire({
                     icon: 'success',
                     title: '<?= addslashes(__('success', 'Success')) ?>',
-                    html: successHtml
+                    html: successHtml,
+                    width: skippedCount > 0 ? '640px' : '540px',
+                    confirmButtonColor: '#2563eb',
+                    allowOutsideClick: false,
                 });
                 window.location.reload();
             } catch (error) {

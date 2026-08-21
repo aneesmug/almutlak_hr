@@ -1130,7 +1130,7 @@ if (!empty($requests)) {
                                                 <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-calendar"></i><strong><?= __('month') ?>:</strong> <?= htmlspecialchars($request['payroll_month']) ?></div>
                                                         <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <?= number_format((float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?> SAR</div>
+                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <i class="icon-saudi_riyal"></i> <?= number_format((float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?></div>
                                                         <?php if ($isHrPayrollUser): ?>
                                                         <div class="detail-item"><i class="fad fa-user-check"></i><strong><?= __('checked_by_me', 'Checked By Me') ?>:</strong> <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></div>
                                                         <?php endif; ?>
@@ -1289,9 +1289,9 @@ function buildPayrollRequestDetailsHtml(requestInvNo, payrollMonth, employeeCoun
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('request_id') || 'Request ID'}</span><span class="swal-detail-value">${requestInvNo || 'N/A'}</span></div>
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('payroll_month') || 'Payroll Month'}</span><span class="swal-detail-value">${payrollMonth || 'N/A'}</span></div>
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('employees', 'Employees')}</span><span class="swal-detail-value">${employeeCount || 0}</span></div>
-                <div class="swal-detail-item"><span class="swal-detail-label">${__('total_net', 'Total Net')}</span><span class="swal-detail-value">SAR ${formattedTotalNet}</span></div>
+                <div class="swal-detail-item"><span class="swal-detail-label">${__('total_net', 'Total Net')}</span><span class="swal-detail-value"><i class="icon-saudi_riyal"></i> ${formattedTotalNet}</span></div>
                 <div class="swal-detail-item"><span class="swal-detail-label">${__('requested_by', 'Requested By')}</span><span class="swal-detail-value">${safeRequesterName}</span></div>
-                <div class="swal-detail-item"><span class="swal-detail-label">${__('bank_wps_payment', 'Bank WPS Payment')}</span><span class="swal-detail-value">SAR ${formattedBankWpsPayment}</span></div>
+                <div class="swal-detail-item"><span class="swal-detail-label">${__('bank_wps_payment', 'Bank WPS Payment')}</span><span class="swal-detail-value"><i class="icon-saudi_riyal"></i> ${formattedBankWpsPayment}</span></div>
             </div>
         </div>
     `;

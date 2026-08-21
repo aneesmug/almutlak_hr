@@ -496,7 +496,7 @@ $departmentName = ($is_rtl ?? false)
                         </div>
                         <div class="detail-box">
                             <div class="detail-label"><?= __('total_net', 'Total Net') ?></div>
-                            <div class="detail-value"><?= number_format((float)($payrollRequest['total_net_salary'] ?? 0), 2) ?> SAR</div>
+                            <div class="detail-value"><i class="icon-saudi_riyal"></i> <?= number_format((float)($payrollRequest['total_net_salary'] ?? 0), 2) ?></div>
                         </div>
                         <div class="detail-box">
                             <div class="detail-label"><?= __('submitted', 'Submitted') ?></div>

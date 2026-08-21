@@ -484,11 +484,11 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                         </div>
                                                         <div class="card-body">
                                                             <div class="detail-item">
-                                                                <i class="fad fa-hand-holding-usd duotone-info"></i><strong><?=__('applied_amount')?>:</strong> <?=htmlspecialchars($loan['loan_amount']); ?>
+                                                                <i class="fad fa-hand-holding-usd duotone-info"></i><strong><?=__('applied_amount')?>:</strong> <i class="icon-saudi_riyal"></i> <?=htmlspecialchars($loan['loan_amount']); ?>
                                                             </div>
                                                             <?php if (!empty($loan['approved_amount']) && $loan['approved_amount'] != $loan['loan_amount']): ?>
                                                                 <div class="detail-item">
-                                                                    <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><?=htmlspecialchars($loan['approved_amount']); ?></span>
+                                                                    <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><i class="icon-saudi_riyal"></i> <?=htmlspecialchars($loan['approved_amount']); ?></span>
                                                                 </div>
                                                             <?php endif; ?>
                                                             <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(format_safe_date($loan['start_date'] ?? null, 'd M Y', 'N/A')); ?></div>
@@ -609,7 +609,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                         <div class="text-left">
                             <p><strong>Employee:</strong> ${employeeName}</p>
                             <p><strong>Loan Ref:</strong> ${loanInvNo}</p>
-                            <p><strong>Settlement Amount:</strong> <span class="badge badge-success">SAR ${parseFloat(loanAmount).toFixed(2)}</span></p>
+                            <p><strong>Settlement Amount:</strong> <span class="badge badge-success"><i class="icon-saudi_riyal"></i> ${parseFloat(loanAmount).toFixed(2)}</span></p>
                             <hr>
                             <p class="text-muted"><small>This will create a settlement record and initiate the settlement approval chain (Department Manager → Finance Officer → HR Payroll).</small></p>
                         </div>

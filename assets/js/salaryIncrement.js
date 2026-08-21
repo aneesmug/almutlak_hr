@@ -72,7 +72,7 @@ function openSalaryIncrementApplyModal(empid, iqama, name, deptName, joiningDate
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eef0f4;">
                             <span style="color:#8a94a6;font-size:13px;">${__('increment_amount', 'Increment Amount')}</span>
-                            <strong style="font-size:14px;">${Number(req.increment_amount).toFixed(2)}</strong>
+                            <strong style="font-size:14px;"><i class="icon-saudi_riyal"></i> ${Number(req.increment_amount).toFixed(2)}</strong>
                         </div>
                         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eef0f4;">
                             <span style="color:#8a94a6;font-size:13px;">${__('submitted_date', 'Submitted Date')}</span>

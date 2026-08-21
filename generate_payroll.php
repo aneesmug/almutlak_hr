@@ -1862,20 +1862,35 @@ function buildBenefitsHtml(benefits, benefitTypes) {
         }
         const savedTypeId = parseInt(b.type_id || 0, 10);
 
-        const shouldUseBenefitSelect = !isVacationBenefit && savedTypeId > 0 && benefitTypes && benefitTypes.length > 0;
+        // Imported benefit rows never carry a matched type_id (excel import always stores
+        // type_id = NULL), so fall back to matching the imported name against the real
+        // benefit_types list (e.g. "Over time" -> "Overtime") and use THAT type's own
+        // configured calculation - never a custom/duplicated formula - so amounts always
+        // match what's set up in the "Overtime" type itself.
+        const normalizeBenefitTypeName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        let matchedTypeId = savedTypeId;
+        if (!matchedTypeId && !isVacationBenefit && benefitTypes && benefitTypes.length > 0 && benefitName) {
+            const normalizedBenefitName = normalizeBenefitTypeName(benefitName);
+            const matchedType = benefitTypes.find(type => normalizeBenefitTypeName(type.name) === normalizedBenefitName);
+            if (matchedType) {
+                matchedTypeId = parseInt(matchedType.id, 10);
+            }
+        }
+
+        const shouldUseBenefitSelect = !isVacationBenefit && matchedTypeId > 0 && benefitTypes && benefitTypes.length > 0;
 
         const benefitOptionsHtml = isVacationBenefit
-            ? `<input type="text" class="form-control form-control-sm benefit-name bg-light" 
+            ? `<input type="text" class="form-control form-control-sm benefit-name bg-light"
                        data-benefit-id="${b.id}" value="${displayName}" readonly>`
             : (shouldUseBenefitSelect
                 ? `<select class="form-control form-control-sm benefit-type" data-benefit-id="${b.id}">
                     <option>${__('select_type_option')}</option>
                     ${benefitTypes.map(type => {
-                        const isSelected = parseInt(type.id, 10) === savedTypeId;
+                        const isSelected = parseInt(type.id, 10) === matchedTypeId;
                         return `<option value="${type.id}" data-calculation="${type.calculation_type}" ${isSelected ? 'selected' : ''}>${type.name}</option>`;
                     }).join('')}
                 </select>`
-                : `<input type="text" class="form-control form-control-sm benefit-name ${isVacationBenefit ? 'bg-light' : ''}" 
+                : `<input type="text" class="form-control form-control-sm benefit-name ${isVacationBenefit ? 'bg-light' : ''}"
                        data-benefit-id="${b.id}" value="${displayName || benefitName}" placeholder="${__('benefit_name_placeholder')}" ${isVacationBenefit ? 'readonly' : ''}>`
             );
 
@@ -1889,7 +1904,7 @@ function buildBenefitsHtml(benefits, benefitTypes) {
                 <div class="col-6 col-md-2">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                        <input type="text" step="0.01" class="form-control benefit-amount ${isVacationBenefit ? 'bg-light' : ''}" 
+                        <input type="text" step="0.01" class="form-control benefit-amount ${isVacationBenefit ? 'bg-light' : ''}"
                                data-benefit-id="${b.id}" value="${benefitAmount}" placeholder="${__('amount_placeholder')}" ${isVacationBenefit ? 'readonly' : ''}>
                     </div>
                 </div>
@@ -2039,10 +2054,14 @@ function initializeDataTable() {
                         return `<span class="badge badge-primary">${__('bank_option') || 'Bank'}</span>`;
                     }
                 },
-            { 
+            {
                 data: 'salary',
                 render: function(data, type, row) {
-                    return `SAR ${parseFloat(data).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    const numericValue = parseFloat(data) || 0;
+                    if (type === 'sort' || type === 'type') {
+                        return numericValue;
+                    }
+                    return `<i class="icon-saudi_riyal"></i> ${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 }
             },
             {
@@ -5897,7 +5916,7 @@ async function showPayrollDetails(empId, empName, month) {
                     });
 
                     // Benefit Type Rules: keep behavior aligned with calculation_type.
-                    const applyBenefitTypeRules = function(selectElement) {
+                    const applyBenefitTypeRules = function(selectElement, recalculate = true) {
                         const select = $(selectElement);
                         if (!select.length) {
                             return;
@@ -5949,7 +5968,16 @@ async function showPayrollDetails(empId, empName, month) {
                             amountInput.prop('readonly', false);
                         }
 
-                        calculateOvertime.call(selectElement);
+                        // On initial modal load, trust whatever amount is already stored
+                        // (import or a prior manual save) instead of recomputing it against
+                        // today's live salary figures - those can legitimately differ from
+                        // what the amount was calculated against (e.g. an excel import), and
+                        // silently overwriting a correct imported amount on open reads as
+                        // "the calculation is wrong". Only recompute when the admin actively
+                        // changes the type or edits hours/minutes.
+                        if (recalculate) {
+                            calculateOvertime.call(selectElement);
+                        }
                         updateDynamicNetSalary();
                     };
 
@@ -5961,13 +5989,16 @@ async function showPayrollDetails(empId, empName, month) {
                     const calculateOvertime = function() {
                         const row = $(this).closest('.benefit-row');
                         const benefitTypeSelect = row.find('.benefit-type');
-                        
-                        // Ensure the select element exists before proceeding
+
+                        // Rows without a matched benefit type (e.g. imported "Over time" rows
+                        // that never got linked to a benefit_types id) still carry their own
+                        // calculation_type on the row itself - fall back to that instead of
+                        // bailing out and leaving hours/note blank.
                         if (!benefitTypeSelect.length) {
                             return;
                         }
-
                         const benefitType = benefitTypeSelect.find('option:selected').data('calculation');
+
                         const hoursInput = row.find('.benefit-hours');
                         const minutesInput = row.find('.benefit-minutes');
                         const wholeHours = hoursInput.length ? parseFloat(hoursInput.val()) || 0 : 0;
@@ -6012,9 +6043,12 @@ async function showPayrollDetails(empId, empName, month) {
                         updateDynamicNetSalary(); 
                     };
                     // Add event listeners for existing benefit type selects and apply rules on modal load.
+                    // recalculate=false here: build the hours/minutes UI from stored data but
+                    // keep the already-saved amount as-is - don't recompute it just because the
+                    // modal was opened (see note in applyBenefitTypeRules).
                     document.querySelectorAll('.benefit-type').forEach(select => {
                         addDynamicEventListener(select, 'change', handleBenefitTypeChange);
-                        applyBenefitTypeRules(select);
+                        applyBenefitTypeRules(select, false);
                     });
 
                     // Add event listeners for existing hours inputs
@@ -6416,7 +6450,7 @@ function openPayslipsFile(base, data) {
                             <tfoot>
                                 <tr>
                                     <th colspan="3" class="text-right">${__('grand_total_label')}</th>
-                                    <th class="text-right">${grandTotalNet.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}</th>
+                                    <th class="text-right"><i class="icon-saudi_riyal"></i> ${grandTotalNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</th>
                                 </tr>
                             </tfoot>
                         </table>
@@ -6446,7 +6480,17 @@ function openPayslipsFile(base, data) {
                                 },
                                 { data: 'emp_id' },
                                 { data: 'employee_name' },
-                                { data: 'net_salary', className: 'text-right', render: (d) => parseFloat(d || 0).toLocaleString('en-US', { style: 'currency', currency: 'SAR' }) }
+                                {
+                                    data: 'net_salary',
+                                    className: 'text-right',
+                                    render: (d, type) => {
+                                        const numericValue = parseFloat(d) || 0;
+                                        if (type === 'sort' || type === 'type') {
+                                            return numericValue;
+                                        }
+                                        return `<i class="icon-saudi_riyal"></i> ${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                    }
+                                }
                             ],
                             pageLength: 10,
                             lengthMenu: [[-1, 10, 25, 50, 100], [__('all'), 10, 25, 50, 100]],

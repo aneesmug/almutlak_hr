@@ -153,6 +153,20 @@ if (mysqli_num_rows($query) == 1) {
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_additional_info', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
 		$canEditAdditionalInfo = $canViewAdditionalInfo && ($isHR || $is_system_admin || $isDeptHr);
+
+		// Other Income (scheduled Bonus/extra income) has its own dedicated special access key
+		// so it can be granted independently of the rest of Additional Information - e.g. a
+		// payroll user who should only manage Other Income, not see salary grade/ticket/etc.
+		// Edit Employee page has its own per-employee master switch ('other_income_enabled',
+		// default on) - when off, the section is hidden for everyone on THIS employee's
+		// profile regardless of the viewer's own special access grant.
+		$otherIncomeEnabledForEmployee = ((string)($emprow['other_income_enabled'] ?? '1') === '1');
+		$canViewOtherIncome = $otherIncomeEnabledForEmployee && (
+			($is_system_admin ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_other_income', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
+		$canEditOtherIncome = $canViewOtherIncome && ($isHR || $is_system_admin || $isDeptHr);
+
 		$employee_additional_info = null;
 		if ($canViewSalary) {
 			$additional_info_stmt = mysqli_prepare($conDB, "SELECT * FROM `employee_additional_info` WHERE `emp_id` = ? LIMIT 1");
@@ -201,6 +215,19 @@ if (mysqli_num_rows($query) == 1) {
 					break;
 				}
 			}
+		}
+
+		// Scheduled "Other Income" (e.g. a 3-month Bonus) - HR schedules an amount across a
+		// month range once, and payroll generation auto-adds it as a payroll_benefits row for
+		// every covered month (see addOrUpdateScheduledOtherIncome in process_payroll.php),
+		// then flips the schedule to status = 0 once its end_month has been processed.
+		$other_income_records = [];
+		if ($canViewOtherIncome) {
+			$other_income_stmt = mysqli_prepare($conDB, "SELECT id, title, amount, start_month, end_month, status, created_at FROM `employee_other_income` WHERE `emp_id` = ? ORDER BY `created_at` DESC, `id` DESC");
+			mysqli_stmt_bind_param($other_income_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($other_income_stmt);
+			$other_income_records = mysqli_fetch_all(mysqli_stmt_get_result($other_income_stmt), MYSQLI_ASSOC);
+			mysqli_stmt_close($other_income_stmt);
 		}
 		// --- END: Additional Information ---
 		// debug($emprow);
@@ -1244,7 +1271,7 @@ if (mysqli_num_rows($query) == 1) {
 											</a>
 										</li>
 										<?php endif; ?>
-										<?php if ($canViewAdditionalInfo): ?>
+										<?php if ($canViewAdditionalInfo || $canViewOtherIncome): ?>
 										<li class="nav-item">
 											<a href="#additionalinfo1" data-toggle="tab" aria-expanded="false" class="nav-link">
 												<i class="mdi mdi-information-outline"></i> <?= __('additional_information', 'Additional Information') ?>
@@ -1925,7 +1952,7 @@ if (mysqli_num_rows($query) == 1) {
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('approved_amount') ?>:</td>
-																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> <?= __('sar', 'SAR') ?></td>
+																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> <i class="icon-saudi_riyal"></i></td>
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('installments') ?>:</td>
@@ -1933,7 +1960,7 @@ if (mysqli_num_rows($query) == 1) {
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('monthly_deduction') ?>:</td>
-																			<td class="text-warning font-weight-bold"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> <?= __('sar', 'SAR') ?></td>
+																			<td class="text-warning font-weight-bold"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> <i class="icon-saudi_riyal"></i></td>
 																		</tr>
 																		<tr>
 																			<td class="font-weight-bold"><?= __('deduction_mode') ?>:</td>
@@ -2105,8 +2132,8 @@ if (mysqli_num_rows($query) == 1) {
 															$topup_rec = $history_row['rec'];
 														?>
 															<tr class="bg-light">
-																<td class="font-weight-bold text-primary">+<?= number_format($topup_rec['additional_amount'], 2); ?></td>
-																<td><?= number_format($topup_rec['new_monthly_deduction'], 2); ?></td>
+																<td class="font-weight-bold text-primary">+<?= number_format($topup_rec['additional_amount'], 2); ?> <i class="icon-saudi_riyal"></i></td>
+																<td><?= number_format($topup_rec['new_monthly_deduction'], 2); ?> <i class="icon-saudi_riyal"></i></td>
 																<td>-</td>
 																<td><?= format_safe_date($topup_rec['created_at'], 'd, M Y H:i'); ?></td>
 																<td>-</td>
@@ -2129,9 +2156,9 @@ if (mysqli_num_rows($query) == 1) {
 														$remaining_balance_hist = $total_payable_hist - $total_paid_hist;
 													?>
 														<tr>
-															<td><?= number_format($loan_rec['loan_amount'], 2); ?></td>
-															<td><?= number_format($loan_rec['monthly_deduction'], 2); ?></td>
-															<td class="font-weight-bold <?= ($remaining_balance_hist > 0) ? 'text-danger' : 'text-success' ?>"><?= number_format($remaining_balance_hist, 2); ?></td>
+															<td><?= number_format($loan_rec['loan_amount'], 2); ?> <i class="icon-saudi_riyal"></i></td>
+															<td><?= number_format($loan_rec['monthly_deduction'], 2); ?> <i class="icon-saudi_riyal"></i></td>
+															<td class="font-weight-bold <?= ($remaining_balance_hist > 0) ? 'text-danger' : 'text-success' ?>"><?= number_format($remaining_balance_hist, 2); ?> <i class="icon-saudi_riyal"></i></td>
 															<td>
 																<?php
 																$loanRowStartDate = $loan_rec['start_date'] ?? '';
@@ -2189,7 +2216,7 @@ if (mysqli_num_rows($query) == 1) {
 													?>
 														<tr>
 															<td><?= format_safe_date($payment_rec['payment_date'] ?? null, 'd, M Y'); ?></td>
-															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td class="font-weight-bold text-success"><?= number_format($payment_rec['amount'], 2); ?> <i class="icon-saudi_riyal"></i></td>
 															<td><?= $payment_method_badge; ?></td>
 															<td><?= !empty($payment_rec['receipt_id']) ? htmlspecialchars($payment_rec['receipt_id']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>'; ?></td>
 															<td>
@@ -2241,20 +2268,20 @@ if (mysqli_num_rows($query) == 1) {
 														<?php $month_benefits = $payroll_benefits_by_month[$payroll_rec['month_year']] ?? []; ?>
 														<tr>
 															<td><?= date('F Y', strtotime($payroll_rec['month_year'] . '-01')); ?></td>
-															<td><?= number_format((float)$payroll_rec['total_gross_salary'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td><?= number_format((float)$payroll_rec['total_gross_salary'], 2); ?> <i class="icon-saudi_riyal"></i></td>
 															<td>
-																<?= number_format((float)$payroll_rec['total_benefits'], 2); ?> <?= __('sar', 'SAR') ?>
+																<?= number_format((float)$payroll_rec['total_benefits'], 2); ?> <i class="icon-saudi_riyal"></i>
 																<?php if (!empty($month_benefits)): ?>
 																	<br>
 																	<?php foreach ($month_benefits as $benefit_item): ?>
 																		<span class="badge badge-light border d-inline-block mt-1 mr-1" style="font-weight: 400;">
-																			<?= htmlspecialchars($benefit_item['benefit']); ?>: <?= number_format((float)$benefit_item['note'], 2); ?>
+																			<?= htmlspecialchars($benefit_item['benefit']); ?>: <?= number_format((float)$benefit_item['note'], 2); ?> <i class="icon-saudi_riyal"></i>
 																		</span>
 																	<?php endforeach; ?>
 																<?php endif; ?>
 															</td>
-															<td><?= number_format((float)$payroll_rec['total_deductions'], 2); ?> <?= __('sar', 'SAR') ?></td>
-															<td class="font-weight-bold text-success"><?= number_format((float)$payroll_rec['net_salary'], 2); ?> <?= __('sar', 'SAR') ?></td>
+															<td><?= number_format((float)$payroll_rec['total_deductions'], 2); ?> <i class="icon-saudi_riyal"></i></td>
+															<td class="font-weight-bold text-success"><?= number_format((float)$payroll_rec['net_salary'], 2); ?> <i class="icon-saudi_riyal"></i></td>
 															<td>
 																<a href="./generate_bulk_payslips_pdf.php?month=<?= urlencode($payroll_rec['month_year']); ?>&emp_id=<?= urlencode($emprow['empid']); ?>" target="_blank" class="btn btn-sm btn-info">
 																	<i class="fas fa-file-pdf"></i> <?= __('download_payslip', 'Download Payslip') ?>
@@ -2266,9 +2293,10 @@ if (mysqli_num_rows($query) == 1) {
 											</table>
 										</div>
 										<?php endif; ?>
-										<?php if ($canViewAdditionalInfo): ?>
+										<?php if ($canViewAdditionalInfo || $canViewOtherIncome): ?>
 
 										<div class="tab-pane" id="additionalinfo1">
+											<?php if ($canViewAdditionalInfo): ?>
 											<div class="d-flex justify-content-between align-items-center mb-3">
 												<h4 class="header-title m-t-0"><?= __('additional_information', 'Additional Information') ?></h4>
 												<?php if ($canEditAdditionalInfo): ?>
@@ -2290,16 +2318,16 @@ if (mysqli_num_rows($query) == 1) {
 														</div>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('ticket_fare', 'Ticket') ?></div>
-															<div class="profile-field-value" data-field="ticket_fare"><?= isset($employee_additional_info['ticket_fare']) ? number_format((float)$employee_additional_info['ticket_fare'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+															<div class="profile-field-value" data-field="ticket_fare"><?= isset($employee_additional_info['ticket_fare']) ? number_format((float)$employee_additional_info['ticket_fare'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<?php if ((int)($emprow['country'] ?? 0) !== 191): ?>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('labour_office_expense', 'Labour Office Expenses') ?></div>
-															<div class="profile-field-value" data-field="labour_office_expense"><?= isset($employee_additional_info['labour_office_expense']) ? number_format((float)$employee_additional_info['labour_office_expense'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+															<div class="profile-field-value" data-field="labour_office_expense"><?= isset($employee_additional_info['labour_office_expense']) ? number_format((float)$employee_additional_info['labour_office_expense'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('iqama_renewal_fee', 'Iqama Renewal Fee') ?></div>
-															<div class="profile-field-value" data-field="iqama_renewal_fee"><?= isset($employee_additional_info['iqama_renewal_fee']) ? number_format((float)$employee_additional_info['iqama_renewal_fee'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+															<div class="profile-field-value" data-field="iqama_renewal_fee"><?= isset($employee_additional_info['iqama_renewal_fee']) ? number_format((float)$employee_additional_info['iqama_renewal_fee'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('citizen_local_relation', 'Citizen (Local)') ?></div>
@@ -2312,7 +2340,7 @@ if (mysqli_num_rows($query) == 1) {
 														</div>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('eng_council_fee', 'Saudi Engineering Council Fee') ?></div>
-															<div class="profile-field-value" data-field="eng_council_fee"><?= isset($employee_additional_info['eng_council_fee']) ? number_format((float)$employee_additional_info['eng_council_fee'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+															<div class="profile-field-value" data-field="eng_council_fee"><?= isset($employee_additional_info['eng_council_fee']) ? number_format((float)$employee_additional_info['eng_council_fee'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
 															<div class="profile-field-label"><?= __('eng_council_expiry', 'Saudi Engineering Council Expiry') ?></div>
@@ -2339,7 +2367,7 @@ if (mysqli_num_rows($query) == 1) {
 													</div>
 													<div class="profile-field">
 														<div class="profile-field-label"><?= __('med_insurance', 'Medical Insurance') ?></div>
-														<div class="profile-field-value"><?= isset($current_medical_insurance['med_insurance']) ? number_format((float)$current_medical_insurance['med_insurance'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></div>
+														<div class="profile-field-value"><?= isset($current_medical_insurance['med_insurance']) ? number_format((float)$current_medical_insurance['med_insurance'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 													</div>
 													<div class="profile-field">
 														<div class="profile-field-label"><?= __('medical_expiry', 'Medical Expiry') ?></div>
@@ -2370,7 +2398,7 @@ if (mysqli_num_rows($query) == 1) {
 												<?php foreach ($medical_insurance_records as $mi_row): ?>
 												<tr>
 													<td><?= display_or_na($mi_row['insurance_no']) ?></td>
-													<td><?= isset($mi_row['med_insurance']) ? number_format((float)$mi_row['med_insurance'], 2) . ' ' . __('sar', 'SAR') : __('not_available') ?></td>
+													<td><?= isset($mi_row['med_insurance']) ? number_format((float)$mi_row['med_insurance'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></td>
 													<td><?= (!empty($mi_row['medical_expiry']) && $mi_row['medical_expiry'] !== '0000-00-00') ? format_safe_date($mi_row['medical_expiry'], 'd M, Y') : __('not_available') ?></td>
 													<td><?= display_or_na($mi_row['medical_class']) ?></td>
 													<td>
@@ -2386,7 +2414,67 @@ if (mysqli_num_rows($query) == 1) {
 											</tbody>
 										</table>
 										<?php endif; ?>
+										<?php endif; // $canViewAdditionalInfo ?>
+										<?php if ($canViewOtherIncome): ?>
+										<div class="d-flex justify-content-between align-items-center mb-3 mt-4">
+											<h4 class="header-title m-t-0"><?= __('other_income', 'Other Income') ?> <small class="text-muted">(<?= __('scheduled_months', 'scheduled months') ?>)</small></h4>
+											<?php if ($canEditOtherIncome): ?>
+											<button type="button" class="btn btn-sm btn-primary addOtherIncomeBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+												<i class="mdi mdi-plus"></i> <?= __('add_other_income', 'Add Other Income') ?>
+											</button>
+											<?php endif; ?>
+										</div>
+										<?php if (!empty($other_income_records)): ?>
+										<?php $has_inactive_other_income = false; foreach ($other_income_records as $oi_row) { if ((int)$oi_row['status'] !== 1) { $has_inactive_other_income = true; break; } } ?>
+										<?php if ($has_inactive_other_income): ?>
+										<div class="form-check mb-2">
+											<input type="checkbox" class="form-check-input" id="oiShowInactive">
+											<label class="form-check-label" for="oiShowInactive"><?= __('show_inactive', 'Show Inactive') ?></label>
+										</div>
 										<?php endif; ?>
+										<table class="table table-striped table-bordered" style="width: 100%;">
+											<thead>
+												<tr>
+													<th><?= __('other_income_title', 'Title') ?></th>
+													<th><?= __('amount', 'Amount') ?></th>
+													<th><?= __('start_month', 'Start Month') ?></th>
+													<th><?= __('end_month', 'End Month') ?></th>
+													<th><?= __('status', 'Status') ?></th>
+													<?php if ($canEditOtherIncome): ?><th><?= __('action', 'Action') ?></th><?php endif; ?>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ($other_income_records as $oi_row): ?>
+												<tr<?= (int)$oi_row['status'] !== 1 ? ' class="oi-inactive-row" style="display:none;"' : '' ?>>
+													<td><?= htmlspecialchars($oi_row['title']) ?></td>
+													<td><?= number_format((float)$oi_row['amount'], 2) ?> <i class="icon-saudi_riyal"></i></td>
+													<td><?= htmlspecialchars($oi_row['start_month']) ?></td>
+													<td><?= htmlspecialchars($oi_row['end_month']) ?></td>
+													<td>
+														<?php if ((int)$oi_row['status'] === 1): ?>
+														<span class="badge badge-success"><?= __('active', 'Active') ?></span>
+														<?php else: ?>
+														<span class="badge badge-secondary"><?= __('inactive', 'Inactive') ?></span>
+														<?php endif; ?>
+													</td>
+													<?php if ($canEditOtherIncome): ?>
+													<td>
+														<?php if ((int)$oi_row['status'] === 1): ?>
+														<button type="button" class="btn btn-sm btn-outline-danger deactivateOtherIncomeBtn" data-id="<?= (int)$oi_row['id'] ?>" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+															<i class="mdi mdi-close"></i> <?= __('deactivate', 'Deactivate') ?>
+														</button>
+														<?php endif; ?>
+													</td>
+													<?php endif; ?>
+												</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+										<?php else: ?>
+										<p class="text-muted"><?= __('no_other_income_scheduled', 'No scheduled other income records.') ?></p>
+										<?php endif; ?>
+										<?php endif; // $canViewOtherIncome ?>
+										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>
 
 										</div>
 										<div class="tab-pane" id="assets">
@@ -4701,7 +4789,7 @@ if (mysqli_num_rows($query) == 1) {
 						<div class="form-group">
 							<label for="payment_amount" class="font-weight-bold">${__('payment_amount')} (${__('sar', 'SAR')}) <span class="text-danger">*</span></label>
 							<input type="number" id="payment_amount" class="form-control swal2-input" step="0.01" min="0.01" max="${remainingBalance.toFixed(2)}" placeholder="${__('max')}: ${remainingBalance.toFixed(2)}" required>
-							<small class="text-muted">${__('remaining_balance')}: ${remainingBalance.toFixed(2)} ${__('sar', 'SAR')}</small>
+							<small class="text-muted">${__('remaining_balance')}: <i class="icon-saudi_riyal"></i> ${remainingBalance.toFixed(2)}</small>
 						</div>
 						<div class="form-group">
 							<label for="receipt_id" class="font-weight-bold">${__('receipt_number')}</label>
@@ -5104,6 +5192,222 @@ if (mysqli_num_rows($query) == 1) {
 				});
 			});
 
+			// Add Other Income (scheduled recurring income, e.g. a 3-month Bonus). Start/End
+			// Month each reuse the shared SweetAlert2 single-date picker (newEmpDatePickerModal,
+			// defined globally in jquery.app.js) instead of a plain <input type="month"> - pick
+			// Start Month, its popup closes, then pick End Month separately. Only the YYYY-MM
+			// part of each picked date is kept, and the picked range's month count is shown
+			// live under the fields.
+			function otherIncomeMonthCount(startMonth, endMonth) {
+				if (!startMonth || !endMonth) return null;
+				const parts1 = startMonth.split('-').map(Number);
+				const parts2 = endMonth.split('-').map(Number);
+				return (parts2[0] - parts1[0]) * 12 + (parts2[1] - parts1[1]) + 1;
+			}
+
+			function renderOtherIncomeDuration(startMonth, endMonth) {
+				const count = otherIncomeMonthCount(startMonth, endMonth);
+				if (count === null) {
+					$('#oiDuration').text('');
+				} else if (count < 1) {
+					$('#oiDuration').text('<?= __('end_month', 'End Month') ?> < <?= __('start_month', 'Start Month') ?>');
+				} else {
+					$('#oiDuration').text('<?= __('duration', 'Duration') ?>: ' + count + ' ' + (count > 1 ? '<?= __('months') ?>' : '<?= __('month') ?>'));
+				}
+			}
+
+			// Opens the shared SweetAlert2 single-date picker (newEmpDatePickerModal, global
+			// in jquery.app.js) for one field at a time - pick Start Month, its popup closes,
+			// then separately open it again for End Month. Reopens this modal pre-filled with
+			// the result either way - same "picker returns to the parent modal" pattern as
+			// openEngCouncilExpiryPicker above.
+			function openOtherIncomeDatePicker(empId, snapshot, field) {
+				const currentValue = snapshot[field] ? snapshot[field] + '-01' : null;
+				newEmpDatePickerModal({ value: currentValue }).then(function(result) {
+					if (result.isConfirmed) {
+						snapshot[field] = result.value.gregorian.substring(0, 7);
+					}
+					openAddOtherIncomeModal(empId, snapshot);
+				});
+			}
+
+			function openAddOtherIncomeModal(empId, prefill) {
+				Swal.fire({
+					title: '<?= __('add_other_income', 'Add Other Income') ?>',
+					width: '450px',
+					html: `
+					<div class="text-left">
+						<div class="form-group">
+							<label><?= __('other_income_title', 'Title') ?></label>
+							<input type="text" id="oiTitle" class="form-control" placeholder="<?= __('other_income_title_placeholder', 'e.g. Bonus') ?>">
+						</div>
+						<div class="form-group">
+							<label><?= __('amount', 'Amount') ?> (<?= __('sar', 'SAR') ?>)</label>
+							<input type="number" id="oiAmount" class="form-control" min="0" step="0.01" placeholder="0.00">
+						</div>
+						<div class="form-group">
+							<label><?= __('start_month', 'Start Month') ?></label>
+							<input type="text" id="oiStartMonth" class="form-control" placeholder="YYYY-MM" autocomplete="off" readonly style="cursor: pointer; background-color: #fff;">
+						</div>
+						<div class="form-group">
+							<label><?= __('end_month', 'End Month') ?></label>
+							<input type="text" id="oiEndMonth" class="form-control" placeholder="YYYY-MM" autocomplete="off" readonly style="cursor: pointer; background-color: #fff;">
+						</div>
+						<div id="oiDuration" class="text-muted small mb-2"></div>
+					</div>
+					`,
+					showCancelButton: true,
+					confirmButtonText: '<?= __('save', 'Save') ?>',
+					cancelButtonText: '<?= __('cancel') ?>',
+					allowOutsideClick: false,
+					didOpen: () => {
+						function fillForm(d) {
+							$('#oiTitle').val(d.title || '');
+							$('#oiAmount').val(d.amount || '');
+							$('#oiStartMonth').val(d.start_month || '');
+							$('#oiEndMonth').val(d.end_month || '');
+							renderOtherIncomeDuration(d.start_month, d.end_month);
+						}
+
+						if (prefill) {
+							fillForm(prefill);
+						}
+
+						$('#oiStartMonth').on('click', function() {
+							const snapshot = {
+								title: $('#oiTitle').val(),
+								amount: $('#oiAmount').val(),
+								start_month: $('#oiStartMonth').val(),
+								end_month: $('#oiEndMonth').val()
+							};
+							openOtherIncomeDatePicker(empId, snapshot, 'start_month');
+						});
+
+						$('#oiEndMonth').on('click', function() {
+							const snapshot = {
+								title: $('#oiTitle').val(),
+								amount: $('#oiAmount').val(),
+								start_month: $('#oiStartMonth').val(),
+								end_month: $('#oiEndMonth').val()
+							};
+							openOtherIncomeDatePicker(empId, snapshot, 'end_month');
+						});
+					},
+					preConfirm: () => {
+						const title = $('#oiTitle').val().trim();
+						const amount = $('#oiAmount').val();
+						const startMonth = $('#oiStartMonth').val();
+						const endMonth = $('#oiEndMonth').val();
+						if (!title || !amount || parseFloat(amount) <= 0) {
+							Swal.showValidationMessage('<?= __('other_income_title', 'Title') ?> / <?= __('amount', 'Amount') ?>');
+							return false;
+						}
+						if (!startMonth || !endMonth) {
+							Swal.showValidationMessage('<?= __('start_month', 'Start Month') ?> / <?= __('end_month', 'End Month') ?>');
+							return false;
+						}
+						if (endMonth < startMonth) {
+							Swal.showValidationMessage('<?= __('end_month', 'End Month') ?>');
+							return false;
+						}
+						return { title: title, amount: amount, start_month: startMonth, end_month: endMonth };
+					}
+				}).then((result) => {
+					if (result.isConfirmed) {
+						$.ajax({
+							url: './includes/ajaxFile/employeeOtherIncomeHandler.php',
+							type: 'POST',
+							dataType: 'json',
+							data: Object.assign({ ajaxType: 'add_employee_other_income', emp_id: empId }, result.value),
+							success: function(resp) {
+								if (resp.status === 200) {
+									Swal.fire({
+										icon: 'success',
+										title: '<?= __('success') ?>',
+										text: resp.message || '<?= __('update_successful', 'Updated successfully') ?>'
+									}).then(() => {
+										location.reload();
+									});
+								} else {
+									Swal.fire({
+										icon: 'error',
+										title: '<?= __('error') ?>',
+										text: resp.message || '<?= __('update_failed') ?>'
+									});
+								}
+							},
+							error: function() {
+								Swal.fire({
+									icon: 'error',
+									title: '<?= __('error') ?>',
+									text: '<?= __('an_error_occurred') ?>'
+								});
+							}
+						});
+					}
+				});
+			}
+
+			$(document).on('click', '.addOtherIncomeBtn', function(e) {
+				e.preventDefault();
+				const empId = $(this).data('emp-id');
+				openAddOtherIncomeModal(empId, null);
+			});
+
+			// Inactive Other Income rows are hidden by default (server-rendered display:none) -
+			// this checkbox just toggles them, no reload needed.
+			$(document).on('change', '#oiShowInactive', function() {
+				$('.oi-inactive-row').toggle(this.checked);
+			});
+
+			// Handle Deactivate Other Income (stop it before its scheduled end month)
+			$(document).on('click', '.deactivateOtherIncomeBtn', function(e) {
+				e.preventDefault();
+				const id = $(this).data('id');
+
+				Swal.fire({
+					icon: 'warning',
+					title: '<?= __('deactivate', 'Deactivate') ?>',
+					text: '<?= __('confirm_deactivate_other_income', 'Stop this scheduled income? Months not yet paid will no longer receive it.') ?>',
+					showCancelButton: true,
+					confirmButtonText: '<?= __('deactivate', 'Deactivate') ?>',
+					cancelButtonText: '<?= __('cancel') ?>'
+				}).then((result) => {
+					if (result.isConfirmed) {
+						$.ajax({
+							url: './includes/ajaxFile/employeeOtherIncomeHandler.php',
+							type: 'POST',
+							dataType: 'json',
+							data: { ajaxType: 'deactivate_employee_other_income', id: id },
+							success: function(resp) {
+								if (resp.status === 200) {
+									Swal.fire({
+										icon: 'success',
+										title: '<?= __('success') ?>',
+										text: resp.message || '<?= __('update_successful', 'Updated successfully') ?>'
+									}).then(() => {
+										location.reload();
+									});
+								} else {
+									Swal.fire({
+										icon: 'error',
+										title: '<?= __('error') ?>',
+										text: resp.message || '<?= __('update_failed') ?>'
+									});
+								}
+							},
+							error: function() {
+								Swal.fire({
+									icon: 'error',
+									title: '<?= __('error') ?>',
+									text: '<?= __('an_error_occurred') ?>'
+								});
+							}
+						});
+					}
+				});
+			});
+
 			// Handle Edit Loan Installments
 			$(document).on('click', '.editLoanInstallments', function(e) {
 				e.preventDefault();
@@ -5127,7 +5431,7 @@ if (mysqli_num_rows($query) == 1) {
 						<small class="text-muted d-block mt-1"><?= __('calculated_automatically') ?></small>
 					</div>
 					<div class="alert alert-info">
-						<?= __('remaining_balance') ?>: <strong>${remaining.toFixed(2)} <?= __('sar', 'SAR') ?></strong>
+						<?= __('remaining_balance') ?>: <strong><i class="icon-saudi_riyal"></i> ${remaining.toFixed(2)}</strong>
 					</div>
 				`,
 					showCancelButton: true,

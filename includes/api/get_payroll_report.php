@@ -68,6 +68,63 @@ if (!empty($companyFilter)) {
     $params[':company_name'] = $companyFilter;
 }
 
+// Must mirror the VACATION PAYROLL DROPOUT CHECK in get_employees.php / process_payroll.php
+// so employees skipped from payroll generation because of a long vacation don't still
+// show up on this report.
+$vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+$dropout_filter = "";
+if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
+    $dropout_filter = " AND NOT EXISTS (
+            SELECT 1 FROM emp_vacation vd
+            WHERE vd.emp_id = e.emp_id
+                AND vd.review = 'A'
+                AND vd.current_status IN ('approved', 'completed')
+                AND vd.start_date <= :dropout_month_end
+                AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
+                AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                AND vd.request_inv_no LIKE 'VAC-%'
+        )";
+    $params[':dropout_month_end'] = $monthEnd;
+    $params[':dropout_month_start'] = $monthStart;
+    $params[':dropout_days_param'] = $vacationDropoutDays;
+}
+
+// Same paid-settlement double-check as get_employees.php: a PAID vacation settlement
+// overlapping this month means the employee was already paid out for that period.
+$settlement_filter = "";
+if (!empty($monthStart) && !empty($monthEnd)) {
+    $settlement_filter = " AND NOT EXISTS (
+            SELECT 1 FROM settlement_records sr
+            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+            WHERE sr.emp_id = e.emp_id
+                AND sr.request_type = 'annual_vacation'
+                AND sr.settlement_status IN ('completed', 'processed')
+                AND sr.payment_date IS NOT NULL
+                AND (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= :settlement_month_end
+                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > :settlement_month_end3
+                            )
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
+                        )
+                )
+        )";
+    $params[':settlement_month_end'] = $monthEnd;
+    $params[':settlement_month_start'] = $monthStart;
+    $params[':settlement_month_end2'] = $monthEnd;
+    $params[':settlement_month_start2'] = $monthStart;
+    $params[':settlement_month_end3'] = $monthEnd;
+}
+
 try {
     // Main query to get the generated payroll summary for all employees for the month
     $sql = "SELECT
@@ -131,7 +188,7 @@ try {
                 ORDER BY er.last_working_day DESC, er.id DESC
                 LIMIT 1
             )
-            WHERE gp.month_year = :month_year_param AND e.payment_type <> 3" . $dept_filter . $company_filter . "
+            WHERE gp.month_year = :month_year_param AND e.payment_type <> 3" . $dept_filter . $company_filter . $dropout_filter . $settlement_filter . "
             ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
     $stmt = $pdo->prepare($sql);

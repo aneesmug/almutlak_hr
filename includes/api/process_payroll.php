@@ -702,6 +702,12 @@ try {
         addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
         addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays);
 
+        // Runs on every generation, including regeneration - unlike the benefits/deductions
+        // below, it's keyed off source_other_income_id so it never duplicates or touches
+        // manually-added benefits, so it's safe to re-check every time (e.g. a schedule added
+        // *after* the month was first generated still gets picked up on the next regenerate).
+        addOrUpdateScheduledOtherIncome($pdo, $empId, $monthYear);
+
         if (!$isRegeneration) {
             // Only add automatic benefits/deductions on initial payroll generation
             // --- LEAVE DEDUCTION LOGIC ---
@@ -1393,6 +1399,61 @@ function addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalar
             }
             // If vacation_salary_type = 'end_of_service', vacation salary is NOT added to payroll
             // It will be calculated and paid during end of service settlement
+        }
+    }
+}
+
+/**
+ * Auto-adds "Other Income" payroll_benefits rows for any employee_other_income schedule
+ * (e.g. a 3-month Bonus set up on the Additional Information tab) that covers $monthYear.
+ * Each schedule is only applied once per month (tracked via source_other_income_id, so
+ * re-running this for the same month never duplicates the benefit). Once a schedule's
+ * end_month has been processed, the schedule is flipped to status = 0 (inactive) so it
+ * stops being picked up by future payroll runs.
+ */
+function addOrUpdateScheduledOtherIncome($pdo, $empId, $monthYear) {
+    $stmtSchedules = $pdo->prepare("
+        SELECT id, amount, end_month
+        FROM employee_other_income
+        WHERE emp_id = :emp_id
+        AND status = 1
+        AND start_month <= :month_year_start
+        AND end_month >= :month_year_end
+    ");
+    $stmtSchedules->execute([':emp_id' => $empId, ':month_year_start' => $monthYear, ':month_year_end' => $monthYear]);
+    $schedules = $stmtSchedules->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$schedules) {
+        return;
+    }
+
+    $typeStmt = $pdo->query("SELECT id FROM benefit_types WHERE name = 'Other Income' LIMIT 1");
+    $otherIncomeTypeId = $typeStmt ? $typeStmt->fetchColumn() : false;
+    $otherIncomeTypeId = ($otherIncomeTypeId !== false) ? (int)$otherIncomeTypeId : null;
+
+    foreach ($schedules as $schedule) {
+        $stmtCheck = $pdo->prepare("SELECT id FROM payroll_benefits WHERE source_other_income_id = :schedule_id AND month = :month_year LIMIT 1");
+        $stmtCheck->execute([':schedule_id' => $schedule['id'], ':month_year' => $monthYear]);
+
+        if (!$stmtCheck->fetch(PDO::FETCH_ASSOC)) {
+            $stmtInsert = $pdo->prepare("
+                INSERT INTO payroll_benefits (emp_id, benefit, note, month, status, type_id, calculation_type, source_other_income_id)
+                VALUES (:emp_id, 'Other Income', :amount, :month_year, 1, :type_id, 'fixed', :schedule_id)
+            ");
+            $stmtInsert->execute([
+                ':emp_id' => $empId,
+                ':amount' => number_format((float)$schedule['amount'], 2, '.', ''),
+                ':month_year' => $monthYear,
+                ':type_id' => $otherIncomeTypeId,
+                ':schedule_id' => $schedule['id'],
+            ]);
+        }
+
+        // The schedule's last covered month has now been generated - deactivate it so it's
+        // no longer picked up (matches "inactive after the time period" behavior).
+        if ($monthYear >= $schedule['end_month']) {
+            $stmtDeactivate = $pdo->prepare("UPDATE employee_other_income SET status = 0 WHERE id = :id");
+            $stmtDeactivate->execute([':id' => $schedule['id']]);
         }
     }
 }
