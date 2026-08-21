@@ -106,6 +106,25 @@ if ($action === 'truncate_tables') {
         exit;
     }
 
+    // The export key is single-use - download_db_export.php rotates it after every
+    // successful pull, so a key that worked for an earlier import is dead by the time
+    // this runs again. Without this check, a stale key would truncate the local tables
+    // (this action never talks to the live server otherwise) and only THEN fail during
+    // run_import's actual data pull, leaving those tables permanently empty. Validate
+    // against db_export_tables.php first (it never rotates the key) so a bad/expired key
+    // is caught before anything local is destroyed.
+    $keyCheck = db_import_remote_curl($baseUrl . '/includes/api/db_export_tables.php', ['export_key' => $exportKey], 30);
+    $keyCheckData = json_decode((string) $keyCheck['body'], true);
+    if ($keyCheck['error'] || $keyCheck['http_code'] !== 200 || !is_array($keyCheckData) || ($keyCheckData['status'] ?? '') !== 'success') {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Live server rejected the export key - nothing was truncated. ' .
+                ($keyCheckData['message'] ?? $keyCheck['error'] ?? ('HTTP ' . $keyCheck['http_code'])) .
+                ' Get a fresh key from db_export.php on the live server and try again.',
+        ]);
+        exit;
+    }
+
     $mysqli = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
     if (!$mysqli) {
         echo json_encode(['status' => 'error', 'message' => 'Could not connect to local database: ' . mysqli_connect_error()]);
@@ -196,13 +215,14 @@ if ($action === 'run_import') {
         exit;
     }
 
-    // download_db_export.php always ends its output with this line once every
-    // selected table has been fully written out. If it's missing, the download was
-    // cut short (host execution/time limit, WAF, dropped connection) partway through
-    // a table's INSERT block - applying it as-is would silently import a partial
-    // table while still reporting "success", which is worse than truncate mode ever
-    // running: the truncated table would be left with less data than before.
-    if (!preg_match('/SET FOREIGN_KEY_CHECKS=1;\s*$/', $sql)) {
+    // download_db_export.php always ends its output with a "-- NEW_EXPORT_KEY: ..." line
+    // (the rotated one-time key, see below) once every selected table has been fully
+    // written out. If it's missing, the download was cut short (host execution/time
+    // limit, WAF, dropped connection) partway through a table's INSERT block - applying
+    // it as-is would silently import a partial table while still reporting "success",
+    // which is worse than truncate mode ever running: the truncated table would be left
+    // with less data than before.
+    if (!preg_match('/SET FOREIGN_KEY_CHECKS=1;/', $sql) || !preg_match('/^-- NEW_EXPORT_KEY: (\S+)\s*$/m', $sql, $keyMatch)) {
         echo json_encode([
             'status' => 'error',
             'message' => 'The download from the live server looks incomplete (it was cut off before finishing) - nothing was imported. This is usually a live-server timeout on large tables; try selecting fewer tables per run.' .
@@ -210,6 +230,10 @@ if ($action === 'run_import') {
         ]);
         exit;
     }
+    // The importer pulls one table per request and this key is single-use (rotated
+    // server-side on every successful export), so the NEXT request in the batch must use
+    // this rotated value - hand it back to the client, which threads it through.
+    $rotatedExportKey = $keyMatch[1];
 
     // download_db_export.php prints "-- Table: name (N rows)" per table it dumps -
     // reuse that instead of re-deriving counts, so the reported numbers always match
@@ -229,6 +253,12 @@ if ($action === 'run_import') {
 
     $statementsRun = 0;
     $errors = [];
+    // mysqli_info() returns a string like "Records: 482  Duplicates: 480  Warnings: 0" for
+    // INSERT/UPDATE statements specifically - captured per statement so a shortfall (fewer
+    // local rows than the dump claimed, despite zero SQL errors) can be explained: a high
+    // Duplicates count means most rows collapsed into each other via ON DUPLICATE KEY UPDATE,
+    // which happens when the source data has many rows sharing the same unique key value.
+    $insertDiagnostics = [];
 
     if (mysqli_multi_query($mysqli, $sql)) {
         do {
@@ -239,6 +269,10 @@ if ($action === 'run_import') {
                 $errors[] = mysqli_error($mysqli);
             } else {
                 $statementsRun++;
+                $info = mysqli_info($mysqli);
+                if ($info) {
+                    $insertDiagnostics[] = $info;
+                }
             }
         } while (mysqli_more_results($mysqli) && mysqli_next_result($mysqli));
     } else {
@@ -252,6 +286,11 @@ if ($action === 'run_import') {
             'message' => 'Import completed with errors.',
             'statements_run' => $statementsRun,
             'errors' => array_slice($errors, 0, 20),
+            'insert_diagnostics' => $insertDiagnostics,
+            // The live server already rotated its key once the download completed, before
+            // these local SQL errors were hit - the caller must move to this value for the
+            // next table's request, or every table after this one will fail auth too.
+            'next_export_key' => $rotatedExportKey,
         ]);
         exit;
     }
@@ -279,7 +318,17 @@ if ($action === 'run_import') {
         $message .= ' Tables were truncated first - local data now mirrors live exactly.';
     }
     if (!empty($shortfallTables)) {
-        $message .= ' WARNING: ' . implode(', ', $shortfallTables) . ' ended up with fewer local rows than the live export reported - check the import for that table.';
+        $message .= ' WARNING: ' . implode(', ', $shortfallTables) . ' ended up with fewer local rows than the live export reported.';
+        if (!empty($insertDiagnostics)) {
+            // e.g. "Records: 482  Duplicates: 480  Warnings: 0" - a high Duplicates count
+            // means most of the exported rows share a unique key value with an earlier row
+            // in the same batch and collapsed into it via ON DUPLICATE KEY UPDATE, instead of
+            // landing as separate rows - almost always a data issue on the live table itself
+            // (duplicate values in whatever column the unique key covers), not an import bug.
+            $message .= ' (' . implode('; ', $insertDiagnostics) . ')';
+        } else {
+            $message .= ' Check the import for that table.';
+        }
     }
 
     echo json_encode([
@@ -291,6 +340,125 @@ if ($action === 'run_import') {
         'total_records' => $totalRecords,
         'statements_run' => $statementsRun,
         'shortfall_tables' => $shortfallTables,
+        'insert_diagnostics' => $insertDiagnostics,
+        'next_export_key' => $rotatedExportKey,
+    ]);
+    exit;
+}
+
+if ($action === 'check_schema') {
+    $tablesRaw = $_POST['tables'] ?? [];
+    $tables = is_array($tablesRaw) ? array_values(array_filter(array_map('trim', $tablesRaw))) : [];
+    if (empty($tables)) {
+        echo json_encode(['status' => 'error', 'message' => 'Select at least one table.']);
+        exit;
+    }
+
+    $result = db_import_remote_curl($baseUrl . '/includes/api/db_export_schema.php', [
+        'export_key' => $exportKey,
+        'tables' => implode(',', $tables),
+    ], 30);
+
+    if ($result['error']) {
+        echo json_encode(['status' => 'error', 'message' => 'Connection failed: ' . $result['error']]);
+        exit;
+    }
+    $data = json_decode((string) $result['body'], true);
+    if ($result['http_code'] !== 200 || !is_array($data) || ($data['status'] ?? '') !== 'success') {
+        echo json_encode(['status' => 'error', 'message' => ($data['message'] ?? null) ?: ('Live server returned HTTP ' . $result['http_code'] . '. If this is a 404, upload the new includes/api/db_export_schema.php file to the live server first.')]);
+        exit;
+    }
+    $liveSchema = $data['schema'] ?? [];
+
+    $localTableNames = [];
+    $namesRes = mysqli_query($conDB, 'SHOW TABLES');
+    while ($row = mysqli_fetch_array($namesRes)) {
+        $localTableNames[$row[0]] = true;
+    }
+
+    $localColsStmt = mysqli_prepare($conDB, "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COLUMN_DEFAULT, EXTRA
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+        ORDER BY ORDINAL_POSITION");
+
+    $report = [];
+    $anyMismatch = false;
+    foreach ($tables as $table) {
+        $liveCols = $liveSchema[$table] ?? [];
+        $liveByName = [];
+        foreach ($liveCols as $c) {
+            $liveByName[$c['name']] = $c;
+        }
+
+        if (!isset($localTableNames[$table])) {
+            $report[$table] = [
+                'exists_locally' => false,
+                'missing_in_local' => array_values($liveByName),
+                'missing_in_live' => [],
+                'type_mismatches' => [],
+            ];
+            if (!empty($liveByName)) {
+                $anyMismatch = true;
+            }
+            continue;
+        }
+
+        mysqli_stmt_bind_param($localColsStmt, 's', $table);
+        mysqli_stmt_execute($localColsStmt);
+        $localRes = mysqli_stmt_get_result($localColsStmt);
+        $localByName = [];
+        while ($row = mysqli_fetch_assoc($localRes)) {
+            $localByName[$row['COLUMN_NAME']] = $row;
+        }
+
+        $missingInLocalNames = array_diff(array_keys($liveByName), array_keys($localByName));
+        $missingInLiveNames = array_diff(array_keys($localByName), array_keys($liveByName));
+
+        $missingInLocal = array_values(array_map(function ($name) use ($liveByName) {
+            return $liveByName[$name];
+        }, $missingInLocalNames));
+        $missingInLive = array_values(array_map(function ($name) use ($localByName) {
+            $c = $localByName[$name];
+            return [
+                'name' => $c['COLUMN_NAME'],
+                'type' => $c['COLUMN_TYPE'],
+                'nullable' => $c['IS_NULLABLE'] === 'YES',
+                'default' => $c['COLUMN_DEFAULT'],
+                'extra' => $c['EXTRA'],
+            ];
+        }, $missingInLiveNames));
+
+        $typeMismatches = [];
+        foreach ($liveByName as $name => $liveCol) {
+            if (!isset($localByName[$name])) {
+                continue;
+            }
+            $localCol = $localByName[$name];
+            if ($localCol['COLUMN_TYPE'] !== $liveCol['type'] || ($localCol['IS_NULLABLE'] === 'YES') !== $liveCol['nullable']) {
+                $typeMismatches[] = [
+                    'column' => $name,
+                    'local_type' => $localCol['COLUMN_TYPE'] . ($localCol['IS_NULLABLE'] === 'YES' ? ' NULL' : ' NOT NULL'),
+                    'live_type' => $liveCol['type'] . ($liveCol['nullable'] ? ' NULL' : ' NOT NULL'),
+                ];
+            }
+        }
+
+        if (!empty($missingInLocal) || !empty($missingInLive) || !empty($typeMismatches)) {
+            $anyMismatch = true;
+        }
+
+        $report[$table] = [
+            'exists_locally' => true,
+            'missing_in_local' => $missingInLocal,
+            'missing_in_live' => $missingInLive,
+            'type_mismatches' => $typeMismatches,
+        ];
+    }
+
+    echo json_encode([
+        'status' => 'success',
+        'any_mismatch' => $anyMismatch,
+        'report' => $report,
     ]);
     exit;
 }

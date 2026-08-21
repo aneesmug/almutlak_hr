@@ -184,9 +184,13 @@ echo "\nSET FOREIGN_KEY_CHECKS=1;\n";
 
 // One-time key: rotate after every successful export so the same key can't be
 // reused for a later pull - the admin has to go back to db_export.php for a
-// fresh one each time.
+// fresh one each time. The importer pulls one table per request (see
+// ajaxDbImportRemote.php), so the rotated key is also echoed back as a trailing
+// comment - the importer picks it up and uses it for the next table's request,
+// chaining through the whole selected batch without a human re-copying keys.
 $newKey = bin2hex(random_bytes(32));
 $rotateStmt = $pdo->prepare("UPDATE app_settings SET setting_value = ? WHERE setting_name = 'db_export_secret_key'");
 $rotateStmt->execute([$newKey]);
+echo "-- NEW_EXPORT_KEY: $newKey\n";
 
 exit;
