@@ -183,6 +183,19 @@ if ($currentPage > $totalPages && $totalPages > 0) {
 
 $requests = [];
 if ($totalItems > 0) {
+    // Mirrors the VACATION PAYROLL DROPOUT CHECK in payroll_checklist_report.php /
+    // get_employees.php / process_payroll.php / get_payroll_report.php: only a LONG
+    // vacation (>= vacation_payroll_dropout_days) drops an employee from the checklist
+    // totals, not any vacation. Inlined as a plain int (server-controlled setting, not
+    // user input) since this query already builds LAST_DAY/CONCAT unparameterized.
+    $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    // When the setting is disabled (0), this condition must make the NOT EXISTS check
+    // below always pass (no one excluded via it) - "1=0" inside the EXISTS subquery's
+    // WHERE does exactly that, mirroring payroll_checklist_report.php skipping the
+    // whole dropoutFilter in that case.
+    $vacdaysGuardSql = $vacationDropoutDays > 0
+        ? "AND COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays}"
+        : "AND 1=0";
     $mainSql = "SELECT
             p_months.month_year AS payroll_month,
             p_months.employee_count,
@@ -190,6 +203,7 @@ if ($totalItems > 0) {
             p_months.bank_total_net_salary,
             p_months.checklist_employee_count,
             p_months.checklist_total_net_salary,
+            p_months.checklist_bank_total_net_salary,
             pr.id AS approval_id,
             pr.request_inv_no,
             pr.status AS approval_status,
@@ -214,10 +228,53 @@ if ($totalItems > 0) {
                 COUNT(p.emp_id) AS employee_count,
                 SUM(p.net_salary) AS total_net_salary,
                 SUM(CASE WHEN COALESCE(e.payment_type, 1) = 1 THEN p.net_salary ELSE 0 END) AS bank_total_net_salary,
-                COUNT(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.emp_id END) AS checklist_employee_count,
-                SUM(CASE WHEN COALESCE(e.payment_type, 1) <> 3 THEN p.net_salary ELSE 0 END) AS checklist_total_net_salary
+                COUNT(CASE WHEN COALESCE(e.payment_type, 1) <> 3 AND vac_excl.emp_id IS NULL AND settle_excl.emp_id IS NULL THEN p.emp_id END) AS checklist_employee_count,
+                SUM(CASE WHEN COALESCE(e.payment_type, 1) <> 3 AND vac_excl.emp_id IS NULL AND settle_excl.emp_id IS NULL THEN p.net_salary ELSE 0 END) AS checklist_total_net_salary,
+                SUM(CASE WHEN COALESCE(e.payment_type, 1) = 1 AND vac_excl.emp_id IS NULL AND settle_excl.emp_id IS NULL THEN p.net_salary ELSE 0 END) AS checklist_bank_total_net_salary
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
+            -- Same two exclusion rules as payroll_checklist_report.php (long-vacation dropout
+            -- + already-settled vacation payout), but precomputed once per distinct month
+            -- instead of a correlated NOT EXISTS re-evaluated for every payroll row - this
+            -- query aggregates every month in payroll history at once, and the per-row version
+            -- timed out (25s cap) once the settlement check was added alongside it.
+            LEFT JOIN (
+                SELECT DISTINCT m.month_year, vd.emp_id
+                FROM (SELECT DISTINCT month_year FROM payrolls) m
+                INNER JOIN emp_vacation vd
+                    ON vd.review = 'A'
+                    AND vd.current_status IN ('approved', 'completed')
+                    AND vd.request_inv_no LIKE 'VAC-%'
+                    AND vd.start_date <= LAST_DAY(CONCAT(m.month_year, '-01'))
+                    AND COALESCE(vd.return_date, vd.start_date) >= CONCAT(m.month_year, '-01')
+                    {$vacdaysGuardSql}
+            ) vac_excl ON vac_excl.month_year = p.month_year AND vac_excl.emp_id = p.emp_id
+            LEFT JOIN (
+                SELECT DISTINCT m.month_year, sr.emp_id
+                FROM (SELECT DISTINCT month_year FROM payrolls) m
+                INNER JOIN settlement_records sr
+                    ON sr.request_type = 'annual_vacation'
+                    AND sr.settlement_status IN ('completed', 'processed')
+                    AND sr.payment_date IS NOT NULL
+                LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+                WHERE (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= LAST_DAY(CONCAT(m.month_year, '-01'))
+                            AND COALESCE(sv.return_date, sv.start_date) >= CONCAT(m.month_year, '-01')
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > LAST_DAY(CONCAT(m.month_year, '-01'))
+                            )
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN CONCAT(m.month_year, '-01') AND LAST_DAY(CONCAT(m.month_year, '-01'))
+                        )
+                )
+            ) settle_excl ON settle_excl.month_year = p.month_year AND settle_excl.emp_id COLLATE utf8mb4_general_ci = p.emp_id
             GROUP BY p.month_year
         ) p_months
         $joins
@@ -1171,7 +1228,7 @@ if (!empty($requests)) {
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right">
                                                             <a class="dropdown-item" href="payroll_checklist_report.php?month=<?= urlencode($request['payroll_month']) ?><?php if (!empty($request['request_inv_no'])): ?>&request_inv_no=<?= urlencode($request['request_inv_no']) ?><?php endif; ?>" target="_blank">
-                                                                <i class="fa fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Check List') ?>
+                                                                <i class="fa fa-clipboard-check"></i> <?= __('payroll_check_list', 'Payroll Check List') ?>
                                                             </a>
                                                             <div class="dropdown-divider"></div>
                                                             <?php if (!empty($request['request_inv_no'])): ?>
@@ -1191,10 +1248,10 @@ if (!empty($requests)) {
                                                             <?php endif; ?>
                                                             <?php if ($canApproveNow): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>', <?= (float)($request['bank_total_net_salary'] ?? 0) ?>)">
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>', <?= (float)($request['checklist_bank_total_net_salary'] ?? $request['bank_total_net_salary'] ?? 0) ?>)">
                                                                     <i class="fa fa-check text-success"></i> <?= __('approve') ?>
                                                                 </a>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>', <?= (float)($request['bank_total_net_salary'] ?? 0) ?>)">
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>', <?= (float)($request['checklist_bank_total_net_salary'] ?? $request['bank_total_net_salary'] ?? 0) ?>)">
                                                                     <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
                                                                 </a>
                                                             <?php endif; ?>

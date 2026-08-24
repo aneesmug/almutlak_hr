@@ -572,6 +572,65 @@ if ($isMainFinanceManager) {
     $assignedScopeToggleUrl = 'payroll_checklist_report.php?' . http_build_query($toggleParams);
 }
 
+// Mirrors the VACATION PAYROLL DROPOUT CHECK in get_employees.php / process_payroll.php /
+// get_payroll_report.php so employees skipped from payroll generation because of a long
+// vacation - or already paid out via a vacation settlement - don't show up on this
+// checklist report either.
+$monthStart = $monthYear !== '' ? $monthYear . '-01' : null;
+$monthEnd = $monthStart ? date('Y-m-t', strtotime($monthStart)) : null;
+
+$vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+$dropoutFilter = '';
+if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
+    $dropoutFilter = " AND NOT EXISTS (
+            SELECT 1 FROM emp_vacation vd
+            WHERE vd.emp_id = e.emp_id
+                AND vd.review = 'A'
+                AND vd.current_status IN ('approved', 'completed')
+                AND vd.start_date <= :dropout_month_end
+                AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
+                AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                AND vd.request_inv_no LIKE 'VAC-%'
+        )";
+    $params[':dropout_month_end'] = $monthEnd;
+    $params[':dropout_month_start'] = $monthStart;
+    $params[':dropout_days_param'] = $vacationDropoutDays;
+}
+
+$settlementFilter = '';
+if (!empty($monthStart) && !empty($monthEnd)) {
+    $settlementFilter = " AND NOT EXISTS (
+            SELECT 1 FROM settlement_records sr
+            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+            WHERE sr.emp_id = e.emp_id
+                AND sr.request_type = 'annual_vacation'
+                AND sr.settlement_status IN ('completed', 'processed')
+                AND sr.payment_date IS NOT NULL
+                AND (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= :settlement_month_end
+                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > :settlement_month_end3
+                            )
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
+                        )
+                )
+        )";
+    $params[':settlement_month_end'] = $monthEnd;
+    $params[':settlement_month_start'] = $monthStart;
+    $params[':settlement_month_end2'] = $monthEnd;
+    $params[':settlement_month_start2'] = $monthStart;
+    $params[':settlement_month_end3'] = $monthEnd;
+}
+
 // Always use payroll-only query (JOIN, not LEFT JOIN) to exclude not_generated employees.
 $sql = "SELECT
         gp.id AS payroll_id,
@@ -608,7 +667,7 @@ $sql = "SELECT
     LEFT JOIN companies c ON e.comp_no = c.comp_id
     LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
     LEFT JOIN sponsorship s ON e.emp_sup_type = s.id
-    WHERE gp.month_year = :month_year_param" . $deptFilter . $companyFilter . $departmentFilter . $sponsorFilter . $paymentTypeFilter . "
+    WHERE gp.month_year = :month_year_param" . $deptFilter . $companyFilter . $departmentFilter . $sponsorFilter . $paymentTypeFilter . $dropoutFilter . $settlementFilter . "
     ORDER BY c.comp_name ASC, d.dep_nme ASC, e.name ASC";
 
 $stmt = $pdo->prepare($sql);
@@ -799,8 +858,14 @@ foreach ($employees as $index => $employee) {
     $difference = round($actualNet - $expectedNet, 2);
     $isBalanced = abs($difference) < 0.01;
 
-    $employees[$index]['benefits_list'] = $benefits;
-    $employees[$index]['deductions_list'] = $deductions;
+    $employees[$index]['benefits_list'] = array_map(function ($b) {
+        $b['benefit'] = getDisplayName((string)($b['benefit'] ?? ''));
+        return $b;
+    }, $benefits);
+    $employees[$index]['deductions_list'] = array_map(function ($d) {
+        $d['deduction'] = getDisplayName((string)($d['deduction'] ?? ''));
+        return $d;
+    }, $deductions);
     $employees[$index]['expected_net_salary'] = $expectedNet;
     $employees[$index]['net_difference'] = $difference;
     $employees[$index]['is_balanced'] = $isBalanced;
@@ -862,9 +927,9 @@ $employeesForJs = [];
 foreach ($employees as $employee) {
     $employeesForJs[] = [
         'emp_id' => (string)($employee['emp_id'] ?? ''),
-        'employee_name' => (string)($employee['employee_name'] ?? ''),
+        'employee_name' => getDisplayName((string)($employee['employee_name'] ?? '')),
         'department_name' => (string)((($is_rtl ?? false) ? ($employee['department_name_ar'] ?? $employee['department_name'] ?? 'N/A') : ($employee['department_name'] ?? $employee['department_name_ar'] ?? 'N/A'))),
-        'company_name' => (string)($employee['comp_name'] ?? 'N/A'),
+        'company_name' => getDisplayName((string)($employee['comp_name'] ?? 'N/A')),
         'status' => (string)($employee['status'] ?? 'generated'),
         'payment_type' => (int)($employee['payment_type'] ?? 1),
         'iqama' => (string)($employee['iqama'] ?? ''),

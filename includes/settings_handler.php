@@ -69,8 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 } else {
     echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
 }
-
-$conDB->close();
+// NOTE: don't close $conDB here - includes/db.php already registers a shutdown
+// function that closes it. Closing twice throws "mysqli object is already closed"
+// on PHP 8.1+ (mysqli exception mode), and that fatal error text lands after the
+// JSON we already echoed above, breaking JSON.parse on the client.
 
 
 // --- Function Definitions ---
@@ -85,7 +87,11 @@ function get_all_settings($conDB) {
     ensure_announcement_smtp_settings($conDB);
 
     $settings = [];
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings ORDER BY setting_group, id";
+    // db_export_secret_key is auto-generated/rotated from db_export.php's own
+    // "Regenerate Key" button - it doesn't belong in the general settings UI
+    // as a plain editable text field (and typing over it would just orphan
+    // the real key the export pages check against).
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name != 'db_export_secret_key' ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {

@@ -76,6 +76,4 @@ try {
     mysqli_rollback($conDB);
     echo json_encode(['title'   => "Error!",'message' => "Record not added because there are some error.",'type' 	  => 'error']);
 }
-
-mysqli_close($conDB);
 ?>

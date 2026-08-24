@@ -36,6 +36,4 @@ if (mysqli_query($conDB, $sql)) {
     // You might want to log the actual error: error_log(mysqli_error($conDB));
     echo json_encode(['status' => 'error', 'title_key' => 'error_modal_title', 'message_key' => 'error_database_error']);
 }
-
-mysqli_close($conDB);
 ?>

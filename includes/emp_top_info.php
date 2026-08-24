@@ -22,6 +22,27 @@ $can_modify_employee = (
 	user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
 
+// "Update Salary" button visibility: shown only when due (a Salary Increment request
+// was just finally approved and hasn't been applied yet), the employee has no salary
+// breakdown at all yet (new-hire onboarding), or a sys-admin-granted special access
+// override forces it on for this specific employee via edit_employee.php.
+$empIdForSalaryCheck = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
+$hasSalaryRecord = true;
+if (!empty($empIdForSalaryCheck)) {
+	$checkSalaryStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id LIMIT 1");
+	$checkSalaryStmt->execute([':emp_id' => $empIdForSalaryCheck]);
+	$hasSalaryRecord = (bool)$checkSalaryStmt->fetch();
+}
+$canForceShowUpdateSalary = (
+	($is_system_admin ?? false) ||
+	user_has_special_access($conDB, $empid ?? '', 'manage_update_salary_button_visibility', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$showUpdateSalaryBtn = (
+	!$hasSalaryRecord ||
+	((string)($emprow['salary_update_pending'] ?? '0') === '1') ||
+	((string)($emprow['force_show_update_salary_btn'] ?? '0') === '1')
+);
+
 // Effective request-block status for this employee (global block XOR employee override),
 // used to hide "More Actions" menu items for request types this employee cannot submit.
 // Sys admin always sees every action, regardless of block settings in
@@ -400,7 +421,7 @@ if ($isEmployee !== true) {
 								Add Portfolio Dedails <i class="mdi mdi mdi-account-card-details"></i>
 							</a>
 						<?php endif */ ?>
-					<?php if ($is_system_admin || $isHR || $isDeptHr): ?>
+					<?php if (($is_system_admin || $isHR || $isDeptHr) && $showUpdateSalaryBtn): ?>
 						<?php if ($current_page_name <> "add_emp_slry.php"): ?>
 							<a href="javascript:void(0);" class="btn-sm btn btn-secondary waves-effect btn-rounded updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>">
 								<?= __('update_salary') ?> <i class="mdi mdi-inbox-arrow-up"></i>
@@ -461,12 +482,8 @@ if ($isEmployee !== true) {
 <?php
 $empid_check = $emprow['empid'] ?? $emprow['emp_id'];
 if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
-	// Check if employee has no salary record in emp_salary table
-	$checkSalaryStmt = $pdo->prepare("SELECT id FROM emp_salary WHERE emp_id = :emp_id LIMIT 1");
-	$checkSalaryStmt->execute([':emp_id' => $empid_check]);
-	$hasSalaryRecord = $checkSalaryStmt->fetch();
-	
-	// If no salary record exists, trigger the modal automatically
+	// If no salary record exists, trigger the modal automatically (uses $hasSalaryRecord
+	// computed above, which also drives the Update Salary button's own visibility).
 	if (!$hasSalaryRecord):
 ?>
 <script>

@@ -60,13 +60,74 @@ if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
 // --- 2. Initialize Database Connection (needed for timeout logging) ---
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/init.php';
+require_once __DIR__ . '/user_activity_logger.php';
 include_once __DIR__ . '/helper_functions.php';
 
 // --- 3. Session Timeout Handling ---
 $timeout_duration = get_setting($conDB, 'session_timeout');
+
+// Auto sign-out sweep: catches OTHER users whose session went stale without
+// them ever sending another request (closed tab, dead phone, lost network) -
+// the self-check below only ever catches the current request's own user.
+// Driven by its own dedicated "Auto Sign-Out After (hours)" setting rather
+// than session_timeout (seconds), which controls the separate lazy per-user check.
+$autoSignoutHours = (float) get_setting($conDB, 'auto_signout_hours');
+$autoSignoutSeconds = $autoSignoutHours > 0 ? (int) round($autoSignoutHours * 3600) : 28800; // default 8h
+sweepStaleUserActivity($conDB, $autoSignoutSeconds);
+
+// Admin-forced sign-out (Connection Monitor "Sign out" button). A live PHP
+// process can't be killed remotely, so this session only notices on its next
+// request - checking here means that happens on literally any click/nav,
+// not just the next full page load.
+if (isset($_SESSION['activity_log_id']) && getUserActivityStatus($conDB, $_SESSION['activity_log_id']) === 'logged_out') {
+    session_unset();
+    session_destroy();
+    setcookie('remember_me', '', time() - 3600, '/'); // don't let remember_me silently re-auth them right back in
+
+    while (ob_get_level()) ob_end_clean();
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Signed Out</title>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    </head>
+    <body>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var redirectMs = 3000;
+                var redirectUrl = './index.php';
+                var redirected = false;
+                function goToLogin() {
+                    if (redirected) return;
+                    redirected = true;
+                    window.location.href = redirectUrl;
+                }
+                setTimeout(goToLogin, redirectMs + 500);
+                try {
+                    Swal.mixin({
+                        toast: true, position: 'top-end', showConfirmButton: false,
+                        showCloseButton: false, allowOutsideClick: false, allowEscapeKey: false,
+                        timer: redirectMs, timerProgressBar: true,
+                    }).fire({
+                        icon: 'info',
+                        title: 'You have been signed out by an administrator.',
+                    }).then(goToLogin);
+                } catch (e) {
+                    goToLogin();
+                }
+            });
+        </script>
+    </body>
+    </html>
+    <?php
+    exit();
+}
+
 if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $timeout_duration) {
     // Log timeout activity before destroying session
-    require_once __DIR__ . '/user_activity_logger.php';
     logUserLogout($conDB, 'timeout');
 
     // End session (remember_me cookie, if present, will allow auto-login on dashboard)
@@ -128,6 +189,9 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
     exit();
 }
     $_SESSION['last_activity'] = time();
+    if (isset($_SESSION['activity_log_id'])) {
+        touchUserActivity($conDB, $_SESSION['activity_log_id']);
+    }
     // Store timeout settings in session for header.php to use
     $_SESSION['timeout_duration'] = intval($timeout_duration);
     $_SESSION['last_activity_time'] = isset($_SESSION['last_activity']) ? intval($_SESSION['last_activity']) : time();

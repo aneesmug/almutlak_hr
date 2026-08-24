@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/special_access_helper.php';
 // Request-blocking fields are only writable/visible by admins or employees with the matching special access grant.
 $canManageRequestBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
 $canManageRequestTypeBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_type_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
+$canForceShowUpdateSalary = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_update_salary_button_visibility', $user_role ?? '', $user_type ?? '', $is_system_admin));
 $globallyBlockedRequestTypes = get_global_blocked_request_types($conDB);
 
 // ============================================================
@@ -59,11 +60,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'allow_vacation_salary_below_min_days',
 			'other_income_enabled',
 			'requests_blocked',
-			'blocked_request_types'
+			'blocked_request_types',
+			'force_show_update_salary_btn'
 		];
 
 		if (!$canManageRequestBlock) {
 			unset($formData['requests_blocked']);
+		}
+		if (!$canForceShowUpdateSalary) {
+			unset($formData['force_show_update_salary_btn']);
 		}
 		if (!$canManageRequestTypeBlock) {
 			unset($formData['blocked_request_types']);
@@ -748,6 +753,21 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 												<small class="form-text text-muted"><?= __('other_income_enabled_hint', "When Yes, the Other Income section is available on this employee's profile. When No, it is hidden for everyone regardless of Special Access.") ?></small>
 											</div>
+
+											<?php if ($canForceShowUpdateSalary): ?>
+											<div class="form-group col-md-4">
+												<label class="col-form-label d-block"><?= __('force_show_update_salary_btn', 'Force Show Update Salary Button') ?></label>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="forceShowUpdateSalaryYes" name="force_show_update_salary_btn" value="1" <?= ((string)($emprow['force_show_update_salary_btn'] ?? '0') === '1') ? 'checked' : '' ?>>
+													<label for="forceShowUpdateSalaryYes" class="atch"><?= __('yes', 'Yes') ?></label>
+												</div>
+												<div class="radio radio-info form-check-inline">
+													<input type="radio" id="forceShowUpdateSalaryNo" name="force_show_update_salary_btn" value="0" <?= ((string)($emprow['force_show_update_salary_btn'] ?? '0') !== '1') ? 'checked' : '' ?>>
+													<label for="forceShowUpdateSalaryNo" class="atch"><?= __('no', 'No') ?></label>
+												</div>
+												<small class="form-text text-muted"><?= __('force_show_update_salary_btn_hint', 'The Update Salary button is normally hidden until a Salary Increment request is finally approved for this employee. Set to Yes to force it visible for a special case.') ?></small>
+											</div>
+											<?php endif; ?>
 
 											<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>
 											<div class="form-group col-md-12">

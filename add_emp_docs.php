@@ -49,9 +49,9 @@ $getquery = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `id`='".$_GET[
 			$years	   = $diff->y . " Years";
 			
 	}	
-	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flystus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Fly' ");
+	$sql_count_fly = mysqli_query($conDB, "SELECT COUNT(*) AS `flystus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `vac_type`='Fly' && `current_status` IN ('approved','completed') ");
 	while($rec = mysqli_fetch_assoc($sql_count_fly)){$cont_fly = $rec["flystus"];}
-	$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) AS `encashstus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `note`='Encashed' ");
+	$sql_count_encashed = mysqli_query($conDB, "SELECT COUNT(*) AS `encashstus`, `emp_id` FROM `emp_vacation` WHERE `emp_id`='".$emp_id_get."' && `vac_type`='Encashed' && `current_status` IN ('approved','completed') ");
 	while($rec = mysqli_fetch_assoc($sql_count_encashed)){$cont_encashed = $rec["encashstus"];}
 	
 	

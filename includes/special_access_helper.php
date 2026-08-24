@@ -40,6 +40,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_vacation_salary_below_min_days' => 'Employee Master: Allow Vacation Salary Payout Below Minimum Days',
             'view_employee_eos_value' => 'Employee Master: View End of Service (EOS) Estimated Value',
             'view_employee_salary_value' => 'Employee Master: View Salary',
+            'manage_update_salary_button_visibility' => 'Employee Master: Force Show/Hide Update Salary Button',
             'view_employee_additional_info' => 'Employee Master: View Additional Information Tab',
             'view_employee_other_income' => 'Employee Master: View & Manage Other Income (Scheduled Bonus/Income)',
             'access_ctc_report' => 'Reports: CTC (Cost To Company) Report',
@@ -124,6 +125,7 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_employee_request_block',
                     'manage_employee_request_type_block',
                     'request_employee_transfer',
+                    'manage_update_salary_button_visibility',
                 ],
             ],
             'Vacation Visibility' => [

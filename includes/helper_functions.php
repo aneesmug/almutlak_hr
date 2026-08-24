@@ -2822,6 +2822,27 @@ if (!function_exists('handle_approval_action')) {
                         if (!mysqli_stmt_execute($stmt_main_approved)) throw new Exception("Execute failed (update main approved): " . mysqli_stmt_error($stmt_main_approved));
                         mysqli_stmt_close($stmt_main_approved);
 
+                        // --- Flag "Update Salary" button as due on final Salary Increment approval ---
+                        // Cleared back to 0 by hrHandler.php's 'update_salary' handler once HR applies it.
+                        if ($request_type === 'salary_increment') {
+                            $si_emp_stmt = mysqli_prepare($conDB, "SELECT emp_id FROM emp_salary_increment WHERE request_inv_no = ? LIMIT 1");
+                            if ($si_emp_stmt) {
+                                mysqli_stmt_bind_param($si_emp_stmt, "s", $inv_no_safe);
+                                if (mysqli_stmt_execute($si_emp_stmt)) {
+                                    $si_emp_res = mysqli_stmt_get_result($si_emp_stmt);
+                                    if ($si_emp_res && ($si_emp_row = mysqli_fetch_assoc($si_emp_res))) {
+                                        $flag_stmt = mysqli_prepare($conDB, "UPDATE `employees` SET `salary_update_pending` = 1 WHERE `emp_id` = ?");
+                                        if ($flag_stmt) {
+                                            mysqli_stmt_bind_param($flag_stmt, "s", $si_emp_row['emp_id']);
+                                            mysqli_stmt_execute($flag_stmt);
+                                            mysqli_stmt_close($flag_stmt);
+                                        }
+                                    }
+                                    if ($si_emp_res) mysqli_free_result($si_emp_res);
+                                }
+                                mysqli_stmt_close($si_emp_stmt);
+                            }
+                        }
 
                         // --- [NEW] UPDATE VACATION BALANCE ON FINAL APPROVAL ---
                         if ($request_type == 'vacation_request') {
@@ -5724,7 +5745,13 @@ if (!function_exists('getDisplayName')) {
         if ($lang !== 'ar') {
             return $name;
         }
-        
+
+        // Already Arabic (contains Arabic script): nothing to translate, return as-is.
+        // Avoids mistranslating Arabic-as-English through the translation API/cache.
+        if (preg_match('/\p{Arabic}/u', $name)) {
+            return $name;
+        }
+
         // ===== MULTI-LEVEL CACHING FOR ARABIC TRANSLATION =====
         
         // 1. Check request cache (static variable - fastest, lasts for one page load)

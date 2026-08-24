@@ -1170,6 +1170,10 @@ elseif($ajaxType == 'unassign_asset') {
             // Get new salary record ID
             $new_salary_id = $pdo->lastInsertId();
 
+            // Clear the "Update Salary" pending flag now that HR has applied the breakdown.
+            $clearPendingStmt = $pdo->prepare("UPDATE employees SET salary_update_pending = 0 WHERE emp_id = :emp_id");
+            $clearPendingStmt->execute([':emp_id' => $emp_id]);
+
             // Commit transaction
             $pdo->commit();
             

@@ -71,6 +71,4 @@ try {
     mysqli_rollback($conDB);
     echo json_encode(['type' => 'error', 'title' => 'Database Error', 'message' => 'Could not update the translation.']);
 }
-
-mysqli_close($conDB);
 ?>

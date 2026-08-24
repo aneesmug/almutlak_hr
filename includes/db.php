@@ -177,6 +177,127 @@ if (!function_exists('app_bootstrap_error_handlers')) {
 
 app_bootstrap_error_handlers();
 
+// Caps concurrent DB-connecting requests, per client IP AND app-wide, so the
+// shared-hosting MySQL pool (fixed by the host, can't be raised - see
+// max_connections) never gets exhausted from our side. IP is the closest
+// reliable stand-in for "one device" - true device fingerprints are JS-based
+// and spoofable. Uses flock'd files (no APCu/Redis dependency) so it works on
+// plain shared hosting.
+if (!defined('ALMUTLAK_CONNLIMIT_DIR')) {
+    define('ALMUTLAK_CONNLIMIT_DIR', sys_get_temp_dir() . '/almutlak_connlimit');
+}
+
+// Each active slot is stored as one JSON line so connection_monitor.php can
+// show WHO/WHAT is holding connections (ip, page, age) instead of just a
+// count - needed to tell real traffic apart from a leak.
+if (!function_exists('app_acquire_concurrency_slot')) {
+    function app_acquire_concurrency_slot($key, $limit, $publicMessage, $staleSeconds = 30) {
+        if (PHP_SAPI === 'cli') {
+            return; // cron/CLI scripts not subject to this
+        }
+
+        if (!is_dir(ALMUTLAK_CONNLIMIT_DIR)) {
+            @mkdir(ALMUTLAK_CONNLIMIT_DIR, 0700, true);
+        }
+
+        $file = ALMUTLAK_CONNLIMIT_DIR . '/' . md5($key) . '.json';
+        $fp = @fopen($file, 'c+');
+        if (!$fp) {
+            return; // fail open: don't block traffic if temp dir unwritable
+        }
+
+        flock($fp, LOCK_EX);
+        $raw = stream_get_contents($fp);
+        $now = time();
+        $active = [];
+        foreach (preg_split('/\r?\n/', (string) $raw, -1, PREG_SPLIT_NO_EMPTY) as $line) {
+            $entry = json_decode($line, true);
+            if (is_array($entry) && ($entry['ts'] ?? 0) > $now - $staleSeconds) {
+                $active[] = $entry;
+            }
+        }
+
+        if (count($active) >= $limit) {
+            flock($fp, LOCK_UN);
+            fclose($fp);
+            app_render_runtime_error(
+                $publicMessage,
+                "Key '$key' exceeded $limit concurrent slots",
+                429
+            );
+        }
+
+        // Logged-in user is already known here: session_check.php starts the
+        // session and sets $_SESSION['auth_user'] BEFORE it requires this file,
+        // so this is free - no extra query needed to know who's holding the slot.
+        $sessionLoginId = '';
+        $sessionName = '';
+        if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
+            $sessionLoginId = (string) ($_SESSION['auth_user']['user_id'] ?? '');
+            $sessionName = (string) ($_SESSION['auth_user']['fullname'] ?? '');
+        }
+
+        $myToken = uniqid('', true);
+        $active[] = [
+            'token'    => $myToken,
+            'ip'       => $_SERVER['REMOTE_ADDR'] ?? 'cli',
+            'uri'      => $_SERVER['REQUEST_URI'] ?? '',
+            'ts'       => $now,
+            'pid'      => getmypid(),
+            'login_id' => $sessionLoginId,
+            'user_name'=> $sessionName,
+        ];
+
+        ftruncate($fp, 0);
+        rewind($fp);
+        foreach ($active as $entry) {
+            fwrite($fp, json_encode($entry) . "\n");
+        }
+        fflush($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+
+        register_shutdown_function(function () use ($file, $myToken) {
+            $fp = @fopen($file, 'c+');
+            if (!$fp) {
+                return;
+            }
+            flock($fp, LOCK_EX);
+            $raw = stream_get_contents($fp);
+            $kept = [];
+            foreach (preg_split('/\r?\n/', (string) $raw, -1, PREG_SPLIT_NO_EMPTY) as $line) {
+                $entry = json_decode($line, true);
+                if (is_array($entry) && ($entry['token'] ?? null) !== $myToken) {
+                    $kept[] = $line;
+                }
+            }
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, $kept ? implode("\n", $kept) . "\n" : '');
+            fflush($fp);
+            flock($fp, LOCK_UN);
+            fclose($fp);
+        });
+    }
+}
+
+// Per-IP: stop one browser/bot/script alone eating the pool.
+app_acquire_concurrency_slot(
+    $_SERVER['REMOTE_ADDR'] ?? 'cli',
+    3,
+    'Too many concurrent requests from your connection. Please wait a moment and try again.'
+);
+
+// App-wide: host's max_connections is fixed at 151 and shared with other
+// processes on the account (other cron jobs, other DB clients). Stay well
+// under it so our own app never triggers the fatal "1040 Too many
+// connections" - reject gracefully instead once we're the bottleneck.
+app_acquire_concurrency_slot(
+    'global',
+    100,
+    'The system is under heavy load right now. Please try again in a moment.'
+);
+
 // Load database configuration from an external .ini file
 $configPath = __DIR__ . '/config.ini';
 if (!file_exists($configPath) || !is_readable($configPath)) {
@@ -236,6 +357,23 @@ if (!$connected) {
 }
 
 $conDB->set_charset("utf8mb4");
+
+// Host won't raise max_connections (fixed shared-hosting limit). Shrinking
+// this connection's own idle timeout means if a request dies weird (client
+// abort, hung script) and never explicitly closes, MySQL reclaims the slot
+// in seconds instead of sitting on it until the server-wide wait_timeout
+// (often hours on shared hosts) finally kicks it out.
+mysqli_query($conDB, "SET SESSION wait_timeout = 15, SESSION interactive_timeout = 15");
+
+// Release the slot back to the pool the moment this script ends rather than
+// waiting on PHP's own connection teardown timing.
+register_shutdown_function(function () use ($conDB) {
+    global $pdo;
+    if ($conDB instanceof mysqli) {
+        @mysqli_close($conDB);
+    }
+    $pdo = null;
+});
 
 // Set timezone to Saudi Arabia (GMT+3)
 $defaultTimezone = 'Asia/Riyadh';

@@ -55,13 +55,12 @@ function auto_translate_text(string $text, string $source = 'en', string $target
         }
     }
     
-    // 3. API call only as last resort
+    // 3. API call only as last resort (MyMemory - free, no key required)
     try {
-        $url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=" 
-               . urlencode($source) 
-               . "&tl=" . urlencode($target) 
-               . "&dt=t&q=" . urlencode($text);
-        
+        $url = "https://api.mymemory.translated.net/get?q="
+               . urlencode($text)
+               . "&langpair=" . urlencode($source) . "|" . urlencode($target);
+
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -70,30 +69,24 @@ function auto_translate_text(string $text, string $source = 'en', string $target
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-        
+
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        
+
         if ($httpCode !== 200 || !$response) {
             return $text;
         }
-        
+
         // Parse the response
         $result = json_decode($response, true);
-        
-        if (!$result || !isset($result[0])) {
+
+        if (!$result || empty($result['responseData']['translatedText'])) {
             return $text;
         }
-        
-        // Extract translated text from response
-        $translatedText = '';
-        foreach ($result[0] as $segment) {
-            if (isset($segment[0])) {
-                $translatedText .= $segment[0];
-            }
-        }
-        
+
+        $translatedText = $result['responseData']['translatedText'];
+
         if (empty($translatedText)) {
             return $text;
         }

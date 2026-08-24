@@ -121,8 +121,8 @@
 	LEFT JOIN `sponsorship` ON `sponsorship`.`id` = `employees`.`emp_sup_type`
 	LEFT JOIN `emp_eos` ON `emp_eos`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN `employees` AS `supervisor` ON `supervisor`.`emp_id` = `employees`.`supervisor_id`
-	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `flystus` FROM `emp_vacation` WHERE `note`='Fly' GROUP BY `emp_id`) AS `fly_status` ON `fly_status`.`emp_id` = `employees`.`emp_id`
-	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `encashstus` FROM `emp_vacation` WHERE `note`='Encashed' GROUP BY `emp_id`) AS `encashed_status` ON `encashed_status`.`emp_id` = `employees`.`emp_id`
+	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `flystus` FROM `emp_vacation` WHERE `vac_type`='Fly' AND `current_status` IN ('approved','completed') GROUP BY `emp_id`) AS `fly_status` ON `fly_status`.`emp_id` = `employees`.`emp_id`
+	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `encashstus` FROM `emp_vacation` WHERE `vac_type`='Encashed' AND `current_status` IN ('approved','completed') GROUP BY `emp_id`) AS `encashed_status` ON `encashed_status`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `emp_id`, COUNT(*) AS `docu` FROM `emp_docu` GROUP BY `emp_id`) AS `doc_count` ON `doc_count`.`emp_id` = `employees`.`emp_id`
 	LEFT JOIN (SELECT `dept`, COUNT(*) AS `supemp` FROM `employees` WHERE `status`=1 AND `emp_id` <> `employees`.`emp_id` GROUP BY `dept`) AS `supemp_count` ON `supemp_count`.`dept` = `employees`.`dept`
 	

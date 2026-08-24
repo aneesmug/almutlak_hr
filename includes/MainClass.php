@@ -7,10 +7,14 @@ require_once 'db.php';
 Class MainClass{
     protected $db;
     function __construct(){
-        // include("db.php");
-        $this->db = new mysqli(DB_HOST , DB_USER , DB_PASS , DB_NAME);
+        // Reuse the single connection db.php already opened for this request
+        // instead of opening a second mysqli connection - doubling connection
+        // usage per page was a direct contributor to "Too many connections"
+        // on the shared-hosting connection cap.
+        global $conDB;
+        $this->db = $conDB;
         if(!$this->db){
-            die("Database Connection Failed. Error: ".$this->db->error);
+            die("Database Connection Failed.");
         }
     }
     function db_connect(){

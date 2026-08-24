@@ -123,6 +123,29 @@ if (mysqli_num_rows($query) == 1) {
 		}
 		// --- END: Loan Summary Calculation ---
 
+		// --- START: Last Approved Salary Increment (for the summary card) ---
+		$last_salary_increment = null;
+		$last_si_stmt = mysqli_prepare($conDB, "SELECT approved_amount, increment_amount, COALESCE(last_increment_date, DATE(last_modified)) AS effective_date FROM `emp_salary_increment` WHERE `emp_id` = ? AND `current_status` = 'approved' ORDER BY COALESCE(last_increment_date, DATE(last_modified)) DESC LIMIT 1");
+		if ($last_si_stmt) {
+			mysqli_stmt_bind_param($last_si_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($last_si_stmt);
+			$last_salary_increment = mysqli_fetch_assoc(mysqli_stmt_get_result($last_si_stmt)) ?: null;
+			mysqli_stmt_close($last_si_stmt);
+		}
+		// --- END: Last Approved Salary Increment ---
+
+		// --- START: Local Vacation Count (for the summary card row) ---
+		$local_vacation_count = 0;
+		$local_vac_stmt = mysqli_prepare($conDB, "SELECT COUNT(*) AS cnt FROM `emp_vacation` WHERE `emp_id` = ? AND `vac_type` = 'Local Vacation' AND `current_status` IN ('approved','completed')");
+		if ($local_vac_stmt) {
+			mysqli_stmt_bind_param($local_vac_stmt, "s", $emprow['empid']);
+			mysqli_stmt_execute($local_vac_stmt);
+			$local_vac_row = mysqli_fetch_assoc(mysqli_stmt_get_result($local_vac_stmt));
+			$local_vacation_count = (int)($local_vac_row['cnt'] ?? 0);
+			mysqli_stmt_close($local_vac_stmt);
+		}
+		// --- END: Local Vacation Count ---
+
 		// --- START: Payroll (Payslip) History ---
 		$payroll_history = [];
 		$payroll_benefits_by_month = [];
@@ -436,6 +459,14 @@ if (mysqli_num_rows($query) == 1) {
 			
 			.card-box.tilebox-one:has(.duotone-secondary) {
 				border-left-color: var(--secondary);
+			}
+
+			.card-box.tilebox-one:has(.duotone-warning) {
+				border-left-color: var(--warning);
+			}
+
+			.summary-cards-row .card-box.tilebox-one {
+				height: 80%;
 			}
 			/* More Actions Modal - Professional Action-Sheet Design */
 			.more-actions-modal .swal2-popup {
@@ -1173,34 +1204,68 @@ if (mysqli_num_rows($query) == 1) {
 								</div><!-- end row -->
 								<?php endif; ?>
 
-								<?php if ($emprow["emp_sup_type"] <> "man_power") { ?>
-
-									<div class="row">
-										<div class="col-sm-6">
-											<div class="card-box tilebox-one">
+								<?php
+								$showFlyCard = ($emprow["emp_sup_type"] <> "man_power") && ((int)$emprow['flystus'] > 0);
+								$showEncashedCard = ($emprow["emp_sup_type"] <> "man_power") && ((int)$emprow['encashstus'] > 0);
+								$showLocalVacCard = ($emprow["emp_sup_type"] <> "man_power") && ($local_vacation_count > 0);
+								$showLoanCard = ($canViewSalary && $loan_summary);
+								$showIncrementCard = ($canViewSalary && $last_salary_increment);
+								?>
+								<?php if ($showFlyCard || $showEncashedCard || $showLocalVacCard || $showLoanCard || $showIncrementCard): ?>
+									<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5 summary-cards-row">
+										<?php if ($showFlyCard): ?>
+										<div class="col mb-3 d-flex">
+											<div class="card-box tilebox-one flex-fill">
 												<i class="fad fa-truck-plane float-right duotone-info"></i>
-												<h6 class="text-uppercase mt-0 text-muted">
-													<?php
-													if ($emprow["country"] == 191 or $emprow["country"] == 150) {
-														echo __('encashed');
-													} else {
-														echo __('flys');
-													}
-													?>
-												</h6>
+												<h6 class="text-uppercase mt-0 text-muted"><?= __('flys') ?></h6>
 												<h2 class="m-b-20" data-plugin="counterup"><?= $emprow['flystus'] ?></h2>
 											</div>
 										</div><!-- end col -->
-										<div class="col-sm-6">
-											<div class="card-box tilebox-one">
-												<i class="fad fa-money-from-bracket float-right duotone-info"></i>
+										<?php endif; ?>
+
+										<?php if ($showEncashedCard): ?>
+										<div class="col mb-3 d-flex">
+											<div class="card-box tilebox-one flex-fill">
+												<i class="fad fa-money-from-bracket float-right duotone-danger"></i>
 												<h6 class="text-uppercase mt-0 text-muted"><?= __('encashed') ?></h6>
 												<h2 class="m-b-20"><span data-plugin="counterup"><?= $emprow['encashstus'] ?></span></h2>
 											</div>
 										</div><!-- end col -->
-									</div><!-- end col -->
+										<?php endif; ?>
 
-								<?php } ?>
+										<?php if ($showLocalVacCard): ?>
+										<div class="col mb-3 d-flex">
+											<div class="card-box tilebox-one flex-fill">
+												<i class="fad fa-umbrella-beach float-right duotone-dark"></i>
+												<h6 class="text-uppercase mt-0 text-muted"><?= __('local_vacation', 'Local Vacation') ?></h6>
+												<h2 class="m-b-20" data-plugin="counterup"><?= $local_vacation_count ?></h2>
+											</div>
+										</div><!-- end col -->
+										<?php endif; ?>
+
+										<?php if ($showLoanCard): ?>
+										<div class="col mb-3 d-flex">
+											<div class="card-box tilebox-one flex-fill">
+												<i class="fad fa-hand-holding-dollar float-right duotone-warning"></i>
+												<h6 class="text-uppercase mt-0 text-muted"><?= __('active_loan_summary', 'Active Loan') ?></h6>
+												<h2 class="m-b-20 text-warning"><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i></h2>
+												<small class="text-muted"><?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?> &middot; <?= __('remaining_balance', 'Remaining Balance') ?></small>
+											</div>
+										</div><!-- end col -->
+										<?php endif; ?>
+
+										<?php if ($showIncrementCard): ?>
+										<div class="col mb-3 d-flex">
+											<div class="card-box tilebox-one flex-fill">
+												<i class="fad fa-arrow-trend-up float-right duotone-success"></i>
+												<h6 class="text-uppercase mt-0 text-muted"><?= __('last_salary_increment', 'Last Salary Increment') ?></h6>
+												<h2 class="m-b-20 text-success"><?= number_format((float)($last_salary_increment['approved_amount'] ?? $last_salary_increment['increment_amount']), 2) ?> <i class="icon-saudi_riyal"></i></h2>
+												<small class="text-muted"><?= !empty($last_salary_increment['effective_date']) ? date('d M Y', strtotime($last_salary_increment['effective_date'])) : '' ?></small>
+											</div>
+										</div><!-- end col -->
+										<?php endif; ?>
+									</div><!-- end row -->
+								<?php endif; ?>
 
 
 							</div>

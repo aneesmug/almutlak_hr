@@ -17,5 +17,4 @@
     	];
         echo json_encode($data);
     }
-    mysqli_close($conDB);
 ?>

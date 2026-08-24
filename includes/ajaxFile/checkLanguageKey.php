@@ -41,6 +41,4 @@ echo json_encode([
     'languages' => $languages,
     'translations' => $translations
 ]);
-
-mysqli_close($conDB);
 ?>
