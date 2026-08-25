@@ -8,6 +8,7 @@ require_once(__DIR__ . "/session_check.php");
 require_once(__DIR__ . "/helper_functions.php");
 require_once(__DIR__ . "/special_access_helper.php");
 require_once(__DIR__ . "/page_access_helper.php");
+require_once(__DIR__ . "/../vendor/autoload.php");
 
 if ($conDB->connect_error) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed: ' . $conDB->connect_error]);
@@ -61,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'update_page_role_access':
             update_page_role_access($conDB);
+            break;
+        case 'test_email_settings':
+            test_email_settings($conDB);
             break;
         default:
             echo json_encode(['success' => false, 'message' => 'Invalid action specified.']);
@@ -298,6 +302,83 @@ function ensure_page_role_access_setting($conDB) {
     $insertStmt->bind_param("ss", $settingName, $defaultValue);
     $insertStmt->execute();
     $insertStmt->close();
+}
+
+/**
+ * Sends a test email using the SMTP values currently typed into the Email tab's
+ * form (not necessarily saved yet), to the Default From Email Address entered
+ * there, so an admin can verify credentials before committing to Save Changes.
+ */
+function test_email_settings($conDB) {
+    if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+        echo json_encode(['success' => false, 'message' => 'PHPMailer library not found.']);
+        return;
+    }
+
+    $smtp_host = trim((string)($_POST['smtp_host'] ?? ''));
+    $smtp_port = trim((string)($_POST['smtp_port'] ?? ''));
+    $smtp_user = trim((string)($_POST['smtp_user'] ?? ''));
+    $smtp_pass = (string)($_POST['smtp_pass'] ?? '');
+    $smtp_encryption = strtolower(trim((string)($_POST['smtp_encryption'] ?? '')));
+    $from_email = trim((string)($_POST['from_email'] ?? ''));
+    $from_name = trim((string)($_POST['from_name'] ?? '')) ?: 'App Settings Test';
+    $cc_email = trim((string)($_POST['admin_email'] ?? ''));
+
+    if ($smtp_host === '' || $smtp_port === '' || $smtp_user === '' || $smtp_pass === '' || $from_email === '') {
+        echo json_encode(['success' => false, 'message' => 'Please fill Host, Port, Username, Password and Default From Email Address before testing.']);
+        return;
+    }
+
+    if (!filter_var($from_email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Default From Email Address is not a valid email address.']);
+        return;
+    }
+
+    if ($cc_email !== '' && !filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Administrator Email for Notifications is not a valid email address.']);
+        return;
+    }
+
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = $smtp_host;
+        $mail->SMTPAuth = true;
+        $mail->Username = $smtp_user;
+        $mail->Password = $smtp_pass;
+
+        switch ($smtp_encryption) {
+            case 'tls':
+                $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                break;
+            case 'ssl':
+                $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                break;
+            default:
+                $mail->SMTPSecure = false;
+                break;
+        }
+
+        $mail->Port = (int)$smtp_port;
+        $mail->CharSet = 'UTF-8';
+        $mail->Timeout = 15;
+
+        $mail->setFrom($from_email, $from_name);
+        $mail->addAddress($from_email, $from_name);
+        if ($cc_email !== '') {
+            $mail->addCC($cc_email);
+        }
+        $mail->isHTML(true);
+        $mail->Subject = 'Test Email - App Settings SMTP Configuration';
+        $mail->Body = 'This is a test email confirming your SMTP configuration entered in App Settings is working correctly.<br><br>Sent at: ' . date('Y-m-d H:i:s');
+        $mail->AltBody = 'This is a test email confirming your SMTP configuration entered in App Settings is working correctly. Sent at: ' . date('Y-m-d H:i:s');
+
+        $mail->send();
+        $recipientNote = $from_email . ($cc_email !== '' ? ' (CC: ' . $cc_email . ')' : '');
+        echo json_encode(['success' => true, 'message' => 'Test email sent successfully to ' . $recipientNote . '. Please check the inbox.']);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to send test email: ' . $mail->ErrorInfo]);
+    }
 }
 
 /**

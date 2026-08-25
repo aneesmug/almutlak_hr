@@ -986,9 +986,26 @@
                 
                 formHtml += `</div></div>`;
             });
+
+            if (normalizedGroupName === 'email') {
+                formHtml += `
+                    <hr>
+                    <div class="form-group row">
+                        <div class="col-sm-3"></div>
+                        <div class="col-sm-9">
+                            <button type="button" id="testEmailConfigBtn" class="btn btn-outline-info">
+                                <i class="mdi mdi-email-send"></i> <?= __('send_test_email', 'Send Test Email') ?>
+                            </button>
+                            <small class="form-text text-muted"><?= __('send_test_email_hint', 'Sends a test email to the Default From Email Address above, using the SMTP settings currently entered in this form (works even if not saved yet).') ?></small>
+                            <div id="testEmailResult" class="mt-2"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
             formHtml += `</div>`;
             settingsContainer.innerHTML = formHtml;
-            
+
             // Initialize Select2 with a width setting for better Bootstrap integration.
             $('.select2').select2({
                 width: '100%'
@@ -999,6 +1016,10 @@
             attachPreviewListeners();
             attachEmailListListeners();
             attachSessionTimeoutListeners();
+
+            if (normalizedGroupName === 'email') {
+                attachTestEmailListener();
+            }
         }
 
         // --- Payroll Settings Hub ---
@@ -1507,6 +1528,66 @@
                 
                 // Trigger input event on load to show current value
                 input.dispatchEvent(new Event('input'));
+            });
+        }
+
+        function attachTestEmailListener() {
+            const btn = document.getElementById('testEmailConfigBtn');
+            if (!btn) return;
+
+            btn.addEventListener('click', async function() {
+                const resultDiv = document.getElementById('testEmailResult');
+                const getVal = (name) => (document.getElementById(`setting-${name}`)?.value || '').trim();
+
+                const host = getVal('smtp_host');
+                const port = getVal('smtp_port');
+                const user = getVal('smtp_user');
+                const pass = getVal('smtp_pass');
+                const encryption = getVal('smtp_encryption') || 'tls';
+                const fromEmail = getVal('from_email');
+                const fromName = getVal('from_name');
+                const adminEmail = getVal('admin_email');
+
+                if (!host || !port || !user || !pass || !fromEmail) {
+                    resultDiv.innerHTML = '';
+                    Swal.fire('<?= __('missing_fields', 'Missing Fields') ?>', '<?= __('fill_smtp_host_port_username_password_and_default_from_email_before_testing', 'Please fill Host, Port, Username, Password and Default From Email Address before testing.') ?>', 'warning');
+                    return;
+                }
+
+                btn.disabled = true;
+                resultDiv.innerHTML = `<small class="text-muted"><div class="spinner-border spinner-border-sm" role="status"></div> <?= __('sending_test_email', 'Sending test email...') ?></small>`;
+
+                try {
+                    const response = await fetch('./includes/settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'test_email_settings',
+                            smtp_host: host,
+                            smtp_port: port,
+                            smtp_user: user,
+                            smtp_pass: pass,
+                            smtp_encryption: encryption,
+                            from_email: fromEmail,
+                            from_name: fromName,
+                            admin_email: adminEmail
+                        })
+                    });
+                    const result = await response.json();
+                    btn.disabled = false;
+
+                    if (result.success) {
+                        resultDiv.innerHTML = `<small class="text-success"><i class="mdi mdi-check-circle"></i> ${escapeHtml(result.message)}</small>`;
+                        Swal.fire('<?= __('success', 'Success') ?>', result.message, 'success');
+                    } else {
+                        resultDiv.innerHTML = `<small class="text-danger"><i class="mdi mdi-alert-circle"></i> ${escapeHtml(result.message || '<?= __('could_not_send_test_email', 'Could not send test email.') ?>')}</small>`;
+                        Swal.fire('<?= __('failed', 'Failed') ?>', result.message || '<?= __('could_not_send_test_email', 'Could not send test email.') ?>', 'error');
+                    }
+                } catch (error) {
+                    btn.disabled = false;
+                    resultDiv.innerHTML = `<small class="text-danger">${escapeHtml(error.message)}</small>`;
+                    Swal.fire('<?= __('request_failed') ?>', error.message, 'error');
+                }
             });
         }
 
