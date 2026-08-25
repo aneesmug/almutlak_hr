@@ -364,15 +364,34 @@ function forceSignOutActivity($conDB, $activity_id) {
  * same check server-side across ALL users, driven by the existing
  * app_settings "Set Session Timeout" value (in seconds).
  */
-function sweepStaleUserActivity($conDB, $timeoutSeconds) {
+function sweepStaleUserActivity($conDB, $timeoutSeconds, $employeeTimeoutSeconds = null) {
     $timeoutSeconds = (int) $timeoutSeconds;
     if ($timeoutSeconds < 60) {
         $timeoutSeconds = 60; // safety floor - never sweep on a near-zero/invalid setting
     }
-    mysqli_query($conDB, "UPDATE `user_activity_log`
-        SET `status` = 'timeout', `logout_time` = NOW()
-        WHERE `status` = 'active'
-          AND COALESCE(`last_activity`, `login_time`) < (NOW() - INTERVAL $timeoutSeconds SECOND)");
+
+    $employeeTimeoutSeconds = $employeeTimeoutSeconds === null ? $timeoutSeconds : (int) $employeeTimeoutSeconds;
+    if ($employeeTimeoutSeconds < 60) {
+        $employeeTimeoutSeconds = 60;
+    }
+
+    // admin_login.user_type = 'employee' accounts get their own timeout
+    // (App Settings -> "Auto Sign-Out After (hours) - Employee Users");
+    // everyone else, and any row whose emp_id no longer matches an
+    // admin_login record, falls back to the general timeout.
+    mysqli_query($conDB, "UPDATE `user_activity_log` ua
+        JOIN `admin_login` al ON al.`emp_id` = ua.`emp_id`
+        SET ua.`status` = 'timeout', ua.`logout_time` = NOW()
+        WHERE ua.`status` = 'active'
+          AND al.`user_type` = 'employee'
+          AND COALESCE(ua.`last_activity`, ua.`login_time`) < (NOW() - INTERVAL $employeeTimeoutSeconds SECOND)");
+
+    mysqli_query($conDB, "UPDATE `user_activity_log` ua
+        LEFT JOIN `admin_login` al ON al.`emp_id` = ua.`emp_id`
+        SET ua.`status` = 'timeout', ua.`logout_time` = NOW()
+        WHERE ua.`status` = 'active'
+          AND (al.`user_type` IS NULL OR al.`user_type` != 'employee')
+          AND COALESCE(ua.`last_activity`, ua.`login_time`) < (NOW() - INTERVAL $timeoutSeconds SECOND)");
 }
 
 /**

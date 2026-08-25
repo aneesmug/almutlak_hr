@@ -68,6 +68,7 @@ require_once __DIR__ . '/includes/connection_monitor_helper.php';
 
 $snap = connmon_snapshot($conDB);
 $tokenExpiryMs = connmon_token_expiry() * 1000;
+$connmonAlertSeconds = connmon_alert_thresholds(); // e.g. [300, 60] - tune in includes/connmon_gate.php
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -323,7 +324,99 @@ $tokenExpiryMs = connmon_token_expiry() * 1000;
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 let tokenExpiryMs = <?= (int) $tokenExpiryMs ?>;
+// Warning checkpoints (seconds remaining), largest first - configured in
+// includes/connmon_gate.php (CONNMON_ALERT_SECONDS). The extend button/amber
+// countdown appear once remaining time drops under the largest checkpoint.
+const alertThresholdsMs = <?= json_encode($connmonAlertSeconds) ?>.map(s => s * 1000);
+const extendLabel = <?= json_encode(
+    CONNMON_EXTEND_SECONDS % 3600 === 0
+        ? (CONNMON_EXTEND_SECONDS / 3600) . ' hour' . (CONNMON_EXTEND_SECONDS / 3600 == 1 ? '' : 's')
+        : round(CONNMON_EXTEND_SECONDS / 60) . ' min'
+) ?>;
 let extendBtnShown = false;
+const promptShownFor = new Set(); // threshold (ms) values whose modal already fired this session
+
+async function doExtendSession(sourceBtn) {
+    if (sourceBtn) {
+        sourceBtn.disabled = true;
+        sourceBtn.textContent = 'Extending...';
+    }
+    try {
+        const res = await fetch('connection_monitor_extend.php', { method: 'POST' });
+        const d = await res.json();
+        if (d.success) {
+            tokenExpiryMs = d.expiry * 1000;
+            promptShownFor.clear();
+            document.getElementById('extendSessionBtn').style.display = 'none';
+            extendBtnShown = false;
+            tickCountdown();
+            return true;
+        }
+        await Swal.fire({ icon: 'error', title: 'Could not extend', text: d.message || 'Please sign in again.', background: '#131826', color: '#e5e9f2' });
+        window.location.reload();
+        return false;
+    } catch (e) {
+        await Swal.fire({ icon: 'error', title: 'Network error', background: '#131826', color: '#e5e9f2' });
+        return false;
+    } finally {
+        if (sourceBtn) {
+            sourceBtn.disabled = false;
+            sourceBtn.textContent = 'Extend session';
+        }
+    }
+}
+
+function formatMmSs(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return m + ':' + String(s).padStart(2, '0');
+}
+
+async function showExtendPrompt(thresholdMs, minutesLeftText) {
+    if (promptShownFor.has(thresholdMs)) {
+        return; // already showing/shown for this checkpoint
+    }
+    promptShownFor.add(thresholdMs);
+
+    let tickHandle = null;
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Session expiring soon',
+        html: `Your access expires in <b id="swalExpiryCountdown">${minutesLeftText}</b>.`,
+        showCancelButton: true,
+        confirmButtonText: 'Extend session (+' + extendLabel + ')',
+        cancelButtonText: 'Dismiss',
+        confirmButtonColor: '#22c55e',
+        cancelButtonColor: '#374151',
+        background: '#131826',
+        color: '#e5e9f2',
+        allowOutsideClick: true,
+        allowEscapeKey: true,
+        didOpen: () => {
+            const el = document.getElementById('swalExpiryCountdown');
+            tickHandle = setInterval(() => {
+                const remainingMs = tokenExpiryMs - Date.now();
+                if (remainingMs <= 0) {
+                    clearInterval(tickHandle);
+                    window.location.reload();
+                    return;
+                }
+                if (el) {
+                    el.textContent = formatMmSs(remainingMs);
+                }
+            }, 1000);
+        },
+        willClose: () => {
+            if (tickHandle) {
+                clearInterval(tickHandle);
+            }
+        }
+    });
+    if (result.isConfirmed) {
+        doExtendSession(null);
+    }
+}
 
 function tickCountdown() {
     const remainingMs = tokenExpiryMs - Date.now();
@@ -339,46 +432,37 @@ function tickCountdown() {
     const totalSeconds = Math.floor(remainingMs / 1000);
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;
-    countdownEl.textContent = m + ':' + String(s).padStart(2, '0');
+    const mmss = m + ':' + String(s).padStart(2, '0');
+    countdownEl.textContent = mmss;
 
-    const fiveMinutes = 5 * 60 * 1000;
-    if (remainingMs <= fiveMinutes) {
+    const warnAtMs = alertThresholdsMs[0] || 0;
+    if (remainingMs <= warnAtMs) {
         countdownEl.classList.add('countdown-warn');
         if (!extendBtnShown) {
             extendBtn.style.display = '';
             extendBtnShown = true;
         }
+        // Thresholds are largest-first; fire the smallest one we've reached
+        // (so at e.g. 40s left with checkpoints [300,60] we show the 60s modal,
+        // not the already-dismissed 300s one).
+        for (let i = alertThresholdsMs.length - 1; i >= 0; i--) {
+            if (remainingMs <= alertThresholdsMs[i]) {
+                showExtendPrompt(alertThresholdsMs[i], mmss);
+                break;
+            }
+        }
     } else {
         countdownEl.classList.remove('countdown-warn');
         extendBtn.style.display = 'none';
         extendBtnShown = false;
+        promptShownFor.clear();
     }
 }
 setInterval(tickCountdown, 1000);
 tickCountdown();
 
-document.getElementById('extendSessionBtn').addEventListener('click', async function() {
-    const btn = this;
-    btn.disabled = true;
-    btn.textContent = 'Extending...';
-    try {
-        const res = await fetch('connection_monitor_extend.php', { method: 'POST' });
-        const d = await res.json();
-        if (d.success) {
-            tokenExpiryMs = d.expiry * 1000;
-            btn.style.display = 'none';
-            extendBtnShown = false;
-            tickCountdown();
-        } else {
-            await Swal.fire({ icon: 'error', title: 'Could not extend', text: d.message || 'Please sign in again.', background: '#131826', color: '#e5e9f2' });
-            window.location.reload();
-        }
-    } catch (e) {
-        Swal.fire({ icon: 'error', title: 'Network error', background: '#131826', color: '#e5e9f2' });
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Extend session';
-    }
+document.getElementById('extendSessionBtn').addEventListener('click', function() {
+    doExtendSession(this);
 });
 
 const activeUsersDT = $('#activeUsersTable').DataTable({

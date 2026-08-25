@@ -15,6 +15,32 @@ if (!defined('CONNMON_OTP_SECRET')) {
     define('CONNMON_OTP_SECRET', 'almutlak-connmon-8f2ad61c9b7e4f0a');
 }
 
+// ---- Session timing config - the one place to change these ----
+// CONNMON_SESSION_SECONDS: total time granted after entering the access code.
+// CONNMON_EXTEND_SECONDS: time granted per "Extend session" click (kept separate
+//   from SESSION so you can shrink SESSION for testing without also shrinking
+//   what Extend grants - Extend should still prove out a real-length session).
+// CONNMON_ALERT_SECONDS: comma-separated "show a warning at N seconds remaining"
+//   checkpoints - e.g. '300,60' warns at 5 minutes and again at 1 minute left.
+if (!defined('CONNMON_SESSION_SECONDS')) {
+    define('CONNMON_SESSION_SECONDS', 3600);
+}
+if (!defined('CONNMON_EXTEND_SECONDS')) {
+    define('CONNMON_EXTEND_SECONDS', 3600);
+}
+if (!defined('CONNMON_ALERT_SECONDS')) {
+    define('CONNMON_ALERT_SECONDS', '300,60');
+}
+
+if (!function_exists('connmon_alert_thresholds')) {
+    function connmon_alert_thresholds() {
+        $values = array_map('intval', explode(',', CONNMON_ALERT_SECONDS));
+        $values = array_values(array_filter($values, fn($v) => $v > 0));
+        rsort($values);
+        return $values ?: [300, 60];
+    }
+}
+
 if (!function_exists('connmon_current_otp')) {
     function connmon_current_otp($offsetMinutes = 0) {
         date_default_timezone_set('Asia/Riyadh');
@@ -35,8 +61,9 @@ if (!function_exists('connmon_verify_otp')) {
 }
 
 if (!function_exists('connmon_issue_token')) {
-    function connmon_issue_token() {
-        $expiry = time() + 3600; // 1 hour
+    function connmon_issue_token($seconds = null) {
+        $seconds = $seconds !== null ? (int) $seconds : CONNMON_SESSION_SECONDS;
+        $expiry = time() + (int) $seconds;
         $sig = hash_hmac('sha256', (string) $expiry, CONNMON_OTP_SECRET);
         setcookie('connmon_access', $expiry . '.' . $sig, [
             'expires'  => $expiry,

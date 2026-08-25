@@ -73,7 +73,9 @@ $timeout_duration = get_setting($conDB, 'session_timeout');
 // than session_timeout (seconds), which controls the separate lazy per-user check.
 $autoSignoutHours = (float) get_setting($conDB, 'auto_signout_hours');
 $autoSignoutSeconds = $autoSignoutHours > 0 ? (int) round($autoSignoutHours * 3600) : 28800; // default 8h
-sweepStaleUserActivity($conDB, $autoSignoutSeconds);
+$autoSignoutEmployeeHours = (float) get_setting($conDB, 'auto_signout_hours_employee');
+$autoSignoutEmployeeSeconds = $autoSignoutEmployeeHours > 0 ? (int) round($autoSignoutEmployeeHours * 3600) : $autoSignoutSeconds;
+sweepStaleUserActivity($conDB, $autoSignoutSeconds, $autoSignoutEmployeeSeconds);
 
 // Admin-forced sign-out (Connection Monitor "Sign out" button). A live PHP
 // process can't be killed remotely, so this session only notices on its next

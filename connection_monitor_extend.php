@@ -1,8 +1,9 @@
 <?php
 /**
- * Refreshes the Connection Monitor access cookie for another hour without
- * requiring the OTP again - only works while the current token is still
- * valid, so it can't be used to regain access after it's actually expired.
+ * Refreshes the Connection Monitor access cookie (CONNMON_EXTEND_SECONDS,
+ * see includes/connmon_gate.php) without requiring the OTP again - only
+ * works while the current token is still valid, so it can't be used to
+ * regain access after it's actually expired.
  */
 require_once __DIR__ . '/includes/connmon_gate.php';
 
@@ -14,5 +15,5 @@ if (!connmon_has_valid_token()) {
     exit;
 }
 
-$expiry = connmon_issue_token();
+$expiry = connmon_issue_token(CONNMON_EXTEND_SECONDS);
 echo json_encode(['success' => true, 'expiry' => $expiry]);

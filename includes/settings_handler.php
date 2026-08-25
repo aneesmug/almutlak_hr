@@ -171,6 +171,26 @@ function update_all_settings($conDB) {
 
         $stmt->close();
         $conDB->commit();
+
+        // If an auto sign-out threshold just changed, apply it right now instead
+        // of waiting for some other request to incidentally trigger the sweep -
+        // so shortening the timeout signs out already-over-limit users immediately.
+        if (isset($text_inputs['auto_signout_hours']) || isset($text_inputs['auto_signout_hours_employee'])) {
+            $generalHours = isset($text_inputs['auto_signout_hours'])
+                ? (float) $text_inputs['auto_signout_hours']
+                : (float) get_setting($conDB, 'auto_signout_hours');
+            $generalSeconds = $generalHours > 0 ? (int) round($generalHours * 3600) : 28800;
+
+            $employeeHours = isset($text_inputs['auto_signout_hours_employee'])
+                ? (float) $text_inputs['auto_signout_hours_employee']
+                : (float) get_setting($conDB, 'auto_signout_hours_employee');
+            $employeeSeconds = $employeeHours > 0 ? (int) round($employeeHours * 3600) : $generalSeconds;
+
+            if (function_exists('sweepStaleUserActivity')) {
+                sweepStaleUserActivity($conDB, $generalSeconds, $employeeSeconds);
+            }
+        }
+
         echo json_encode(['success' => true, 'message' => 'Settings updated successfully.']);
 
     } catch (Exception $e) {

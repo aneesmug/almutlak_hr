@@ -67,12 +67,14 @@ if (!function_exists('connmon_processlist')) {
 if (!function_exists('connmon_active_users')) {
     function connmon_active_users($conDB, $limit = 200) {
         // Sweep first so the list reflects reality even if no other request
-        // has triggered sweepStaleUserActivity() recently. Same
-        // "auto_signout_hours" setting used in session_check.php.
+        // has triggered sweepStaleUserActivity() recently. Same settings
+        // used in session_check.php.
         if (function_exists('sweepStaleUserActivity')) {
             $autoSignoutHours = function_exists('get_setting') ? (float) get_setting($conDB, 'auto_signout_hours') : 0;
             $autoSignoutSeconds = $autoSignoutHours > 0 ? (int) round($autoSignoutHours * 3600) : 28800;
-            sweepStaleUserActivity($conDB, $autoSignoutSeconds);
+            $autoSignoutEmployeeHours = function_exists('get_setting') ? (float) get_setting($conDB, 'auto_signout_hours_employee') : 0;
+            $autoSignoutEmployeeSeconds = $autoSignoutEmployeeHours > 0 ? (int) round($autoSignoutEmployeeHours * 3600) : $autoSignoutSeconds;
+            sweepStaleUserActivity($conDB, $autoSignoutSeconds, $autoSignoutEmployeeSeconds);
         }
 
         $sql = "SELECT ua.id AS activity_id, ua.emp_id, ua.username AS login_id, al.fullname, e.name AS employee_name,
