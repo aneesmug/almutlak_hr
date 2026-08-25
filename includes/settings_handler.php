@@ -90,7 +90,10 @@ function get_all_settings($conDB) {
     // db_export_secret_key is auto-generated/rotated from db_export.php's own
     // "Regenerate Key" button - it doesn't belong in the general settings UI
     // as a plain editable text field (and typing over it would just orphan
-    // the real key the export pages check against).
+    // the real key the export pages check against). db_backup_secret_key is
+    // different: it's meant to be a stable value for cron, and editing it here
+    // is a legitimate way to rotate it (just also update the cron URL), so it
+    // stays visible.
     $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name != 'db_export_secret_key' ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 

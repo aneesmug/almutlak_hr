@@ -382,6 +382,74 @@ function getAssignedFinanceVerificationCompanyIdsForVerifier(PDO $pdo, string $r
     })));
 }
 
+// Mirrors the vacation-dropout + settlement exclusion in payroll_checklist_report.php
+// so employee scope/counts here match what officers actually see and check there.
+// Correlates on alias "e" (employees) - caller's query must join employees AS e.
+function getPayrollVacationExclusionSql(string $monthValue): array
+{
+    global $conDB;
+
+    $monthStart = $monthValue !== '' ? $monthValue . '-01' : null;
+    $monthEnd = $monthStart ? date('Y-m-t', strtotime($monthStart)) : null;
+
+    $sql = '';
+    $params = [];
+
+    if (empty($monthStart) || empty($monthEnd)) {
+        return [$sql, $params];
+    }
+
+    $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    if ($vacationDropoutDays > 0) {
+        $sql .= " AND NOT EXISTS (
+                SELECT 1 FROM emp_vacation vd
+                WHERE vd.emp_id = e.emp_id
+                    AND vd.review = 'A'
+                    AND vd.current_status IN ('approved', 'completed')
+                    AND vd.start_date <= :dropout_month_end
+                    AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
+                    AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                    AND vd.request_inv_no LIKE 'VAC-%'
+            )";
+        $params[':dropout_month_end'] = $monthEnd;
+        $params[':dropout_month_start'] = $monthStart;
+        $params[':dropout_days_param'] = $vacationDropoutDays;
+    }
+
+    $sql .= " AND NOT EXISTS (
+            SELECT 1 FROM settlement_records sr
+            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+            WHERE sr.emp_id = e.emp_id
+                AND sr.request_type = 'annual_vacation'
+                AND sr.settlement_status IN ('completed', 'processed')
+                AND sr.payment_date IS NOT NULL
+                AND (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= :settlement_month_end
+                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > :settlement_month_end3
+                            )
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
+                        )
+                )
+        )";
+    $params[':settlement_month_end'] = $monthEnd;
+    $params[':settlement_month_start'] = $monthStart;
+    $params[':settlement_month_end2'] = $monthEnd;
+    $params[':settlement_month_start2'] = $monthStart;
+    $params[':settlement_month_end3'] = $monthEnd;
+
+    return [$sql, $params];
+}
+
 function confirmFinanceOfficerVerification(PDO $pdo, string $currentUserId): void
 {
     $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
@@ -434,14 +502,20 @@ function confirmFinanceOfficerVerification(PDO $pdo, string $currentUserId): voi
             $scopeParams[$paramKey] = $companyId;
         }
 
+        [$vacationExclusionSql, $vacationExclusionParams] = getPayrollVacationExclusionSql($monthYear);
+        $scopeParams = array_merge($scopeParams, $vacationExclusionParams);
+
         // Every employee in the officer's assigned companies must be marked checked
         // (payroll_checklist_employee_checks, keyed by this officer as approver) before
         // they can approve - enforced server-side, not just via the disabled button.
+        // Excludes Hold-payment employees and vacation/settlement dropouts, matching
+        // the employee set actually shown/checkable on the Payroll Checklist Report.
         $scopeEmpStmt = $pdo->prepare("SELECT DISTINCT p.emp_id
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
             WHERE p.month_year = :payroll_month
-              AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $companyPlaceholders) . ")");
+              AND COALESCE(e.payment_type, 1) <> 3
+              AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $companyPlaceholders) . ")" . $vacationExclusionSql);
         $scopeEmpStmt->execute($scopeParams);
         $scopeEmpIds = array_values(array_filter(array_map('strval', $scopeEmpStmt->fetchAll(PDO::FETCH_COLUMN)), static function ($value) {
             return $value !== '';
@@ -538,11 +612,14 @@ function getPayrollChecklistReviewSummary(PDO $pdo, string $requestInvNo, string
         $deptSql .= " AND CAST(e.comp_no AS CHAR) IN (" . implode(', ', $companyPlaceholders) . ")";
     }
 
+    [$vacationExclusionSql, $vacationExclusionParams] = getPayrollVacationExclusionSql($monthValue);
+    $scopeParams = array_merge($scopeParams, $vacationExclusionParams);
+
     $scopeStmt = $pdo->prepare("SELECT DISTINCT p.emp_id
         FROM payrolls p
         INNER JOIN employees e ON e.emp_id = p.emp_id
         WHERE p.month_year = :payroll_month_main
-          AND COALESCE(e.payment_type, 1) <> 3" . $deptSql);
+          AND COALESCE(e.payment_type, 1) <> 3" . $deptSql . $vacationExclusionSql);
     $scopeStmt->execute($scopeParams);
 
     $scopeEmpIds = array_values(array_filter(array_map('trim', array_map('strval', $scopeStmt->fetchAll(PDO::FETCH_COLUMN))), static function ($empId) {
@@ -608,12 +685,13 @@ function getPayrollChecklistReviewSummary(PDO $pdo, string $requestInvNo, string
 
 function getHrPayrollChecklistReviewSummary(PDO $pdo, string $requestInvNo, string $monthValue): array
 {
+    [$vacationExclusionSql, $vacationExclusionParams] = getPayrollVacationExclusionSql($monthValue);
     $totalStmt = $pdo->prepare("SELECT COUNT(DISTINCT p.emp_id)
         FROM payrolls p
         INNER JOIN employees e ON e.emp_id = p.emp_id
         WHERE p.month_year = :month_year
-          AND COALESCE(e.payment_type, 1) <> 3");
-    $totalStmt->execute([':month_year' => $monthValue]);
+          AND COALESCE(e.payment_type, 1) <> 3" . $vacationExclusionSql);
+    $totalStmt->execute(array_merge([':month_year' => $monthValue], $vacationExclusionParams));
     $totalEmployees = (int)$totalStmt->fetchColumn();
 
     if ($totalEmployees <= 0) {
@@ -3867,13 +3945,15 @@ function approvePayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $req
 
         $result = $chainManager->processApproval($requestInvNo, $currentUserId, 'approve', $note);
 
-        // Fetch payroll data for employee count and net salary (excludes Hold employees, matching the Payroll Checklist Report)
+        // Fetch payroll data for employee count and net salary (excludes Hold employees and
+        // vacation/settlement dropouts, matching the Payroll Checklist Report)
+        [$vacationExclusionSql, $vacationExclusionParams] = getPayrollVacationExclusionSql((string)$requestRow['payroll_month']);
         $payrollStmt = $pdo->prepare("SELECT COUNT(p.emp_id) as employee_count, SUM(p.net_salary) as total_net_salary
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
             WHERE p.month_year = :month
-              AND COALESCE(e.payment_type, 1) <> 3");
-        $payrollStmt->execute([':month' => $requestRow['payroll_month']]);
+              AND COALESCE(e.payment_type, 1) <> 3" . $vacationExclusionSql);
+        $payrollStmt->execute(array_merge([':month' => $requestRow['payroll_month']], $vacationExclusionParams));
         $payrollData = $payrollStmt->fetch(PDO::FETCH_ASSOC);
         $employeeCount = (int)($payrollData['employee_count'] ?? 0);
         $totalNetSalary = (float)($payrollData['total_net_salary'] ?? 0);
@@ -4068,13 +4148,15 @@ function rejectPayrollRequest(PDO $pdo, $conDB, string $currentUserId, int $requ
             throw new Exception('Payroll request not found');
         }
 
-        // Fetch payroll data for employee count and net salary (excludes Hold employees, matching the Payroll Checklist Report)
+        // Fetch payroll data for employee count and net salary (excludes Hold employees and
+        // vacation/settlement dropouts, matching the Payroll Checklist Report)
+        [$vacationExclusionSql, $vacationExclusionParams] = getPayrollVacationExclusionSql((string)$requestRow['payroll_month']);
         $payrollStmt = $pdo->prepare("SELECT COUNT(p.emp_id) as employee_count, SUM(p.net_salary) as total_net_salary
             FROM payrolls p
             INNER JOIN employees e ON e.emp_id = p.emp_id
             WHERE p.month_year = :month
-              AND COALESCE(e.payment_type, 1) <> 3");
-        $payrollStmt->execute([':month' => $requestRow['payroll_month']]);
+              AND COALESCE(e.payment_type, 1) <> 3" . $vacationExclusionSql);
+        $payrollStmt->execute(array_merge([':month' => $requestRow['payroll_month']], $vacationExclusionParams));
         $payrollData = $payrollStmt->fetch(PDO::FETCH_ASSOC);
         $employeeCount = (int)($payrollData['employee_count'] ?? 0);
         $totalNetSalary = (float)($payrollData['total_net_salary'] ?? 0);

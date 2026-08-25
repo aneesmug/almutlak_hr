@@ -3,3 +3,6 @@
 
 # ReadMore folder
 /readmore/
+
+# Local-only FTP credentials for pulling backups down to this machine
+/tools/ftp_pull_config.ps1

@@ -1,0 +1,28 @@
+# Copy this file to ftp_pull_config.ps1 (same folder) and fill in real values.
+# ftp_pull_config.ps1 is gitignored - never commit real FTP credentials.
+
+$FtpHost         = "ftp.yourdomain.com"
+$FtpPort         = 21
+$FtpUser         = "your_ftp_username"
+$FtpPass         = "your_ftp_password"
+$UseSsl          = $true      # $true = FTPS (explicit TLS, recommended), $false = plain FTP
+$IgnoreCertErrors = $true     # most cPanel FTPS certs don't match the ftp.* hostname - keep $true unless yours does
+
+# Path to the db_backups folder AS SEEN FROM THE FTP ACCOUNT ROOT (not the full
+# server path). Usually one level above your FTP account's "system"/public_html
+# folder. Log in with any FTP client (FileZilla etc.) once to find the right path.
+$RemoteDir       = "/db_backups"
+
+# Primary local cache - where files are pulled from FTP to first.
+$LocalDir        = "$PSScriptRoot\..\..\db_backups_from_live"
+$RetentionDays   = 7
+
+# Extra destinations to mirror every backup into, after the FTP pull (same
+# day-folder structure, same 7-day rotation applied to each). Leave the array
+# empty ( @() ) to skip this. Examples:
+#   - Shared network folder by IP: "\\192.168.1.50\SharedBackups\almutlak"
+#   - Another local drive:         "D:\Backups\almutlak_db_backups"
+$ExtraDestinations = @(
+    "\\192.168.1.50\SharedBackups\almutlak",
+    "D:\Backups\almutlak_db_backups"
+)

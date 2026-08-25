@@ -758,6 +758,8 @@ function getPayrollBankBucketLabels(): array
 
 function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
 {
+    global $conDB;
+
     $summary = [
         'month' => $monthValue,
         'bank_columns' => [],
@@ -767,6 +769,66 @@ function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
     if ($monthValue === '') {
         return $summary;
     }
+
+    $monthStart = $monthValue . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    // Must mirror the exclusions used by the Payroll Summary Report PDF
+    // (get_payroll_report.php / actionPayrollSummaryReportBtn): Hold employees
+    // (payment_type = 3) and employees dropped via a long vacation or already
+    // settled - otherwise this breakdown table disagrees with the real report.
+    $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    $params = [
+        ':month_year' => $monthValue,
+    ];
+
+    $dropoutFilter = '';
+    if ($vacationDropoutDays > 0) {
+        $dropoutFilter = " AND NOT EXISTS (
+                SELECT 1 FROM emp_vacation vd
+                WHERE vd.emp_id = e.emp_id
+                    AND vd.review = 'A'
+                    AND vd.current_status IN ('approved', 'completed')
+                    AND vd.start_date <= :dropout_month_end
+                    AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
+                    AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                    AND vd.request_inv_no LIKE 'VAC-%'
+            )";
+        $params[':dropout_month_end'] = $monthEnd;
+        $params[':dropout_month_start'] = $monthStart;
+        $params[':dropout_days_param'] = $vacationDropoutDays;
+    }
+
+    $settlementFilter = " AND NOT EXISTS (
+            SELECT 1 FROM settlement_records sr
+            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
+            WHERE sr.emp_id = e.emp_id
+                AND sr.request_type = 'annual_vacation'
+                AND sr.settlement_status IN ('completed', 'processed')
+                AND sr.payment_date IS NOT NULL
+                AND (
+                        (
+                            sv.id IS NOT NULL
+                            AND sv.current_status IN ('approved', 'completed')
+                            AND sv.start_date <= :settlement_month_end
+                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
+                            AND (
+                                sv.return_date IS NULL
+                                OR sv.return_date > :settlement_month_end3
+                            )
+                        )
+                        OR
+                        (
+                            sv.id IS NULL
+                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
+                        )
+                )
+        )";
+    $params[':settlement_month_end'] = $monthEnd;
+    $params[':settlement_month_start'] = $monthStart;
+    $params[':settlement_month_end2'] = $monthEnd;
+    $params[':settlement_month_start2'] = $monthStart;
+    $params[':settlement_month_end3'] = $monthEnd;
 
     $stmt = $pdo->prepare("SELECT
             p.emp_id,
@@ -779,9 +841,11 @@ function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
         INNER JOIN employees e ON e.emp_id = p.emp_id
         LEFT JOIN companies c ON c.comp_id = e.comp_no
         LEFT JOIN bank_list bl ON bl.bnk_id = e.bank_name
-        WHERE p.month_year = :month_year
+        WHERE p.month_year = :month_year AND e.payment_type <> 3
+        {$dropoutFilter}
+        {$settlementFilter}
         ORDER BY c.comp_name ASC, p.emp_id ASC");
-    $stmt->execute([':month_year' => $monthValue]);
+    $stmt->execute($params);
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if (empty($rows)) {
@@ -1358,66 +1422,86 @@ function buildPayrollApprovalBankReportHtml(requestInvNo, payrollMonth) {
     const report = payrollApprovalBankReports[String(requestInvNo || '').trim()] || null;
     const rows = Array.isArray(report && report.rows) ? report.rows : [];
     const bankColumns = Array.isArray(report && report.bank_columns) ? report.bank_columns : [];
-    const bankColumnLabels = {
-        ncb: 'NATIONAL COMMERCIAL BANK',
-        riyadh_bank: 'RIYADH BANK',
-        saudi_investment_bank: 'SAUDI INVESTMENT BANK',
-        al_rajhi_bank: 'AL RAJHI BANK',
-        alinma_bank: 'ALINMA BANK',
-        anb_bank: 'ANB BANK',
-        al_jazira: 'AL JAZIRA',
-        other_bank: 'OTHER BANKS'
-    };
 
     if (rows.length === 0) {
         return `
             <div class="swal-payroll-details">
-                <div class="swal-details-header"><i class="fas fa-table"></i> Payroll Summary Report</div>
+                <div class="swal-details-header"><i class="fas fa-table"></i> ${__('payroll_summary_report', 'Payroll Summary Report')}</div>
                 <div class="text-muted">No payroll summary data available for ${payrollMonth || 'selected month'}.</div>
             </div>
         `;
     }
 
-    const monthTitle = String(payrollMonth || report.month || '').trim();
     const formatAmount = (value) => Number(value || 0).toLocaleString('en-US', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
-    const bankHeaderCells = bankColumns.map((bankColumn) => `
-        <th style="padding:6px 8px;border:1px solid #dbe3ef;">${bankColumnLabels[bankColumn] || String(bankColumn || '').replace(/_/g, ' ').toUpperCase()}</th>
+    const formatCount = (value) => Number(value || 0).toLocaleString('en-US');
+
+    const totalRow = rows.find((row) => String(row.branch || '').toUpperCase() === 'TOTAL') || null;
+    const companyRows = rows.filter((row) => String(row.branch || '').toUpperCase() !== 'TOTAL');
+
+    const rowTotalBank = (row) => bankColumns.reduce((sum, col) => sum + Number(row[col] || 0), 0);
+
+    const totalCompanies = companyRows.length;
+    const grandEmployees = totalRow ? Number(totalRow.no_of_emp || 0) : companyRows.reduce((sum, r) => sum + Number(r.no_of_emp || 0), 0);
+    const grandNet = totalRow ? Number(totalRow.salary_register || 0) : companyRows.reduce((sum, r) => sum + Number(r.salary_register || 0), 0);
+    const grandBank = totalRow ? rowTotalBank(totalRow) : companyRows.reduce((sum, r) => sum + rowTotalBank(r), 0);
+    const grandCash = totalRow ? Number(totalRow.cash_salary || 0) : companyRows.reduce((sum, r) => sum + Number(r.cash_salary || 0), 0);
+
+    const cardsHtml = `
+        <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:150px;background:#2f80c4;color:#fff;border-radius:8px;padding:12px 16px;">
+                <div style="font-size:12px;opacity:0.9;">${__('total_companies', 'Total Companies')}</div>
+                <div style="font-size:22px;font-weight:700;">${formatCount(totalCompanies)}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:#e8912d;color:#fff;border-radius:8px;padding:12px 16px;">
+                <div style="font-size:12px;opacity:0.9;">${__('employees', 'Employees')}</div>
+                <div style="font-size:22px;font-weight:700;">${formatCount(grandEmployees)}</div>
+            </div>
+            <div style="flex:1;min-width:150px;background:#27ae60;color:#fff;border-radius:8px;padding:12px 16px;">
+                <div style="font-size:12px;opacity:0.9;">${__('grand_total_label', 'Grand Total')}: (SAR)</div>
+                <div style="font-size:22px;font-weight:700;">${formatAmount(grandNet)}</div>
+            </div>
+        </div>
+    `;
+
+    const bodyRows = companyRows.map((row, index) => `
+        <tr>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:center;color:#8a94a6;">${index + 1}</td>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:center;">${formatCount(row.no_of_emp)}</td>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;white-space:nowrap;">${String(row.branch || '-')}</td>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:right;">${formatAmount(rowTotalBank(row))}</td>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:right;">${formatAmount(row.cash_salary)}</td>
+            <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:right;">${formatAmount(row.salary_register)}</td>
+        </tr>
     `).join('');
 
-    const bodyRows = rows.map((row, index) => {
-        const isTotal = String(row.branch || '').toUpperCase() === 'TOTAL';
-        const bankValueCells = bankColumns.map((bankColumn) => `
-            <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row[bankColumn])}</td>
-        `).join('');
-        return `
-            <tr ${isTotal ? 'style="font-weight:700;background:#eef5ff;"' : ''}>
-                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:center;">${isTotal ? '' : (index + 1)}</td>
-                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:center;">${Number(row.no_of_emp || 0)}</td>
-                <td style="padding:6px 8px;border:1px solid #dbe3ef;white-space:nowrap;">${String(row.branch || '-')}</td>
-                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row.salary_register)}</td>
-                ${bankValueCells}
-                <td style="padding:6px 8px;border:1px solid #dbe3ef;text-align:right;">${formatAmount(row.cash_salary)}</td>
-            </tr>
-        `;
-    }).join('');
-
     return `
-        <div class="swal-payroll-details" style="max-height:360px;overflow:auto;">
+        <div class="swal-payroll-details" style="max-height:420px;overflow:auto;">
+            ${cardsHtml}
             <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;">
                 <thead>
-                    <tr style="background:#f1f5f9;">
-                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">S/N</th>
-                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">NO OF EMP.</th>
-                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">BRANCH</th>
-                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">SALARY REGISTER</th>
-                        ${bankHeaderCells}
-                        <th style="padding:6px 8px;border:1px solid #dbe3ef;">CASH SALARY</th>
+                    <tr style="background:#1b3358;color:#fff;">
+                        <th style="padding:8px 10px;border:1px solid #1b3358;">#</th>
+                        <th style="padding:8px 10px;border:1px solid #1b3358;">${__('employees', 'Employees')}</th>
+                        <th style="padding:8px 10px;border:1px solid #1b3358;text-align:left;">${__('all_companies_option', 'All Companies')}</th>
+                        <th style="padding:8px 10px;border:1px solid #1b3358;">${__('total_bank', 'Total Bank')}</th>
+                        <th style="padding:8px 10px;border:1px solid #1b3358;">${__('total_cash', 'Total Cash')}</th>
+                        <th style="padding:8px 10px;border:1px solid #1b3358;">${__('total_net', 'Total Net')}</th>
                     </tr>
                 </thead>
                 <tbody>${bodyRows}</tbody>
+                <tfoot>
+                    <tr style="background:#27ae60;color:#fff;font-weight:700;">
+                        <td style="padding:8px 10px;border:1px solid #27ae60;"></td>
+                        <td style="padding:8px 10px;border:1px solid #27ae60;text-align:center;">${formatCount(grandEmployees)}</td>
+                        <td style="padding:8px 10px;border:1px solid #27ae60;">${__('all_companies_option', 'All Companies')}</td>
+                        <td style="padding:8px 10px;border:1px solid #27ae60;text-align:right;">${formatAmount(grandBank)}</td>
+                        <td style="padding:8px 10px;border:1px solid #27ae60;text-align:right;">${formatAmount(grandCash)}</td>
+                        <td style="padding:8px 10px;border:1px solid #27ae60;text-align:right;">${formatAmount(grandNet)}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     `;
