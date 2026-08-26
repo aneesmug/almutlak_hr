@@ -1261,10 +1261,14 @@ if (mysqli_num_rows($query) == 1) {
                     payroll: {
                         options: [
                             { value: '', label: (typeof __ === 'function') ? __('all_status') : 'All Status' },
+                            { value: 'paid', label: (typeof __ === 'function') ? __('paid') : 'Paid' },
                             { value: 'generated', label: (typeof __ === 'function') ? __('generated') : 'Generated' },
                             { value: 'updated', label: (typeof __ === 'function') ? __('updated') : 'Updated' }
                         ],
-                        defaultValue: ''
+                        // Default to Paid so totals match the live/authoritative figures
+                        // (Payroll Summary Report) instead of mixing in still-pending
+                        // generated/updated rows that were never actually paid out.
+                        defaultValue: 'paid'
                     },
                     salary_increment: {
                         options: [
@@ -2020,11 +2024,6 @@ if (mysqli_num_rows($query) == 1) {
                             default: true
                         },
                         {
-                            id: 'total_employees',
-                            label: (typeof __ === 'function') ? __('total_employees') : 'Total Employees',
-                            default: true
-                        },
-                        {
                             id: 'total_salary',
                             label: (typeof __ === 'function') ? __('total_salary') : 'Total Salary',
                             default: true
@@ -2080,8 +2079,38 @@ if (mysqli_num_rows($query) == 1) {
                             default: false
                         },
                         {
+                            id: 'hours_benefit',
+                            label: (typeof __ === 'function') ? __('hours_benefit') : 'Hours Benefits',
+                            default: true
+                        },
+                        {
+                            id: 'days_benefit',
+                            label: (typeof __ === 'function') ? __('days_benefit') : 'Days Benefits',
+                            default: true
+                        },
+                        {
+                            id: 'other_income_benefit',
+                            label: (typeof __ === 'function') ? __('other_income_benefit') : 'Other Income',
+                            default: true
+                        },
+                        {
                             id: 'total_benefits',
                             label: (typeof __ === 'function') ? __('total_benefits') : 'Total Benefits',
+                            default: true
+                        },
+                        {
+                            id: 'gosi_deduction',
+                            label: (typeof __ === 'function') ? __('gosi_deduction') : 'GOSI Deduction',
+                            default: true
+                        },
+                        {
+                            id: 'loan_deduction',
+                            label: (typeof __ === 'function') ? __('loan_deduction') : 'Loan Deduction',
+                            default: true
+                        },
+                        {
+                            id: 'other_deductions',
+                            label: (typeof __ === 'function') ? __('other_deductions') : 'Other Deductions',
                             default: true
                         },
                         {
@@ -3544,12 +3573,18 @@ if (mysqli_num_rows($query) == 1) {
                         console.error('Column IDs:', columnIds);
                     }
 
+                    // Payroll report shows every selected column directly instead of
+                    // collapsing extras behind the expand-row control used by other reports.
+                    const showControlColumn = (reportType !== 'payroll');
+
                     // Build table headers (store, apply later after cleanup)
                     let headerHtml = '<tr>';
-                    
+
                     // Add expand control header
-                    headerHtml += '<th></th>';
-                    
+                    if (showControlColumn) {
+                        headerHtml += '<th></th>';
+                    }
+
                     // Add ALL column headers (including hidden ones)
                     for (let i = 0; i < headers.length; i++) {
                         var cleanHeader = String(headers[i]);
@@ -3562,7 +3597,7 @@ if (mysqli_num_rows($query) == 1) {
 
                     if (!data || data.length === 0) {
                         console.warn('No data returned for report');
-                        bodyHtml = '<tr><td colspan="' + (headers.length + 1) + '" class="text-center text-muted py-4">' + ((typeof __ === 'function') ? __('no_records_found') : 'No records found') + '</td></tr>';
+                        bodyHtml = '<tr><td colspan="' + (headers.length + (showControlColumn ? 1 : 0)) + '" class="text-center text-muted py-4">' + ((typeof __ === 'function') ? __('no_records_found') : 'No records found') + '</td></tr>';
                     } else {
                         // console.log('Processing', data.length, 'rows...');
                         data.forEach(function(row, rowIndex) {
@@ -3571,9 +3606,11 @@ if (mysqli_num_rows($query) == 1) {
                             }
                             // Store row index as data attribute for reliable detail row retrieval
                             bodyHtml += '<tr data-row-index="' + rowIndex + '">';
-                            
+
                             // Add blank cell for expand control
-                            bodyHtml += '<td></td>';
+                            if (showControlColumn) {
+                                bodyHtml += '<td></td>';
+                            }
 
                             // Build ALL columns in row (visible + hidden)
                             columnIds.forEach(function(columnId, colIndex) {
@@ -3653,6 +3690,44 @@ if (mysqli_num_rows($query) == 1) {
                     // console.log('Body HTML length:', bodyHtml.length);
                     // console.log('Header columns:', headers.length, 'Body columns per row:', columnIds.slice(0, headers.length).length);
 
+                    // Totals footer row for the payroll report - sums every numeric column
+                    // (Basic, Housing, Benefits, Deductions, Net...) and shows the actual
+                    // employee count once, instead of a per-row Total Employees column.
+                    let footerHtml = '';
+                    if (reportType === 'payroll' && data.length > 0) {
+                        const numericPayrollColumns = new Set([
+                            'total_salary', 'basic_salary', 'housing_allowance', 'transport_allowance',
+                            'food_allowance', 'miscellaneous_allowance', 'cashier_allowance', 'fuel_allowance',
+                            'telephone_allowance', 'other_allowance', 'guard_allowance',
+                            'hours_benefit', 'days_benefit', 'other_income_benefit', 'total_benefits',
+                            'gosi_deduction', 'loan_deduction', 'other_deductions', 'total_deductions',
+                            'net_salary'
+                        ]);
+                        const formatTotal = (value) => Number(value || 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+
+                        let employeeCountShown = false;
+                        footerHtml = '<tr class="report-totals-row" style="background-color:#eaf7ee;font-weight:600;">';
+                        if (showControlColumn) {
+                            footerHtml += '<td></td>';
+                        }
+                        columnIds.forEach(function(columnId) {
+                            if (numericPayrollColumns.has(columnId)) {
+                                const sum = data.reduce((acc, row) => acc + (parseFloat(row[columnId]) || 0), 0);
+                                footerHtml += `<td>${formatTotal(sum)}</td>`;
+                            } else if (!employeeCountShown) {
+                                const totalEmployeesLabel = (typeof __ === 'function') ? __('total_employees') : 'Total Employees';
+                                footerHtml += `<td>${totalEmployeesLabel}: ${data.length}</td>`;
+                                employeeCountShown = true;
+                            } else {
+                                footerHtml += '<td></td>';
+                            }
+                        });
+                        footerHtml += '</tr>';
+                    }
+
                     // (Delay applying header/body until after potential wrapper cleanup)
 
                     // console.log('Table body HTML set, checking DOM...');
@@ -3709,6 +3784,7 @@ if (mysqli_num_rows($query) == 1) {
                         const tableMarkup = '<table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" width="100%">' +
                             '<thead id="reportTableHead">' + headerHtml + '</thead>' +
                             '<tbody id="reportTableBody">' + bodyHtml + '</tbody>' +
+                            (footerHtml ? '<tfoot id="reportTableFoot">' + footerHtml + '</tfoot>' : '') +
                             '</table>';
                         $('#reportTableContainer').html(tableMarkup);
 
@@ -3737,29 +3813,32 @@ if (mysqli_num_rows($query) == 1) {
                                 // Create column definitions
                                 var columnDefsArray = [];
                                 
-                                // Control column (expand/collapse button)
-                                columnDefsArray.push({
-                                    targets: 0,
-                                    orderable: false,
-                                    searchable: false,
-                                    className: 'dt-control',
-                                    width: '40px'
-                                });
-
-                                // Show only the first five summary columns in the main table.
-                                // The rest remain searchable and visible inside the expandable detail panel.
-                                const hiddenColumnIndices = [];
-                                for (let i = 6; i <= headers.length; i++) {
-                                    hiddenColumnIndices.push(i);
-                                }
-                                
-                                if (hiddenColumnIndices.length > 0) {
+                                if (showControlColumn) {
+                                    // Control column (expand/collapse button)
                                     columnDefsArray.push({
-                                        targets: hiddenColumnIndices,
-                                        visible: false,
-                                        searchable: true  // Still searchable even if hidden
+                                        targets: 0,
+                                        orderable: false,
+                                        searchable: false,
+                                        className: 'dt-control',
+                                        width: '40px'
                                     });
+
+                                    // Show only the first five summary columns in the main table.
+                                    // The rest remain searchable and visible inside the expandable detail panel.
+                                    const hiddenColumnIndices = [];
+                                    for (let i = 6; i <= headers.length; i++) {
+                                        hiddenColumnIndices.push(i);
+                                    }
+
+                                    if (hiddenColumnIndices.length > 0) {
+                                        columnDefsArray.push({
+                                            targets: hiddenColumnIndices,
+                                            visible: false,
+                                            searchable: true  // Still searchable even if hidden
+                                        });
+                                    }
                                 }
+                                // Payroll: no control column, every selected column shown directly - nothing hidden.
 
                                 // Format function for details - show ALL columns in COLUMN (horizontal) layout
                                 function formatDetailRow(d, idx) {
@@ -3805,6 +3884,9 @@ if (mysqli_num_rows($query) == 1) {
                                         {
                                             extend: 'excel',
                                             filename: filename,
+                                            // Include the payroll totals <tfoot> row in the exported file.
+                                            // NOTE: `footer` is a button-level option, not an exportOptions key.
+                                            footer: true,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
                                                     // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports
@@ -3824,6 +3906,7 @@ if (mysqli_num_rows($query) == 1) {
                                         {
                                             extend: 'pdf',
                                             filename: filename,
+                                            footer: true,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
                                                     // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports

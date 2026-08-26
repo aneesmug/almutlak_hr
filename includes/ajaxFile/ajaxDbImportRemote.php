@@ -8,6 +8,19 @@ if (!($is_system_admin ?? false)) {
     exit;
 }
 
+// Returns the column name immediately before $target in $orderedNames (ordinal order),
+// or null if $target is the first column - used to emit AFTER `col` / FIRST in generated ALTERs.
+function db_import_remote_predecessor(array $orderedNames, string $target) {
+    $prev = null;
+    foreach ($orderedNames as $name) {
+        if ($name === $target) {
+            return $prev;
+        }
+        $prev = $name;
+    }
+    return null;
+}
+
 function db_import_remote_curl(string $url, array $postFields, int $timeoutSeconds) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -391,9 +404,15 @@ if ($action === 'check_schema') {
         }
 
         if (!isset($localTableNames[$table])) {
+            $liveOrderAll = array_keys($liveByName);
+            $missingInLocalAll = array_values(array_map(function ($name) use ($liveByName, $liveOrderAll) {
+                $col = $liveByName[$name];
+                $col['after'] = db_import_remote_predecessor($liveOrderAll, $name);
+                return $col;
+            }, $liveOrderAll));
             $report[$table] = [
                 'exists_locally' => false,
-                'missing_in_local' => array_values($liveByName),
+                'missing_in_local' => $missingInLocalAll,
                 'missing_in_live' => [],
                 'type_mismatches' => [],
             ];
@@ -414,10 +433,15 @@ if ($action === 'check_schema') {
         $missingInLocalNames = array_diff(array_keys($liveByName), array_keys($localByName));
         $missingInLiveNames = array_diff(array_keys($localByName), array_keys($liveByName));
 
-        $missingInLocal = array_values(array_map(function ($name) use ($liveByName) {
-            return $liveByName[$name];
+        $liveOrder = array_keys($liveByName);
+        $localOrder = array_keys($localByName);
+
+        $missingInLocal = array_values(array_map(function ($name) use ($liveByName, $liveOrder) {
+            $col = $liveByName[$name];
+            $col['after'] = db_import_remote_predecessor($liveOrder, $name);
+            return $col;
         }, $missingInLocalNames));
-        $missingInLive = array_values(array_map(function ($name) use ($localByName) {
+        $missingInLive = array_values(array_map(function ($name) use ($localByName, $localOrder) {
             $c = $localByName[$name];
             return [
                 'name' => $c['COLUMN_NAME'],
@@ -425,6 +449,7 @@ if ($action === 'check_schema') {
                 'nullable' => $c['IS_NULLABLE'] === 'YES',
                 'default' => $c['COLUMN_DEFAULT'],
                 'extra' => $c['EXTRA'],
+                'after' => db_import_remote_predecessor($localOrder, $name),
             ];
         }, $missingInLiveNames));
 

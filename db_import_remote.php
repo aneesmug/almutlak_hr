@@ -529,6 +529,7 @@ if (!($is_system_admin ?? false)) {
             if (col.extra) {
                 sql += ' ' + col.extra;
             }
+            sql += col.after ? ' AFTER `' + col.after + '`' : ' FIRST';
             return sql;
         }
 

@@ -2061,6 +2061,95 @@ if ($can_see_all_depts) {
                 });
             }
 
+            // Fetches asset-department staff and shows the "Assign Asset Checker"
+            // modal. Callers must confirm the employee actually has assigned
+            // assets BEFORE calling this - it does not check itself.
+            function fetchAndShowAssetCheckerModal(vacationId, employeeId, employeeName, assetDeptId) {
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        ajaxType: 'get_asset_department_employees',
+                        dept_id: assetDeptId
+                    }
+                }).done(function(res) {
+                    const selectAssetCheckerLabel = __('select_asset_checker') || 'Select Asset Checker';
+                    let optionsHtml = '<option value="">' + selectAssetCheckerLabel + '</option>';
+                    const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
+
+                    employees.forEach(function(emp) {
+                        optionsHtml += `<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`;
+                    });
+
+                    Swal.fire({
+                        title: __('assign_asset_checker') || 'Assign Asset Checker',
+                        html: `
+                            <form class="text-left">
+                                <p class="alert alert-info" style="margin-bottom: 15px;">
+                                    <i class="fa fa-info-circle"></i> ${__('asset_checker_select_note') || 'Select a colleague from IT, Administration, or Transportation to perform the asset check.'}
+                                </p>
+                                <div class="form-group">
+                                    <label style="text-align: left; display: block;">${__('asset_checker') || 'Asset Checker'} <span class="text-danger">*</span></label>
+                                    <select id="asset_checker_emp_id" class="form-control" required>
+                                        ${optionsHtml}
+                                    </select>
+                                    <small class="text-muted">${__('asset_checker_same_dept') || 'Only active staff from IT, Administration, and Transportation are listed.'}</small>
+                                </div>
+                                <div class="form-group">
+                                    <label style="text-align: left; display: block;">${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
+                                    <textarea id="asset_checker_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Write your comment...'}" maxlength="5000" style="height: 80px;"></textarea>
+                                    <small class="text-muted"><span id="asset-checker-char-count">0</span>/5000 ${__('characters')}</small>
+                                </div>
+                            </form>
+                        `,
+                        width: '40%',
+                        showCancelButton: true,
+                        confirmButtonText: __('approve_and_assign_checker') || 'Approve & Assign Checker',
+                        confirmButtonColor: APP_COLORS.success,
+                        cancelButtonColor: APP_COLORS.danger,
+                        showLoaderOnConfirm: true,
+                        allowOutsideClick: false,
+                        preConfirm: () => {
+                            const checkerId = document.getElementById('asset_checker_emp_id').value;
+                            const comment = document.getElementById('asset_checker_comment').value;
+
+                            if (!checkerId) {
+                                Swal.showValidationMessage(__('please_select_an_asset_checker') || 'Please select an asset checker');
+                                return false;
+                            }
+
+                            return {
+                                asset_checker_emp_id: checkerId,
+                                approval_comment: comment
+                            };
+                        },
+                        didOpen: () => {
+                            const commentEl = document.getElementById('asset_checker_comment');
+                            commentEl.addEventListener('input', function() {
+                                document.getElementById('asset-checker-char-count').textContent = this.value.length;
+                            });
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            const payload = result.value || {};
+                            const approvalData = {
+                                asset_checker_emp_id: parseInt(payload.asset_checker_emp_id, 10),
+                                approval_comment: payload.approval_comment || ''
+                            };
+                            sendApproval(vacationId, approvalData);
+                        }
+                    });
+                }).fail(function() {
+                    Swal.fire({
+                        title: __('error') || 'Error',
+                        text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
+                        icon: 'error',
+                        confirmButtonColor: APP_COLORS.danger
+                    });
+                });
+            }
+
             const assetDeptMap = { it: 6, admin: 1, transport: 17 };
             const getAssetDeptId = (role) => {
                 if (!role) return null;
@@ -2082,9 +2171,13 @@ if ($can_see_all_depts) {
                 return;
             }
 
-            // Check if current user is the assigned asset checker for this vacation
-            // If yes, show clearance modal; if no but they're an asset manager, show assignment modal
-            if (vacType !== 'Encashed') {
+            // Asset checker flow only applies to Annual (Fly | annual) vacations -
+            // not Emergency Fly, Local, Excuse, Encashed, or any other type, even
+            // when the employee has assigned assets. Check if current user is the
+            // assigned asset checker for this vacation; if yes, show clearance
+            // modal, if no but they're an asset manager, show assignment modal.
+            const isAnnualVacationForAssetCheck = (vacType === 'Fly' && flyType === 'annual');
+            if (isAnnualVacationForAssetCheck) {
                 $.ajax({
                     url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
@@ -2145,92 +2238,36 @@ if ($can_see_all_depts) {
                             return;
                         }
 
-                        // Otherwise, if they're an asset manager (from asset dept) AND NOT a Manager by emp_type, show assignment modal
-                        // Managers from asset departments should go through normal approval flow
+                        // Otherwise, if they're an asset manager (from asset dept) AND NOT a Manager by emp_type,
+                        // check the employee actually has assigned assets BEFORE showing the assignment modal -
+                        // this was the bug: the modal used to show unconditionally here, with no assets check
+                        // (unlike the assigned-checker and department-manager branches, which both check first).
+                        // Managers from asset departments should go through normal approval flow.
                         if (assetDeptId && !isManagerRole) {
-                            console.log('✓ Showing asset checker assignment modal for asset department staff (non-manager)');
+                            console.log('✓ Asset department staff (non-manager) - checking if employee has assigned assets first');
 
                             $.ajax({
                                 url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
-                                    ajaxType: 'get_asset_department_employees',
-                                    dept_id: assetDeptId
+                                    ajaxType: 'getEmployeeAssignedAssets',
+                                    emp_id: employeeId
+                                },
+                                success: function(assetsResponse) {
+                                    if (!assetsResponse.assets || assetsResponse.assets.length === 0) {
+                                        console.log('✓ Employee has no assigned assets - skipping asset checker assignment modal');
+                                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                                        return;
+                                    }
+                                    console.log('✓ Employee has assigned assets - showing asset checker assignment modal');
+                                    fetchAndShowAssetCheckerModal(vacationId, employeeId, employeeName, assetDeptId);
+                                },
+                                error: function() {
+                                    // Can't verify - fall back to showing the modal rather than silently skipping.
+                                    console.log('✓ Could not verify assets - showing asset checker assignment modal as fallback');
+                                    fetchAndShowAssetCheckerModal(vacationId, employeeId, employeeName, assetDeptId);
                                 }
-                            }).done(function(res) {
-                                const selectAssetCheckerLabel = __('select_asset_checker') || 'Select Asset Checker';
-                                let optionsHtml = '<option value="">' + selectAssetCheckerLabel + '</option>';
-                                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
-
-                                employees.forEach(function(emp) {
-                                    optionsHtml += `<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`;
-                                });
-
-                                Swal.fire({
-                                    title: __('assign_asset_checker') || 'Assign Asset Checker',
-                                    html: `
-                                        <form class="text-left">
-                                            <p class="alert alert-info" style="margin-bottom: 15px;">
-                                                <i class="fa fa-info-circle"></i> ${__('asset_checker_select_note') || 'Select a colleague from IT, Administration, or Transportation to perform the asset check.'}
-                                            </p>
-                                            <div class="form-group">
-                                                <label style="text-align: left; display: block;">${__('asset_checker') || 'Asset Checker'} <span class="text-danger">*</span></label>
-                                                <select id="asset_checker_emp_id" class="form-control" required>
-                                                    ${optionsHtml}
-                                                </select>
-                                                <small class="text-muted">${__('asset_checker_same_dept') || 'Only active staff from IT, Administration, and Transportation are listed.'}</small>
-                                            </div>
-                                            <div class="form-group">
-                                                <label style="text-align: left; display: block;">${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
-                                                <textarea id="asset_checker_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Write your comment...'}" maxlength="5000" style="height: 80px;"></textarea>
-                                                <small class="text-muted"><span id="asset-checker-char-count">0</span>/5000 ${__('characters')}</small>
-                                            </div>
-                                        </form>
-                                    `,
-                                    width: '40%',
-                                    showCancelButton: true,
-                                    confirmButtonText: __('approve_and_assign_checker') || 'Approve & Assign Checker',
-                                    confirmButtonColor: APP_COLORS.success,
-                                    cancelButtonColor: APP_COLORS.danger,
-                                    showLoaderOnConfirm: true,
-                                    preConfirm: () => {
-                                        const checkerId = document.getElementById('asset_checker_emp_id').value;
-                                        const comment = document.getElementById('asset_checker_comment').value;
-
-                                        if (!checkerId) {
-                                            Swal.showValidationMessage(__('please_select_an_asset_checker') || 'Please select an asset checker');
-                                            return false;
-                                        }
-
-                                        return {
-                                            asset_checker_emp_id: checkerId,
-                                            approval_comment: comment
-                                        };
-                                    },
-                                    didOpen: () => {
-                                        const commentEl = document.getElementById('asset_checker_comment');
-                                        commentEl.addEventListener('input', function() {
-                                            document.getElementById('asset-checker-char-count').textContent = this.value.length;
-                                        });
-                                    }
-                                }).then((result) => {
-                                    if (result.isConfirmed) {
-                                        const payload = result.value || {};
-                                        const approvalData = {
-                                            asset_checker_emp_id: parseInt(payload.asset_checker_emp_id, 10),
-                                            approval_comment: payload.approval_comment || ''
-                                        };
-                                        sendApproval(vacationId, approvalData);
-                                    }
-                                });
-                            }).fail(function() {
-                                Swal.fire({
-                                    title: __('error') || 'Error',
-                                    text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
-                                    icon: 'error',
-                                    confirmButtonColor: APP_COLORS.danger
-                                });
                             });
                             return;
                         }
@@ -2266,91 +2303,30 @@ if ($can_see_all_depts) {
                         });
                     },
                     error: function() {
-                        // If we can't fetch vacation details, check if they're an asset manager
+                        // If we can't fetch vacation details, check if they're an asset manager -
+                        // but still confirm the employee has assigned assets before showing the
+                        // assignment modal (same bug/fix as the success branch above).
                         if (assetDeptId) {
-                            // Asset manager but can't verify if they're assigned checker - show assignment modal
                             $.ajax({
                                 url: './includes/ajaxFile/leaveHandler.php',
                                 type: 'POST',
                                 dataType: 'json',
                                 data: {
-                                    ajaxType: 'get_asset_department_employees',
-                                    dept_id: assetDeptId
+                                    ajaxType: 'getEmployeeAssignedAssets',
+                                    emp_id: employeeId
+                                },
+                                success: function(assetsResponse) {
+                                    if (!assetsResponse.assets || assetsResponse.assets.length === 0) {
+                                        console.log('✓ Employee has no assigned assets - skipping asset checker assignment modal');
+                                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                                        return;
+                                    }
+                                    fetchAndShowAssetCheckerModal(vacationId, employeeId, employeeName, assetDeptId);
+                                },
+                                error: function() {
+                                    // Can't verify - fall back to showing the modal rather than silently skipping.
+                                    fetchAndShowAssetCheckerModal(vacationId, employeeId, employeeName, assetDeptId);
                                 }
-                            }).done(function(res) {
-                                const selectAssetCheckerLabel = __('select_asset_checker') || 'Select Asset Checker';
-                                let optionsHtml = '<option value="">' + selectAssetCheckerLabel + '</option>';
-                                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
-
-                                employees.forEach(function(emp) {
-                                    optionsHtml += `<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`;
-                                });
-
-                                Swal.fire({
-                                    title: __('assign_asset_checker') || 'Assign Asset Checker',
-                                    html: `
-                                        <form class="text-left">
-                                            <p class="alert alert-info" style="margin-bottom: 15px;">
-                                                <i class="fa fa-info-circle"></i> ${__('asset_checker_select_note') || 'Select a colleague from IT, Administration, or Transportation to perform the asset check.'}
-                                            </p>
-                                            <div class="form-group">
-                                                <label style="text-align: left; display: block;">${__('asset_checker') || 'Asset Checker'} <span class="text-danger">*</span></label>
-                                                <select id="asset_checker_emp_id" class="form-control" required>
-                                                    ${optionsHtml}
-                                                </select>
-                                                <small class="text-muted">${__('asset_checker_same_dept') || 'Only active staff from IT, Administration, and Transportation are listed.'}</small>
-                                            </div>
-                                            <div class="form-group">
-                                                <label style="text-align: left; display: block;">${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
-                                                <textarea id="asset_checker_comment" class="form-control" rows="3" placeholder="${__('write_comment') || 'Write your comment...'}" maxlength="5000" style="height: 80px;"></textarea>
-                                                <small class="text-muted"><span id="asset-checker-char-count">0</span>/5000 ${__('characters')}</small>
-                                            </div>
-                                        </form>
-                                    `,
-                                    width: '40%',
-                                    showCancelButton: true,
-                                    confirmButtonText: __('approve_and_assign_checker') || 'Approve & Assign Checker',
-                                    confirmButtonColor: APP_COLORS.success,
-                                    cancelButtonColor: APP_COLORS.danger,
-                                    showLoaderOnConfirm: true,
-                                    allowOutsideClick: false,
-                                    preConfirm: () => {
-                                        const checkerId = document.getElementById('asset_checker_emp_id').value;
-                                        const comment = document.getElementById('asset_checker_comment').value;
-
-                                        if (!checkerId) {
-                                            Swal.showValidationMessage(__('please_select_an_asset_checker') || 'Please select an asset checker');
-                                            return false;
-                                        }
-
-                                        return {
-                                            asset_checker_emp_id: checkerId,
-                                            approval_comment: comment
-                                        };
-                                    },
-                                    didOpen: () => {
-                                        const commentEl = document.getElementById('asset_checker_comment');
-                                        commentEl.addEventListener('input', function() {
-                                            document.getElementById('asset-checker-char-count').textContent = this.value.length;
-                                        });
-                                    }
-                                }).then((result) => {
-                                    if (result.isConfirmed) {
-                                        const payload = result.value || {};
-                                        const approvalData = {
-                                            asset_checker_emp_id: parseInt(payload.asset_checker_emp_id, 10),
-                                            approval_comment: payload.approval_comment || ''
-                                        };
-                                        sendApproval(vacationId, approvalData);
-                                    }
-                                });
-                            }).fail(function() {
-                                Swal.fire({
-                                    title: __('error') || 'Error',
-                                    text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
-                                    icon: 'error',
-                                    confirmButtonColor: APP_COLORS.danger
-                                });
                             });
                             return;
                         }
@@ -2362,7 +2338,9 @@ if ($can_see_all_depts) {
                 return;
             }
             
-            // For Encashed vacations or any other case not handled above, proceed with normal approval
+            // Not an Annual (Fly | annual) vacation - Emergency Fly, Local, Excuse,
+            // Encashed, or anything else - skip the asset checker flow entirely,
+            // even if the employee has assigned assets, and proceed normally.
             proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
         }
 

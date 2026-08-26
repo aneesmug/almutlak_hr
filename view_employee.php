@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/eos_estimate_helper.php';
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
@@ -85,6 +86,16 @@ if (mysqli_num_rows($query) == 1) {
 			($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_salary_value', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
+
+		// EOS estimate badge visible only to sys admin, HR, or an explicitly granted
+		// 'view_employee_eos_value' special access (App Settings -> Special Access).
+		$canViewEosValue = (
+			($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_eos_value', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
+		$eos_estimate = $canViewEosValue
+			? calculate_current_eos_estimate($conDB, $emprow['empid'] ?? '', $emprow['joining_date'] ?? '')
+			: null;
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -2539,9 +2550,8 @@ if (mysqli_num_rows($query) == 1) {
 										<p class="text-muted"><?= __('no_other_income_scheduled', 'No scheduled other income records.') ?></p>
 										<?php endif; ?>
 										<?php endif; // $canViewOtherIncome ?>
-										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>
-
 										</div>
+										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>
 										<div class="tab-pane" id="assets">
 											<h4 class="header-title m-t-0 m-b-30 mt-4"><?= __('assigned_assets') ?></h4>
 											<table id="assets_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
