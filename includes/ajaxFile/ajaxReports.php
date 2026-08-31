@@ -1813,13 +1813,18 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
                 $selectCols[] = 'p.total_deductions AS total_deductions';
                 break;
             case 'gosi_deduction':
-                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND UPPER(pd.deduction) = 'GOSI') AS gosi_deduction";
+                // NOTE: no pd.status filter - once a payroll month is marked "Paid",
+                // update_payroll_status.php flips payroll_deductions.status to 0 to mark
+                // rows as consumed, but they're still the deductions that were actually
+                // applied to that month's net salary (same reasoning get_payroll_report.php
+                // uses), so filtering status=1 here would zero out every already-paid month.
+                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND UPPER(pd.deduction) = 'GOSI') AS gosi_deduction";
                 break;
             case 'loan_deduction':
-                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND (pd.deduction LIKE '%Loan%' OR pd.deduction LIKE 'Advance Salary Deduction%')) AS loan_deduction";
+                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND (pd.deduction LIKE '%Loan%' OR pd.deduction LIKE 'Advance Salary Deduction%')) AS loan_deduction";
                 break;
             case 'other_deductions':
-                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND UPPER(pd.deduction) <> 'GOSI' AND pd.deduction NOT LIKE '%Loan%' AND pd.deduction NOT LIKE 'Advance Salary Deduction%') AS other_deductions";
+                $selectCols[] = "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND UPPER(pd.deduction) <> 'GOSI' AND pd.deduction NOT LIKE '%Loan%' AND pd.deduction NOT LIKE 'Advance Salary Deduction%') AS other_deductions";
                 break;
             case 'net_salary':
                 $selectCols[] = 'p.net_salary AS net_salary';
@@ -1861,9 +1866,9 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
             "(SELECT COALESCE(SUM(CAST(pb.note AS DECIMAL(10,2))), 0) FROM payroll_benefits pb WHERE pb.emp_id = p.emp_id AND pb.month = p.month_year AND pb.status = 1 AND COALESCE(pb.days, 0) > 0 AND COALESCE(pb.hours, 0) = 0 AND pb.calculation_type NOT IN ('overtime_basic', 'overtime_total')) AS days_benefit",
             "(SELECT COALESCE(SUM(CAST(pb.note AS DECIMAL(10,2))), 0) FROM payroll_benefits pb WHERE pb.emp_id = p.emp_id AND pb.month = p.month_year AND pb.status = 1 AND COALESCE(pb.hours, 0) = 0 AND COALESCE(pb.days, 0) = 0 AND pb.calculation_type NOT IN ('overtime_basic', 'overtime_total')) AS other_income_benefit",
             'p.total_deductions AS total_deductions',
-            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND UPPER(pd.deduction) = 'GOSI') AS gosi_deduction",
-            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND (pd.deduction LIKE '%Loan%' OR pd.deduction LIKE 'Advance Salary Deduction%')) AS loan_deduction",
-            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND pd.status = 1 AND UPPER(pd.deduction) <> 'GOSI' AND pd.deduction NOT LIKE '%Loan%' AND pd.deduction NOT LIKE 'Advance Salary Deduction%') AS other_deductions",
+            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND UPPER(pd.deduction) = 'GOSI') AS gosi_deduction",
+            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND (pd.deduction LIKE '%Loan%' OR pd.deduction LIKE 'Advance Salary Deduction%')) AS loan_deduction",
+            "(SELECT COALESCE(SUM(CAST(pd.note AS DECIMAL(10,2))), 0) FROM payroll_deductions pd WHERE pd.emp_id = p.emp_id AND pd.month = p.month_year AND UPPER(pd.deduction) <> 'GOSI' AND pd.deduction NOT LIKE '%Loan%' AND pd.deduction NOT LIKE 'Advance Salary Deduction%') AS other_deductions",
             'p.net_salary AS net_salary',
             'p.status AS status',
             'p.generated_at AS created_at'

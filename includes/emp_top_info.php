@@ -96,11 +96,14 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 
 // Build More Actions menu HTML organized by categories
 $moreActionsHtml = '';
-if ($emprow['status'] == 1) {
+if ($emprow['status'] == 1 && $user_type === 'archiving') {
+	// Archiving role: document upload only, none of the HR/management actions below.
+	$moreActionsHtml .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
+} elseif ($emprow['status'] == 1) {
 	// HR ACTIONS
 	$hr_actions = '';
-	
-	// Add Documents (HR only) 
+
+	// Add Documents (HR or Admin)
 	if ($isDeptHr || $isHR || $is_system_admin) {
 		$hr_actions .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 	}

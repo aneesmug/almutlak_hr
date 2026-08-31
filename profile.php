@@ -108,7 +108,7 @@ if ($emprow['status'] == 1) {
     // Sequence below mirrors includes/emp_top_info.php's More Actions order
     // (Loan -> Vacation -> Excuse Leave -> Rejoin -> Edit -> Resignation), limited
     // to the items that apply in this self-service context.
-    if (!$isLoanBlocked) {
+    if (!$isLoanBlocked && empty($emprow['has_active_regular_loan'])) {
         $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
     }
     $allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;

@@ -1284,6 +1284,7 @@ elseif($ajaxType == 'unassign_asset') {
     $stmt = mysqli_query($conDB, "SELECT * FROM `docu_type` ORDER BY `duc_type` REGEXP '^[^A-Za-z]' ASC, `duc_type`");
     $sub_type = []; // Initialize
     while($row = mysqli_fetch_assoc($stmt)) {
+        $row['duc_type_display'] = getDisplayName($row['duc_type']);
         $sub_type[] = $row;
     }
     mysqli_free_result($stmt); // <-- FIX

@@ -324,6 +324,7 @@ while ($rec = mysqli_fetch_array($query_emp_vac)) {
             'assistant'       : { title: 'Assistant Manager'},
             'employee'        : { title: 'Employee'},
             'general_manager' : { title: 'General Manager'},
+            'archiving'       : { title: 'Archiving'},
             // Legacy compatibility
             'gm'              : { title: 'General Manager'},
         };

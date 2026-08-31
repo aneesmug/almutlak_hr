@@ -679,6 +679,7 @@ function edit_user_HTML(){
                 <option value="employee">Employee</option>
                 <option value="gm">Grneran Manager</option>
                 <option value="hr">Human Resource</option>
+                <option value="archiving">Archiving</option>
             </select>
         </div>
         <div class="form-group col-md-4">

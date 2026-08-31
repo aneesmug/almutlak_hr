@@ -4420,7 +4420,7 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
                         let options = '';
                         for (let i in res.data) {
                             const docTypeVal = res.data[i].duc_type;
-                            const docTypeLabel = __(docTypeToTranslationKey(docTypeVal), docTypeVal);
+                            const docTypeLabel = res.data[i].duc_type_display || docTypeVal;
                             options += `<option value="${docTypeVal}">${docTypeLabel}</option>`;
                         }
                             options += `<option value="Others">${__('others')}</option>`;
@@ -8384,7 +8384,8 @@ function create_user_HTML() {
         { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
         { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
         { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
-        
+        { value: 'archiving', label: __('archiving') || 'Archiving', group: 'dept' },
+
         // Legacy Roles (for backward compatibility)
         { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
         { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },
@@ -8518,7 +8519,8 @@ function edit_user_HTML(){
         { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
         { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
         { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
-        
+        { value: 'archiving', label: __('archiving') || 'Archiving', group: 'dept' },
+
         // Legacy Roles (for backward compatibility)
         { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
         { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },

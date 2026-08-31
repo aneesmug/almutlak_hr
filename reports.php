@@ -1265,10 +1265,12 @@ if (mysqli_num_rows($query) == 1) {
                             { value: 'generated', label: (typeof __ === 'function') ? __('generated') : 'Generated' },
                             { value: 'updated', label: (typeof __ === 'function') ? __('updated') : 'Updated' }
                         ],
-                        // Default to Paid so totals match the live/authoritative figures
-                        // (Payroll Summary Report) instead of mixing in still-pending
-                        // generated/updated rows that were never actually paid out.
-                        defaultValue: 'paid'
+                        // Default to All Status - a month that hasn't been marked Paid yet
+                        // (still "generated"/"updated") must keep showing here, otherwise the
+                        // report goes blank for the current in-progress month. Pick "Paid"
+                        // manually once a month is finalized to match the Payroll Summary
+                        // Report totals exactly.
+                        defaultValue: ''
                     },
                     salary_increment: {
                         options: [
@@ -3502,7 +3504,14 @@ if (mysqli_num_rows($query) == 1) {
                                 console.log('Response data row 0 keys:', response.data && response.data.length > 0 ? Object.keys(response.data[0]) : 'No data');
                                 console.log('Response data row 0:', response.data && response.data.length > 0 ? response.data[0] : 'No data');
                                 displayReport(response.data, response.headers, reportType, selectedColumns, filterData.columns);
-                                $('#exportExcelBtn, #exportPdfBtn').show();
+                                // Only show export buttons when there's an actual DataTable to
+                                // export - showing them over an empty/no-data state means the
+                                // click just fails silently since DataTable() was never inited.
+                                if (response.data && response.data.length > 0) {
+                                    $('#exportExcelBtn, #exportPdfBtn').show();
+                                } else {
+                                    $('#exportExcelBtn, #exportPdfBtn').hide();
+                                }
                             } else {
                                 Swal.fire({
                                     icon: 'error',
@@ -3524,6 +3533,16 @@ if (mysqli_num_rows($query) == 1) {
                 });
 
                 function displayReport(data, headers, reportType, selectedColumnsOrder, columnIds) {
+                    // Escape raw cell text so a stray '<', '>' or '&' in a name/note field
+                    // can't be parsed as markup and corrupt the table's row/column structure
+                    // (which is what confuses DataTables' column auto-detection on init).
+                    function escapeCellHtml(value) {
+                        return String(value)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                    }
+
                     // Helper: translate status keys using global __()
                     function translateStatusKey(key) {
                         if (!key) return '';
@@ -3566,11 +3585,21 @@ if (mysqli_num_rows($query) == 1) {
                         columnIds = ['entry_number', 'asset_name', 'asset_type', 'tracking_id', 'emp_id', 'employee_name', 'employee_department', 'assigned_date', 'return_date', 'status', 'description'];
                     }
 
-                    // Ensure headers and columnIds have same length
+                    // Ensure headers and columnIds have same length - a mismatch here means
+                    // every row would end up with a different <td> count than the <th> count,
+                    // which is exactly what breaks DataTables' column auto-detection on init
+                    // (surfaces as a cryptic "aDataSort"/"nTableWrapper" error). Bail out with
+                    // a clear message instead of building/initializing a broken table.
                     if (headers.length !== columnIds.length) {
                         console.error('MISMATCH: Headers length (' + headers.length + ') != Column IDs length (' + columnIds.length + ')');
                         console.error('Headers:', headers);
                         console.error('Column IDs:', columnIds);
+                        Swal.fire({
+                            icon: 'error',
+                            title: (typeof __ === 'function') ? __('table_structure_error') : 'Table Structure Error',
+                            text: (typeof __ === 'function') ? __('column_count_mismatch') + ' ' + __('headers') + ': ' + headers.length + ', ' + __('data_columns') + ': ' + columnIds.length : 'Column count mismatch. Headers: ' + headers.length + ', Data columns: ' + columnIds.length
+                        });
+                        return;
                     }
 
                     // Payroll report shows every selected column directly instead of
@@ -3638,6 +3667,13 @@ if (mysqli_num_rows($query) == 1) {
                                     }
                                 }
 
+                                // Escape raw text before deciding on status-badge formatting -
+                                // badge markup below is built from controlled strings, so it's
+                                // applied after this and is safe as-is.
+                                if (cell !== null && cell !== undefined && cell !== '') {
+                                    cell = escapeCellHtml(cell);
+                                }
+
                                 // Apply status badge formatting for status columns
                                 if (cell !== null && cell !== undefined && cell !== '') {
                                     const lowerCell = String(cell).toLowerCase();
@@ -3690,10 +3726,18 @@ if (mysqli_num_rows($query) == 1) {
                     // console.log('Body HTML length:', bodyHtml.length);
                     // console.log('Header columns:', headers.length, 'Body columns per row:', columnIds.slice(0, headers.length).length);
 
-                    // Totals footer row for the payroll report - sums every numeric column
-                    // (Basic, Housing, Benefits, Deductions, Net...) and shows the actual
-                    // employee count once, instead of a per-row Total Employees column.
-                    let footerHtml = '';
+                    // Totals row for the payroll report - sums every numeric column (Basic,
+                    // Housing, Benefits, Deductions, Net...) and shows the actual employee
+                    // count once, instead of a per-row Total Employees column.
+                    //
+                    // Built as a plain array (footerCells), not a <tfoot> handed to
+                    // DataTables at init - this old bundled DataTables version breaks
+                    // ("aDataSort"/"nTableWrapper" errors) when a real <tfoot> with content
+                    // is present at init time together with the Buttons extension. Instead
+                    // the row is appended to the live table AFTER DataTables has finished
+                    // initializing (purely visual, DataTables never parses it), and pushed
+                    // into the export data via customizeData for Excel/PDF.
+                    let footerCells = null;
                     if (reportType === 'payroll' && data.length > 0) {
                         const numericPayrollColumns = new Set([
                             'total_salary', 'basic_salary', 'housing_allowance', 'transport_allowance',
@@ -3709,46 +3753,20 @@ if (mysqli_num_rows($query) == 1) {
                         });
 
                         let employeeCountShown = false;
-                        footerHtml = '<tr class="report-totals-row" style="background-color:#eaf7ee;font-weight:600;">';
-                        if (showControlColumn) {
-                            footerHtml += '<td></td>';
-                        }
-                        columnIds.forEach(function(columnId) {
+                        footerCells = columnIds.map(function(columnId) {
                             if (numericPayrollColumns.has(columnId)) {
                                 const sum = data.reduce((acc, row) => acc + (parseFloat(row[columnId]) || 0), 0);
-                                footerHtml += `<td>${formatTotal(sum)}</td>`;
+                                return formatTotal(sum);
                             } else if (!employeeCountShown) {
                                 const totalEmployeesLabel = (typeof __ === 'function') ? __('total_employees') : 'Total Employees';
-                                footerHtml += `<td>${totalEmployeesLabel}: ${data.length}</td>`;
                                 employeeCountShown = true;
-                            } else {
-                                footerHtml += '<td></td>';
+                                return `${totalEmployeesLabel}: ${data.length}`;
                             }
+                            return '';
                         });
-                        footerHtml += '</tr>';
                     }
 
                     // (Delay applying header/body until after potential wrapper cleanup)
-
-                    // console.log('Table body HTML set, checking DOM...');
-                    // console.log('Rows in tbody:', $('#reportTableBody tr').length);
-
-                    // CRITICAL: Verify column counts match
-                    const firstRow = $('#reportTableBody tr:first');
-                    const tdCount = firstRow.find('td').length;
-                    const thCount = $('#reportTableHead th').length;
-                    // console.log('TH count:', thCount, 'TD count in first row:', tdCount);
-
-                    if (thCount !== tdCount && data.length > 0) {
-                        console.error('COLUMN MISMATCH! TH:', thCount, 'TD:', tdCount);
-                        console.error('This will cause DataTables to fail');
-                        Swal.fire({
-                            icon: 'error',
-                            title: (typeof __ === 'function') ? __('table_structure_error') : 'Table Structure Error',
-                            text: (typeof __ === 'function') ? __('column_count_mismatch') + ' ' + __('headers') + ': ' + thCount + ', ' + __('data_columns') + ': ' + tdCount : 'Column count mismatch. Headers: ' + thCount + ', Data columns: ' + tdCount
-                        });
-                        return;
-                    }
 
                     // Update title with translation: reports
                     var reportWord = (typeof __ === 'function') ? __('reports') || 'Reports' : 'Reports';
@@ -3776,15 +3794,29 @@ if (mysqli_num_rows($query) == 1) {
                                 console.error('Error destroying DataTable in displayReport:', e);
                             }
                         }
+                        // Defense in depth: if destroy() above failed partway (corrupted
+                        // internal state, e.g. a null nTableWrapper), it can leave a stale
+                        // entry in DataTables' own settings registry that isn't tied to the
+                        // DOM node we're about to replace - purge it directly so the next
+                        // init doesn't inherit broken column bookkeeping from it.
+                        if ($.fn.dataTable && $.fn.dataTable.settings) {
+                            for (let i = $.fn.dataTable.settings.length - 1; i >= 0; i--) {
+                                const s = $.fn.dataTable.settings[i];
+                                if (s && s.nTable && s.nTable.id === 'reportTable') {
+                                    $.fn.dataTable.settings.splice(i, 1);
+                                }
+                            }
+                        }
                         // Remove previous DataTables wrapper if exists
                         if ($('#reportTable_wrapper').length) {
                             $('#reportTable_wrapper').remove();
                         }
-                        // Rebuild single clean table markup
+                        // Rebuild single clean table markup - no <tfoot> here, see the
+                        // footerCells comment above for why it's appended after DataTables
+                        // has finished initializing instead.
                         const tableMarkup = '<table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" width="100%">' +
                             '<thead id="reportTableHead">' + headerHtml + '</thead>' +
                             '<tbody id="reportTableBody">' + bodyHtml + '</tbody>' +
-                            (footerHtml ? '<tfoot id="reportTableFoot">' + footerHtml + '</tfoot>' : '') +
                             '</table>';
                         $('#reportTableContainer').html(tableMarkup);
 
@@ -3884,9 +3916,6 @@ if (mysqli_num_rows($query) == 1) {
                                         {
                                             extend: 'excel',
                                             filename: filename,
-                                            // Include the payroll totals <tfoot> row in the exported file.
-                                            // NOTE: `footer` is a button-level option, not an exportOptions key.
-                                            footer: true,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
                                                     // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports
@@ -3901,12 +3930,20 @@ if (mysqli_num_rows($query) == 1) {
                                                     search: 'applied',
                                                     order: 'applied'
                                                 }
+                                            },
+                                            // Append the payroll totals row to the exported data directly
+                                            // (see footerCells comment above - avoids handing DataTables a
+                                            // real <tfoot> at init, which is what broke this old bundled
+                                            // version with the Buttons extension).
+                                            customizeData: function(data) {
+                                                if (footerCells) {
+                                                    data.body.push(footerCells);
+                                                }
                                             }
                                         },
                                         {
                                             extend: 'pdf',
                                             filename: filename,
-                                            footer: true,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
                                                     // Export all columns except the last one (Actions/Attachment) for evaluation, document, assets_list, eos, and terminated_employees reports
@@ -3920,6 +3957,11 @@ if (mysqli_num_rows($query) == 1) {
                                                     page: 'all',
                                                     search: 'applied',
                                                     order: 'applied'
+                                                }
+                                            },
+                                            customizeData: function(data) {
+                                                if (footerCells) {
+                                                    data.body.push(footerCells);
                                                 }
                                             }
                                         },
@@ -3946,6 +3988,21 @@ if (mysqli_num_rows($query) == 1) {
                                         processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
                                     }
                                 });
+
+                                // Append the payroll totals row AFTER DataTables has finished
+                                // initializing - purely visual, DataTables never parses/manages
+                                // it (see footerCells comment above for why).
+                                if (footerCells) {
+                                    let footerRowHtml = '<tr class="report-totals-row" style="background-color:#eaf7ee;font-weight:600;">';
+                                    if (showControlColumn) {
+                                        footerRowHtml += '<td></td>';
+                                    }
+                                    footerCells.forEach(function(cellText) {
+                                        footerRowHtml += `<td>${escapeCellHtml(cellText)}</td>`;
+                                    });
+                                    footerRowHtml += '</tr>';
+                                    $(table.table().node()).append('<tfoot>' + footerRowHtml + '</tfoot>');
+                                }
 
                                 // Handle detail row click
                                 $('#reportTable').on('click', 'td.dt-control', function() {

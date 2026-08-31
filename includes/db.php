@@ -370,7 +370,11 @@ mysqli_query($conDB, "SET SESSION wait_timeout = 15, SESSION interactive_timeout
 register_shutdown_function(function () use ($conDB) {
     global $pdo;
     if ($conDB instanceof mysqli) {
-        @mysqli_close($conDB);
+        try {
+            @mysqli_close($conDB);
+        } catch (\Throwable $e) {
+            // Already closed explicitly earlier in the script (e.g. $conDB->close()) - ignore.
+        }
     }
     $pdo = null;
 });

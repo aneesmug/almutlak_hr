@@ -4262,13 +4262,19 @@ if (!function_exists('update_vacation_balance_on_approval')) {
         // [NEW] Check if this is a DEDUCTIBLE vacation
         // ONLY these types will deduct from balance:
         // - Local Vacation with fly_type = 'annual'
+        // - Fly with fly_type = 'annual'
         // - Encashed (handled below)
-        // Fly | Annual is deducted on rejoin (not here)
         // ALL Emergency types are NON-DEDUCTIBLE
+        // NOTE: Must stay in sync with the mirrored $is_deductible_type check in the
+        // refund function below (refund_vacation_balance_on_cancel) - both must agree
+        // on which types were deducted at approval, or cancellations will over/under-refund.
         $is_deductible_type = false;
-        
-        // Local Annual vacations are deductible from balance
-        if ($vac_details['vac_type'] == 'Local Vacation' && $vac_details['fly_type'] == 'annual') {
+
+        // Local Annual and Fly Annual vacations are deductible from balance
+        if (
+            ($vac_details['vac_type'] == 'Local Vacation' && $vac_details['fly_type'] == 'annual') ||
+            ($vac_details['vac_type'] == 'Fly' && $vac_details['fly_type'] == 'annual')
+        ) {
             $is_deductible_type = true;
         }
         
@@ -5884,6 +5890,7 @@ if (!function_exists('canAccessCompany')) {
  * - HR roles, HR Payroll, or anyone in HR department (dept 5)
  * - Administration department (dept 1)
  * - Finance Manager (role/user_type/department-manager mapping)
+ * - Archiving user_type (needs every employee's documents, across companies/departments)
  *
  * NOTE: Finance Officer is intentionally NOT full-access.
  *
@@ -5918,6 +5925,8 @@ if (!function_exists('canSeeAllEmployeesByRole')) {
             || $resolvedUserRole === 'finance_manager'
             || ($resolvedUserDept === 2 && $resolvedEmpType === 'manager');
 
+        $isArchivingResolved = $resolvedUserType === 'archiving';
+
         require_once __DIR__ . '/special_access_helper.php';
         $isManualFullAccess = ($resolvedEmpId > 0) && user_has_special_access(
             $conDB,
@@ -5934,6 +5943,7 @@ if (!function_exists('canSeeAllEmployeesByRole')) {
             || $isHRResolved
             || $isAdministrationResolved
             || $isFinanceManagerResolved
+            || $isArchivingResolved
             || $isManualFullAccess
         );
     }
@@ -5965,6 +5975,7 @@ if (!function_exists('canSeeAllEmployeesByRoleParams')) {
         $isAdministrationResolved = $resolvedUserDept === 1;
         $isFinanceManagerResolved = $resolvedUserType === 'finance'
             || ($resolvedUserDept === 2 && $resolvedEmpType === 'manager');
+        $isArchivingResolved = $resolvedUserType === 'archiving';
 
         require_once __DIR__ . '/special_access_helper.php';
         $isManualFullAccess = ($resolvedEmpId > 0) && user_has_special_access(
@@ -5982,6 +5993,7 @@ if (!function_exists('canSeeAllEmployeesByRoleParams')) {
             || $isHRResolved
             || $isAdministrationResolved
             || $isFinanceManagerResolved
+            || $isArchivingResolved
             || $isManualFullAccess
         );
     }

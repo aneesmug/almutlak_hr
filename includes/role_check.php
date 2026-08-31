@@ -53,6 +53,7 @@ $role_mapping = [
     'finance' => 'Finance_Manager',
     'dept_user' => 'DPT_Manager',
     'employee' => 'Employee',
+    'archiving' => 'Archiving',
 ];
 
 // Department-based role mapping (when user_type matches department role pattern)

@@ -475,6 +475,9 @@ if (mysqli_num_rows($query) == 1) {
                     'general_manager': {
                         title: 'General Manager'
                     },
+                    'archiving': {
+                        title: 'Archiving'
+                    },
                     // Legacy compatibility
                     'gm': {
                         title: 'General Manager'
