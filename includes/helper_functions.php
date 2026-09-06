@@ -2776,7 +2776,10 @@ if (!function_exists('handle_approval_action')) {
 
                             // Rules:
                             // - Fly | Annual: stay approved until travel email + payments + adjustments handled
-                            // - Local | Annual: keep review = 'A'; rejoining will close it later
+                            // - Local | Annual: stay approved until HR Payroll enters overtime/deductions
+                            //   (all_applied_vac.php only shows the Adjustments button while current_status
+                            //   is 'approved'; completing here would hide it, so completion is deferred to
+                            //   the updateVacationAdjustments handler in leaveHandler.php)
                             // - Encashed: close immediately after final approval (review = 'C')
                             // - Fly | Emergency: stay approved; close only on rejoin (review = 'A')
                             // - Local | Emergency: keep review = 'A'; rejoining will close it later
@@ -2788,10 +2791,7 @@ if (!function_exists('handle_approval_action')) {
                             } elseif ($is_local_emergency && !$is_asset_clearance) {
                                 $final_status = 'completed';
                                 $review_status = 'A'; // Keep active until rejoin closes it
-                            } elseif ($is_local_annual && !$is_asset_clearance) {
-                                $final_status = 'completed';
-                                $review_status = 'A'; // Keep active until rejoin closes it
-                            } elseif (!$is_annual_fly && !$is_fly_emergency && !$is_asset_clearance) {
+                            } elseif (!$is_annual_fly && !$is_fly_emergency && !$is_local_annual && !$is_asset_clearance) {
                                 $final_status = 'completed';
                                 $review_status = 'A'; // Active
                             }

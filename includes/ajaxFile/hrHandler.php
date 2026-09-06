@@ -210,8 +210,15 @@ if($ajaxType == 'emp_search') {
     // applicant's own department - drop the department restriction entirely for them.
     $replacement_shows_all_departments = $for_replacement && !empty($isHR_Assistant);
 
+    // Finance (2) and Sales (14) applicants must be able to pick a replacement from
+    // that same department company-wide, ignoring the requester's own company scope.
+    $company_wide_replacement_depts = [2, 14];
+    $replacement_bypass_company = $for_replacement && !$replacement_shows_all_departments && in_array($dept, $company_wide_replacement_depts, true);
+
     if ($replacement_shows_all_departments) {
         $where_clause = "`e`.`status`=1".$company_filter;
+    } elseif ($replacement_bypass_company) {
+        $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept";
     } else {
         $where_clause = "`e`.`status`=1 AND `e`.`dept`=$dept".$company_filter.$department_filter;
     }

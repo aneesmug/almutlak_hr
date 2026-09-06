@@ -40,7 +40,8 @@ $canForceShowUpdateSalary = (
 $showUpdateSalaryBtn = (
 	!$hasSalaryRecord ||
 	((string)($emprow['salary_update_pending'] ?? '0') === '1') ||
-	((string)($emprow['force_show_update_salary_btn'] ?? '0') === '1')
+	((string)($emprow['force_show_update_salary_btn'] ?? '0') === '1') ||
+	$canForceShowUpdateSalary
 );
 
 // Effective request-block status for this employee (global block XOR employee override),
