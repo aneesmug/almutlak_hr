@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
+$can_add_car = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'cars_add', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$can_edit_car = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'cars_edit', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$can_delete_car = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'cars_delete', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -162,8 +166,10 @@ WHERE `cars`.`status` = '1';
                                                             <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
                                                                 <a href='./view_car.php?id=<?= $rec['id'] ?>' class='dropdown-item text-dark'><i class="mdi mdi-eye-outline mr-2"></i></i><?= __('open') ?></a>
-                                                                <a href='javascript:void(0);' class='dropdown-item text-custom editCarAttr' data-id="<?= $rec['id'] ?>" data-maker_name="<?= $rec['mkid'] ?>" data-model="<?= $rec['mdid'] ?>" data-made_year="<?= $rec['made_year'] ?>" data-plate_no="<?= $rec['plate_no'] ?>" data-type="<?= $rec['type'] ?>" data-remarks="<?= $rec['remarks'] ?>" data-status="<?= $rec['status'] ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i><?= __('edit') ?></a>
-                                                                <?php if ($user_type == $access1) { ?>
+                                                                <?php if ($can_edit_car) { ?>
+                                                                    <a href='javascript:void(0);' class='dropdown-item text-custom editCarAttr' data-id="<?= $rec['id'] ?>" data-maker_name="<?= $rec['mkid'] ?>" data-model="<?= $rec['mdid'] ?>" data-made_year="<?= $rec['made_year'] ?>" data-plate_no="<?= $rec['plate_no'] ?>" data-type="<?= $rec['type'] ?>" data-remarks="<?= $rec['remarks'] ?>" data-status="<?= $rec['status'] ?>"><i class='fa fa-edit mr-2 font-18 vertical-middle'></i><?= __('edit') ?></a>
+                                                                <?php } ?>
+                                                                <?php if ($can_delete_car) { ?>
                                                                     <a href='javascript:void(0);' class='dropdown-item  text-danger deleteAjax' data-id='<?= $rec['id'] ?>' data-tbl='cars' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('delete') ?></a>
                                                                 <?php } ?>
                                                             </div>
@@ -281,6 +287,7 @@ WHERE `cars`.`status` = '1';
                     title: exportTitle,
                     className: 'btn-dark'
                 });
+<?php if ($can_add_car): ?>
                 buttonConfig.push({
                     text: '<i class="mdi mdi-car-connected"></i> Add Car',
                     action: function(e, dt, button, config) {
@@ -288,6 +295,7 @@ WHERE `cars`.`status` = '1';
                     },
                     className: 'btn-info'
                 });
+                <?php endif; ?>
                 /*
                         buttonConfig.push({text: '<i class="mdi mdi-library-plus"></i> Add Car Model', action: function ( e, dt, button, config ) { addCarFunc() } ,className: 'btn-dark'});*/
 

@@ -10,7 +10,18 @@ header('Content-Type: application/json');
 // Using PDO is crucial for security.
 require_once __DIR__ . '/../../includes/db.php'; // This should provide the $pdo object.
 require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../../includes/special_access_helper.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function ---
+
+// Per-table Special Access delete gate for a handful of tables whose list
+// pages (Cars/Locations/Asset Inventory) now expose a granular *_delete key
+// instead of the old hardcoded admin-only check. Every other table keeps its
+// existing behavior (any authenticated user) - only these three are scoped.
+const SPECIAL_ACCESS_DELETE_KEYS = [
+    'cars'        => 'cars_delete',
+    'section'     => 'locations_delete',
+    'asset_items' => 'asset_inventory_delete',
+];
 // 2. File Path Mapping:
 // Maps a table name to its corresponding file directory for tables WITH attachments.
 const PATH_MAP = [
@@ -42,6 +53,13 @@ if (!$table_name || !$record_id) {
 // Security Check: If a column is specified, ensure it's in our whitelist.
 if ($column_name && !in_array($column_name, $allowed_columns)) {
     send_json_response("Forbidden", "Invalid column specified for file deletion.", "error", 403);
+}
+
+if (isset(SPECIAL_ACCESS_DELETE_KEYS[$table_name])) {
+    $canDeleteRecord = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', SPECIAL_ACCESS_DELETE_KEYS[$table_name], $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    if (!$canDeleteRecord) {
+        send_json_response("Forbidden", "You do not have permission to delete this record.", "error", 403);
+    }
 }
 // --- Main Logic ---
 try {

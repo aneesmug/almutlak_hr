@@ -549,6 +549,7 @@ $isSupervisor = (isset($emprow['supervisor_id']) && $emprow['supervisor_id'] !==
 
 // Other Specific Roles
 $isGR_Officer = ($user_type === 'gr_officer');
+$isGR_Manager = ($user_type === 'dept_user' && $emp_type === 'Manager' && $user_dept == 1); // GR Department Manager
 $isAssistant = ($user_type === 'assistant'); // Generic assistant role
 $isItTeam = ($user_dept == 6); // Anyone in IT Department
 $isItAssistant = ($user_type === 'it' && $user_dept == 6 && $emp_type === 'Supporter'); // IT Department Assistant
@@ -575,7 +576,16 @@ if (defined('SKIP_PAGE_ACCESS_CONTROL') && SKIP_PAGE_ACCESS_CONTROL === true) {
     $is_ajax_file = true;
 }
 
-if (!$is_ajax_file && ($user_type ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true)) {
+// An explicit per-user Special Access grant (App Settings > Special Access >
+// Page Access) lets one specific employee reach a page outside the default
+// EMPLOYEE_ALLOWED_PAGES list, without changing their role or widening access
+// for every other employee. Key follows the 'access_<page-slug>' convention
+// used throughout get_special_access_page_labels().
+require_once __DIR__ . '/special_access_helper.php';
+$current_page_special_key = 'access_' . strtolower(pathinfo($current_page, PATHINFO_FILENAME));
+$has_current_page_special_access = user_has_special_access($conDB, $empid ?? '', $current_page_special_key, '', $user_type ?? '', false);
+
+if (!$is_ajax_file && ($user_type ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true) && !$has_current_page_special_access) {
     header("Location: ./profile.php");
     exit();
 }

@@ -1493,7 +1493,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
                 url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
-                data:{ajaxType:"emp_search"},
+                data:{ajaxType:"car_driver_search"},
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
@@ -1599,8 +1599,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
     })
 });
 
-// * working fine but disabled as per request */
-/* $(document).on('click', '.addDrvrAtter', function (e) {
+$(document).on('click', '.addDrvrAtter', function (e) {
     e.preventDefault();
     var cid = $(this).data('id');
     Swal.fire({
@@ -1627,7 +1626,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
                 url: './includes/ajaxFile/hrHandler.php',
                 dataType: 'JSON',
                 type: 'POST',
-                data:{ajaxType:"emp_search"},
+                data:{ajaxType:"car_driver_search"},
                 success: function(res) {
                     if (res.status == 200) {
                         let options = '';
@@ -1671,7 +1670,7 @@ $(document).on('click', '.addMaintAttr', function (e) {
             });
         },
     })
-}); */
+});
 
 $(document).on('click', '.addRtrnDrvrAtter', function (e) {
     e.preventDefault();

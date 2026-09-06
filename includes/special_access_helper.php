@@ -48,6 +48,15 @@ if (!function_exists('get_special_access_labels')) {
             'view_employee_banking_details' => 'Employee Master: View Banking/IBAN/GOSI Details',
             'view_employee_documents' => 'Employee Master: View Uploaded Documents (Passport/Iqama, etc.)',
             'request_employee_transfer' => 'Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)',
+            'cars_add' => 'Cars: Add New Car',
+            'cars_edit' => 'Cars: Edit Car',
+            'cars_delete' => 'Cars: Delete Car',
+            'locations_add' => 'Locations: Add New Location',
+            'locations_edit' => 'Locations: Edit Location',
+            'locations_delete' => 'Locations: Delete Location',
+            'asset_inventory_add' => 'Asset Inventory: Add New Asset',
+            'asset_inventory_edit' => 'Asset Inventory: Edit Asset',
+            'asset_inventory_delete' => 'Asset Inventory: Delete Asset',
         ] + get_special_access_page_labels();
     }
 }
@@ -60,7 +69,7 @@ if (!function_exists('get_special_access_page_labels')) {
      * without changing their role or giving them any other management ability.
      */
     function get_special_access_page_labels() {
-        return [
+        $labels = [
             'access_all_applied_vac' => 'Access Page: All Applied Vacations',
             'access_all_applied_loan' => 'Access Page: All Applied Loans',
             'access_all_applied_business_trip' => 'Access Page: All Applied Business Trips',
@@ -81,6 +90,27 @@ if (!function_exists('get_special_access_page_labels')) {
             'access_import_loan_opening_balance' => 'Access Page: Import Loan Opening Balance',
             'access_import_iqama_exp' => 'Access Page: Import Iqama Expiry',
         ];
+
+        // Auto-add every other role-controlled page (App Settings > Page Access)
+        // that doesn't already have a dedicated key above, using the generic
+        // 'access_<page-slug>' convention - so any page in that list can be
+        // granted to one specific employee/user regardless of their role,
+        // without needing a hand-written entry here every time a page is added.
+        require_once __DIR__ . '/page_access_helper.php';
+        foreach (get_page_access_labels() as $page => $pageLabel) {
+            // app_settings.php and vacation_balance_history.php already have their
+            // own dedicated bypass keys (manage_*_settings / view_vacation_balance_history).
+            if ($page === 'app_settings.php' || $page === 'vacation_balance_history.php') {
+                continue;
+            }
+            $key = 'access_' . strtolower(pathinfo($page, PATHINFO_FILENAME));
+            if (isset($labels[$key])) {
+                continue;
+            }
+            $labels[$key] = 'Access Page: ' . $pageLabel;
+        }
+
+        return $labels;
     }
 }
 
@@ -162,6 +192,20 @@ if (!function_exists('get_special_access_categories')) {
                 'icon' => 'fa-plane',
                 'keys' => [
                     'add_business_trip_manual_allowance',
+                ],
+            ],
+            'Cars, Locations & Assets' => [
+                'icon' => 'fa-warehouse',
+                'keys' => [
+                    'cars_add',
+                    'cars_edit',
+                    'cars_delete',
+                    'locations_add',
+                    'locations_edit',
+                    'locations_delete',
+                    'asset_inventory_add',
+                    'asset_inventory_edit',
+                    'asset_inventory_delete',
                 ],
             ],
             'Other Special Actions' => [

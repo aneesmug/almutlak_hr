@@ -32,6 +32,30 @@ if($ajaxType == 'emp_search') {
         'status'    => 200
     ];
     echo json_encode($data);
+} elseif($ajaxType == 'car_driver_search') {
+    // Full, unscoped active-employee list for car driver/maintenance assignment.
+    // Company vehicles get assigned to any employee company-wide, not just the
+    // acting user's own company/department/direct-report scope - so this
+    // intentionally skips getCompanyFilterSQL/getDepartmentFilterSQL/
+    // getEmployeeFilterSQL. `fly`=0 excludes employees currently on vacation;
+    // `status`=1 excludes terminated ones. Restricted to the same roles that
+    // can manage cars (see includes/page_access_helper.php: all_cars.php /
+    // view_car.php) - use the already-resolved session booleans rather than
+    // re-deriving from $user_role/$user_type strings.
+    $can_search_all_for_cars = !empty($is_system_admin) || !empty($isGR_Officer) || !empty($isGR_Manager);
+
+    if (!$can_search_all_for_cars) {
+        echo json_encode(['data' => [], 'status' => 403]);
+    } else {
+        $stmt = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `status`=1 AND `fly`=0 ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name` ");
+        $name = [];
+        while ($row = mysqli_fetch_assoc($stmt)) {
+            $row['name'] = parseName($row['name']);
+            $name[] = $row;
+        }
+        mysqli_free_result($stmt);
+        echo json_encode(['data' => $name, 'status' => 200]);
+    }
 } elseif($ajaxType == 'emp_search_select2') {
     // Select2 AJAX search - for reports employee filter
     // Returns data in format: [{emp_id: "...", name: "...", department: "..."}]

@@ -1,8 +1,17 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
 	require_once __DIR__ . '/../../includes/session_check.php';
+	require_once __DIR__ . '/../../includes/special_access_helper.php';
+	require_once __DIR__ . '/../../includes/helper_functions.php';
 
 $ajaxType = $_POST['ajaxType'];
+
+if ($ajaxType === 'add_location' || $ajaxType === 'edit_location') {
+    $canManageLocation = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', $ajaxType === 'add_location' ? 'locations_add' : 'locations_edit', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    if (!$canManageLocation) {
+        send_json_response('Error!', 'Access denied.', 'error', 403);
+    }
+}
 
 if ($ajaxType == 'add_location') {
     $section_name = mysqli_real_escape_string($conDB, $_POST['section_name']);

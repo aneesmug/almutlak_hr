@@ -1,21 +1,30 @@
 <?php
     require_once __DIR__ . '/includes/session_check.php';
+    require_once __DIR__ . '/includes/special_access_helper.php';
     include(__DIR__ . '/includes/avatar_select.php');
-    
+
     // Determine user role and allowed assets
     $userType = $_SESSION['user_type'] ?? '';
     $empType = $_SESSION['emp_type'] ?? '';
     $isSystemAdmin = $is_system_admin ?? false;
-    
+
+    // Per-user Special Access grants (App Settings > Special Access), independent
+    // of the role-based asset-type restriction below.
+    $can_add_asset = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_add', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+    $can_edit_asset = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_edit', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+    $can_delete_asset = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_delete', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
+
     // Define role-based asset access (exclusive - each role only sees their assets)
     $roleAssetAccess = [
         'it' => ['Laptop'],           // IT can only manage Laptops
         'gr_officer' => ['SIM Card', 'Car', 'Mobile Phone'] // GR Officer can only manage SIM Card, Car, Mobile Phone
     ];
-    
-    // Determine allowed assets for current user
+
+    // Determine allowed assets for current user. A 'asset_inventory_add' Special
+    // Access grant lifts the role-based asset-type restriction the same way
+    // being a system admin does, without granting any other admin ability.
     $allowedAssets = [];
-    if ($isSystemAdmin) {
+    if ($isSystemAdmin || $can_add_asset) {
         $allowedAssets = []; // Empty means all assets
     } else {
         $allowedAssets = $roleAssetAccess[$userType] ?? [];
@@ -83,9 +92,11 @@
                             <div class="card-box table-responsive">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h4 class="m-t-0 header-title"><?= __('asset_inventory', 'Asset Inventory') ?></h4>
+                                    <?php if ($can_add_asset): ?>
                                     <button id="btn-add-asset" type="button" class="btn btn-primary btn-sm waves-effect waves-light">
                                         <i class="mdi mdi-plus-circle mr-2"></i><?= __('add_asset', 'Add Asset') ?>
                                     </button>
+                                    <?php endif; ?>
                                 </div>
 
                                 <div id="response"></div>
@@ -158,20 +169,24 @@
             userType: '<?= htmlspecialchars($userType) ?>',
             empType: '<?= htmlspecialchars($empType) ?>',
             isSystemAdmin: <?= $isSystemAdmin ? 'true' : 'false' ?>,
+            // Special Access grants (App Settings > Special Access), independent of role
+            canAdd: <?= $can_add_asset ? 'true' : 'false' ?>,
+            canEdit: <?= $can_edit_asset ? 'true' : 'false' ?>,
+            canDelete: <?= $can_delete_asset ? 'true' : 'false' ?>,
             // Allowed assets for this user
             allowedAssets: <?= json_encode($allowedAssets) ?>,
             // Excluded assets for this user (exclusive filtering)
             excludedAssets: function() {
-                if (this.isSystemAdmin) return [];
+                if (this.isSystemAdmin || this.canAdd) return [];
                 if (this.userType === 'it') return ['SIM Card', 'Car', 'Mobile Phone'];
                 if (this.userType === 'gr_officer') return ['Laptop'];
                 return [];
             }
         };
-        
+
         // Check if user can access asset type
         function canAccessAsset(assetName) {
-            if (userRole.isSystemAdmin) return true;
+            if (userRole.isSystemAdmin || userRole.canAdd) return true;
             if (userRole.allowedAssets.length === 0) return false;
             return userRole.allowedAssets.includes(assetName);
         }
@@ -231,10 +246,10 @@
                                             <i class="mdi mdi-dots-horizontal"></i>
                                         </a>
                                         <div class="dropdown-menu dropdown-menu-right">
-                                            ${row.status !== 'Assigned' ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-custom editAssetBtn" 
-                                                data-id="${row.id}" 
-                                                data-asset_id="${row.asset_id}" 
+                                            ${(row.status !== 'Assigned' && userRole.canEdit) ? `
+                                            <a href="javascript:void(0);" class="dropdown-item text-custom editAssetBtn"
+                                                data-id="${row.id}"
+                                                data-asset_id="${row.asset_id}"
                                                 data-asset_name="${(row.asset_name) || ''}"
                                                 data-tracking="${row.tracking_id || ''}"
                                                 data-serial="${row.serial_number || ''}"
@@ -243,15 +258,13 @@
                                                 <i class="fa fa-edit mr-2 font-18 vertical-middle"></i>${__('edit', 'Edit')}
                                             </a>
                                             ` : ''}
-                                            ${row.status !== 'Assigned' ? `
-                                            <?php if($is_system_admin): ?>
-                                            <a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax" 
+                                            ${(row.status !== 'Assigned' && userRole.canDelete) ? `
+                                            <a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax"
                                                 data-tbl='asset_items'
                                                 data-file='0'
                                                 data-id="${row.id}">
                                                 <i class="fa fa-trash mr-2 font-18 vertical-middle"></i>${__('delete', 'Delete')}
                                             </a>
-                                            <?php endif; ?>
                                             ` : ''}
                                             ${row.status === 'Assigned' ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-info print-asset-report" 

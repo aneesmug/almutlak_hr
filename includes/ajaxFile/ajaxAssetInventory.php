@@ -46,6 +46,13 @@ if (!$isSystemAdmin && isset($roleAssetAccess[$userType])) {
     $allowedAssets = $roleAssetAccess[$userType];
 }
 
+// Per-user Special Access grants (App Settings > Special Access), independent
+// of the role-based asset-type restriction above.
+require_once __DIR__ . '/../special_access_helper.php';
+$canAddAssetSpecial = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_add', $user_role ?? '', $userType, $isSystemAdmin);
+$canEditAssetSpecial = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_edit', $user_role ?? '', $userType, $isSystemAdmin);
+$canDeleteAssetSpecial = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'asset_inventory_delete', $user_role ?? '', $userType, $isSystemAdmin);
+
 /**
  * Check if user can access/manage a specific asset
  * Checks if the asset name contains any of the allowed asset keywords
@@ -361,7 +368,7 @@ try {
                 json_fail('Asset type not found');
             }
             
-            if (!canAccessAsset($assetRow['name'], $isSystemAdmin, $allowedAssets)) {
+            if (!canAccessAsset($assetRow['name'], $canAddAssetSpecial, $allowedAssets)) {
                 json_fail('You do not have permission to add this asset type', 403);
             }
             
@@ -889,10 +896,13 @@ try {
             break;
 
         case 'update_item':
+            if (!$canEditAssetSpecial) {
+                json_fail('You do not have permission to edit assets', 403);
+            }
             $itemId = (int) ($_POST['item_id'] ?? 0);
             $serialNumber = trim($_POST['serial_number'] ?? '');
             $description = trim($_POST['description'] ?? '');
-            
+
             if ($itemId <= 0) {
                 json_fail('Asset item ID is required');
             }
@@ -917,8 +927,11 @@ try {
             break;
 
         case 'delete_item':
+            if (!$canDeleteAssetSpecial) {
+                json_fail('You do not have permission to delete assets', 403);
+            }
             $itemId = (int) ($_POST['item_id'] ?? 0);
-            
+
             if ($itemId <= 0) {
                 json_fail('Asset item ID is required');
             }

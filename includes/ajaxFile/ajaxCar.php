@@ -1,9 +1,17 @@
 <?php
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../../includes/special_access_helper.php';
 include("./../../includes/helper_functions.php");
 
 $ajaxType = $_POST['ajaxType'];
+
+if ($ajaxType === 'add_car' || $ajaxType === 'edit_car') {
+    $canManageCar = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', $ajaxType === 'add_car' ? 'cars_add' : 'cars_edit', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    if (!$canManageCar) {
+        send_json_response(__('error_title'), 'Access denied.', "error", 403);
+    }
+}
 
 if ($ajaxType == 'add_car') {
     $maker_name = $_POST['maker_name'];

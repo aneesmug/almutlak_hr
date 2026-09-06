@@ -200,6 +200,26 @@
         $assets_count_rec = mysqli_fetch_assoc($assets_query);
         $assigned_assets_count = $assets_count_rec['assigned_assets_count'];
 
+        // Query for company cars currently assigned to this employee as driver.
+        // Cars are tracked in `cars_drv`, not `employee_assets`, so the generic
+        // assets check above never catches an outstanding car - check separately.
+        $cars_query = mysqli_query($conDB, "SELECT `cars_drv`.`id`, `cars_drv`.`car_id`, `cars_drv`.`rcv_date`,
+                `cars`.`plate_no`, `cars`.`type` AS `car_type`,
+                `car_maker`.`maker` AS `maker_name`, `car_model`.`model`
+            FROM `cars_drv`
+            JOIN `cars` ON `cars`.`id` = `cars_drv`.`car_id`
+            LEFT JOIN `car_maker` ON `car_maker`.`id` = `cars`.`maker_name`
+            LEFT JOIN `car_model` ON `car_model`.`id` = `cars`.`model`
+            WHERE `cars_drv`.`car_user` = '{$emprow['empid']}' AND `cars_drv`.`status` = 1");
+        $assigned_cars = [];
+        if ($cars_query) {
+            while ($car_row = mysqli_fetch_assoc($cars_query)) {
+                $assigned_cars[] = $car_row;
+            }
+            mysqli_free_result($cars_query);
+        }
+        $assigned_cars_count = count($assigned_cars);
+
         // --- NEW: Check for subordinates (employees who have this employee as direct supervisor) ---
         $subordinates_query = mysqli_query($conDB, "SELECT 
             e.emp_id, e.name, e.supervisor_id, d.dep_nme as department
@@ -430,7 +450,7 @@
             }
         }
         
-        if(empty($errors) && $assigned_assets_count > 0){
+        if(empty($errors) && ($assigned_assets_count > 0 || $assigned_cars_count > 0)){
             $errors['assets'] = "Cannot process termination. Employee has outstanding assets that must be returned first.";
         } else {
             $contractType = trim($_POST['contract_type'] ?? '');
@@ -824,6 +844,39 @@
                                     </div>
                                     <?php endif; ?>
 
+                                    <?php if ($assigned_cars_count > 0): ?>
+                                    <!-- Assigned Cars Section -->
+                                    <div class="card mt-4">
+                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Assigned Vehicles for Clearance', 'Assigned Vehicles for Clearance');?></h5></div>
+                                        <div class="card-body">
+                                            <table class="table table-sm table-bordered">
+                                                <thead>
+                                                    <tr>
+                                                        <th><?=__('plate_no_label', 'Plate No');?></th>
+                                                        <th><?=__('Description');?></th>
+                                                        <th><?=__('receive_date_label', 'Receive Date');?></th>
+                                                        <th><?=__('Action');?></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                <?php foreach ($assigned_cars as $car_row): ?>
+                                                    <tr>
+                                                        <td><?= htmlspecialchars($car_row['plate_no']); ?></td>
+                                                        <td><?= htmlspecialchars(trim(($car_row['maker_name'] ?? '') . ' - ' . ($car_row['model'] ?? '')), ENT_QUOTES); ?></td>
+                                                        <td><?= htmlspecialchars($car_row['rcv_date'] ?? ''); ?></td>
+                                                        <td>
+                                                            <a href="javascript:void(0);" class="btn btn-sm btn-danger addRtrnDrvrAtter" data-id="<?= (int)$car_row['id']; ?>" data-cid="<?= (int)$car_row['car_id']; ?>">
+                                                                <i class="mdi mdi-car-convertable"></i> <?= __('return_car_button', 'Return Car'); ?>
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+
                                     <!-- EOS Calculation Section -->
                                     <div class="card mt-4">
                                         <div class="card-header bg-light"><h5 class="m-0"><?=__('End of Service Calculation');?></h5></div>
@@ -831,6 +884,12 @@
                                             <?php if ($assigned_assets_count > 0): ?>
                                                 <div class="alert alert-danger text-center">
                                                     <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('This employee has {count} outstanding asset(s). Please ensure all assets are returned before proceeding with termination.')) ?>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <?php if ($assigned_cars_count > 0): ?>
+                                                <div class="alert alert-danger text-center">
+                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_cars_count, __('This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.', 'This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.')) ?>
                                                 </div>
                                             <?php endif; ?>
 
@@ -845,7 +904,7 @@
 
                                             <?php if ($eos_id == ""): ?>
                                                 <form id="calculatorForm" action="emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>" method="post">
-                                                    <fieldset <?= ($assigned_assets_count > 0) ? 'disabled' : '' ?>>
+                                                    <fieldset <?= ($assigned_assets_count > 0 || $assigned_cars_count > 0) ? 'disabled' : '' ?>>
                                                         <?php if ($general_error_message): ?>
                                                             <div class="alert alert-danger"><?=htmlspecialchars($general_error_message); ?></div>
                                                         <?php endif; ?>

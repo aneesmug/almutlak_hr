@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
+$can_edit_location = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'locations_edit', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -231,9 +233,11 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
                                                             <i class="mdi mdi-clipboard-text"></i></i> <?= __('add_contract_button') ?>
                                                         </a>
                                                     <?php } ?>
+                                                    <?php if ($can_edit_location): ?>
                                                     <a href="javascript:void(0);" class="btn btn-sm btn-light waves-effect editLocationAttr" data-id="<?= $id_loc ?>" data-id="<?= $id_loc ?>" data-section_name="<?= $section_name ?>" data-dept="<?= $dept ?>" data-location_owner="<?= $location_owner ?>" data-camera_in="<?= $camera_in ?>" data-camera_out="<?= $camera_out ?>" data-b_license_exp="<?= $b_license_exp ?>" data-b_license_no="<?= $b_license_no ?>" data-location_dist="<?= $location_dist ?>" data-bulding_base="<?= $bulding_base ?>" data-bulding_size="<?= $bulding_size ?>" data-t_bulding_size="<?= $t_bulding_size ?>" data-latitude="<?= $latitude ?>" data-longitude="<?= $longitude ?>" data-location_name="<?= $location_name ?>" data-municipality="<?= $municipality ?>" data-sub_municipality="<?= $sub_municipality ?>" data-status="<?= $status ?>">
                                                         <i class="fa fa-edit"></i> <?= __('edit_button') ?>
                                                     </a>
+                                                    <?php endif; ?>
 
                                                 </div>
 

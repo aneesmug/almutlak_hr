@@ -123,6 +123,18 @@ $page_special_access_bypass = [
     'import_iqama_exp.php' => 'access_import_iqama_exp',
 ];
 
+// Auto-extend: every other role-controlled page (App Settings > Page Access)
+// that doesn't already have an explicit bypass key above gets the generic
+// 'access_<page-slug>' key generated in get_special_access_page_labels(), so a
+// per-user Special Access grant can override the role restriction for that
+// page too - regardless of the user's role/user_type.
+foreach (array_keys(get_page_access_labels()) as $bypassPage) {
+    if (isset($page_special_access_bypass[$bypassPage]) || $bypassPage === 'app_settings.php' || $bypassPage === 'vacation_balance_history.php') {
+        continue;
+    }
+    $page_special_access_bypass[$bypassPage] = 'access_' . strtolower(pathinfo($bypassPage, PATHINFO_FILENAME));
+}
+
 // Grant $user_role into $page_roles for any page this employee has an explicit
 // special-access bypass for, so the sidebar link visibility ($can_see_*, built
 // from $page_roles below) and the gate below both reflect the same grant -

@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
+$can_add_location = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'locations_add', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$can_delete_location = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'locations_delete', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
@@ -187,7 +190,7 @@ if (mysqli_num_rows($query) == 1) {
                                                             <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
                                                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
                                                                 <a class='dropdown-item text-dark' href='./view_location.php?id=<?= $id ?>'><i class='mdi mdi-eye-outline mr-2 font-18 vertical-middle'></i><?=__('open_link')?></a>
-                                                                <?php if ($user_type == $access1) { ?>
+                                                                <?php if ($can_delete_location) { ?>
                                                                     <a href='javascript:void(0);' class='dropdown-item  text-danger deleteAjax' data-id='<?= $id ?>' data-tbl='section' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?=__('delete_link')?></a>
                                                                 <?php } ?>
                                                             </div>
@@ -352,6 +355,7 @@ if (mysqli_num_rows($query) == 1) {
                     title: exportTitle,
                     className: 'btn-dark'
                 });
+<?php if ($can_add_location): ?>
                 buttonConfig.push({
                     text: '<i class="fa fa-plus"></i> <?=__('add_location_button')?>',
                     action: function(e, dt, button, config) {
@@ -359,6 +363,7 @@ if (mysqli_num_rows($query) == 1) {
                     },
                     className: 'btn-info'
                 });
+                <?php endif; ?>
 
                 $('form').parsley();
 
