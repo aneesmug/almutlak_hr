@@ -184,6 +184,92 @@
             font-weight: 600;
             transition: background-color .15s ease, color .15s ease;
         }
+        /* Special Access edit modal - sidebar-tab layout (replaces the old single long
+           scrolling stack of every category, which made a specific setting hard to find). */
+        .sae-layout {
+            display: flex;
+            border: 1px solid #e9ecef;
+            border-radius: .5rem;
+            overflow: hidden;
+        }
+        .sae-sidebar {
+            width: 240px;
+            flex: 0 0 240px;
+            background: #f8f9fb;
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+            max-height: 55vh;
+        }
+        .sae-tab {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .6rem .9rem;
+            cursor: pointer;
+            font-size: .84rem;
+            border-left: 3px solid transparent;
+            color: #495057;
+        }
+        .sae-tab:hover {
+            background: #eef1f5;
+        }
+        .sae-tab.active {
+            background: #fff;
+            border-left-color: #4fa0e3;
+            color: #1c1c1c;
+            font-weight: 600;
+        }
+        .sae-tab span:first-child {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            min-width: 0;
+        }
+        .sae-tab span:first-child i {
+            width: 16px;
+            text-align: center;
+            color: #4fa0e3;
+            flex-shrink: 0;
+        }
+        .sae-content {
+            flex: 1;
+            min-width: 0;
+            overflow-y: auto;
+            max-height: 55vh;
+            padding: .9rem 1.1rem;
+        }
+        .sae-panel {
+            display: none;
+        }
+        .sae-panel.sae-panel-visible {
+            display: block;
+        }
+        .sae-panel-title {
+            font-size: .95rem;
+            font-weight: 600;
+            margin-bottom: .75rem;
+            color: #343a40;
+        }
+        .sae-search-hit-cat {
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            color: #8a94a6;
+            margin: 1rem 0 .4rem;
+            padding-bottom: .25rem;
+            border-bottom: 1px dashed #e9ecef;
+        }
+        .sae-search-hit-cat:first-child {
+            margin-top: 0;
+        }
+        .sae-empty-state {
+            color: #8a94a6;
+            text-align: center;
+            padding: 2.5rem 1rem;
+            font-size: .85rem;
+        }
         .special-access-user-card {
             border: 1px solid #e9ecef;
             border-left: 3px solid #4fa0e3;
@@ -450,7 +536,7 @@
         // Purely presentational grouping (icon + ordered keys) for the Special Access
         // checkbox grid - mirrors includes/special_access_helper.php::get_special_access_categories()
         // so both stay in sync. Any catalog key not listed in any category here still shows,
-        // just bucketed under a trailing "Other" group by buildSpecialAccessGroupedHtml().
+        // just bucketed under a trailing "Other" group by buildSpecialAccessPanelData().
         function getSpecialAccessCategories() {
             return [
                 <?php foreach (get_special_access_categories() as $categoryName => $meta): ?>
@@ -462,63 +548,60 @@
         // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
         // inline "select a user" panel and the SweetAlert2 edit modal. idPrefix keeps
         // checkbox/count element ids unique between the two contexts.
-        function buildSpecialAccessGroupedHtml(idPrefix, selectedSet) {
+        // Builds the category list (id/name/icon/keys) used by both the sidebar nav and
+        // the per-category panels - each key appears in exactly one category, with anything
+        // not listed in getSpecialAccessCategories() falling back into a trailing "Other" bucket.
+        function buildSpecialAccessPanelData() {
             const categories = getSpecialAccessCategories();
             const catalog = getSpecialAccessCatalog();
             const labelByKey = new Map(catalog.map(item => [item.value, item.label]));
             const placedKeys = new Set();
+            const panels = [];
 
-            function renderCategoryBlock(catIndex, name, icon, keys) {
-                let block = `<div class="special-access-category mb-3" data-cat-index="${catIndex}">`;
-                block += `<div class="special-access-category-header">`;
-                block += `<span><i class="fa ${icon}"></i> <strong>${escapeHtml(name)}</strong></span>`;
-                block += `<span class="badge badge-light special-access-cat-count" id="${idPrefix}-catcount-${catIndex}" data-total="${keys.length}">0/${keys.length}</span>`;
-                block += `</div>`;
-                block += `<div class="special-access-category-body"><div class="special-access-checkbox-grid">`;
-                keys.forEach(key => {
-                    const label = labelByKey.get(key) || key;
-                    const checkboxId = `${idPrefix}-${key}`;
-                    block += `
-                        <div class="special-access-item" data-search-label="${escapeHtml(label).toLowerCase()}">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${escapeHtml(key)}" data-access-key="${escapeHtml(key)}" data-cat-index="${catIndex}" ${selectedSet.has(key) ? 'checked' : ''}>
-                                <label class="custom-control-label" for="${checkboxId}">${escapeHtml(label)}</label>
-                            </div>
-                        </div>
-                    `;
-                });
-                block += `</div></div></div>`;
-                return block;
-            }
-
-            let html = '';
             categories.forEach((cat, catIndex) => {
                 const keysInCat = cat.keys.filter(k => labelByKey.has(k));
                 if (!keysInCat.length) return;
                 keysInCat.forEach(k => placedKeys.add(k));
-                html += renderCategoryBlock(catIndex, cat.name, cat.icon, keysInCat);
+                panels.push({ id: `cat-${catIndex}`, name: cat.name, icon: cat.icon, keys: keysInCat });
             });
 
             const uncategorized = catalog.filter(item => !placedKeys.has(item.value)).map(item => item.value);
             if (uncategorized.length) {
-                html += renderCategoryBlock(categories.length, '<?= __('other', 'Other') ?>', 'fa-ellipsis-h', uncategorized);
+                panels.push({ id: 'cat-other', name: '<?= __('other', 'Other') ?>', icon: 'fa-ellipsis-h', keys: uncategorized });
             }
+
+            return { panels, labelByKey };
+        }
+
+        function renderSpecialAccessCheckboxGrid(idPrefix, keys, labelByKey, selectedSet) {
+            let html = '<div class="special-access-checkbox-grid">';
+            keys.forEach(key => {
+                const label = labelByKey.get(key) || key;
+                const checkboxId = `${idPrefix}-${key}`;
+                html += `
+                    <div class="special-access-item" data-search-label="${escapeHtml(label).toLowerCase()}">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${escapeHtml(key)}" data-access-key="${escapeHtml(key)}" ${selectedSet.has(key) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
             return html;
         }
 
-        // Recomputes each category's "checked/total" badge after checkboxes change.
-        function updateSpecialAccessCategoryCounts(container) {
-            if (!container) return;
-            container.querySelectorAll('.special-access-category').forEach(block => {
-                const catIndex = block.getAttribute('data-cat-index');
-                const countBadge = block.querySelector(`.special-access-cat-count[id$="-catcount-${catIndex}"]`);
-                if (!countBadge) return;
-                const total = parseInt(countBadge.getAttribute('data-total'), 10) || 0;
-                const checked = block.querySelectorAll('.special-access-checkbox:checked').length;
-                countBadge.textContent = `${checked}/${total}`;
-                countBadge.classList.toggle('badge-success', checked > 0);
-                countBadge.classList.toggle('badge-light', checked === 0);
-            });
+        // Recomputes one sidebar tab's "checked/total" badge after a checkbox inside its
+        // panel changes.
+        function updateSpecialAccessTabCount(popup, panelId) {
+            const panel = popup.querySelector(`.sae-panel[data-panel-id="${panelId}"]`);
+            const badge = popup.querySelector(`.sae-tab-count[data-count-for="${panelId}"]`);
+            if (!panel || !badge) return;
+            const total = parseInt(badge.getAttribute('data-total'), 10) || 0;
+            const checked = panel.querySelectorAll('.special-access-checkbox:checked').length;
+            badge.textContent = `${checked}/${total}`;
+            badge.classList.toggle('badge-success', checked > 0);
+            badge.classList.toggle('badge-light', checked === 0);
         }
 
         // Report Access lives inside the Special Access editor's Swal modal as one more
@@ -527,21 +610,22 @@
         // explicit entry for a user means "sees ALL report types" (backward-compatible
         // default from get_allowed_report_types_for_user()), not "sees none" like every
         // other Special Access key. That's why it gets its own builder/wiring instead of
-        // reusing buildSpecialAccessGroupedHtml - the "no entry yet" starting state, the
+        // reusing the special-access panel builders - the "no entry yet" starting state, the
         // Custom/All(default) mode badge, and the "Reset to Default" action are all specific
         // to this map's semantics. It renders nothing actionable for plain employees, since
         // get_report_permission_users() never included them in the first place (report
         // pages aren't reachable by that role).
-        function buildReportAccessBlockHtml(idPrefix, empId) {
+        function buildReportAccessBlockHtml(idPrefix, empId, includeHeader = true) {
             const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === empId);
             const userType = user ? String(user.user_type || '').trim().toLowerCase() : '';
 
-            let html = `<div class="special-access-category mb-3" data-report-access-block="1">`;
-            html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong><?= __('report_access', 'Report Access') ?></strong></span>`;
-
             if (userType === 'employee') {
+                const msg = `<p class="text-muted mb-0" style="font-size:.85rem;"><?= __('report_access_not_applicable_for_employees', "Report access doesn't apply to plain employee accounts.") ?></p>`;
+                if (!includeHeader) return msg;
+                let html = `<div class="special-access-category mb-3" data-report-access-block="1">`;
+                html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong><?= __('report_access', 'Report Access') ?></strong></span>`;
                 html += `<span class="badge badge-light"><?= __('not_applicable', 'N/A') ?></span></div>`;
-                html += `<div class="special-access-category-body"><p class="text-muted mb-0" style="font-size:.85rem;"><?= __('report_access_not_applicable_for_employees', "Report access doesn't apply to plain employee accounts.") ?></p></div></div>`;
+                html += `<div class="special-access-category-body">${msg}</div></div>`;
                 return html;
             }
 
@@ -550,8 +634,13 @@
             const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
             const selectedSet = new Set(hasExplicit ? normalizeReportTypeList(reportPermissionMap[empId]) : allTypeValues);
 
-            html += `<span class="badge ${hasExplicit ? 'badge-info' : 'badge-light'}" id="${idPrefix}-report-mode">${hasExplicit ? '<?= __('custom', 'Custom') ?>' : '<?= __('all_default', 'All (default)') ?>'}</span></div>`;
-            html += `<div class="special-access-category-body">`;
+            let html = '';
+            if (includeHeader) {
+                html += `<div class="special-access-category mb-3" data-report-access-block="1">`;
+                html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong><?= __('report_access', 'Report Access') ?></strong></span>`;
+                html += `<span class="badge ${hasExplicit ? 'badge-info' : 'badge-light'}" id="${idPrefix}-report-mode">${hasExplicit ? '<?= __('custom', 'Custom') ?>' : '<?= __('all_default', 'All (default)') ?>'}</span></div>`;
+                html += `<div class="special-access-category-body">`;
+            }
             html += `<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">`;
             html += `<small class="text-muted"><?= __('check_reports_user_can_view') ?></small>`;
             html += `<div>`;
@@ -571,7 +660,10 @@
                     </div>
                 `;
             });
-            html += `</div></div></div>`;
+            html += `</div>`;
+            if (includeHeader) {
+                html += `</div></div>`;
+            }
             return html;
         }
 
@@ -1859,6 +1951,8 @@
 
             const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === targetEmpId);
             const displayName = user ? ((user.name || '').trim() || targetEmpId) : targetEmpId;
+            const userType = user ? String(user.user_type || '').trim().toLowerCase() : '';
+            const reportAccessApplicable = userType !== 'employee';
 
             const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, targetEmpId);
             const selectedSet = new Set(hasExplicit ? normalizeSpecialAccessList(specialAccessMap[targetEmpId]) : []);
@@ -1873,34 +1967,110 @@
                 ? normalizeReportTypeList(reportPermissionMap[targetEmpId])
                 : getReportTypeCatalog().map(item => item.value);
 
+            const { panels, labelByKey } = buildSpecialAccessPanelData();
+            const defaultPanelId = panels.length ? panels[0].id : 'report-access';
+
+            let navHtml = '';
+            panels.forEach((p, i) => {
+                const granted = p.keys.filter(k => selectedSet.has(k)).length;
+                navHtml += `
+                    <div class="sae-tab${i === 0 ? ' active' : ''}" data-panel-target="${p.id}">
+                        <span><i class="fa ${p.icon}"></i> ${escapeHtml(p.name)}</span>
+                        <span class="badge ${granted ? 'badge-success' : 'badge-light'} sae-tab-count" data-count-for="${p.id}" data-total="${p.keys.length}">${granted}/${p.keys.length}</span>
+                    </div>
+                `;
+            });
+            if (reportAccessApplicable) {
+                navHtml += `
+                    <div class="sae-tab${panels.length === 0 ? ' active' : ''}" data-panel-target="report-access">
+                        <span><i class="fa fa-chart-bar"></i> <?= __('report_access', 'Report Access') ?></span>
+                        <span class="badge ${reportHasExplicit ? 'badge-info' : 'badge-light'}" id="swal-special-access-report-mode">${reportHasExplicit ? '<?= __('custom', 'Custom') ?>' : '<?= __('all_default', 'All (default)') ?>'}</span>
+                    </div>
+                `;
+            }
+
+            let panelsHtml = '';
+            panels.forEach((p, i) => {
+                panelsHtml += `<div class="sae-panel${i === 0 ? ' sae-panel-visible' : ''}" data-panel-id="${p.id}">`;
+                panelsHtml += `<div class="sae-panel-title"><i class="fa ${p.icon} mr-1"></i> ${escapeHtml(p.name)}</div>`;
+                panelsHtml += renderSpecialAccessCheckboxGrid('swal-special-access', p.keys, labelByKey, selectedSet);
+                panelsHtml += `</div>`;
+            });
+            if (reportAccessApplicable) {
+                panelsHtml += `<div class="sae-panel${panels.length === 0 ? ' sae-panel-visible' : ''}" data-panel-id="report-access">`;
+                panelsHtml += `<div class="sae-panel-title"><i class="fa fa-chart-bar mr-1"></i> <?= __('report_access', 'Report Access') ?></div>`;
+                panelsHtml += buildReportAccessBlockHtml('swal-special-access', targetEmpId, false);
+                panelsHtml += `</div>`;
+            }
+
             let gridHtml = '<div class="text-left">';
-            gridHtml += `<p class="text-muted mb-3" style="font-size:.85rem;"><?= __('currently_granted', 'Currently granted') ?>: <span class="badge badge-${grantedCount ? 'success' : 'light'}">${grantedCount}</span></p>`;
-            gridHtml += '<div class="d-flex justify-content-between align-items-center mb-3">';
-            gridHtml += '<input type="text" class="form-control form-control-sm mr-2" id="swal-special-access-search" placeholder="<?= __('search') ?>...">';
-            gridHtml += '<div class="text-nowrap">';
-            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="swal-special-access-select-all"><?= __('select_all') ?></button>';
-            gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all"><?= __('clear_all') ?></button>';
-            gridHtml += '</div></div>';
-            gridHtml += `<div id="swal-special-access-grid" style="max-height:55vh;overflow-y:auto;">`;
-            gridHtml += buildSpecialAccessGroupedHtml('swal-special-access', selectedSet);
-            gridHtml += buildReportAccessBlockHtml('swal-special-access', targetEmpId);
+            gridHtml += `<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">`;
+            gridHtml += `<p class="text-muted mb-0 mr-2" style="font-size:.85rem;"><?= __('currently_granted', 'Currently granted') ?>: <span class="badge badge-${grantedCount ? 'success' : 'light'}" id="swal-special-access-total-badge">${grantedCount}</span></p>`;
+            gridHtml += '<input type="text" class="form-control form-control-sm" id="swal-special-access-search" style="max-width:260px;" placeholder="<?= __('search') ?>...">';
+            gridHtml += '</div>';
+            gridHtml += '<div class="sae-layout">';
+            gridHtml += `<div class="sae-sidebar" id="swal-special-access-sidebar">${navHtml}</div>`;
+            gridHtml += `<div class="sae-content" id="swal-special-access-content">`;
+            gridHtml += panelsHtml;
+            gridHtml += `<div class="sae-empty-state" id="swal-special-access-no-results" style="display:none;"><?= __('no_matching_settings', 'No matching settings.') ?></div>`;
             gridHtml += `</div>`;
+            gridHtml += '</div>';
+            gridHtml += '<div class="d-flex justify-content-end mt-2">';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="swal-special-access-select-all"><?= __('select_all_visible', 'Select All (visible)') ?></button>';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all"><?= __('clear_all_visible', 'Clear All (visible)') ?></button>';
+            gridHtml += '</div>';
             gridHtml += '</div>';
 
             Swal.fire({
                 title: displayName,
                 html: gridHtml,
-                width: '70%',
+                width: '78%',
                 showCancelButton: true,
                 confirmButtonText: '<?= __('save_changes') ?>',
                 cancelButtonText: '<?= __('cancel') ?>',
                 focusConfirm: false,
                 didOpen: () => {
                     const popup = Swal.getPopup();
-                    updateSpecialAccessCategoryCounts(popup);
+                    const sidebar = popup.querySelector('#swal-special-access-sidebar');
+                    const totalBadge = popup.querySelector('#swal-special-access-total-badge');
+                    let activePanelId = defaultPanelId;
+                    let searching = false;
+
+                    panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+
+                    function updateTotalBadge() {
+                        if (!totalBadge) return;
+                        const total = popup.querySelectorAll('.special-access-checkbox:checked').length;
+                        totalBadge.textContent = String(total);
+                        totalBadge.classList.toggle('badge-success', total > 0);
+                        totalBadge.classList.toggle('badge-light', total === 0);
+                    }
+
+                    function showTab(panelId) {
+                        activePanelId = panelId;
+                        popup.querySelectorAll('.sae-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.getAttribute('data-panel-target') === panelId);
+                        });
+                        popup.querySelectorAll('.sae-panel').forEach(panel => {
+                            panel.classList.toggle('sae-panel-visible', panel.getAttribute('data-panel-id') === panelId);
+                        });
+                    }
+
+                    if (sidebar) {
+                        sidebar.querySelectorAll('.sae-tab').forEach(tab => {
+                            tab.addEventListener('click', () => {
+                                if (searching) return;
+                                showTab(tab.getAttribute('data-panel-target'));
+                            });
+                        });
+                    }
 
                     popup.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
-                        checkbox.addEventListener('change', () => updateSpecialAccessCategoryCounts(popup));
+                        checkbox.addEventListener('change', () => {
+                            const panel = checkbox.closest('.sae-panel');
+                            if (panel) updateSpecialAccessTabCount(popup, panel.getAttribute('data-panel-id'));
+                            updateTotalBadge();
+                        });
                     });
 
                     wireReportAccessBlock(popup, 'swal-special-access', (mode, values) => {
@@ -1908,39 +2078,67 @@
                         reportAccessValues = values;
                     });
 
+                    // Searching temporarily reveals every panel (ignoring the active tab) and
+                    // hides only the non-matching items within them, so a setting buried in a
+                    // category the user hasn't clicked into is still one keystroke away.
                     const searchInput = popup.querySelector('#swal-special-access-search');
+                    const noResultsEl = popup.querySelector('#swal-special-access-no-results');
                     if (searchInput) {
                         searchInput.addEventListener('input', function() {
                             const term = this.value.trim().toLowerCase();
-                            popup.querySelectorAll('.special-access-item').forEach(item => {
-                                const matches = term === '' || (item.getAttribute('data-search-label') || '').includes(term);
-                                item.style.display = matches ? '' : 'none';
+                            searching = term !== '';
+
+                            if (!searching) {
+                                if (noResultsEl) noResultsEl.style.display = 'none';
+                                popup.querySelectorAll('.special-access-item').forEach(item => { item.style.display = ''; });
+                                showTab(activePanelId);
+                                return;
+                            }
+
+                            popup.querySelectorAll('.sae-tab').forEach(tab => tab.classList.remove('active'));
+                            let anyVisible = false;
+                            popup.querySelectorAll('.sae-panel').forEach(panel => {
+                                if (panel.getAttribute('data-panel-id') === 'report-access') {
+                                    panel.classList.remove('sae-panel-visible');
+                                    return;
+                                }
+                                let panelHasMatch = false;
+                                panel.querySelectorAll('.special-access-item').forEach(item => {
+                                    const matches = (item.getAttribute('data-search-label') || '').includes(term);
+                                    item.style.display = matches ? '' : 'none';
+                                    if (matches) panelHasMatch = true;
+                                });
+                                panel.classList.toggle('sae-panel-visible', panelHasMatch);
+                                if (panelHasMatch) anyVisible = true;
                             });
-                            popup.querySelectorAll('.special-access-category').forEach(block => {
-                                const anyVisible = Array.from(block.querySelectorAll('.special-access-item')).some(el => el.style.display !== 'none');
-                                block.style.display = anyVisible ? '' : 'none';
-                            });
+                            if (noResultsEl) noResultsEl.style.display = anyVisible ? 'none' : '';
                         });
                     }
+
                     const selectAllBtn = popup.querySelector('#swal-special-access-select-all');
                     if (selectAllBtn) {
                         selectAllBtn.addEventListener('click', () => {
-                            popup.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = true; });
-                            updateSpecialAccessCategoryCounts(popup);
+                            popup.querySelectorAll('.sae-panel.sae-panel-visible .special-access-checkbox').forEach(el => {
+                                if (el.closest('.special-access-item').style.display !== 'none') el.checked = true;
+                            });
+                            panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+                            updateTotalBadge();
                         });
                     }
                     const clearAllBtn = popup.querySelector('#swal-special-access-clear-all');
                     if (clearAllBtn) {
                         clearAllBtn.addEventListener('click', () => {
-                            popup.querySelectorAll('.special-access-checkbox').forEach(el => { el.checked = false; });
-                            updateSpecialAccessCategoryCounts(popup);
+                            popup.querySelectorAll('.sae-panel.sae-panel-visible .special-access-checkbox').forEach(el => {
+                                if (el.closest('.special-access-item').style.display !== 'none') el.checked = false;
+                            });
+                            panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+                            updateTotalBadge();
                         });
                     }
                 },
                 preConfirm: () => {
                     const popup = Swal.getPopup();
                     const abilities = Array.from(popup.querySelectorAll('.special-access-checkbox:checked')).map(el => el.value);
-                    const reportAccessApplicable = !!popup.querySelector('.report-type-checkbox, .report-access-select-all');
                     return { abilities, reportAccessApplicable, reportAccessMode, reportAccessValues };
                 }
             }).then(async (result) => {
