@@ -346,6 +346,18 @@
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
+    // Debug net: if the big settings script below fails to parse/run (JS error),
+    // the nav/container spinners spin forever with no visible cause. Surface it.
+    window.addEventListener('error', function(e) {
+        var msg = 'JS error: ' + e.message + ' (' + e.filename + ':' + e.lineno + ':' + e.colno + ')';
+        console.error(msg, e.error);
+        var nav = document.getElementById('settings-nav');
+        var container = document.getElementById('settings-container');
+        if (nav) nav.innerHTML = '<li class="text-danger p-2" style="font-size:12px;white-space:pre-wrap;">' + msg.replace(/</g, '&lt;') + '</li>';
+        if (container) container.innerHTML = '<pre class="text-danger p-2" style="white-space:pre-wrap;">' + msg.replace(/</g, '&lt;') + '</pre>';
+    });
+    </script>
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
         const isFullSettingsAdmin = <?= $is_system_admin ? 'true' : 'false' ?>;
         const canAccessDepartmentsTab = <?= $canAccessDepartmentsTab ? 'true' : 'false' ?>;
@@ -832,7 +844,7 @@
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license'];
+            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -846,6 +858,13 @@
             // Special handling for approval chain configuration
             if (normalizedGroupName === 'approval') {
                 renderApprovalChainSettings();
+                return;
+            }
+
+            // Special handling for asset clearance handler assignment (who clears
+            // Laptop/Mobile/SIM/Car returns during vacation approval)
+            if (normalizedGroupName === 'asset_clearance') {
+                renderAssetClearanceSettings();
                 return;
             }
 
@@ -3843,6 +3862,146 @@
             }
         }
 
+        /**
+         * =================================================================
+         * == ASSET CLEARANCE HANDLERS SETTINGS
+         * == Lets an administrator pre-assign, per asset type (Laptop, Mobile,
+         * == SIM, Car...), who clears its return during vacation approval -
+         * == used by processAssetKeepReturnDecision in leaveHandler.php.
+         * =================================================================
+         */
+        async function renderAssetClearanceSettings() {
+            settingsContainer.innerHTML = `
+                <div id="group-asset_clearance" class="tab-pane active">
+                    <h5 class="mb-3"><?= htmlspecialchars(__('asset_clearance_handlers', 'Asset Clearance Handlers')) ?></h5>
+                    <p class="text-muted"><?= htmlspecialchars(__('asset_clearance_handlers_note', "Assign who confirms an asset's return during vacation approval. If left unassigned, the department's manager handles it automatically (or a system administrator, if that manager is the employee's own direct manager).")) ?></p>
+                    <div id="asset-clearance-table-wrapper" class="approval-chain-container border rounded p-3 bg-light">
+                        <div class="d-flex justify-content-center align-items-center" style="height: 80px;"><div class="loader"></div></div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_asset_clearance_handlers' })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed to load asset clearance handlers');
+                renderAssetClearanceTable(data.assets || []);
+            } catch (error) {
+                document.getElementById('asset-clearance-table-wrapper').innerHTML = `<p class="text-danger text-center">${error.message}</p>`;
+            }
+        }
+
+        function renderAssetClearanceTable(assets) {
+            const wrapper = document.getElementById('asset-clearance-table-wrapper');
+            if (assets.length === 0) {
+                wrapper.innerHTML = '<p class="text-muted text-center mb-0"><?= htmlspecialchars(__('no_asset_types_configured', 'No asset types configured yet.')) ?></p>';
+                return;
+            }
+
+            let rowsHtml = '';
+            assets.forEach(asset => {
+                rowsHtml += `
+                    <tr data-asset-id="${asset.asset_id}" data-dept-id="${asset.clearance_dept_id || ''}">
+                        <td>${asset.asset_name}</td>
+                        <td>${asset.dept_name || '<span class="text-muted">-</span>'}</td>
+                        <td style="width:1%;">
+                            <select class="form-control form-control-sm asset-handler-select" multiple>
+                            </select>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-primary asset-handler-save"><?= htmlspecialchars(__('save', 'Save')) ?></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            wrapper.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead>
+                            <tr>
+                                <th><?= htmlspecialchars(__('asset_type', 'Asset Type')) ?></th>
+                                <th><?= htmlspecialchars(__('department', 'Department')) ?></th>
+                                <th><?= htmlspecialchars(__('handler', 'Handler')) ?></th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            `;
+
+            // One shared employee list for every row - the handler pool is no longer
+            // restricted by department, so there's nothing to fetch per-row.
+            fetch('./includes/ajaxFile/leaveHandler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ ajaxType: 'get_asset_department_employees' })
+            })
+            .then(r => r.json())
+            .then(res => {
+                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
+
+                wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => {
+                    const assetId = tr.dataset.assetId;
+                    const asset = assets.find(a => String(a.asset_id) === assetId);
+                    const select = tr.querySelector('.asset-handler-select');
+                    const assignedIds = (asset && Array.isArray(asset.handlers)) ? asset.handlers.map(h => String(h.emp_id)) : [];
+
+                    let optionsHtml = '';
+                    employees.forEach(emp => {
+                        const selected = assignedIds.includes(String(emp.emp_id)) ? 'selected' : '';
+                        optionsHtml += `<option value="${emp.emp_id}" ${selected}>${emp.name} (${emp.emp_id})</option>`;
+                    });
+                    select.innerHTML = optionsHtml;
+                    $(select).select2({
+                        width: '400px',
+                        multiple: true,
+                        allowClear: true,
+                        placeholder: <?= json_encode(__('automatic', 'Automatic (department manager)')) ?>
+                    });
+                });
+            })
+            .catch(() => {
+                wrapper.querySelectorAll('.asset-handler-select').forEach(select => {
+                    select.innerHTML = '';
+                    $(select).select2({ width: '400px', multiple: true });
+                });
+            });
+
+            wrapper.querySelectorAll('.asset-handler-save').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const tr = btn.closest('tr');
+                    const assetId = tr.dataset.assetId;
+                    const select = tr.querySelector('.asset-handler-select');
+                    const handlerEmpIds = Array.from(select.selectedOptions).map(o => o.value);
+
+                    const params = new URLSearchParams({ action: 'set_asset_clearance_handler', asset_id: assetId });
+                    handlerEmpIds.forEach(id => params.append('handler_emp_id[]', id));
+
+                    btn.disabled = true;
+                    try {
+                        const response = await fetch('./includes/approval_chain_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: params
+                        });
+                        const data = await response.json();
+                        if (!data.success) throw new Error(data.message || 'Failed to save');
+                        Swal.fire({ icon: 'success', title: <?= json_encode(__('saved', 'Saved')) ?>, text: data.message, timer: 1500, showConfirmButton: false });
+                    } catch (error) {
+                        Swal.fire(<?= json_encode(__('Error!', 'Error!')) ?>, error.message, 'error');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+            });
+        }
+
         function attachPreviewListeners() {
             appSettings.forEach(setting => {
                 const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
@@ -4066,6 +4225,9 @@
                 <?php if ($is_system_admin ?? false): ?>
                 if (!groupedSettings['license']) {
                     groupedSettings['license'] = [];
+                }
+                if (!groupedSettings['asset_clearance']) {
+                    groupedSettings['asset_clearance'] = [];
                 }
                 <?php endif; ?>
 

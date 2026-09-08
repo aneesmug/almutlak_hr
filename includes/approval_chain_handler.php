@@ -55,6 +55,12 @@ switch ($action) {
     case 'create_new_request_type':
         createNewRequestType($conDB);
         break;
+    case 'get_asset_clearance_handlers':
+        getAssetClearanceHandlers($conDB);
+        break;
+    case 'set_asset_clearance_handler':
+        setAssetClearanceHandler($conDB);
+        break;
     default:
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
         break;
@@ -379,6 +385,135 @@ function createNewRequestType($conDB) {
         ]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+    }
+}
+
+/**
+ * List every asset type (Laptop, Mobile, SIM, Car, ...) with its clearance
+ * department and the people currently assigned to handle its returns (0 or
+ * more - a backup list; resolution uses the first still-active one, in the
+ * order they were assigned). Backs the "Asset Clearance Handlers" settings tab.
+ */
+function getAssetClearanceHandlers($conDB)
+{
+    $assets = [];
+    $query = mysqli_query($conDB, "SELECT a.id, a.name, a.clearance_dept_id, d.dep_nme AS dept_name
+                                    FROM assets a
+                                    LEFT JOIN department d ON a.clearance_dept_id = d.id
+                                    ORDER BY a.id ASC");
+    if (!$query) {
+        echo json_encode(['success' => false, 'message' => 'assets query failed: ' . mysqli_error($conDB)]);
+        return;
+    }
+    while ($row = mysqli_fetch_assoc($query)) {
+        $assets[(int)$row['id']] = [
+            'asset_id' => (int)$row['id'],
+            'asset_name' => $row['name'],
+            'clearance_dept_id' => $row['clearance_dept_id'] !== null ? (int)$row['clearance_dept_id'] : null,
+            'dept_name' => $row['dept_name'],
+            'handlers' => []
+        ];
+    }
+    mysqli_free_result($query);
+
+    $handlersQuery = mysqli_query($conDB, "SELECT ach.asset_id, ach.handler_emp_id, e.name AS handler_name
+                                            FROM asset_clearance_handlers ach
+                                            JOIN employees e ON ach.handler_emp_id = e.emp_id
+                                            ORDER BY ach.asset_id ASC, ach.id ASC");
+    if (!$handlersQuery) {
+        echo json_encode(['success' => false, 'message' => 'asset_clearance_handlers query failed: ' . mysqli_error($conDB)]);
+        return;
+    }
+    while ($row = mysqli_fetch_assoc($handlersQuery)) {
+        $aid = (int)$row['asset_id'];
+        if (isset($assets[$aid])) {
+            $assets[$aid]['handlers'][] = [
+                'emp_id' => (int)$row['handler_emp_id'],
+                'name' => $row['handler_name']
+            ];
+        }
+    }
+    mysqli_free_result($handlersQuery);
+
+    echo json_encode(['success' => true, 'assets' => array_values($assets)]);
+}
+
+/**
+ * Replace the set of employees who can handle asset-return clearance for one
+ * asset type (0 or more - a backup list). Used by processAssetKeepReturnDecision
+ * in leaveHandler.php: when set, the first still-active one is added to the
+ * vacation approval chain directly instead of the department manager / a
+ * fallback administrator.
+ */
+function setAssetClearanceHandler($conDB)
+{
+    $assetId = (int)($_POST['asset_id'] ?? 0);
+    $handlerEmpIds = $_POST['handler_emp_id'] ?? [];
+    if (!is_array($handlerEmpIds)) {
+        $handlerEmpIds = $handlerEmpIds !== '' ? [$handlerEmpIds] : [];
+    }
+    $handlerEmpIds = array_values(array_unique(array_filter(array_map('intval', $handlerEmpIds), fn($id) => $id > 0)));
+
+    if ($assetId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Asset is required']);
+        return;
+    }
+
+    $del = mysqli_prepare($conDB, "DELETE FROM asset_clearance_handlers WHERE asset_id = ?");
+    if (!$del) {
+        echo json_encode(['success' => false, 'message' => 'asset_clearance_handlers table missing: ' . mysqli_error($conDB)]);
+        return;
+    }
+    mysqli_stmt_bind_param($del, "i", $assetId);
+    mysqli_stmt_execute($del);
+    mysqli_stmt_close($del);
+
+    if (empty($handlerEmpIds)) {
+        // Falls back to the automatic dept-manager/administrator flow.
+        echo json_encode(['success' => true, 'message' => 'Handler assignment cleared']);
+        return;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($handlerEmpIds), '?'));
+    $types = str_repeat('i', count($handlerEmpIds));
+    $check = mysqli_prepare($conDB, "SELECT emp_id FROM employees WHERE status = 1 AND emp_id IN ($placeholders)");
+    if (!$check) {
+        echo json_encode(['success' => false, 'message' => 'employees query failed: ' . mysqli_error($conDB)]);
+        return;
+    }
+    mysqli_stmt_bind_param($check, $types, ...$handlerEmpIds);
+    mysqli_stmt_execute($check);
+    $activeResult = mysqli_stmt_get_result($check);
+    $activeIds = [];
+    while ($row = mysqli_fetch_assoc($activeResult)) {
+        $activeIds[] = (int)$row['emp_id'];
+    }
+    mysqli_stmt_close($check);
+
+    if (empty($activeIds)) {
+        echo json_encode(['success' => false, 'message' => 'None of the selected employees are active']);
+        return;
+    }
+
+    $adminId = (int)($_SESSION['empid'] ?? 0);
+    $insert = mysqli_prepare($conDB, "INSERT INTO asset_clearance_handlers (asset_id, handler_emp_id, updated_by) VALUES (?, ?, ?)");
+    if (!$insert) {
+        echo json_encode(['success' => false, 'message' => 'asset_clearance_handlers table missing: ' . mysqli_error($conDB)]);
+        return;
+    }
+    $ok = true;
+    foreach ($activeIds as $handlerEmpId) {
+        mysqli_stmt_bind_param($insert, "iii", $assetId, $handlerEmpId, $adminId);
+        if (!mysqli_stmt_execute($insert)) {
+            $ok = false;
+        }
+    }
+    mysqli_stmt_close($insert);
+
+    if ($ok) {
+        echo json_encode(['success' => true, 'message' => 'Handler assigned successfully']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Database error: ' . mysqli_error($conDB)]);
     }
 }
 

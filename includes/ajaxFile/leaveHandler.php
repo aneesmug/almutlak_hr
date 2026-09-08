@@ -4339,6 +4339,509 @@ elseif ($ajaxType == 'getEmployeeAssignedAssets') {
     exit;
 }
 
+// ================================================================
+// --- [NEW] ASSET KEEP/RETURN CLEARANCE (dynamic department routing) ---
+// == Assets are routed to their owning department automatically via
+// == assets.clearance_dept_id (Laptop -> IT, Mobile/SIM/Car -> Administration).
+// == The direct manager (level 1 approver) decides Keep/Return per asset;
+// == "Return" items get that department's manager auto-added to the chain.
+// ================================================================
+
+// Combined list of an employee's assets eligible for a Keep/Return decision:
+// employee_assets (laptops, mobiles, SIMs, ...) plus active car assignments.
+elseif ($ajaxType == 'getEmployeeAssetsForClearance') {
+    try {
+        $emp_id = (int)($_POST['emp_id'] ?? 0);
+        if (empty($emp_id)) {
+            throw new Exception(__("employee_id_is_missing"));
+        }
+
+        $items = [];
+
+        $sql = "SELECT ea.id, ea.serial_number, ea.description, ea.assigned_date, a.id AS asset_type_id, a.name AS asset_name,
+                       a.clearance_dept_id, d.dep_nme AS dept_name
+                FROM employee_assets ea
+                LEFT JOIN assets a ON ea.asset_id = a.id
+                LEFT JOIN department d ON a.clearance_dept_id = d.id
+                WHERE ea.emp_id = ? AND ea.status = 'Assigned'
+                ORDER BY ea.assigned_date DESC";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) throw new Exception(__('database_prepare_error') . ": " . mysqli_error($conDB));
+        mysqli_stmt_bind_param($stmt, "i", $emp_id);
+        if (!mysqli_stmt_execute($stmt)) throw new Exception(__('database_prepare_error') . ": " . mysqli_stmt_error($stmt));
+        $result = mysqli_stmt_get_result($stmt);
+        while ($row = mysqli_fetch_assoc($result)) {
+            $items[] = [
+                'source' => 'employee_asset',
+                'ref_id' => (int)$row['id'],
+                'asset_type_id' => $row['asset_type_id'] !== null ? (int)$row['asset_type_id'] : null,
+                'asset_name' => $row['asset_name'] ?? __('asset'),
+                'detail' => trim(($row['description'] ?? '') . (!empty($row['serial_number']) ? ' - ' . $row['serial_number'] : '')),
+                'assigned_date' => $row['assigned_date'],
+                'clearance_dept_id' => $row['clearance_dept_id'] !== null ? (int)$row['clearance_dept_id'] : null,
+                'dept_name' => $row['dept_name']
+            ];
+        }
+        mysqli_stmt_close($stmt);
+
+        $sql_cars = "SELECT cd.id, cd.rcv_date, c.plate_no, cm.maker AS maker_name, cmd.model AS model_name
+                     FROM cars_drv cd
+                     JOIN cars c ON cd.car_id = c.id
+                     LEFT JOIN car_maker cm ON c.maker_name = cm.id
+                     LEFT JOIN car_model cmd ON c.model = cmd.id
+                     WHERE cd.car_user = ? AND cd.status = 1 AND (cd.rtn_date IS NULL OR cd.rtn_date = '' OR cd.rtn_date = '0000-00-00')";
+        $stmt_cars = mysqli_prepare($conDB, $sql_cars);
+        if ($stmt_cars) {
+            mysqli_stmt_bind_param($stmt_cars, "i", $emp_id);
+            if (mysqli_stmt_execute($stmt_cars)) {
+                $res_cars = mysqli_stmt_get_result($stmt_cars);
+                $car_dept_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT id AS asset_type_id, clearance_dept_id, d.dep_nme AS dept_name FROM assets a LEFT JOIN department d ON a.clearance_dept_id = d.id WHERE a.name = 'Car' LIMIT 1"));
+                while ($row = mysqli_fetch_assoc($res_cars)) {
+                    $items[] = [
+                        'source' => 'car',
+                        'ref_id' => (int)$row['id'],
+                        'asset_type_id' => $car_dept_row['asset_type_id'] !== null ? (int)$car_dept_row['asset_type_id'] : null,
+                        'asset_name' => 'Car',
+                        'detail' => trim(($row['maker_name'] ?? '') . ' ' . ($row['model_name'] ?? '') . (!empty($row['plate_no']) ? ' - ' . $row['plate_no'] : '')),
+                        'assigned_date' => $row['rcv_date'],
+                        'clearance_dept_id' => $car_dept_row['clearance_dept_id'] !== null ? (int)$car_dept_row['clearance_dept_id'] : null,
+                        'dept_name' => $car_dept_row['dept_name'] ?? null
+                    ];
+                }
+            }
+            mysqli_stmt_close($stmt_cars);
+        }
+
+        echo json_encode(['status' => 200, 'assets' => $items, 'total' => count($items)]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// Direct manager's Keep/Return decision, made while approving (level 1).
+// Approves their own step AND auto-appends the owning department's manager
+// to the chain for every asset marked "return".
+elseif ($ajaxType == 'processAssetKeepReturnDecision') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $decisions_raw = $_POST['decisions'] ?? '[]';
+        $approval_comment = trim($_POST['approval_comment'] ?? '');
+        $decisions = json_decode($decisions_raw, true);
+
+        if (empty($vacation_id) || empty($current_user_id)) {
+            throw new Exception('Missing required parameters');
+        }
+        if (!is_array($decisions)) {
+            throw new Exception('Invalid decisions payload');
+        }
+
+        $vac_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT request_inv_no, emp_id FROM emp_vacation WHERE id = " . (int)$vacation_id));
+        if (!$vac_row) {
+            throw new Exception('Vacation not found');
+        }
+        $request_inv_no = $vac_row['request_inv_no'];
+        $emp_id = $vac_row['emp_id'];
+
+        $type_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT art.id AS type_id FROM request_approvers ra JOIN approval_request_types art ON ra.request_type_id = art.id WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' LIMIT 1"));
+        $detected_type_id = $type_row['type_id'] ?? null;
+
+        // Save each decision, tracking the inserted row id for "return" items so each
+        // one's handler can be resolved and written back individually below - different
+        // asset types in the same department can have different configured handlers.
+        $pending_rows = []; // [{id, dept_id, asset_type_id, asset_name}]
+        $insert_stmt = mysqli_prepare($conDB, "INSERT INTO vacation_asset_decisions (vacation_id, request_inv_no, emp_id, source, ref_id, asset_name, decision, clearance_dept_id, status, decided_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+        foreach ($decisions as $d) {
+            $source = ($d['source'] ?? '') === 'car' ? 'car' : 'employee_asset';
+            $ref_id = (int)($d['ref_id'] ?? 0);
+            $asset_name = trim($d['asset_name'] ?? '');
+            $decision = ($d['decision'] ?? '') === 'return' ? 'return' : 'keep';
+            $dept_id = isset($d['clearance_dept_id']) && $d['clearance_dept_id'] !== '' ? (int)$d['clearance_dept_id'] : null;
+            $asset_type_id = isset($d['asset_type_id']) && $d['asset_type_id'] !== '' ? (int)$d['asset_type_id'] : null;
+
+            if ($ref_id <= 0) continue;
+
+            $status = ($decision === 'return' && $dept_id) ? 'pending' : 'n_a';
+
+            if ($insert_stmt) {
+                mysqli_stmt_bind_param($insert_stmt, "isssissisi", $vacation_id, $request_inv_no, $emp_id, $source, $ref_id, $asset_name, $decision, $dept_id, $status, $current_user_id);
+                mysqli_stmt_execute($insert_stmt);
+
+                if ($status === 'pending') {
+                    $pending_rows[] = [
+                        'id' => $insert_stmt->insert_id,
+                        'dept_id' => $dept_id,
+                        'asset_type_id' => $asset_type_id,
+                        'asset_name' => $asset_name
+                    ];
+                }
+            }
+        }
+        if ($insert_stmt) mysqli_stmt_close($insert_stmt);
+
+        // Resolve the handler for each "return" item, in priority order:
+        // 1. A handler explicitly configured for this asset type (Settings -> Asset
+        //    Clearance Handlers) - trusted as-is, no self-clearance check needed.
+        // 2. The department's manager - unless that's the same person as the direct
+        //    manager who just approved (no oversight otherwise).
+        // 3. A system administrator, who will then pick who actually clears it
+        //    (needs_assignment) - see assignAssetClearanceHandler.
+        // Items resolving to the same handler AND the same role (direct clear vs.
+        // assign-a-handler) are grouped into one chain entry. Keyed by handler+role
+        // rather than just handler, because the same person can legitimately hold
+        // both roles on one request (e.g. the sole administrator is also the IT
+        // manager: they directly clear the laptop, but must ASSIGN someone else for
+        // an Administration asset where they're also the conflicted direct manager) -
+        // those are two distinct duties and must not collapse into one ambiguous step.
+        $handlers_needed = []; // "empId:role" => ['handler'=>..., 'needs_assignment'=>bool, 'asset_names'=>[], 'row_ids'=>[]]
+        if (!empty($pending_rows) && $detected_type_id !== null) {
+            foreach ($pending_rows as $row) {
+                $handler = null;
+                $needs_assignment = false;
+
+                if ($row['asset_type_id']) {
+                    // Walk the configured backup list in order, skipping anyone who
+                    // is the direct manager who just approved (self-clearance - no
+                    // oversight) even though they're explicitly configured; the next
+                    // person in the list still applies before falling through further.
+                    $configured_result = mysqli_query($conDB, "SELECT ach.handler_emp_id, e.name, al.email
+                                                                 FROM asset_clearance_handlers ach
+                                                                 JOIN employees e ON ach.handler_emp_id = e.emp_id
+                                                                 LEFT JOIN admin_login al ON e.emp_id = al.emp_id
+                                                                 WHERE ach.asset_id = " . (int)$row['asset_type_id'] . " AND e.status = 1 ORDER BY ach.id ASC");
+                    if ($configured_result) {
+                        while ($configured = mysqli_fetch_assoc($configured_result)) {
+                            if ((int)$configured['handler_emp_id'] === (int)$current_user_id) {
+                                continue; // self-clearance - skip to the next configured backup
+                            }
+                            $handler = ['emp_id' => $configured['handler_emp_id'], 'name' => $configured['name'], 'email' => $configured['email']];
+                            break;
+                        }
+                        mysqli_free_result($configured_result);
+                    }
+                }
+
+                if (!$handler && $row['dept_id']) {
+                    $dept_manager = getDeptManager($conDB, $row['dept_id']);
+                    if ($dept_manager && !empty($dept_manager['emp_id']) && (int)$dept_manager['emp_id'] !== (int)$current_user_id) {
+                        $handler = $dept_manager;
+                    }
+                }
+
+                if (!$handler) {
+                    $handler = getSystemAdministrator($conDB, (int)$current_user_id);
+                    if ($handler) {
+                        $needs_assignment = true;
+                    }
+                }
+
+                if (!$handler || empty($handler['emp_id'])) {
+                    continue; // No handler available at all - decision stays recorded but unassigned.
+                }
+
+                $handler_id = (int)$handler['emp_id'];
+                $group_key = $handler_id . ':' . ($needs_assignment ? 'assign' : 'direct');
+                if (!isset($handlers_needed[$group_key])) {
+                    $handlers_needed[$group_key] = ['handler' => $handler, 'needs_assignment' => $needs_assignment, 'asset_names' => [], 'row_ids' => []];
+                }
+                $handlers_needed[$group_key]['asset_names'][] = $row['asset_name'];
+                $handlers_needed[$group_key]['row_ids'][] = $row['id'];
+            }
+        }
+
+        $added_managers = [];
+        foreach ($handlers_needed as $info) {
+            $handler = $info['handler'];
+            $handler_id = (int)$handler['emp_id'];
+            $needs_assignment = $info['needs_assignment'];
+            $asset_names = $info['asset_names'];
+
+            // Always append a fresh step - this function only ever runs once per
+            // vacation (its very first line approves the direct manager's own step,
+            // which throws immediately on any repeat call), so there's no risk of
+            // re-adding the same duty twice; and the same person can legitimately
+            // need two separate steps here (see the comment above $handlers_needed).
+            $max_level_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT MAX(approval_level) AS max_level FROM request_approvers WHERE request_inv_no = '" . escape_string($request_inv_no) . "' AND request_type_id = " . (int)$detected_type_id));
+            $next_level = (isset($max_level_row['max_level']) && $max_level_row['max_level'] > 0) ? ((int)$max_level_row['max_level'] + 1) : 1;
+
+            $new_approver_row_id = null;
+            $ins = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
+            if ($ins) {
+                mysqli_stmt_bind_param($ins, "siii", $request_inv_no, $detected_type_id, $handler_id, $next_level);
+                mysqli_stmt_execute($ins);
+                $new_approver_row_id = $ins->insert_id;
+                mysqli_stmt_close($ins);
+            }
+
+            $new_status = $needs_assignment ? 'needs_assignment' : 'pending';
+            $row_ids_list = implode(',', array_map('intval', $info['row_ids']));
+            mysqli_query($conDB, "UPDATE vacation_asset_decisions SET approver_id = " . $handler_id . ", request_approver_id = " . (int)$new_approver_row_id . ", status = '" . $new_status . "' WHERE id IN ($row_ids_list)");
+
+            $added_managers[] = $handler['name'] . ($needs_assignment ? ' - to assign handler' : '');
+
+            $notif_title = $needs_assignment ? 'Asset clearance handler assignment required' : 'Asset return clearance required';
+            $notif_message = $needs_assignment
+                ? "Vacation {$request_inv_no}: please assign who will clear the following asset(s): " . implode(', ', $asset_names) . '.'
+                : "Vacation {$request_inv_no}: please confirm receipt of " . implode(', ', $asset_names) . '.';
+
+            if (function_exists('create_browser_notification')) {
+                create_browser_notification($conDB, $handler_id, $notif_title, $notif_message, 'all_applied_vac.php?status=my_pending');
+            }
+            if (!empty($handler['email']) && function_exists('send_approval_email')) {
+                $template_data = get_request_details_for_email($conDB, $request_inv_no, 'vacation_request', $handler['name']);
+                send_approval_email($conDB, $handler['email'], $handler['name'], $notif_title, 'vacation_request', $template_data ?: []);
+            }
+        }
+
+        // Approve the direct manager's own step LAST - any asset-clearance rows
+        // just appended above must exist first, or handle_approval_action (which
+        // looks for an existing "next level" to promote) would find none and
+        // wrongly treat this as final approval of the whole vacation while the
+        // actual clearance work hasn't happened yet.
+        $result = handle_approval_action($conDB, $request_inv_no, 'vacation_request', $current_user_id, 'approve', $approval_comment ?: 'Approved');
+        if ($result['status'] == 'error') {
+            throw new Exception($result['message']);
+        }
+
+        send_json_response(
+            __("success") ?: 'Success',
+            'Approved. ' . (!empty($added_managers) ? 'Asset return clearance added to the chain: ' . implode(', ', $added_managers) . '.' : 'No asset return clearance needed.'),
+            'success'
+        );
+    } catch (Exception $e) {
+        send_json_response('Error', $e->getMessage(), 'error');
+    }
+    exit;
+}
+
+// Tells the frontend whether the current approver has pending asset-return
+// items assigned to their department for this vacation request.
+elseif ($ajaxType == 'checkAssetReturnClearanceStatus') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        if (empty($vacation_id) || empty($current_user_id)) {
+            throw new Exception('Missing required parameters');
+        }
+
+        $decisions_count_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM vacation_asset_decisions WHERE vacation_id = " . (int)$vacation_id));
+        $decisions_exist = ((int)($decisions_count_row['cnt'] ?? 0)) > 0;
+
+        // Only surface items whose specific chain step (request_approver_id) is
+        // CURRENTLY this person's active turn - not every duty they'll ever have
+        // on this request. The same person can hold two separate duties here (see
+        // the note in processAssetKeepReturnDecision), and only one is ever "now".
+        $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.source, vad.ref_id, vad.asset_name, vad.clearance_dept_id, vad.status
+                                         FROM vacation_asset_decisions vad
+                                         JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
+                                         WHERE vad.vacation_id = ? AND vad.status IN ('pending', 'needs_assignment') AND vad.approver_id = ?");
+        $pending_items = [];
+        $assignment_items = [];
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "ii", $vacation_id, $current_user_id);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            while ($row = mysqli_fetch_assoc($res)) {
+                if ($row['status'] === 'needs_assignment') {
+                    $assignment_items[] = $row;
+                } else {
+                    $pending_items[] = $row;
+                }
+            }
+            mysqli_stmt_close($stmt);
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'decisions_exist' => $decisions_exist,
+            'has_pending' => count($pending_items) > 0,
+            'has_assignment' => count($assignment_items) > 0,
+            'items' => $pending_items,
+            'assignment_items' => $assignment_items
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage(), 'has_pending' => false, 'has_assignment' => false]);
+    }
+    exit;
+}
+
+// The auto-added department approver confirms ONE asset at a time was physically
+// received back, recording its condition. Only once every asset assigned to this
+// approver on this request is cleared does their chain step get approved.
+elseif ($ajaxType == 'confirmSingleAssetReturn') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $decision_id = (int)($_POST['decision_id'] ?? 0);
+        $condition = trim($_POST['condition'] ?? '');
+        $item_comment = trim($_POST['comment'] ?? '');
+
+        if (empty($vacation_id) || empty($current_user_id) || $decision_id <= 0) {
+            throw new Exception('Missing required parameters');
+        }
+        $allowed_conditions = ['Good', 'Damage', 'Lost', 'Buy', 'Other'];
+        if (!in_array($condition, $allowed_conditions, true)) {
+            throw new Exception('Please select a valid asset condition');
+        }
+
+        $vac_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT request_inv_no FROM emp_vacation WHERE id = " . (int)$vacation_id));
+        if (!$vac_row) {
+            throw new Exception('Vacation not found');
+        }
+        $request_inv_no = $vac_row['request_inv_no'];
+
+        $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.source, vad.ref_id, vad.asset_name
+                                         FROM vacation_asset_decisions vad
+                                         JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
+                                         WHERE vad.id = ? AND vad.vacation_id = ? AND vad.status = 'pending' AND vad.approver_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt, "iii", $decision_id, $vacation_id, $current_user_id);
+        mysqli_stmt_execute($stmt);
+        $item = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+
+        if (!$item) {
+            throw new Exception('This asset is not pending your clearance (already cleared, or not assigned to you).');
+        }
+
+        $condition_esc = escape_string($condition);
+        mysqli_query($conDB, "UPDATE vacation_asset_decisions SET status = 'cleared', cleared_by = " . (int)$current_user_id . ", cleared_at = NOW(), condition_on_return = '{$condition_esc}' WHERE id = " . (int)$item['id']);
+
+        if ($item['source'] === 'employee_asset') {
+            mysqli_query($conDB, "UPDATE employee_assets SET status = 'Returned', return_date = CURDATE(), asset_condition = '{$condition_esc}' WHERE id = " . (int)$item['ref_id']);
+        } elseif ($item['source'] === 'car') {
+            mysqli_query($conDB, "UPDATE cars_drv SET status = 0, rtn_date = CURDATE(), car_condition = '{$condition_esc}' WHERE id = " . (int)$item['ref_id']);
+        }
+
+        if (!empty($item_comment) && function_exists('save_approval_comment_db')) {
+            save_approval_comment_db($conDB, $request_inv_no, 'vacation_request', 'approve', $current_user_id, $userwel ?? 'Asset Clearance', "Asset Clearance - {$item['asset_name']} ({$condition}): {$item_comment}");
+        }
+
+        // Only advance the chain once every item assigned to THIS approver on THIS
+        // request is cleared - they may have several (e.g. Car + SIM + Mobile).
+        $remaining_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM vacation_asset_decisions WHERE vacation_id = " . (int)$vacation_id . " AND approver_id = " . (int)$current_user_id . " AND status = 'pending'"));
+        $remaining = (int)($remaining_row['cnt'] ?? 0);
+
+        $chain_advanced = false;
+        if ($remaining === 0) {
+            $note = "Asset Clearance: All assigned assets received and cleared.";
+            $result = handle_approval_action($conDB, $request_inv_no, 'vacation_request', $current_user_id, 'approve', $note);
+            if ($result['status'] == 'error') {
+                throw new Exception($result['message']);
+            }
+            $chain_advanced = true;
+        }
+
+        send_json_response(
+            __("asset_clearance_complete") ?: 'Asset Clearance',
+            $chain_advanced ? 'Asset return confirmed. All assigned assets cleared - approval moved to the next step.' : "Asset return confirmed. {$remaining} asset(s) still pending your clearance on this request.",
+            'success',
+            200,
+            ['remaining' => $remaining, 'chain_advanced' => $chain_advanced]
+        );
+    } catch (Exception $e) {
+        send_json_response('Error', $e->getMessage(), 'error');
+    }
+    exit;
+}
+
+// A system administrator (added because the department manager was the same
+// person as the direct manager) picks who actually performs the asset
+// clearance. That person is appended to the chain and the decisions hand off
+// to them (status: needs_assignment -> pending).
+elseif ($ajaxType == 'assignAssetClearanceHandler') {
+    try {
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $handler_emp_id = (int)($_POST['handler_emp_id'] ?? 0);
+
+        if (empty($vacation_id) || empty($current_user_id) || $handler_emp_id <= 0) {
+            throw new Exception('Missing required parameters');
+        }
+
+        $vac_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT request_inv_no FROM emp_vacation WHERE id = " . (int)$vacation_id));
+        if (!$vac_row) {
+            throw new Exception('Vacation not found');
+        }
+        $request_inv_no = $vac_row['request_inv_no'];
+
+        $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.asset_name, vad.clearance_dept_id
+                                         FROM vacation_asset_decisions vad
+                                         JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
+                                         WHERE vad.vacation_id = ? AND vad.status = 'needs_assignment' AND vad.approver_id = ?");
+        $pending = [];
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "ii", $vacation_id, $current_user_id);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            while ($row = mysqli_fetch_assoc($res)) {
+                $pending[] = $row;
+            }
+            mysqli_stmt_close($stmt);
+        }
+
+        if (empty($pending)) {
+            throw new Exception('No pending asset clearance assignment found for you on this request.');
+        }
+
+        $handler = getEmployeeDetailsForApproval($conDB, $handler_emp_id);
+        if (!$handler || empty($handler['name'])) {
+            throw new Exception('Selected employee was not found or is inactive.');
+        }
+
+        $type_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT art.id AS type_id FROM request_approvers ra JOIN approval_request_types art ON ra.request_type_id = art.id WHERE ra.request_inv_no = '" . escape_string($request_inv_no) . "' LIMIT 1"));
+        $detected_type_id = $type_row['type_id'] ?? null;
+        if ($detected_type_id === null) {
+            throw new Exception('Could not determine request type.');
+        }
+
+        // Append the handler as a fresh chain step for THIS specific duty BEFORE
+        // approving the administrator's own step below - handle_approval_action
+        // looks for an existing "next level" row to promote, and if none exists yet
+        // it treats the request as fully approved (final step). Since this delegate
+        // row IS the next step, it must exist first or the whole vacation would get
+        // wrongly finalized here while the actual clearance hasn't happened. Not
+        // reused/deduped against any other row the handler might already have in
+        // this chain - they could hold a separate, unrelated duty elsewhere in the
+        // same request (see the note in processAssetKeepReturnDecision), and this
+        // function's own idempotency is already guaranteed by handle_approval_action
+        // below (it throws on any repeat call for the same admin duty).
+        $max_level_row = mysqli_fetch_assoc(mysqli_query($conDB, "SELECT MAX(approval_level) AS max_level FROM request_approvers WHERE request_inv_no = '" . escape_string($request_inv_no) . "' AND request_type_id = " . (int)$detected_type_id));
+        $next_level = (isset($max_level_row['max_level']) && $max_level_row['max_level'] > 0) ? ((int)$max_level_row['max_level'] + 1) : 1;
+
+        $new_approver_row_id = null;
+        $ins = mysqli_prepare($conDB, "INSERT INTO request_approvers (request_inv_no, request_type_id, approver_id, approval_level, status) VALUES (?, ?, ?, ?, 'awaiting')");
+        if ($ins) {
+            mysqli_stmt_bind_param($ins, "siii", $request_inv_no, $detected_type_id, $handler_emp_id, $next_level);
+            mysqli_stmt_execute($ins);
+            $new_approver_row_id = $ins->insert_id;
+            mysqli_stmt_close($ins);
+        }
+
+        $pending_ids_list = implode(',', array_map(fn($p) => (int)$p['id'], $pending));
+        mysqli_query($conDB, "UPDATE vacation_asset_decisions SET approver_id = " . $handler_emp_id . ", request_approver_id = " . (int)$new_approver_row_id . ", status = 'pending' WHERE id IN ($pending_ids_list)");
+
+        // Now approve the administrator's own step - handle_approval_action will find
+        // the delegate row just inserted above at current_level+1 and promote it.
+        $note = "Asset Clearance: Delegated to " . $handler['name'];
+        $result = handle_approval_action($conDB, $request_inv_no, 'vacation_request', $current_user_id, 'approve', $note);
+        if ($result['status'] == 'error') {
+            throw new Exception($result['message']);
+        }
+
+        if (function_exists('create_browser_notification')) {
+            $asset_names = array_column($pending, 'asset_name');
+            create_browser_notification($conDB, $handler_emp_id, 'Asset return clearance required', "Vacation {$request_inv_no}: please confirm receipt of " . implode(', ', $asset_names) . '.', 'all_applied_vac.php?status=my_pending');
+        }
+        if (!empty($handler['email']) && function_exists('send_approval_email')) {
+            $template_data = get_request_details_for_email($conDB, $request_inv_no, 'vacation_request', $handler['name']);
+            send_approval_email($conDB, $handler['email'], $handler['name'], 'Asset return clearance required', 'vacation_request', $template_data ?: []);
+        }
+
+        send_json_response(__("success") ?: 'Success', 'Clearance handler assigned: ' . $handler['name'] . '.', 'success');
+    } catch (Exception $e) {
+        send_json_response('Error', $e->getMessage(), 'error');
+    }
+    exit;
+}
+
 // --- [NEW] BLOCK TO HANDLE FETCHING TRAVELER DETAILS ---
 // ================================================================
 elseif ($ajaxType == 'getTravelerDetails') {
@@ -5338,20 +5841,20 @@ elseif ($ajaxType == 'get_potential_approvers') {
     echo json_encode(['data' => $data, 'status' => 200]);
     exit;
 } elseif ($ajaxType == 'get_asset_department_employees') {
-    // Return all active employees for the manager's asset department (Admin, IT, or Transportation)
-    $dept_id = (int)($_POST['dept_id'] ?? 0);
-    if ($dept_id <= 0) {
-        echo json_encode(['status' => 400, 'message' => 'Department id is required']);
-        exit;
+    // Returns every active employee (not just the asset's own department) so a
+    // clearance handler can be picked from anywhere in the company - names run
+    // through parseName() for a clean, consistent display.
+    $employees = [];
+    $result = mysqli_query($conDB, "SELECT emp_id, name FROM employees WHERE status = 1 ORDER BY name ASC");
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $employees[] = [
+                'emp_id' => $row['emp_id'],
+                'name' => parseName($row['name'])
+            ];
+        }
+        mysqli_free_result($result);
     }
-
-    $asset_dept_ids = [1, 6, 17];
-    if (!in_array($dept_id, $asset_dept_ids, true)) {
-        echo json_encode(['status' => 403, 'message' => 'Invalid asset department']);
-        exit;
-    }
-
-    $employees = get_department_employees_all($conDB, $dept_id);
     echo json_encode(['status' => 200, 'employees' => $employees]);
     exit;
 } elseif ($ajaxType == 'get_hr_assistants') {

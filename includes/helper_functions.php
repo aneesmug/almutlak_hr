@@ -3611,6 +3611,46 @@ if (!function_exists('getDeptManager')) {
     }
 }
 
+if (!function_exists('getSystemAdministrator')) {
+    // Fallback approver used when the department manager who would normally clear an
+    // asset return is the same person who already approved as direct manager (no
+    // oversight otherwise). Picks any active administrator other than $exclude_emp_id.
+    function getSystemAdministrator($conDB, $exclude_emp_id = null)
+    {
+        if (!$conDB) return null;
+        $sql = "SELECT e.emp_id, e.name, al.email
+                FROM `employees` e
+                JOIN `admin_login` al ON e.emp_id = al.emp_id
+                WHERE al.`user_type` = 'administrator' AND e.`status` = 1";
+        $params = [];
+        $types = "";
+        if (!empty($exclude_emp_id)) {
+            $sql .= " AND e.emp_id != ?";
+            $types .= "i";
+            $params[] = (int)$exclude_emp_id;
+        }
+        $sql .= " ORDER BY e.emp_id ASC LIMIT 1";
+        $stmt = mysqli_prepare($conDB, $sql);
+        if (!$stmt) return null;
+        if (!empty($types)) {
+            mysqli_stmt_bind_param($stmt, $types, ...$params);
+        }
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result && mysqli_num_rows($result) > 0) {
+                $details = mysqli_fetch_assoc($result);
+                mysqli_free_result($result);
+                mysqli_stmt_close($stmt);
+                $details['email'] = (!empty($details['email']) && filter_var($details['email'], FILTER_VALIDATE_EMAIL)) ? $details['email'] : null;
+                return $details;
+            }
+            if ($result) mysqli_free_result($result);
+        }
+        mysqli_stmt_close($stmt);
+        return null;
+    }
+}
+
 if (!function_exists('getFinancePersonnel')) {
     function getFinancePersonnel($conDB, $dept_id = 2)
     { // Default Finance Dept ID = 2

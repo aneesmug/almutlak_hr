@@ -1698,6 +1698,353 @@ if ($can_see_all_depts) {
 
         /**
          * =================================================================
+         * == ASSET KEEP/RETURN DECISION MODAL (Direct Manager, Level 1)
+         * == Each asset is auto-routed to its clearance department (Laptop -> IT,
+         * == Mobile/SIM/Car -> Administration) via assets.clearance_dept_id.
+         * =================================================================
+         */
+        function showAssetKeepReturnModal(vacationId, employeeId, employeeName, items, onDone) {
+            let rowsHtml = '';
+            items.forEach(function(item, index) {
+                rowsHtml += `
+                    <div class="card mb-2" style="border:1px solid #e0e0e0;">
+                        <div class="card-body" style="padding: 12px 15px;">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap">
+                                <div>
+                                    <strong>${item.asset_name || (__('asset') || 'Asset')}</strong>
+                                    ${item.detail ? `<br><small class="text-muted">${item.detail}</small>` : ''}
+                                    ${item.dept_name ? `<br><small class="text-muted"><i class="fa fa-building"></i> ${item.dept_name}</small>` : ''}
+                                </div>
+                                <div class="custom-control custom-radio custom-control-inline mt-1">
+                                    <input type="radio" id="keep_${index}" name="decision_${index}" class="custom-control-input asset-decision-radio" value="keep" data-index="${index}" required>
+                                    <label class="custom-control-label" for="keep_${index}" style="cursor:pointer;">${__('keep') || 'Keep'}</label>
+                                </div>
+                                <div class="custom-control custom-radio custom-control-inline mt-1">
+                                    <input type="radio" id="return_${index}" name="decision_${index}" class="custom-control-input asset-decision-radio" value="return" data-index="${index}" required>
+                                    <label class="custom-control-label" for="return_${index}" style="cursor:pointer;">${__('return') || 'Return'}</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            Swal.fire({
+                title: __('asset_clearance') || 'Asset Clearance',
+                html: `
+                    <form class="text-left">
+                        <p class="alert alert-info mb-3">
+                            <i class="fa fa-info-circle"></i>
+                            ${__('asset_keep_return_note') || 'For each asset, decide whether the employee will keep it during the vacation or return it. Assets marked "Return" will be routed to the responsible department for clearance.'}
+                        </p>
+                        ${rowsHtml}
+                        <div class="form-group mt-3">
+                            <label>${__('approval_comment') || 'Approval Comment'} <span class="text-muted">(${__('optional')})</span></label>
+                            <textarea id="asset_kr_comment" class="form-control" rows="2" maxlength="5000"></textarea>
+                        </div>
+                    </form>
+                `,
+                width: '55%',
+                showCancelButton: true,
+                confirmButtonText: __('confirm_clearance') || 'Confirm & Approve',
+                confirmButtonColor: APP_COLORS.success,
+                cancelButtonColor: APP_COLORS.danger,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showLoaderOnConfirm: true,
+                preConfirm: () => {
+                    const decisions = [];
+                    for (let i = 0; i < items.length; i++) {
+                        const checked = document.querySelector(`input[name="decision_${i}"]:checked`);
+                        if (!checked) {
+                            Swal.showValidationMessage(__('please_select_keep_or_return_for_every_asset') || 'Please select Keep or Return for every asset');
+                            return false;
+                        }
+                        decisions.push({
+                            source: items[i].source,
+                            ref_id: items[i].ref_id,
+                            asset_name: items[i].asset_name,
+                            asset_type_id: items[i].asset_type_id,
+                            clearance_dept_id: items[i].clearance_dept_id,
+                            decision: checked.value
+                        });
+                    }
+                    return {
+                        decisions: decisions,
+                        comment: document.getElementById('asset_kr_comment').value
+                    };
+                }
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        ajaxType: 'processAssetKeepReturnDecision',
+                        vacation_id: vacationId,
+                        decisions: JSON.stringify(result.value.decisions),
+                        approval_comment: result.value.comment
+                    },
+                    success: function(response) {
+                        Swal.fire({
+                            title: response.title,
+                            text: response.message,
+                            icon: response.type,
+                            confirmButtonColor: APP_COLORS.success,
+                            confirmButtonText: __('ok') || 'OK'
+                        }).then(() => {
+                            location.reload();
+                        });
+                    },
+                    error: function(xhr) {
+                        const response = xhr.responseJSON || {};
+                        Swal.fire({
+                            title: response.title || __('error') || 'Error',
+                            text: response.message || __('error_processing_request') || 'An error occurred',
+                            icon: 'error',
+                            confirmButtonColor: APP_COLORS.danger
+                        });
+                    }
+                });
+            });
+        }
+
+        /**
+         * =================================================================
+         * == ASSET RETURN CONFIRMATION MODAL (Auto-added department approver)
+         * == Each asset is cleared ONE AT A TIME with its own condition, so
+         * == the returned condition is recorded per item, not as a batch.
+         * =================================================================
+         */
+        function showAssetReturnConfirmModal(vacationId, items, onDone) {
+            let anyClearedThisSession = false;
+            let allClearedHandled = false; // true once the "all items cleared" success flow has taken over
+            const conditionOptions = ['Good', 'Damage', 'Lost', 'Buy', 'Other'];
+            const conditionLabels = {
+                Good: __('good') || 'Good',
+                Damage: __('damage') || 'Damage',
+                Lost: __('lost') || 'Lost',
+                Buy: __('buy') || 'Buy (Employee Purchased)',
+                Other: __('other') || 'Other'
+            };
+
+            let rowsHtml = '';
+            items.forEach(function(item) {
+                let optionsHtml = `<option value="">${__('select_condition') || 'Select Condition'}</option>`;
+                conditionOptions.forEach(c => { optionsHtml += `<option value="${c}">${conditionLabels[c]}</option>`; });
+
+                rowsHtml += `
+                    <div class="asset-return-row card mb-2" data-decision-id="${item.id}" style="border:1px solid #e0e0e0;">
+                        <div class="card-body" style="padding: 12px 15px;">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                                <strong class="mr-2">${item.asset_name || (__('asset') || 'Asset')}</strong>
+                                <select class="form-control form-control-sm asset-return-condition" style="max-width:200px; display:inline-block; width:auto;">
+                                    ${optionsHtml}
+                                </select>
+                                <button type="button" class="btn btn-sm btn-success asset-return-confirm-btn ml-2">${__('confirm') || 'Confirm'}</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            Swal.fire({
+                title: __('asset_clearance') || 'Asset Clearance',
+                html: `
+                    <div class="text-left">
+                        <p class="alert alert-info mb-3">
+                            <i class="fa fa-info-circle"></i>
+                            ${__('asset_return_confirm_note_per_item') || 'Confirm each asset individually and record its condition on return.'}
+                        </p>
+                        <div id="asset-return-rows">${rowsHtml}</div>
+                    </div>
+                `,
+                width: '55%',
+                showConfirmButton: false,
+                showCancelButton: true,
+                cancelButtonText: __('close') || 'Close',
+                cancelButtonColor: APP_COLORS.secondary || '#6c757d',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    const container = Swal.getHtmlContainer();
+
+                    const wireRow = (row) => {
+                        const btn = row.querySelector('.asset-return-confirm-btn');
+                        btn.addEventListener('click', () => {
+                            const decisionId = row.dataset.decisionId;
+                            const condition = row.querySelector('.asset-return-condition').value;
+                            if (!condition) {
+                                Swal.showValidationMessage(__('please_select_an_asset_condition') || 'Please select the asset condition');
+                                return;
+                            }
+                            Swal.resetValidationMessage();
+                            btn.disabled = true;
+                            row.querySelector('.asset-return-condition').disabled = true;
+
+                            $.ajax({
+                                url: './includes/ajaxFile/leaveHandler.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: {
+                                    ajaxType: 'confirmSingleAssetReturn',
+                                    vacation_id: vacationId,
+                                    decision_id: decisionId,
+                                    condition: condition
+                                },
+                                success: function(response) {
+                                    row.style.opacity = '0.5';
+                                    row.style.pointerEvents = 'none';
+                                    btn.innerHTML = '<i class="fa fa-check"></i>';
+                                    row.setAttribute('data-cleared', '1');
+                                    anyClearedThisSession = true;
+
+                                    if (container.querySelectorAll('.asset-return-row:not([data-cleared])').length === 0) {
+                                        allClearedHandled = true;
+                                        Swal.fire({
+                                            title: response.title,
+                                            text: response.message,
+                                            icon: response.type,
+                                            confirmButtonColor: APP_COLORS.success,
+                                            confirmButtonText: __('ok') || 'OK'
+                                        }).then(() => {
+                                            location.reload();
+                                        });
+                                    }
+                                },
+                                error: function(xhr) {
+                                    btn.disabled = false;
+                                    row.querySelector('.asset-return-condition').disabled = false;
+                                    const response = xhr.responseJSON || {};
+                                    Swal.showValidationMessage(response.message || __('error_processing_request') || 'An error occurred');
+                                }
+                            });
+                        });
+                    };
+
+                    container.querySelectorAll('.asset-return-row').forEach(wireRow);
+                }
+            }).then((result) => {
+                // Dismissed (Close/outside/ESC) before every item was cleared - any
+                // items already cleared in this session are saved server-side, the
+                // rest stay pending for next time. Reload so the page reflects that
+                // partial progress. If nothing was cleared, or everything was (which
+                // already triggers its own reload above), there's nothing to refresh.
+                if (!allClearedHandled && anyClearedThisSession) {
+                    location.reload();
+                }
+            });
+        }
+
+        /**
+         * =================================================================
+         * == ASSIGN ASSET CLEARANCE HANDLER MODAL (System Administrator)
+         * == Shown when the department manager who'd normally clear the asset
+         * == IS the direct manager who already approved - the administrator
+         * == picks someone else from that department to do the clearance.
+         * =================================================================
+         */
+        function showAssignAssetClearanceHandlerModal(vacationId, items, onDone) {
+            const deptId = items.length > 0 ? items[0].clearance_dept_id : null;
+            const assetNames = items.map(i => i.asset_name || (__('asset') || 'Asset')).join(', ');
+
+            $.ajax({
+                url: './includes/ajaxFile/leaveHandler.php',
+                type: 'POST',
+                dataType: 'json',
+                data: { ajaxType: 'get_asset_department_employees', dept_id: deptId }
+            }).done(function(res) {
+                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
+                let optionsHtml = `<option value="">${__('select_employee') || 'Select Employee'}</option>`;
+                employees.forEach(function(emp) {
+                    optionsHtml += `<option value="${emp.emp_id}">${emp.name} (${emp.emp_id})</option>`;
+                });
+
+                Swal.fire({
+                    title: __('assign_asset_checker') || 'Assign Asset Clearance Handler',
+                    html: `
+                        <form class="text-left">
+                            <p class="alert alert-warning mb-3">
+                                <i class="fa fa-exclamation-triangle"></i>
+                                ${__('asset_assign_handler_note') || 'The department manager for this asset is the same person who already approved as direct manager. Please assign someone else to confirm the asset return.'}
+                            </p>
+                            <p><strong>${__('asset') || 'Asset'}:</strong> ${assetNames}</p>
+                            <div class="form-group">
+                                <label style="display:block;">${__('asset_checker') || 'Clearance Handler'} <span class="text-danger">*</span></label>
+                                <select id="clearance_handler_emp_id" class="form-control" required>
+                                    ${optionsHtml}
+                                </select>
+                            </div>
+                        </form>
+                    `,
+                    width: '45%',
+                    showCancelButton: true,
+                    confirmButtonText: __('approve_and_assign_checker') || 'Assign',
+                    confirmButtonColor: APP_COLORS.success,
+                    cancelButtonColor: APP_COLORS.danger,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => {
+                        const handlerId = document.getElementById('clearance_handler_emp_id').value;
+                        if (!handlerId) {
+                            Swal.showValidationMessage(__('please_select_an_asset_checker') || 'Please select a clearance handler');
+                            return false;
+                        }
+                        return { handler_emp_id: handlerId };
+                    },
+                    didOpen: () => {
+                        $('#clearance_handler_emp_id').select2({
+                            width: '100%',
+                            dropdownParent: $(Swal.getHtmlContainer()),
+                            placeholder: __('select_employee') || 'Select Employee'
+                        });
+                    }
+                }).then((result) => {
+                    if (!result.isConfirmed) return;
+                    $.ajax({
+                        url: './includes/ajaxFile/leaveHandler.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            ajaxType: 'assignAssetClearanceHandler',
+                            vacation_id: vacationId,
+                            handler_emp_id: result.value.handler_emp_id
+                        },
+                        success: function(response) {
+                            Swal.fire({
+                                title: response.title,
+                                text: response.message,
+                                icon: response.type,
+                                confirmButtonColor: APP_COLORS.success,
+                                confirmButtonText: __('ok') || 'OK'
+                            }).then(() => {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            const response = xhr.responseJSON || {};
+                            Swal.fire({
+                                title: response.title || __('error') || 'Error',
+                                text: response.message || __('error_processing_request') || 'An error occurred',
+                                icon: 'error',
+                                confirmButtonColor: APP_COLORS.danger
+                            });
+                        }
+                    });
+                });
+            }).fail(function() {
+                Swal.fire({
+                    title: __('error') || 'Error',
+                    text: __('error_loading_department_staff') || 'Could not load department staff. Please try again.',
+                    icon: 'error',
+                    confirmButtonColor: APP_COLORS.danger
+                });
+            });
+        }
+
+        /**
+         * =================================================================
          * == APPROVE REQUEST FUNCTION (Updated for Supervisor Chain)
          * =================================================================
          * This function now handles BOTH:
@@ -2129,6 +2476,11 @@ if ($can_see_all_depts) {
                             commentEl.addEventListener('input', function() {
                                 document.getElementById('asset-checker-char-count').textContent = this.value.length;
                             });
+                            $('#asset_checker_emp_id').select2({
+                                width: '100%',
+                                dropdownParent: $(Swal.getHtmlContainer()),
+                                placeholder: selectAssetCheckerLabel
+                            });
                         }
                     }).then((result) => {
                         if (result.isConfirmed) {
@@ -2177,7 +2529,77 @@ if ($can_see_all_depts) {
             // assigned asset checker for this vacation; if yes, show clearance
             // modal, if no but they're an asset manager, show assignment modal.
             const isAnnualVacationForAssetCheck = (vacType === 'Fly' && flyType === 'annual');
+            const isLevel1Approver = (parseInt(currentLevel) === 1);
+
+            // NEW: Direct manager (level 1) decides Keep/Return per asset. Each
+            // asset's department (assets.clearance_dept_id: Laptop -> IT,
+            // Mobile/SIM/Car -> Administration) is auto-added to the chain for
+            // any asset marked "Return" - no manual checker picking needed.
+            if (isAnnualVacationForAssetCheck && isLevel1Approver) {
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: { ajaxType: 'getEmployeeAssetsForClearance', emp_id: employeeId }
+                }).done(function(assetsResponse) {
+                    const items = assetsResponse.assets || [];
+                    if (items.length === 0) {
+                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        return;
+                    }
+                    showAssetKeepReturnModal(vacationId, employeeId, employeeName, items, function() {
+                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                    });
+                }).fail(function() {
+                    proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                });
+                return;
+            }
+
+            // NEW: Any other approver in the chain (e.g. the auto-added IT / Administration
+            // manager) - check if they have a pending asset-return confirmation waiting on
+            // them for this vacation before falling back to the legacy flow below.
             if (isAnnualVacationForAssetCheck) {
+                $.ajax({
+                    url: './includes/ajaxFile/leaveHandler.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: { ajaxType: 'checkAssetReturnClearanceStatus', vacation_id: vacationId }
+                }).done(function(clearanceStatus) {
+                    if (clearanceStatus.has_assignment) {
+                        showAssignAssetClearanceHandlerModal(vacationId, clearanceStatus.assignment_items || [], function() {
+                            proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        });
+                        return;
+                    }
+                    if (clearanceStatus.has_pending) {
+                        showAssetReturnConfirmModal(vacationId, clearanceStatus.items || [], function() {
+                            proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        });
+                        return;
+                    }
+                    if (clearanceStatus.decisions_exist) {
+                        // The direct manager already made the Keep/Return call for this
+                        // request - don't ask every other approver about it again.
+                        proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+                        return;
+                    }
+                    runLegacyAssetClearanceFlow();
+                }).fail(function() {
+                    runLegacyAssetClearanceFlow();
+                });
+                return;
+            }
+
+            // Not an Annual (Fly | annual) vacation - Emergency Fly, Local, Excuse,
+            // Encashed, or anything else - skip the asset checker flow entirely,
+            // even if the employee has assigned assets, and proceed normally.
+            proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
+
+            // Legacy flow retained for requests created before dynamic department
+            // routing existed (no vacation_asset_decisions rows yet): manual asset
+            // checker assignment / generic single-choice clearance modal.
+            function runLegacyAssetClearanceFlow() {
                 $.ajax({
                     url: './includes/ajaxFile/leaveHandler.php',
                     type: 'POST',
@@ -2335,13 +2757,7 @@ if ($can_see_all_depts) {
                         proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
                     }
                 });
-                return;
             }
-            
-            // Not an Annual (Fly | annual) vacation - Emergency Fly, Local, Excuse,
-            // Encashed, or anything else - skip the asset checker flow entirely,
-            // even if the employee has assigned assets, and proceed normally.
-            proceedWithApproval(vacationId, employeeId, employeeName, vacType, flyType, startDate, endDate, totalDays, currentLevel, userRole, hasSupervisor, isSimpleLeave);
         }
 
         /**
