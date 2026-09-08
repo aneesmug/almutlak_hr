@@ -1164,7 +1164,7 @@ function get_loan_details_for_modification() {
 }
 
 function apply_for_loan() {
-    global $conDB, $pdo;
+    global $conDB, $pdo, $current_user_id, $user_type, $user_role, $is_system_admin;
     // Check for required fields
     if (!isset($_POST['emp_id'], $_POST['loan_amount'], $_POST['loan_type'])) {
         echo json_encode(['status' => 'error','title' => 'Input Error','message' => 'Missing required fields.','type' => 'error']);
@@ -1181,13 +1181,17 @@ function apply_for_loan() {
         return;
     }
 
+    // Special Access "apply_loan_with_active_loan" lets a granted user (e.g. HR) submit
+    // a new loan for this employee even while one is still pending/awaiting approval.
+    $can_force_apply_with_active_loan = user_has_special_access($conDB, $current_user_id ?? '', 'apply_loan_with_active_loan', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
     // CHECK IF EMPLOYEE HAS PENDING OR AWAITING LOAN REQUESTS
     $pending_check = $conDB->prepare("SELECT id, inv_no, loan_type, loan_amount, status, created_at FROM emp_loan WHERE emp_id = ? AND status IN ('pending', 'awaiting')");
     $pending_check->bind_param("s", $emp_id);
     $pending_check->execute();
     $pending_result = $pending_check->get_result();
-    
-    if ($pending_result->num_rows > 0) {
+
+    if (!$can_force_apply_with_active_loan && $pending_result->num_rows > 0) {
         $pending_loan = $pending_result->fetch_assoc();
         $pending_check->close();
         

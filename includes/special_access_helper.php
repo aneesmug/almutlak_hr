@@ -57,6 +57,7 @@ if (!function_exists('get_special_access_labels')) {
             'asset_inventory_add' => 'Asset Inventory: Add New Asset',
             'asset_inventory_edit' => 'Asset Inventory: Edit Asset',
             'asset_inventory_delete' => 'Asset Inventory: Delete Asset',
+            'apply_loan_with_active_loan' => 'Loan: Allow Applying for a New Loan While Another Is Pending/Awaiting',
         ] + get_special_access_page_labels();
     }
 }
@@ -192,6 +193,12 @@ if (!function_exists('get_special_access_categories')) {
                 'icon' => 'fa-plane',
                 'keys' => [
                     'add_business_trip_manual_allowance',
+                ],
+            ],
+            'Loan' => [
+                'icon' => 'fa-hand-holding-usd',
+                'keys' => [
+                    'apply_loan_with_active_loan',
                 ],
             ],
             'Cars, Locations & Assets' => [
