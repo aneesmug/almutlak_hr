@@ -124,6 +124,9 @@
             background-color: #f0f8ff !important;
             border-color: #4fa0e3 !important;
         }
+        .approval-step.dragging {
+            opacity: 0.4;
+        }
         .approval-steps {
             position: relative;
         }
@@ -657,9 +660,9 @@
             }
             html += `<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">`;
             html += `<small class="text-muted"><?= __('check_reports_user_can_view') ?></small>`;
-            html += `<div>`;
-            html += `<button type="button" class="btn btn-sm btn-outline-primary mr-1 report-access-select-all" data-target="${idPrefix}"><?= __('select_all') ?></button>`;
-            html += `<button type="button" class="btn btn-sm btn-outline-secondary mr-1 report-access-clear-all" data-target="${idPrefix}"><?= __('clear_all') ?></button>`;
+            html += `<div class="btn-group">`;
+            html += `<button type="button" class="btn btn-sm btn-outline-primary report-access-select-all" data-target="${idPrefix}"><?= __('select_all') ?></button>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-secondary report-access-clear-all" data-target="${idPrefix}"><?= __('clear_all') ?></button>`;
             html += `<button type="button" class="btn btn-sm btn-outline-warning report-access-reset-default" data-target="${idPrefix}"><?= __('reset_default') ?></button>`;
             html += `</div></div>`;
             html += `<div class="special-access-checkbox-grid">`;
@@ -1559,7 +1562,7 @@
                     // so it can never leave a company/employee covered by two
                     // active timetables at once (see toggle_timetable_active()).
                     const statusHtml = `<span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${isActive ? '<?= __('active', 'Active') ?>' : '<?= __('inactive', 'Inactive') ?>'}</span>`;
-                    // Default is always active and locked - ev Low carb I mean shown motel, maybe so maybe shitshion playing already sectionery other timetable
+                    // Default is always active and locked - ev Low carb I mean shown motel, maybe so maybe shitshion playing already section member e mail cardnifice forward share valiery other timetable
                     // is a draft (built with its days/companies/employees) until
                     // explicitly activated, and going active is guarded server-side
                     // so it can never leave a company/employee covered by two
@@ -2790,8 +2793,10 @@
             gridHtml += `</div>`;
             gridHtml += '</div>';
             gridHtml += '<div class="d-flex justify-content-end mt-2">';
-            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary mr-1" id="swal-special-access-select-all"><?= __('select_all_visible', 'Select All (visible)') ?></button>';
+            gridHtml += '<div class="btn-group">';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary" id="swal-special-access-select-all"><?= __('select_all_visible', 'Select All (visible)') ?></button>';
             gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all"><?= __('clear_all_visible', 'Clear All (visible)') ?></button>';
+            gridHtml += '</div>';
             gridHtml += '</div>';
             gridHtml += '</div>';
 
@@ -4622,8 +4627,9 @@
                 let chainHtml = '<div class="approval-steps">';
                 data.chain.forEach((step, index) => {
                     chainHtml += `
-                        <div class="approval-step d-flex align-items-center justify-content-between p-2 mb-2 bg-white border rounded" data-level="${step.level}" data-role="${step.user_type}">
+                        <div class="approval-step d-flex align-items-center justify-content-between p-2 mb-2 bg-white border rounded" draggable="true" data-level="${step.level}" data-role="${step.user_type}">
                             <div class="d-flex align-items-center">
+                                <i class="mdi mdi-drag-vertical text-muted mr-1"></i>
                                 <span class="badge badge-primary mr-2"><?= __('level') ?> ${step.level}</span>
                                 <span class="font-weight-bold">${translateText(step.role_label)}</span>
                             </div>
@@ -4643,10 +4649,82 @@
                     });
                 });
 
+                enableApprovalDragReorder(container, requestType);
+
             } catch (error) {
                 console.error('Error loading approval chain:', error);
                 const container = document.getElementById(`approval-chain-${requestType}`);
                 container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> <?= __('Error:') ?> ${error.message}</p>`;
+            }
+        }
+
+        // Native HTML5 drag-and-drop reorder for the approval-step rows - the
+        // markup/CSS (cursor: move) and the backend ('update_approval_order' in
+        // approval_chain_handler.php) were already there, nothing ever actually
+        // wired dragstart/dragover/drop up, so rows just showed the move cursor
+        // without moving. Reorders the DOM live as you drag over other rows,
+        // then persists + reloads (for fresh Level badges) on drop.
+        function enableApprovalDragReorder(container, requestType) {
+            const stepsWrap = container.querySelector('.approval-steps');
+            if (!stepsWrap) return;
+            let draggedEl = null;
+
+            const getDragAfterElement = (y) => {
+                const els = [...stepsWrap.querySelectorAll('.approval-step:not(.dragging)')];
+                return els.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset, element: child };
+                    }
+                    return closest;
+                }, { offset: -Infinity, element: null }).element;
+            };
+
+            stepsWrap.querySelectorAll('.approval-step').forEach(step => {
+                step.addEventListener('dragstart', () => {
+                    draggedEl = step;
+                    // Deferred so the drag ghost image is captured before the class changes it.
+                    setTimeout(() => step.classList.add('dragging'), 0);
+                });
+                step.addEventListener('dragend', () => {
+                    step.classList.remove('dragging');
+                    if (draggedEl) {
+                        draggedEl = null;
+                        persistApprovalOrder(requestType, stepsWrap);
+                    }
+                });
+            });
+
+            stepsWrap.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (!draggedEl) return;
+                const afterElement = getDragAfterElement(e.clientY);
+                if (afterElement == null) {
+                    stepsWrap.appendChild(draggedEl);
+                } else {
+                    stepsWrap.insertBefore(draggedEl, afterElement);
+                }
+            });
+        }
+
+        async function persistApprovalOrder(requestType, stepsWrap) {
+            const order = [...stepsWrap.querySelectorAll('.approval-step')].map(el => el.dataset.role);
+            const params = new URLSearchParams({ action: 'update_approval_order', request_type: requestType });
+            order.forEach(userType => params.append('order[]', userType));
+
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || '<?= __('could_not_save_settings') ?>');
+                await loadApprovalChain(requestType);
+            } catch (error) {
+                Swal.fire('<?= __('error') ?>', error.message, 'error');
+                await loadApprovalChain(requestType);
             }
         }
 
