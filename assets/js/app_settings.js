@@ -1,0 +1,5003 @@
+/**
+ * app_settings.php's page-behavior script - a genuinely static file, cache-busted
+ * from app_settings.php via a filemtime()-based ?v= (see that file). It needs two
+ * small bits of per-request PHP data it can't have statically - the translation
+ * dictionary and this user's permission flags - both injected by a tiny inline
+ * bootstrap <script> in app_settings.php (window.lang / window.APP_SETTINGS_PERMISSIONS)
+ * BEFORE this file loads. Everything else here is plain JS.
+ */
+
+// Client-side mirror of PHP's __() (includes/translation_functions.php) - same
+// fallback rule: translated string if present and non-empty, else the given
+// default, else the raw key. Relies on window.lang already being populated.
+function __(key, def) {
+    def = def || '';
+    if (window.lang && window.lang[key]) return window.lang[key];
+    return def !== '' ? def : key;
+}
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const isFullSettingsAdmin = window.APP_SETTINGS_PERMISSIONS.isFullSettingsAdmin;
+        const canAccessDepartmentsTab = window.APP_SETTINGS_PERMISSIONS.canAccessDepartmentsTab;
+        const canAccessJobTitlesTab = window.APP_SETTINGS_PERMISSIONS.canAccessJobTitlesTab;
+        const canAccessLocationsTab = window.APP_SETTINGS_PERMISSIONS.canAccessLocationsTab;
+        const canAccessSubDepartmentsTab = window.APP_SETTINGS_PERMISSIONS.canAccessSubDepartmentsTab;
+        const canAccessRequestBlocksTab = window.APP_SETTINGS_PERMISSIONS.canAccessRequestBlocksTab;
+        const canAccessLoanSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessLoanSettingsTab;
+        const canAccessVacationPayrollTab = window.APP_SETTINGS_PERMISSIONS.canAccessVacationPayrollTab;
+        const canAccessOvertimeSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessOvertimeSettingsTab;
+        const canAccessDeductionSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessDeductionSettingsTab;
+        const canAccessSalaryIncrementSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessSalaryIncrementSettingsTab;
+        const canAccessAttendanceConfigTab = window.APP_SETTINGS_PERMISSIONS.canAccessAttendanceConfigTab;
+        const requestTypeBlockLabels = {
+            smart_request: __('smart_request', 'Smart Request'),
+            loan_request: __('loan_request', 'Loan Request'),
+            vacation_annual: __('vacation_annual_request_type', 'Vacation - Fly (Annual)'),
+            vacation_emergency: __('vacation_emergency_request_type', 'Vacation - Fly (Emergency)'),
+            vacation_local: __('vacation_local_request_type', 'Vacation - Local Vacation'),
+            vacation_encashed: __('vacation_encashed_request_type', 'Vacation - Encashed'),
+            excuse_leave: __('excuse_leave_request_type', 'Leave / Excuse (Sick, Marriage, Hajj, etc.)'),
+            resignation_request: __('resignation_request', 'Resignation Request'),
+            rejoin_request: __('rejoin_request', 'Rejoin Request'),
+            general_request: __('general_request', 'General Request'),
+            business_trip: __('business_trip', 'Business Trip'),
+            salary_increment: __('salary_increment', 'Salary Increment'),
+        };
+        let appSettings = [];
+        let groupedSettings = {};
+        let fullAccessCandidates = null;
+        let specialAccessUsersRaw = null;
+        let reportPermissionMap = {};
+        let specialAccessEligibleUsers = [];
+        let specialAccessMap = {};
+        const settingsContainer = document.getElementById('settings-container');
+        const settingsNav = document.getElementById('settings-nav');
+        const settingsForm = document.getElementById('settingsForm');
+
+        function parseEmpIdList(value) {
+            if (!value) return [];
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    return parsed.map(v => String(v).trim()).filter(v => v !== '');
+                }
+            } catch (e) {
+                // Not JSON, fallback to CSV
+            }
+            return String(value)
+                .split(',')
+                .map(v => v.trim())
+                .filter(v => v !== '');
+        }
+
+        // 'hr_payroll' -> 'Hr Payroll' for display (user_type values are DB slugs, not labels).
+        function formatRoleLabel(role) {
+            return String(role || '')
+                .split('_')
+                .filter(Boolean)
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function getReportTypeCatalog() {
+            return [
+                { value: 'employee', label: '' + __('employee_report') + '' },
+                { value: 'vacation', label: '' + __('vacation_report') + '' },
+                { value: 'loan', label: '' + __('loan_report') + '' },
+                { value: 'salary_increment', label: '' + __('salary_increment_report', 'Salary Increment Report') + '' },
+                { value: 'salary', label: '' + __('salary_report') + '' },
+                { value: 'payroll', label: '' + __('payroll_report') + '' },
+                { value: 'attendance', label: '' + __('attendance_report') + '' },
+                { value: 'document', label: '' + __('document_report') + '' },
+                { value: 'assets', label: '' + __('assets_report') + '' },
+                { value: 'assets_list', label: '' + __('assets_list') + '' },
+                { value: 'evaluation', label: '' + __('evaluation_report') + '' },
+                { value: 'resignation', label: '' + __('resignation_report') + '' },
+                { value: 'terminated_employees', label: '' + __('terminated_employees') + '' },
+                { value: 'eos', label: '' + __('calculate_end_of_service') + '' },
+                { value: 'dept_comparison', label: '' + __('dept_comparison_report') + '' },
+                { value: 'rejoin', label: '' + __('employee_rejoin_report', 'Employee Rejoin Report') + '' },
+                { value: 'country_company_comparison', label: '' + __('country_company_comparison_report', 'Country & Company Comparison Report') + '' },
+                { value: 'custom', label: '' + __('custom_report') + '' }
+            ];
+        }
+
+        function getSpecialAccessCatalog() {
+            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"}];
+        }
+
+        // Purely presentational grouping (icon + ordered keys) for the Special Access
+        // checkbox grid - mirrors includes/special_access_helper.php::get_special_access_categories()
+        // so both stay in sync. Any catalog key not listed in any category here still shows,
+        // just bucketed under a trailing "Other" group by buildSpecialAccessPanelData().
+        function getSpecialAccessCategories() {
+            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"Biometric Devices","icon":"fa-fingerprint","keys":["manage_device_monitor"]},{"name":"Attendance","icon":"fa-calendar-check","keys":["manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor"]}];
+        }
+
+        // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
+        // inline "select a user" panel and the SweetAlert2 edit modal. idPrefix keeps
+        // checkbox/count element ids unique between the two contexts.
+        // Builds the category list (id/name/icon/keys) used by both the sidebar nav and
+        // the per-category panels - each key appears in exactly one category, with anything
+        // not listed in getSpecialAccessCategories() falling back into a trailing "Other" bucket.
+        function buildSpecialAccessPanelData() {
+            const categories = getSpecialAccessCategories();
+            const catalog = getSpecialAccessCatalog();
+            const labelByKey = new Map(catalog.map(item => [item.value, item.label]));
+            const placedKeys = new Set();
+            const panels = [];
+
+            categories.forEach((cat, catIndex) => {
+                const keysInCat = cat.keys.filter(k => labelByKey.has(k));
+                if (!keysInCat.length) return;
+                keysInCat.forEach(k => placedKeys.add(k));
+                panels.push({ id: `cat-${catIndex}`, name: cat.name, icon: cat.icon, keys: keysInCat });
+            });
+
+            const uncategorized = catalog.filter(item => !placedKeys.has(item.value)).map(item => item.value);
+            if (uncategorized.length) {
+                panels.push({ id: 'cat-other', name: '' + __('other', 'Other') + '', icon: 'fa-ellipsis-h', keys: uncategorized });
+            }
+
+            return { panels, labelByKey };
+        }
+
+        function renderSpecialAccessCheckboxGrid(idPrefix, keys, labelByKey, selectedSet) {
+            let html = '<div class="special-access-checkbox-grid">';
+            keys.forEach(key => {
+                const label = labelByKey.get(key) || key;
+                const checkboxId = `${idPrefix}-${key}`;
+                html += `
+                    <div class="special-access-item" data-search-label="${escapeHtml(label).toLowerCase()}">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input special-access-checkbox" id="${checkboxId}" value="${escapeHtml(key)}" data-access-key="${escapeHtml(key)}" ${selectedSet.has(key) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            return html;
+        }
+
+        // Recomputes one sidebar tab's "checked/total" badge after a checkbox inside its
+        // panel changes.
+        function updateSpecialAccessTabCount(popup, panelId) {
+            const panel = popup.querySelector(`.sae-panel[data-panel-id="${panelId}"]`);
+            const badge = popup.querySelector(`.sae-tab-count[data-count-for="${panelId}"]`);
+            if (!panel || !badge) return;
+            const total = parseInt(badge.getAttribute('data-total'), 10) || 0;
+            const checked = panel.querySelectorAll('.special-access-checkbox:checked').length;
+            badge.textContent = `${checked}/${total}`;
+            badge.classList.toggle('badge-success', checked > 0);
+            badge.classList.toggle('badge-light', checked === 0);
+        }
+
+        // Report Access lives inside the Special Access editor's Swal modal as one more
+        // grouped block, but it's backed by its own map
+        // (reportPermissionMap / report_visibility_by_user) with different semantics: no
+        // explicit entry for a user means "sees ALL report types" (backward-compatible
+        // default from get_allowed_report_types_for_user()), not "sees none" like every
+        // other Special Access key. That's why it gets its own builder/wiring instead of
+        // reusing the special-access panel builders - the "no entry yet" starting state, the
+        // Custom/All(default) mode badge, and the "Reset to Default" action are all specific
+        // to this map's semantics. It renders nothing actionable for plain employees, since
+        // get_report_permission_users() never included them in the first place (report
+        // pages aren't reachable by that role).
+        function buildReportAccessBlockHtml(idPrefix, empId, includeHeader = true) {
+            const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === empId);
+            const userType = user ? String(user.user_type || '').trim().toLowerCase() : '';
+
+            if (userType === 'employee') {
+                const msg = `<p class="text-muted mb-0" style="font-size:.85rem;">${__('report_access_not_applicable_for_employees', "Report access doesn't apply to plain employee accounts.")}</p>`;
+                if (!includeHeader) return msg;
+                let html = `<div class="special-access-category mb-3" data-report-access-block="1">`;
+                html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong>${__('report_access', 'Report Access')}</strong></span>`;
+                html += `<span class="badge badge-light">${__('not_applicable', 'N/A')}</span></div>`;
+                html += `<div class="special-access-category-body">${msg}</div></div>`;
+                return html;
+            }
+
+            const catalog = getReportTypeCatalog();
+            const allTypeValues = catalog.map(item => item.value);
+            const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
+            const selectedSet = new Set(hasExplicit ? normalizeReportTypeList(reportPermissionMap[empId]) : allTypeValues);
+
+            let html = '';
+            if (includeHeader) {
+                html += `<div class="special-access-category mb-3" data-report-access-block="1">`;
+                html += `<div class="special-access-category-header"><span><i class="fa fa-chart-bar"></i> <strong>${__('report_access', 'Report Access')}</strong></span>`;
+                html += `<span class="badge ${hasExplicit ? 'badge-info' : 'badge-light'}" id="${idPrefix}-report-mode">${hasExplicit ? '' + __('custom', 'Custom') + '' : '' + __('all_default', 'All (default)') + ''}</span></div>`;
+                html += `<div class="special-access-category-body">`;
+            }
+            html += `<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">`;
+            html += `<small class="text-muted">${__('check_reports_user_can_view')}</small>`;
+            html += `<div class="btn-group">`;
+            html += `<button type="button" class="btn btn-sm btn-outline-primary report-access-select-all" data-target="${idPrefix}">${__('select_all')}</button>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-secondary report-access-clear-all" data-target="${idPrefix}">${__('clear_all')}</button>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-warning report-access-reset-default" data-target="${idPrefix}">${__('reset_default')}</button>`;
+            html += `</div></div>`;
+            html += `<div class="special-access-checkbox-grid">`;
+            catalog.forEach(item => {
+                const checkboxId = `${idPrefix}-report-${item.value}`;
+                html += `
+                    <div class="special-access-item" data-search-label="${escapeHtml(item.label).toLowerCase()}">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input report-type-checkbox" id="${checkboxId}" value="${escapeHtml(item.value)}" data-report-type="${escapeHtml(item.value)}" data-target="${idPrefix}" ${selectedSet.has(item.value) ? 'checked' : ''}>
+                            <label class="custom-control-label" for="${checkboxId}">${escapeHtml(item.label)}</label>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            if (includeHeader) {
+                html += `</div></div>`;
+            }
+            return html;
+        }
+
+        // Wires the checkboxes/buttons rendered by buildReportAccessBlockHtml. onChange(mode,
+        // values) fires on every change with mode 'custom' (values = the checked list) or
+        // 'default' (Reset to Default was clicked) - the caller decides whether that means
+        // "write straight to reportPermissionMap" (inline panel) or "hold until Save" (modal).
+        function wireReportAccessBlock(root, idPrefix, onChange) {
+            const modeBadge = root.querySelector(`#${idPrefix}-report-mode`);
+            function setMode(isCustom) {
+                if (!modeBadge) return;
+                modeBadge.textContent = isCustom ? '' + __('custom', 'Custom') + '' : '' + __('all_default', 'All (default)') + '';
+                modeBadge.classList.toggle('badge-info', isCustom);
+                modeBadge.classList.toggle('badge-light', !isCustom);
+            }
+            function currentChecked() {
+                return Array.from(root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`))
+                    .filter(el => el.checked)
+                    .map(el => el.value);
+            }
+
+            root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(cb => {
+                cb.addEventListener('change', () => {
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            });
+
+            const selectAllBtn = root.querySelector(`.report-access-select-all[data-target="${idPrefix}"]`);
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = true; });
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            }
+
+            const clearAllBtn = root.querySelector(`.report-access-clear-all[data-target="${idPrefix}"]`);
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = false; });
+                    setMode(true);
+                    onChange('custom', currentChecked());
+                });
+            }
+
+            const resetBtn = root.querySelector(`.report-access-reset-default[data-target="${idPrefix}"]`);
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    root.querySelectorAll(`.report-type-checkbox[data-target="${idPrefix}"]`).forEach(el => { el.checked = true; });
+                    setMode(false);
+                    onChange('default', getReportTypeCatalog().map(item => item.value));
+                });
+            }
+        }
+
+        function parseSpecialAccessMap(rawValue) {
+            if (!rawValue) return {};
+
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return {};
+                }
+                const normalized = {};
+                Object.keys(parsed).forEach(empId => {
+                    const key = String(empId || '').trim();
+                    if (!key) return;
+                    normalized[key] = normalizeSpecialAccessList(parsed[empId]);
+                });
+                return normalized;
+            } catch (e) {
+                console.warn('Invalid special access JSON, resetting:', e);
+                return {};
+            }
+        }
+
+        function normalizeSpecialAccessList(values) {
+            const allowed = new Set(getSpecialAccessCatalog().map(item => item.value));
+            if (!Array.isArray(values)) return [];
+            return [...new Set(values.map(v => String(v || '').trim()).filter(v => allowed.has(v)))];
+        }
+
+        function parseReportPermissionMap(rawValue) {
+            if (!rawValue) return {};
+
+            try {
+                const parsed = JSON.parse(rawValue);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return {};
+                }
+                const normalized = {};
+                Object.keys(parsed).forEach(empId => {
+                    const key = String(empId || '').trim();
+                    if (!key) return;
+                    normalized[key] = normalizeReportTypeList(parsed[empId]);
+                });
+                return normalized;
+            } catch (e) {
+                console.warn('Invalid report permission JSON, resetting:', e);
+                return {};
+            }
+        }
+
+        function normalizeReportTypeList(values) {
+            const allowed = new Set(getReportTypeCatalog().map(item => item.value));
+            if (!Array.isArray(values)) return [];
+            return [...new Set(values.map(v => String(v || '').trim()).filter(v => allowed.has(v)))];
+        }
+
+        async function fetchFullAccessCandidates() {
+            if (Array.isArray(fullAccessCandidates)) {
+                return fullAccessCandidates;
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_full_access_candidates' })
+                });
+
+                if (!response.ok) {
+                    throw new Error('' + __('failed_to_load_employees') + '');
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.employees)) {
+                    throw new Error(data.message || '' + __('failed_to_load_employees') + '');
+                }
+
+                fullAccessCandidates = data.employees;
+                return fullAccessCandidates;
+            } catch (error) {
+                console.error('Failed loading full access candidates:', error);
+                fullAccessCandidates = [];
+                return fullAccessCandidates;
+            }
+        }
+
+        async function initializeFullAccessEmployeeSelect() {
+            const element = document.getElementById('setting-full_access_emp_ids');
+            if (!element) return;
+
+            const selectedIds = parseEmpIdList(element.dataset.selected || '');
+            const candidates = await fetchFullAccessCandidates();
+
+            let optionsHtml = '';
+            candidates.forEach(emp => {
+                const empId = String(emp.emp_id || '').trim();
+                if (!empId) return;
+                const empName = (emp.name || '').trim();
+                const selected = selectedIds.includes(empId) ? 'selected' : '';
+                const label = `${empName} (${empId})`;
+                optionsHtml += `<option value="${empId}" ${selected}>${label}</option>`;
+            });
+
+            element.innerHTML = optionsHtml;
+
+            if ($(element).hasClass('select2-hidden-accessible')) {
+                $(element).trigger('change.select2');
+            } else {
+                $(element).select2({
+                    width: '100%',
+                    placeholder: '' + __('select_employees') + '',
+                    allowClear: true
+                });
+            }
+        }
+
+        /**
+         * Translate text using window.lang object (from PHP __() function)
+         */
+        function translateText(key) {
+            if (!key) return key;
+            // Try the key as-is first
+            if (window.lang && window.lang[key]) {
+                return window.lang[key];
+            }
+            // Try normalized version: remove HTML tags, special chars, replace spaces with underscores, lowercase
+            const normalizedKey = key
+                .replace(/<[^>]*>/g, '')           // Remove HTML tags like <br>, <small>, etc.
+                .replace(/[()[\]{}<%>,/]/g, '')    // Remove special characters: () [] {} < > % , /
+                .replace(/\s+/g, '_')              // Replace spaces with underscores
+                .toLowerCase();
+            
+            // Debug: Log for missing translations
+            if (window.lang && window.lang[normalizedKey]) {
+                return window.lang[normalizedKey];
+            } else if (key !== normalizedKey && normalizedKey.length > 0) {
+                console.warn(`Translation key not found: "${normalizedKey}" (original: "${key}")`);
+            }
+            
+            // Return the original key if not found
+            return key;
+        }
+
+        /**
+         * Safely evaluate mathematical expressions for settings like session timeout
+         * Only allows numbers, spaces, and basic arithmetic operators: + - * / ( )
+         */
+        function evaluateExpression(expression) {
+            if (!expression) return '';
+            expression = expression.trim();
+            
+            // Check if it's a simple number
+            if (/^\d+$/.test(expression)) {
+                return expression;
+            }
+            
+            // Validate expression - only allow numbers, operators, and parentheses
+            if (!/^[\d\s\+\-\*\/\(\)]+$/.test(expression)) {
+                return null; // Invalid expression
+            }
+            
+            try {
+                // Use Function instead of eval for safer evaluation
+                const result = Function('"use strict"; return (' + expression + ')')();
+                if (typeof result === 'number' && result > 0 && Number.isInteger(result)) {
+                    return result.toString();
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        /**
+         * Convert seconds to human-readable format
+         * e.g., 7200 -> "2 hours", 1800 -> "30 minutes", 86400 -> "1 day"
+         */
+        function formatSecondsReadable(seconds) {
+            seconds = parseInt(seconds, 10);
+            if (isNaN(seconds) || seconds <= 0) return '';
+            
+            const units = [
+                { name: 'day', value: 86400 },
+                { name: 'hour', value: 3600 },
+                { name: 'minute', value: 60 },
+                { name: 'second', value: 1 }
+            ];
+            
+            let result = [];
+            let remaining = seconds;
+            
+            for (let unit of units) {
+                if (remaining >= unit.value) {
+                    const count = Math.floor(remaining / unit.value);
+                    remaining = remaining % unit.value;
+                    result.push(count + ' ' + unit.name + (count > 1 ? 's' : ''));
+                }
+            }
+            
+            if (result.length === 0) return seconds + ' second' + (seconds > 1 ? 's' : '');
+            if (result.length === 1) return result[0];
+            
+            // Join with commas and 'and' before last item
+            return result.slice(0, -1).join(', ') + ' and ' + result[result.length - 1]
+        }
+
+        function renderSettingsGroup(groupName, hostEl) {
+            hostEl = hostEl || settingsContainer;
+            let formHtml = '';
+            // Normalize group name to use underscores for comparison
+            const normalizedGroupName = groupName.replace(/ /g, '_');
+            // Try to get settings with original groupName first, then with underscores replaced
+            const displayGroupName = groupName.replace(/_/g, ' ');
+            const settings = groupedSettings[groupName] || groupedSettings[displayGroupName];
+
+            // These groups render their own dedicated Save button(s) and post straight to
+            // their own handler (bypassing the outer settings form entirely) - the generic
+            // bottom-right "Save Changes" button does nothing for them and only misleads
+            // users into thinking their change was saved when it wasn't. Hide it here.
+            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance'];
+            const saveBtnWrapper = document.getElementById('saveBtnWrapper');
+            if (saveBtnWrapper) {
+                saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
+            }
+
+            if (!settings) {
+                 settingsContainer.innerHTML = '<p class="text-center text-danger">' + __('Group not found.') + '</p>';
+                 return;
+            }
+
+            // Special handling for approval chain configuration
+            if (normalizedGroupName === 'approval') {
+                renderApprovalChainSettings();
+                return;
+            }
+
+            // Special handling for asset clearance handler assignment (who clears
+            // Laptop/Mobile/SIM/Car returns during vacation approval)
+            if (normalizedGroupName === 'asset_clearance') {
+                renderAssetClearanceSettings();
+                return;
+            }
+
+            // Departments / Job Titles / Locations share one top-level tab (org_structure),
+            // each as its own canAccess()-gated sub-tab - see renderOrgStructureHub.
+            if (normalizedGroupName === 'org_structure') {
+                renderOrgStructureHub();
+                return;
+            }
+
+            // Special handling for sub-departments configuration
+            if (normalizedGroupName === 'sub_departments') {
+                renderSubDepartmentsSettings();
+                return;
+            }
+
+            // Special handling for special access configuration
+            if (normalizedGroupName === 'special_access') {
+                renderSpecialAccessSettings();
+                return;
+            }
+
+            // Special handling for the product license key
+            if (normalizedGroupName === 'license') {
+                renderLicenseSettings();
+                return;
+            }
+
+            // Special handling for global request type blocks
+            if (normalizedGroupName === 'request_type_blocks') {
+                renderRequestTypeBlocksSettings();
+                return;
+            }
+
+            // Special handling for the Payroll Settings hub (loan / vacation / overtime /
+            // deduction all live as sub-tabs INSIDE this one entry, so they never get
+            // interleaved alphabetically with unrelated tabs like Departments or Email).
+            if (normalizedGroupName === 'payroll_settings') {
+                renderPayrollSettingsHub();
+                return;
+            }
+
+            // Special handling for Attendance Config: Timetables (own tables, not
+            // app_settings rows) plus Device Monitor (zk_sync_secret_key / offline
+            // threshold) as a second sub-tab - see renderAttendanceConfigHub.
+            if (normalizedGroupName === 'attendance_config') {
+                renderAttendanceConfigHub();
+                return;
+            }
+
+            // Email + Announcement Config share one top-level "Email" tab as sub-tabs -
+            // see renderEmailSettingsHub. Both still hit the generic field renderer below
+            // (guarded to only fire from the outer nav, not the hub's own sub-tab calls
+            // into this same function, which pass their own hostEl and must fall through).
+            if (normalizedGroupName === 'email' && hostEl === settingsContainer) {
+                renderEmailSettingsHub();
+                return;
+            }
+
+            formHtml += `<div class="tab-pane active" id="group-${groupName}" role="tabpanel">`;
+            settings.forEach(setting => {
+                const id = `setting-${setting.setting_name}`;
+                const label = translateText(setting.description);
+                const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
+                const isEmailList = setting.setting_name === 'traveling_company_email';
+                const isSessionTimeout = setting.setting_name === 'session_timeout';
+
+                formHtml += `<div class="form-group row">`;
+                formHtml += `<label for="${id}" class="col-sm-3 col-form-label">${label}</label>`;
+                formHtml += `<div class="col-sm-9">`;
+                
+                if (isImagePath) {
+                    formHtml += `<div class="d-flex align-items-center">`;
+                    formHtml += `<img id="preview-${setting.setting_name}" src="${setting.setting_value || 'assets/images/placeholder.png'}" alt="Preview" class="preview-image mr-3">`;
+                    formHtml += `<div class="flex-grow-1">`;
+                    formHtml += `<input type="file" id="${id}" name="${setting.setting_name}" accept="image/*" class="form-control-file">`;
+                    formHtml += `<small class="form-text text-muted">${__('current')} ${setting.setting_value || '' + __('not_set') + ''}</small>`;
+                    formHtml += `</div></div>`;
+                } else if (isEmailList) {
+                    // Special handling for email list
+                    let emails = [];
+                    try {
+                        const parsed = JSON.parse(setting.setting_value || '[]');
+                        emails = Array.isArray(parsed) ? parsed : [setting.setting_value].filter(e => e);
+                    } catch (e) {
+                        emails = setting.setting_value ? [setting.setting_value] : [];
+                    }
+                    
+                    formHtml += `<div id="email-list-container">`;
+                    if (emails.length === 0) {
+                        formHtml += `<div class="email-item mb-2">
+                            <div class="input-group">
+                                <input type="email" class="form-control email-input" placeholder="email@example.com" value="">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-danger remove-email-btn" disabled><i class="mdi mdi-delete"></i></button>
+                                </div>
+                            </div>
+                        </div>`;
+                    } else {
+                        emails.forEach((email, idx) => {
+                            formHtml += `<div class="email-item mb-2">
+                                <div class="input-group">
+                                    <input type="email" class="form-control email-input" placeholder="email@example.com" value="${email}">
+                                    <div class="input-group-append">
+                                        <button type="button" class="btn btn-outline-danger remove-email-btn"><i class="mdi mdi-delete"></i></button>
+                                    </div>
+                                </div>
+                            </div>`;
+                        });
+                    }
+                    formHtml += `</div>`;
+                    formHtml += `<button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-email-btn"><i class="mdi mdi-plus"></i> ${__('add_email')}</button>`;
+                    formHtml += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
+                } else if (isSessionTimeout) {
+                    formHtml += `<div>`;
+                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input" value="${setting.setting_value || ''}" placeholder="${__('e.g., 3600 or 60*60*2')}">`;
+                    formHtml += `<small class="form-text text-muted">${__('session_note')}</small>`;
+                    formHtml += `<div id="timeout-result-${setting.setting_name}" class="mt-2" style="display:none;">`;
+                    formHtml += `<small class="text-success"><strong>${__('evaluated_as')}:</strong> <span class="timeout-seconds"></span> ${__('seconds')}</small>`;
+                    formHtml += `</div>`;
+                    formHtml += `</div>`;
+                } else if (setting.setting_name === 'full_access_emp_ids') {
+                    const selectedList = parseEmpIdList(setting.setting_value || '');
+                    formHtml += `<select id="${id}" name="${setting.setting_name}" class="form-control select2" multiple data-selected='${JSON.stringify(selectedList)}'></select>`;
+                    formHtml += `<small class="form-text text-muted">${__('select_users_for_full_employee_access')}</small>`;
+                } else {
+                    let inputHtml = '';
+                    switch (setting.input_type) {
+                        case 'select':
+                            let options = JSON.parse(setting.options || '{}');
+                            // Note: We still use form-control for layout, but our custom CSS will target .select2-container for styling.
+                            inputHtml = `<select id="${id}" name="${setting.setting_name}" class="form-control select2">`;
+                            for (const [value, text] of Object.entries(options)) {
+                                inputHtml += `<option value="${value}" ${setting.setting_value == value ? 'selected' : ''}>${text}</option>`;
+                            }
+                            inputHtml += `</select>`;
+                            break;
+                        default:
+                            inputHtml = `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control" value="${setting.setting_value || ''}">`;
+                            break;
+                    }
+                    formHtml += inputHtml;
+                }
+                
+                formHtml += `</div></div>`;
+            });
+
+            if (normalizedGroupName === 'email') {
+                formHtml += `
+                    <hr>
+                    <div class="form-group row">
+                        <div class="col-sm-3"></div>
+                        <div class="col-sm-9">
+                            <button type="button" id="testEmailConfigBtn" class="btn btn-outline-info">
+                                <i class="mdi mdi-email-send"></i> ${__('send_test_email', 'Send Test Email')}
+                            </button>
+                            <small class="form-text text-muted">${__('send_test_email_hint', 'Sends a test email to the Default From Email Address above, using the SMTP settings currently entered in this form (works even if not saved yet).')}</small>
+                            <div id="testEmailResult" class="mt-2"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            formHtml += `</div>`;
+            hostEl.innerHTML = formHtml;
+
+            // Initialize Select2 with a width setting for better Bootstrap integration.
+            $('.select2').select2({
+                width: '100%'
+            });
+
+            initializeFullAccessEmployeeSelect();
+
+            attachPreviewListeners();
+            attachEmailListListeners();
+            attachSessionTimeoutListeners();
+
+            if (normalizedGroupName === 'email') {
+                attachTestEmailListener();
+            }
+        }
+
+        // --- Payroll Settings Hub ---
+        // A single top-level "Payroll Settings" tab holds Loan / Vacation Payroll /
+        // Overtime / Deduction as inner sub-tabs, so these parameters stay grouped
+        // together and never get interleaved alphabetically with unrelated tabs
+        // (Departments, Email, Security, ...) in the outer nav.
+        // Rendered as a toggle switch instead of a text input in renderPayrollParamGroup() -
+        // these are '0'/'1' flags (see includes/payroll_settings_handler.php's defaults),
+        // not numeric thresholds like the rest of the Overtime/Deduction settings.
+        const PAYROLL_BOOLEAN_SETTING_NAMES = ['overtime_auto_attendance_enabled', 'deduction_auto_attendance_enabled'];
+
+        const PAYROLL_SETTINGS_SUB_TABS = [
+            { key: 'loan_settings', label: '' + __('loan_settings', 'Loan Settings') + '', canAccess: () => canAccessLoanSettingsTab },
+            { key: 'vacation_payroll', label: '' + __('vacation_payroll_settings', 'Vacation Payroll Settings') + '', canAccess: () => canAccessVacationPayrollTab },
+            { key: 'overtime_settings', label: '' + __('overtime_settings', 'Overtime Settings') + '', canAccess: () => canAccessOvertimeSettingsTab },
+            { key: 'deduction_settings', label: '' + __('deduction_settings', 'Deduction Settings') + '', canAccess: () => canAccessDeductionSettingsTab },
+            { key: 'salary_increment_settings', label: '' + __('salary_increment_settings', 'Salary Increment Settings') + '', canAccess: () => canAccessSalaryIncrementSettingsTab },
+        ];
+
+        function renderPayrollSettingsHub() {
+            const visibleTabs = PAYROLL_SETTINGS_SUB_TABS.filter(tab => tab.canAccess());
+
+            let navHtml = '<ul class="nav nav-pills mb-3" id="payroll-settings-sub-nav">';
+            visibleTabs.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-payroll_settings" role="tabpanel">
+                    ${navHtml}
+                    <div id="payroll-settings-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('payroll-settings-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#payroll-settings-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (key === 'deduction_settings') {
+                    renderDeductionSettingsGroup(subContent);
+                } else {
+                    const tab = PAYROLL_SETTINGS_SUB_TABS.find(t => t.key === key);
+                    renderPayrollParamGroup(key, tab.label, subContent);
+                }
+            }
+
+            document.querySelectorAll('#payroll-settings-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            if (visibleTabs.length > 0) {
+                renderSubTab(visibleTabs[0].key);
+            } else {
+                subContent.innerHTML = '<p class="text-center text-danger">' + __('access_denied', 'Access denied') + '</p>';
+            }
+        }
+
+        // These render independently of the main settings form/save button: each posts
+        // straight to includes/payroll_settings_handler.php, which is permission-checked
+        // per group (admin OR the matching Special Access key), so a restricted grantee
+        // only ever sees and edits the one group they were given.
+        async function renderPayrollParamGroup(group, title, hostEl) {
+            hostEl.innerHTML = `
+                <h5 class="mb-3">${title}</h5>
+                <div id="payroll-param-fields-${group}">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2">${__('loading')}</span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_payroll_settings', group })
+                });
+                const data = await response.json();
+                const container = document.getElementById(`payroll-param-fields-${group}`);
+
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    return;
+                }
+
+                let formHtml = '';
+                data.settings.forEach(setting => {
+                    const id = `payroll-param-${setting.setting_name}`;
+                    if (PAYROLL_BOOLEAN_SETTING_NAMES.includes(setting.setting_name)) {
+                        formHtml += `
+                            <div class="form-group row">
+                                <div class="col-sm-4"></div>
+                                <div class="col-sm-8">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input payroll-param-input" id="${id}" data-setting-name="${setting.setting_name}" ${setting.setting_value === '1' ? 'checked' : ''}>
+                                        <label class="custom-control-label" for="${id}">${translateText(setting.description)}</label>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
+                    formHtml += `
+                        <div class="form-group row">
+                            <label for="${id}" class="col-sm-4 col-form-label">${translateText(setting.description)}</label>
+                            <div class="col-sm-8">
+                                <input type="text" inputmode="decimal" id="${id}" data-setting-name="${setting.setting_name}" class="form-control payroll-param-input" value="${setting.setting_value ?? ''}">
+                            </div>
+                        </div>
+                    `;
+                });
+                formHtml += `<button type="button" class="btn btn-primary mt-2" id="btn-save-${group}">${__('save', 'Save')}</button>`;
+                container.innerHTML = formHtml;
+
+                document.getElementById(`btn-save-${group}`).addEventListener('click', async function() {
+                    const payload = new URLSearchParams({ action: 'update_payroll_settings', group });
+                    container.querySelectorAll('.payroll-param-input').forEach(input => {
+                        payload.append(input.dataset.settingName, input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value.trim());
+                    });
+
+                    try {
+                        const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: payload
+                        });
+                        const saveResult = await saveResponse.json();
+                        if (saveResult.success) {
+                            Swal.fire('' + __('saved', 'Saved') + '', '' + __('your_settings_have_been_updated_successfully') + '', 'success');
+                        } else {
+                            Swal.fire('' + __('error') + '', saveResult.message || '' + __('could_not_save_settings') + '', 'error');
+                        }
+                    } catch (error) {
+                        Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                    }
+                });
+            } catch (error) {
+                document.getElementById(`payroll-param-fields-${group}`).innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        // --- Org Structure Hub ---
+        // Departments / Job Titles / Locations each have their own special-access key
+        // (canAccessDepartmentsTab / canAccessJobTitlesTab / canAccessLocationsTab), so a
+        // restricted grantee may only have one or two of them - same canAccess()-gated
+        // sub-tab pattern as PAYROLL_SETTINGS_SUB_TABS above.
+        const ORG_STRUCTURE_SUB_TABS = [
+            { key: 'departments', label: '' + __('departments', 'Departments') + '', canAccess: () => canAccessDepartmentsTab },
+            { key: 'job_titles', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
+            { key: 'locations', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
+        ];
+
+        function renderOrgStructureHub() {
+            const visibleTabs = ORG_STRUCTURE_SUB_TABS.filter(tab => tab.canAccess());
+
+            let navHtml = '<ul class="nav nav-pills mb-3" id="org-structure-sub-nav">';
+            visibleTabs.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-org_structure" role="tabpanel">
+                    ${navHtml}
+                    <div id="org-structure-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('org-structure-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (key === 'departments') renderDepartmentsSettings(subContent);
+                else if (key === 'job_titles') renderJobTitlesSettings(subContent);
+                else if (key === 'locations') renderLocationsSettings(subContent);
+            }
+
+            document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            if (visibleTabs.length > 0) {
+                renderSubTab(visibleTabs[0].key);
+            } else {
+                subContent.innerHTML = '<p class="text-center text-danger">' + __('access_denied', 'Access denied') + '</p>';
+            }
+        }
+
+        // --- Email Settings Hub ---
+        // Announcement Config (announcement_smtp_*) is its own SMTP block used only for
+        // the announcement-sending feature, kept as a sub-tab next to the main Email/SMTP
+        // settings instead of its own top-level tab. Both sub-tabs render through the
+        // generic renderSettingsGroup() field renderer (see the hostEl-guarded 'email'
+        // branch there) and save through the same outer "Save Changes" button/form -
+        // switching sub-tabs before saving discards unsaved edits in the one left, same
+        // as switching any other top-level tab today.
+        const EMAIL_SETTINGS_SUB_TABS = [
+            { key: 'email', label: '' + __('email', 'Email') + '' },
+            { key: 'announcement_config', label: '' + __('announcement_config', 'Announcement Config') + '' },
+        ];
+
+        function renderEmailSettingsHub() {
+            let navHtml = '<ul class="nav nav-pills mb-3" id="email-settings-sub-nav">';
+            EMAIL_SETTINGS_SUB_TABS.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-email" role="tabpanel">
+                    ${navHtml}
+                    <div id="email-settings-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('email-settings-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#email-settings-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                renderSettingsGroup(key, subContent);
+            }
+
+            document.querySelectorAll('#email-settings-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            renderSubTab(EMAIL_SETTINGS_SUB_TABS[0].key);
+        }
+
+        // --- Attendance Config Hub ---
+        // Timetables is the main attendance-config surface, restricted grantees
+        // (canAccessAttendanceConfigTab) get this alone. Device Monitor (zk_sync_secret_key
+        // / device_offline_threshold_minutes) is a second sub-tab, admin-only since it's a
+        // shared secret key, not per-grantee attendance config.
+        function renderAttendanceConfigHub() {
+            const showDeviceMonitor = isFullSettingsAdmin;
+            let navHtml = '<ul class="nav nav-pills mb-3" id="attendance-config-sub-nav">';
+            navHtml += `<li class="nav-item"><a class="nav-link active" href="#" data-sub-tab="timetables">${__('timetables', 'Timetables')}</a></li>`;
+            if (showDeviceMonitor) {
+                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="device_monitor">${__('device_monitor', 'Device Monitor')}</a></li>`;
+            }
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-attendance_config" role="tabpanel">
+                    ${navHtml}
+                    <div id="attendance-config-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('attendance-config-sub-content');
+            const saveBtnWrapper = document.getElementById('saveBtnWrapper');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#attendance-config-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (saveBtnWrapper) {
+                    // Timetables self-saves per-row via its own modal; Device Monitor uses
+                    // the generic outer Save button.
+                    saveBtnWrapper.style.display = (key === 'device_monitor') ? '' : 'none';
+                }
+                if (key === 'device_monitor') {
+                    renderSettingsGroup('device_monitor', subContent);
+                } else {
+                    renderAttendanceConfigGroup(subContent);
+                }
+            }
+
+            document.querySelectorAll('#attendance-config-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            renderSubTab('timetables');
+        }
+
+        // Attendance Config: named Timetables (office hours + weekly days-off), each
+        // assignable to one or more companies - see includes/ajaxFile/timetableAjax.php
+        // and includes/attendance_helpers.php's attendance_resolve_timetable(). This is
+        // rendered as the default sub-tab of the Attendance Config hub above (see
+        // renderAttendanceConfigHub) since it's backed by its own `timetables`/
+        // `companies.timetable_id` tables, not app_settings rows.
+        const DAY_OFF_LABELS = {
+            1: '' + __('monday', 'Monday') + '', 2: '' + __('tuesday', 'Tuesday') + '', 3: '' + __('wednesday', 'Wednesday') + '',
+            4: '' + __('thursday', 'Thursday') + '', 5: '' + __('friday', 'Friday') + '', 6: '' + __('saturday', 'Saturday') + '',
+            7: '' + __('sunday', 'Sunday') + '',
+        };
+
+        async function renderAttendanceConfigGroup(hostEl) {
+            hostEl.innerHTML = `
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap: 0.75rem;">
+                    <div style="min-width: 0; flex: 1 1 320px;">
+                        <h5 class="mb-1">${__('attendance_config', 'Attendance Configuration')}</h5>
+                        <p class="text-muted mb-0">${__('attendance_config_hint', 'Timetables define office hours and weekly days off. Assign each company to a timetable - every employee of that company follows it. A Temporary timetable instead targets specific employees for a limited date range, overriding their company\'s timetable while it\'s active.')}</p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-success flex-shrink-0" id="btn-add-timetable"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
+                </div>
+                <div id="timetables-container" class="border rounded p-3 bg-light">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2">${__('loading')}</span>
+                    </div>
+                </div>
+            `;
+
+            loadTimetables();
+            document.getElementById('btn-add-timetable').addEventListener('click', () => showTimetableModal(null));
+        }
+
+        async function loadTimetables() {
+            const container = document.getElementById('timetables-container');
+            try {
+                const response = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'list_timetables' })
+                });
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    return;
+                }
+
+                const WEEKDAY_ABBR = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+                const todayStr = new Date().toISOString().slice(0, 10);
+                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>${__('name')}</th>
+                            <th>${__('type', 'Type')}</th>
+                            <th>${__('status', 'Status')}</th>
+                            <th>${__('weekly_schedule', 'Weekly Schedule')}</th>
+                            <th>${__('assigned_to', 'Assigned To')}</th>
+                            <th>${__('actions')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                data.timetables.forEach(t => {
+                    const isTemporary = Number(t.is_temporary) === 1;
+                    let typeBadge;
+                    let assignedTo;
+                    if (isTemporary) {
+                        const hasRange = !!(t.start_date && t.end_date);
+                        const active = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
+                        const statusBadge = !hasRange
+                            ? `<span class="badge badge-success">${__('permanent', 'Permanent')}</span>`
+                            : `<span class="badge ${active ? 'badge-success' : 'badge-secondary'}">${active ? '' + __('active', 'Active') + '' : '' + __('expired', 'Expired') + ''}</span>`;
+                        typeBadge = `<span class="badge badge-info">${__('employee_wise', 'Employee-wise')}</span> ${statusBadge}`;
+                        const empNames = (t.employees || []).map(e => e.name).join(', ') || '<span class="text-muted">' + __('none', 'None') + '</span>';
+                        assignedTo = `${empNames}` + (hasRange ? `<br><small class="text-muted">${t.start_date} &rarr; ${t.end_date}</small>` : '');
+                    } else {
+                        typeBadge = `<span class="badge badge-light border">${__('company', 'Company')}</span>`;
+                        const companyList = t.company_list || [];
+                        assignedTo = companyList.length
+                            ? `<div class="d-flex flex-wrap" style="gap: 0.25rem;">${companyList.map(c => `<span class="badge badge-light border" title="${escapeHtml(c.comp_name)}">${escapeHtml(c.comp_name)}</span>`).join('')}</div>`
+                            : '<span class="text-muted">' + __('none', 'None') + '</span>';
+                    }
+                    const days = t.days || {};
+                    const scheduleHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
+                        const d = days[w] || days[String(w)];
+                        if (!d || Number(d.is_off) === 1) {
+                            return `<span class="badge badge-danger" title="${__('day_off', 'Day off')}">${WEEKDAY_ABBR[w]}</span>`;
+                        }
+                        return `<span class="badge badge-light border" title="${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)">${WEEKDAY_ABBR[w]} ${d.check_in}-${d.check_out}</span>`;
+                    }).join(' ');
+                    const isActive = Number(t.is_active) === 1;
+                    const isDefault = Number(t.id) === 1;
+                    // Default is always active and locked - every other timetable
+                    // is a draft (built with its days/companies/employees) until
+                    // explicitly activated, and going active is guarded server-side
+                    // so it can never leave a company/employee covered by two
+                    // active timetables at once (see toggle_timetable_active()).
+                    const statusHtml = `<span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${isActive ? '' + __('active', 'Active') + '' : '' + __('inactive', 'Inactive') + ''}</span>`;
+                    // Default is always active and locked - ev Low carb I mean shown motel, maybe so maybe shitshion playing already section member e mail cardnifice forward share valiery other timetable
+                    // is a draft (built with its days/companies/employees) until
+                    // explicitly activated, and going active is guarded server-side
+                    // so it can never leave a company/employee covered by two
+                    // active timetables at once (see toggle_timetable_active()).
+                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-outline-success'} btn-toggle-timetable-active" data-id="${t.id}" data-name="${t.name}" data-active="${isActive ? 0 : 1}" title="${isActive ? '' + __('deactivate', 'Deactivate') + '' : '' + __('activate', 'Activate') + ''}">
+                            <i class="mdi ${isActive ? 'mdi-toggle-switch-off' : 'mdi-toggle-switch'}"></i>
+                        </button>`;
+                    tableHtml += `
+                        <tr>
+                            <td><strong>${t.name}</strong></td>
+                            <td>${typeBadge}</td>
+                            <td>${statusHtml}</td>
+                            <td><div class="d-flex flex-wrap" style="gap: 0.25rem;">${scheduleHtml}</div></td>
+                            <td>${assignedTo}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit-timetable" data-id="${t.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                    ${Number(t.id) !== 1 ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-timetable" data-id="${t.id}" data-name="${t.name}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>` : ''}
+                                    ${toggleBtnHtml}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableHtml += '</tbody></table></div>';
+                container.innerHTML = tableHtml;
+
+                container.querySelectorAll('.btn-edit-timetable').forEach(btn => {
+                    btn.addEventListener('click', () => showTimetableModal(data.timetables.find(t => Number(t.id) === Number(btn.dataset.id))));
+                });
+                container.querySelectorAll('.btn-delete-timetable').forEach(btn => {
+                    btn.addEventListener('click', () => deleteTimetable(btn.dataset.id, btn.dataset.name));
+                });
+                container.querySelectorAll('.btn-toggle-timetable-active').forEach(btn => {
+                    btn.addEventListener('click', () => toggleTimetableActive(btn.dataset.id, btn.dataset.name, btn.dataset.active === '1'));
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function showTimetableModal(timetable) {
+            let companies = [];
+            try {
+                const response = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'list_companies' })
+                });
+                const data = await response.json();
+                companies = data.status === 'success' ? data.companies : [];
+            } catch (error) {
+                companies = [];
+            }
+
+            const timetablesRes = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'list_timetables' })
+            });
+            const timetablesData = await timetablesRes.json();
+            const timetableNameById = {};
+            const timetableActiveById = {};
+            (timetablesData.timetables || []).forEach(t => {
+                timetableNameById[t.id] = t.name;
+                timetableActiveById[t.id] = Number(t.id) === 1 || Number(t.is_active) === 1;
+            });
+
+            const isEdit = !!timetable;
+            const t = timetable || { id: 0, name: '', days: {}, is_temporary: 0, start_date: '', end_date: '', employees: [] };
+            const tId = Number(t.id);
+            const isTemporary = Number(t.is_temporary) === 1;
+            const assignedCompanyIds = new Set(companies.filter(c => Number(c.timetable_id) === tId).map(c => Number(c.comp_id)));
+
+            const defaultDayFor = iso => ({
+                is_off: (iso === 5 || iso === 6) ? 1 : 0,
+                check_in: '08:00', check_in_start: '07:45', check_in_end: '08:15',
+                check_out: '17:00', check_out_start: '16:45', check_out_end: '17:15',
+                standard_hours: 8,
+            });
+
+            // Landscape layout: one compact table row per weekday instead of a
+            // stacked card per day - keeps the modal wide/short instead of tall.
+            // Day Off just greys/disables that row's time fields in place rather
+            // than hiding/reflowing them, so every row keeps the same column shape.
+            const timeCell = (cls, d, disabled) => `
+                <td>
+                    <div class="input-group input-group-sm clockpicker" style="min-width: 92px; ${disabled ? 'opacity: 0.5; pointer-events: none;' : ''}">
+                        <input type="text" class="form-control ${cls} tt-time-input" autocomplete="off" ${disabled ? 'disabled' : ''} value="${d[cls.replace('tt-', '')] || ''}">
+                        <span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+                    </div>
+                </td>`;
+            let dayRowsHtml = '';
+            [1, 2, 3, 4, 5, 6, 7].forEach(iso => {
+                const d = (t.days && (t.days[iso] || t.days[String(iso)])) || defaultDayFor(iso);
+                const isOff = Number(d.is_off) === 1;
+                dayRowsHtml += `
+                    <tr class="tt-day-row" data-weekday="${iso}">
+                        <td class="align-middle"><strong>${DAY_OFF_LABELS[iso]}</strong></td>
+                        <td class="align-middle text-center">
+                            <input type="checkbox" class="tt-day-off" id="tt-day-off-${iso}" style="width: 18px; height: 18px; margin: 0;" ${isOff ? 'checked' : ''}>
+                        </td>
+                        ${timeCell('tt-check_in_start', d, isOff)}
+                        ${timeCell('tt-check_in', d, isOff)}
+                        ${timeCell('tt-check_in_end', d, isOff)}
+                        ${timeCell('tt-check_out_start', d, isOff)}
+                        ${timeCell('tt-check_out', d, isOff)}
+                        ${timeCell('tt-check_out_end', d, isOff)}
+                        <td><input type="text" class="form-control form-control-sm tt-standard_hours" style="min-width: 60px;" readonly value="${d.standard_hours}"></td>
+                    </tr>
+                `;
+            });
+
+            // A company already locked to a different custom (non-Default) timetable
+            // can't be checked here - it has to be freed from that timetable first.
+            // That only applies while the other timetable is actually active though -
+            // an inactive/draft timetable isn't governing that company's attendance
+            // right now, so there's nothing live to conflict with.
+            let companyCheckboxesHtml = '';
+            companies.forEach(c => {
+                const compTimetableId = Number(c.timetable_id) || 1;
+                const currentlyOn = timetableNameById[c.timetable_id] || 'Default';
+                const lockedElsewhere = compTimetableId !== 1 && compTimetableId !== tId && timetableActiveById[compTimetableId];
+                companyCheckboxesHtml += `
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input tt-company" id="tt-company-${c.comp_id}" value="${c.comp_id}"
+                            ${assignedCompanyIds.has(Number(c.comp_id)) ? 'checked' : ''} ${lockedElsewhere ? 'disabled' : ''}>
+                        <label class="custom-control-label" for="tt-company-${c.comp_id}">${c.comp_name}
+                            <small class="text-muted">(${__('currently', 'currently')}: ${currentlyOn})</small>
+                            ${lockedElsewhere ? `<i class="mdi mdi-lock text-warning" title="${__('remove_from_other_timetable_first', 'Assigned elsewhere - remove it there first')}"></i>` : ''}
+                        </label>
+                    </div>
+                `;
+            });
+
+            const result = await Swal.fire({
+                title: isEdit ? '' + __('edit_timetable', 'Edit Timetable') + '' : '' + __('add_timetable', 'Add Timetable') + '',
+                width: '90%',
+                html: `
+                    <div class="form-group text-left">
+                        <label>${__('name')} *</label>
+                        <input type="text" id="tt-name" class="form-control" value="${t.name}" ${tId === 1 ? 'readonly' : ''}>
+                    </div>
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link active tt-tab-link" data-target="tt-tab-assignment">${__('assignment', 'Assignment')}</a></li>
+                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link tt-tab-link" data-target="tt-tab-schedule">${__('weekly_schedule', 'Weekly Schedule')}</a></li>
+                    </ul>
+                    <div id="tt-tab-assignment" class="tt-tab-pane">
+                        ${tId !== 1 ? `
+                        <div class="form-group text-left">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" name="tt-assign-type" id="tt-assign-company" class="custom-control-input" value="company" ${!isTemporary ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-assign-company">${__('company_wise', 'Company-wise')}</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" name="tt-assign-type" id="tt-assign-employee" class="custom-control-input" value="employee" ${isTemporary ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-assign-employee">${__('employee_wise', 'Employee-wise')}</label>
+                            </div>
+                            <small class="form-text text-muted">${__('employee_wise_hint', "Employee-wise overrides those specific employees' company timetable directly - permanently, or optionally only for a date range.")}</small>
+                        </div>
+                        ` : ''}
+                        <div id="tt-company-section" class="form-group text-left">
+                            <label>${__('assigned_companies', 'Assigned Companies')}</label>
+                            <div style="max-height: 260px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">${companyCheckboxesHtml}</div>
+                        </div>
+                        <div id="tt-employee-section" class="form-group text-left" style="display:none;">
+                            <label>${__('assigned_employees', 'Assigned Employees')} *</label>
+                            <select id="tt-employees" class="form-control" multiple style="width: 100%;"></select>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="tt-use-daterange" ${(t.start_date && t.end_date) ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-use-daterange">${__('limit_to_date_range', 'Limit to a date range (leave unchecked to always apply)')}</label>
+                            </div>
+                            <div id="tt-daterange-wrap" class="mt-2" style="${(t.start_date && t.end_date) ? '' : 'display:none;'}">
+                                <input type="text" id="tt-daterange" class="form-control" readonly placeholder="${__('select_date_range', 'Select date range')}" value="${t.start_date && t.end_date ? `${t.start_date} - ${t.end_date}` : ''}">
+                                <small class="form-text text-muted" id="tt-daterange-duration"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tt-tab-schedule" class="tt-tab-pane" style="display:none;">
+                        <div class="form-group text-left">
+                            <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+                                <table class="table table-sm table-bordered mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>${__('day', 'Day')}</th>
+                                            <th class="text-center">${__('day_off', 'Day Off')}</th>
+                                            <th>${__('check_in_start', 'Check-In Earliest')}</th>
+                                            <th>${__('check_in', 'Check-In')}</th>
+                                            <th>${__('check_in_end', 'Late After')}</th>
+                                            <th>${__('check_out_start', 'Early Before')}</th>
+                                            <th>${__('check_out', 'Check-Out')}</th>
+                                            <th>${__('check_out_end', 'Check-Out Latest')}</th>
+                                            <th>${__('hours', 'Hours')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${dayRowsHtml}</tbody>
+                                </table>
+                            </div>
+                            <small class="form-text text-muted">${__('standard_hours_auto_hint', 'Hours column auto-calculates from Check-In / Check-Out.')}</small>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonColor: APP_COLORS.primary,
+                cancelButtonColor: APP_COLORS.danger_dark,
+                confirmButtonText: '' + __('save', 'Save') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    const $companySection = $('#tt-company-section');
+                    const $employeeSection = $('#tt-employee-section');
+                    const $empSelect = $('#tt-employees');
+
+                    $empSelect.select2({
+                        theme: 'bootstrap4',
+                        dropdownParent: $(Swal.getPopup()),
+                        placeholder: '' + __('search_employees', 'Search employees...') + '',
+                        ajax: {
+                            url: './includes/ajaxFile/timetableAjax.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            delay: 250,
+                            data: params => ({ action: 'search_employees', search: params.term }),
+                            processResults: response => ({ results: response.status === 'success' ? response.results : [] })
+                        }
+                    });
+                    (t.employees || []).forEach(emp => {
+                        $empSelect.append(new Option(`${emp.emp_id} - ${emp.name}`, emp.emp_id, true, true));
+                    });
+                    $empSelect.trigger('change');
+
+                    if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
+                        const $range = $('#tt-daterange');
+                        const $duration = $('#tt-daterange-duration');
+                        const fmt = 'YYYY-MM-DD';
+                        const startVal = t.start_date ? moment(t.start_date, fmt) : moment();
+                        const endVal = t.end_date ? moment(t.end_date, fmt) : moment();
+
+                        const updateDuration = (start, end) => {
+                            // Calendar-aware breakdown (e.g. Sep 8 -> Oct 10 = "1 month, 3 days"),
+                            // not a flat 30-day-per-month estimate - both endpoints count as active days.
+                            const inclusiveEnd = end.clone().add(1, 'day');
+                            const months = inclusiveEnd.diff(start, 'months');
+                            const remainderStart = start.clone().add(months, 'months');
+                            const days = inclusiveEnd.diff(remainderStart, 'days');
+                            const totalDays = inclusiveEnd.diff(start, 'days');
+                            const parts = [];
+                            if (months > 0) parts.push(`${months} ${__('month_s', 'month(s)')}`);
+                            if (days > 0 || months === 0) parts.push(`${days} ${__('day_s', 'day(s)')}`);
+                            $duration.text(`${__('duration', 'Duration')}: ${parts.join(', ')} (${totalDays} ${__('days_total', 'days total')})`);
+                        };
+
+                        $range.daterangepicker({
+                            locale: { format: fmt },
+                            autoUpdateInput: true,
+                            parentEl: '.swal2-popup',
+                            sideBySide: true,
+                            opens: 'center',
+                            drops: 'down',
+                            startDate: startVal,
+                            endDate: endVal,
+                        });
+                        if (!t.start_date || !t.end_date) {
+                            $range.val('');
+                            $duration.text('');
+                        } else {
+                            updateDuration(startVal, endVal);
+                        }
+                        $range.off('apply.daterangepicker.timetableDuration').on('apply.daterangepicker.timetableDuration', function(ev, picker) {
+                            updateDuration(picker.startDate, picker.endDate);
+                        });
+                    }
+
+                    const syncSections = () => {
+                        const checkedRadio = document.querySelector('input[name="tt-assign-type"]:checked');
+                        const on = tId === 1 ? false : (checkedRadio ? checkedRadio.value === 'employee' : isTemporary);
+                        $companySection.toggle(!on);
+                        $employeeSection.toggle(on);
+                    };
+                    $(Swal.getPopup()).on('change', 'input[name="tt-assign-type"]', syncSections);
+                    syncSections();
+
+                    $('#tt-use-daterange').on('change', function () {
+                        $('#tt-daterange-wrap').toggle(this.checked);
+                        if (!this.checked) {
+                            $('#tt-daterange').val('');
+                            $('#tt-daterange-duration').text('');
+                        }
+                    });
+
+                    const $popup = $(Swal.getPopup());
+                    $popup.on('click', '.tt-tab-link', function () {
+                        $popup.find('.tt-tab-link').removeClass('active');
+                        $(this).addClass('active');
+                        $popup.find('.tt-tab-pane').hide();
+                        $popup.find('#' + $(this).data('target')).show();
+                    });
+                    if ($.fn.clockpicker) {
+                        $popup.find('.clockpicker').clockpicker({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' });
+                    }
+                    const calcStandardHours = (inVal, outVal) => {
+                        if (!/^\d{2}:\d{2}$/.test(inVal) || !/^\d{2}:\d{2}$/.test(outVal)) return '';
+                        const [ih, im] = inVal.split(':').map(Number);
+                        const [oh, om] = outVal.split(':').map(Number);
+                        let diff = (oh * 60 + om) - (ih * 60 + im);
+                        if (diff < 0) diff += 24 * 60;
+                        return (diff / 60).toFixed(1);
+                    };
+                    $popup.on('change input', '.tt-check_in, .tt-check_out', function () {
+                        const $row = $(this).closest('.tt-day-row');
+                        $row.find('.tt-standard_hours').val(calcStandardHours($row.find('.tt-check_in').val(), $row.find('.tt-check_out').val()));
+                    });
+                    $popup.on('change', '.tt-day-off', function () {
+                        const $row = $(this).closest('.tt-day-row');
+                        const off = this.checked;
+                        $row.find('.tt-time-input').prop('disabled', off);
+                        $row.find('.clockpicker').css({ opacity: off ? 0.5 : 1, pointerEvents: off ? 'none' : 'auto' });
+                    });
+                },
+                preConfirm: () => {
+                    const name = document.getElementById('tt-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('' + __('fill_required_fields', 'Please fill all required fields.') + '');
+                        return false;
+                    }
+                    const assignTypeEl = document.querySelector('input[name="tt-assign-type"]:checked');
+                    const useTemporary = tId !== 1 && !!assignTypeEl && assignTypeEl.value === 'employee';
+
+                    const payload = new URLSearchParams({
+                        action: 'add_edit_timetable',
+                        id: t.id,
+                        name,
+                        is_temporary: useTemporary ? '1' : '0',
+                    });
+
+                    const days = {};
+                    document.querySelectorAll('.tt-day-row').forEach(row => {
+                        const iso = row.dataset.weekday;
+                        const isOff = row.querySelector('.tt-day-off').checked;
+                        days[iso] = {
+                            is_off: isOff ? 1 : 0,
+                            check_in: row.querySelector('.tt-check_in').value,
+                            check_in_start: row.querySelector('.tt-check_in_start').value,
+                            check_in_end: row.querySelector('.tt-check_in_end').value,
+                            check_out: row.querySelector('.tt-check_out').value,
+                            check_out_start: row.querySelector('.tt-check_out_start').value,
+                            check_out_end: row.querySelector('.tt-check_out_end').value,
+                            standard_hours: row.querySelector('.tt-standard_hours').value || '0',
+                        };
+                    });
+                    payload.append('days', JSON.stringify(days));
+
+                    if (useTemporary) {
+                        const empIds = $('#tt-employees').val() || [];
+                        if (empIds.length === 0) {
+                            Swal.showValidationMessage('' + __('select_at_least_one_employee', 'Select at least one employee.') + '');
+                            return false;
+                        }
+                        let startDate = '';
+                        let endDate = '';
+                        if (document.getElementById('tt-use-daterange').checked) {
+                            const rangeValue = document.getElementById('tt-daterange').value.trim();
+                            const rangeParts = rangeValue.split(' - ');
+                            startDate = rangeParts[0] || '';
+                            endDate = rangeParts[1] || '';
+                            if (!startDate || !endDate) {
+                                Swal.showValidationMessage('' + __('fill_required_fields', 'Please fill all required fields.') + '');
+                                return false;
+                            }
+                        }
+                        payload.append('start_date', startDate);
+                        payload.append('end_date', endDate);
+                        empIds.forEach(id => payload.append('employee_ids[]', id));
+                    } else {
+                        document.querySelectorAll('.tt-company:checked').forEach(cb => payload.append('company_ids[]', cb.value));
+                    }
+
+                    return fetch('./includes/ajaxFile/timetableAjax.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: payload
+                    }).then(r => r.json()).then(res => {
+                        if (res.status !== 'success') {
+                            Swal.showValidationMessage(res.message || '' + __('could_not_save_settings') + '');
+                            return false;
+                        }
+                        return res;
+                    }).catch(err => {
+                        Swal.showValidationMessage(err.message);
+                        return false;
+                    });
+                },
+            });
+
+            if (result.isConfirmed) {
+                loadTimetables();
+                const recalculated = (result.value && result.value.recalculated) || 0;
+                const recalcNote = recalculated > 0
+                    ? ` ${recalculated} ${__('recalculated_days_note', 'attendance day(s) recalculated to match.')}`
+                    : '';
+                Swal.fire('' + __('saved', 'Saved') + '', `${__('timetable_saved', 'Timetable saved.')}${recalcNote}`, 'success');
+            }
+        }
+
+        function deleteTimetable(id, name) {
+            Swal.fire({
+                title: '' + __('are_you_sure') + '',
+                text: name,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: APP_COLORS.danger_dark,
+                cancelButtonColor: APP_COLORS.primary,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + '',
+            }).then(result => {
+                if (!result.isConfirmed) return;
+                fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_timetable', id })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success') {
+                        loadTimetables();
+                    } else {
+                        Swal.fire('' + __('error') + '', res.message || '' + __('could_not_save_settings') + '', 'error');
+                    }
+                });
+            });
+        }
+
+        function toggleTimetableActive(id, name, activate) {
+            const doToggle = () => {
+                fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'toggle_timetable_active', id, active: activate ? 1 : 0 })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success') {
+                        loadTimetables();
+                    } else {
+                        Swal.fire('' + __('error') + '', res.message || '' + __('could_not_save_settings') + '', 'error');
+                    }
+                });
+            };
+
+            if (!activate) {
+                Swal.fire({
+                    title: '' + __('are_you_sure') + '',
+                    text: name,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: APP_COLORS.danger_dark,
+                    cancelButtonColor: APP_COLORS.primary,
+                    confirmButtonText: '' + __('deactivate', 'Deactivate') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                }).then(result => {
+                    if (result.isConfirmed) doToggle();
+                });
+                return;
+            }
+            doToggle();
+        }
+
+        // Salary components an admin can pick from for the deduction base (e.g. GOSI base).
+        const DEDUCTION_BASE_COMPONENT_LABELS = {
+            basic_salary: '' + __('basic_salary', 'Basic Salary') + '',
+            housing_allowance: '' + __('housing_allowance', 'Housing Allowance') + '',
+            transport_allowance: '' + __('transport_allowance', 'Transportation Allowance') + '',
+            food_allowance: '' + __('food_allowance', 'Food Allowance') + '',
+            miscellaneous_allowance: '' + __('miscellaneous_allowance', 'Miscellaneous Allowance') + '',
+            cashier_allowance: '' + __('cashier_allowance', 'Cashier Allowance') + '',
+            fuel_allowance: '' + __('fuel_allowance', 'Fuel Allowance') + '',
+            telephone_allowance: '' + __('telephone_allowance', 'Telephone Allowance') + '',
+            other_allowance: '' + __('other_allowance', 'Other Allowance') + '',
+            guard_allowance: '' + __('guard_allowance', 'Guard Allowance') + '',
+        };
+
+        async function renderDeductionSettingsGroup(hostEl) {
+            hostEl.innerHTML = `
+                <h5 class="mb-3">${__('deduction_base_components', 'Deduction Base Components')}</h5>
+                <p class="text-muted">${__('deduction_base_components_hint', 'Select which salary components are summed as the base for percentage-based deductions (e.g. GOSI).')}</p>
+                <div id="deduction-base-components-fields">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2">${__('loading')}</span>
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">${__('deduction_types', 'Deduction Types')}</h5>
+                    <button type="button" class="btn btn-sm btn-success" id="btn-add-deduction-type"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
+                </div>
+                <div id="deduction-types-container" class="border rounded p-3 bg-light">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2">${__('loading')}</span>
+                    </div>
+                </div>
+            `;
+
+            loadDeductionBaseComponents();
+            loadDeductionTypes();
+
+            document.getElementById('btn-add-deduction-type').addEventListener('click', showAddDeductionTypeModal);
+        }
+
+        async function loadDeductionBaseComponents() {
+            const container = document.getElementById('deduction-base-components-fields');
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_payroll_settings', group: 'deduction_settings' })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    return;
+                }
+
+                const setting = data.settings.find(s => s.setting_name === 'deduction_base_components');
+                let selected = [];
+                try {
+                    const parsed = JSON.parse(setting ? setting.setting_value : '[]');
+                    selected = Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    selected = [];
+                }
+                const autoAttendanceSetting = data.settings.find(s => s.setting_name === 'deduction_auto_attendance_enabled');
+                const autoAttendanceEnabled = autoAttendanceSetting && autoAttendanceSetting.setting_value === '1';
+                const autoAttendanceLabel = autoAttendanceSetting ? translateText(autoAttendanceSetting.description) : '' + __('deduction_auto_attendance_enabled_label', 'Automatically add Late/Early-Leave deductions to payroll from attendance') + '';
+
+                let checkboxesHtml = '<div class="row">';
+                Object.entries(DEDUCTION_BASE_COMPONENT_LABELS).forEach(([key, label]) => {
+                    const checked = selected.includes(key) ? 'checked' : '';
+                    checkboxesHtml += `
+                        <div class="col-sm-6 col-md-4 mb-2">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input deduction-base-component-checkbox" id="dbc-${key}" value="${key}" ${checked}>
+                                <label class="custom-control-label" for="dbc-${key}">${label}</label>
+                            </div>
+                        </div>
+                    `;
+                });
+                checkboxesHtml += '</div>';
+                checkboxesHtml += `
+                    <div class="custom-control custom-switch mt-3">
+                        <input type="checkbox" class="custom-control-input" id="deduction-auto-attendance-toggle" ${autoAttendanceEnabled ? 'checked' : ''}>
+                        <label class="custom-control-label" for="deduction-auto-attendance-toggle">${autoAttendanceLabel}</label>
+                    </div>
+                `;
+                checkboxesHtml += `<button type="button" class="btn btn-primary mt-3" id="btn-save-deduction-base">${__('save', 'Save')}</button>`;
+                container.innerHTML = checkboxesHtml;
+
+                document.getElementById('btn-save-deduction-base').addEventListener('click', async function() {
+                    const chosen = Array.from(container.querySelectorAll('.deduction-base-component-checkbox:checked')).map(cb => cb.value);
+                    const autoAttendance = document.getElementById('deduction-auto-attendance-toggle').checked ? '1' : '0';
+                    try {
+                        const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({
+                                action: 'update_payroll_settings',
+                                group: 'deduction_settings',
+                                deduction_base_components: JSON.stringify(chosen),
+                                deduction_auto_attendance_enabled: autoAttendance
+                            })
+                        });
+                        const saveResult = await saveResponse.json();
+                        if (saveResult.success) {
+                            Swal.fire('' + __('saved', 'Saved') + '', '' + __('your_settings_have_been_updated_successfully') + '', 'success');
+                        } else {
+                            Swal.fire('' + __('error') + '', saveResult.message || '' + __('could_not_save_settings') + '', 'error');
+                        }
+                    } catch (error) {
+                        Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                    }
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function loadDeductionTypes() {
+            const container = document.getElementById('deduction-types-container');
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_deduction_types' })
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    return;
+                }
+
+                if (!data.deduction_types || data.deduction_types.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0">' + __('no_deduction_types_configured_yet', 'No deduction types configured yet') + '</p>';
+                    return;
+                }
+
+                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>${__('name')}</th>
+                            <th>${__('counts_in_net_pay', 'Counts in Net Pay')}</th>
+                            <th>${__('active')}</th>
+                            <th>${__('actions')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                data.deduction_types.forEach(type => {
+                    tableHtml += `
+                        <tr data-id="${type.id}">
+                            <td><strong>${type.name}</strong></td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input deduction-type-counts-toggle" id="dt-counts-${type.id}" data-id="${type.id}" ${Number(type.counts_in_net) === 1 ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-counts-${type.id}"></label>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input deduction-type-status-toggle" id="dt-status-${type.id}" data-id="${type.id}" ${Number(type.status) === 1 ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-status-${type.id}"></label>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-deduction-type-btn" data-id="${type.id}" data-name="${type.name}" title="${__('edit')}">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-deduction-type-btn" data-id="${type.id}" title="${__('delete')}">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableHtml += '</tbody></table></div>';
+                container.innerHTML = tableHtml;
+
+                container.querySelectorAll('.deduction-type-counts-toggle, .deduction-type-status-toggle').forEach(toggle => {
+                    toggle.addEventListener('change', function() {
+                        saveDeductionTypeToggle(this.dataset.id);
+                    });
+                });
+                container.querySelectorAll('.edit-deduction-type-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditDeductionTypeModal(this.dataset.id, this.dataset.name);
+                    });
+                });
+                container.querySelectorAll('.delete-deduction-type-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteDeductionType(this.dataset.id);
+                    });
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function saveDeductionTypeToggle(id) {
+            const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
+            const name = row.querySelector('td strong').textContent;
+            const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
+            const status = row.querySelector('.deduction-type-status-toggle').checked;
+
+            try {
+                const response = await fetch('./includes/payroll_settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_deduction_type',
+                        id, name,
+                        counts_in_net: countsInNet ? '1' : '0',
+                        status: status ? '1' : '0'
+                    })
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    Swal.fire('' + __('error') + '', result.message || '' + __('could_not_save_settings') + '', 'error');
+                    loadDeductionTypes();
+                }
+            } catch (error) {
+                Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                loadDeductionTypes();
+            }
+        }
+
+        function showAddDeductionTypeModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_deduction_type', 'Add New Deduction Type') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="deduction-type-name">${__('name')}</label>
+                        <input type="text" id="deduction-type-name" class="form-control" placeholder="${__('e.g. Late Deduction')}">
+                    </div>
+                    <div class="form-group text-left custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input" id="deduction-type-counts" checked>
+                        <label class="custom-control-label" for="deduction-type-counts">${__('counts_in_net_pay', 'Counts in Net Pay')}</label>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add', 'Add') + '',
+                preConfirm: () => {
+                    const name = document.getElementById('deduction-type-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('' + __('name_is_required', 'Name is required') + '');
+                        return false;
+                    }
+                    return {
+                        name,
+                        counts_in_net: document.getElementById('deduction-type-counts').checked
+                    };
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'add_deduction_type',
+                            name: result.value.name,
+                            counts_in_net: result.value.counts_in_net ? '1' : '0'
+                        })
+                    });
+                    const addResult = await response.json();
+                    if (addResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('' + __('error') + '', addResult.message || '' + __('could_not_save_settings') + '', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            });
+        }
+
+        function showEditDeductionTypeModal(id, currentName) {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('edit_deduction_type', 'Edit Deduction Type') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="deduction-type-edit-name">${__('name')}</label>
+                        <input type="text" id="deduction-type-edit-name" class="form-control" value="${currentName}">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '' + __('save', 'Save') + '',
+                preConfirm: () => {
+                    const name = document.getElementById('deduction-type-edit-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('' + __('name_is_required', 'Name is required') + '');
+                        return false;
+                    }
+                    return name;
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
+                const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
+                const status = row.querySelector('.deduction-type-status-toggle').checked;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'update_deduction_type',
+                            id,
+                            name: result.value,
+                            counts_in_net: countsInNet ? '1' : '0',
+                            status: status ? '1' : '0'
+                        })
+                    });
+                    const updateResult = await response.json();
+                    if (updateResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('' + __('error') + '', updateResult.message || '' + __('could_not_save_settings') + '', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            });
+        }
+
+        function deleteDeductionType(id) {
+            Swal.fire({
+                icon: 'warning',
+                title: '' + __('are_you_sure', 'Are you sure?') + '',
+                text: '' + __('this_action_cannot_be_undone', 'This action cannot be undone.') + '',
+                showCancelButton: true,
+                confirmButtonText: '' + __('delete') + '',
+                confirmButtonColor: '#dc3545'
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                try {
+                    const response = await fetch('./includes/payroll_settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'delete_deduction_type', id })
+                    });
+                    const deleteResult = await response.json();
+                    if (deleteResult.success) {
+                        loadDeductionTypes();
+                    } else {
+                        Swal.fire('' + __('error') + '', deleteResult.message || '' + __('could_not_save_settings') + '', 'error');
+                    }
+                } catch (error) {
+                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            });
+        }
+
+        function attachSessionTimeoutListeners() {
+            const timeoutInputs = document.querySelectorAll('.session-timeout-input');
+            timeoutInputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    const value = this.value.trim();
+                    const resultDiv = document.getElementById(`timeout-result-${this.name}`);
+                    
+                    if (value) {
+                        const evaluated = evaluateExpression(value);
+                        if (evaluated !== null) {
+                            const readableFormat = formatSecondsReadable(evaluated);
+                            resultDiv.style.display = 'block';
+                            resultDiv.querySelector('.timeout-seconds').textContent = readableFormat + ' (' + evaluated + ' seconds)';
+                            this.classList.remove('is-invalid');
+                            this.classList.add('is-valid');
+                        } else {
+                            resultDiv.style.display = 'none';
+                            this.classList.add('is-invalid');
+                            this.classList.remove('is-valid');
+                        }
+                    } else {
+                        resultDiv.style.display = 'none';
+                        this.classList.remove('is-invalid', 'is-valid');
+                    }
+                });
+                
+                // Trigger input event on load to show current value
+                input.dispatchEvent(new Event('input'));
+            });
+        }
+
+        function attachTestEmailListener() {
+            const btn = document.getElementById('testEmailConfigBtn');
+            if (!btn) return;
+
+            btn.addEventListener('click', async function() {
+                const resultDiv = document.getElementById('testEmailResult');
+                const getVal = (name) => (document.getElementById(`setting-${name}`)?.value || '').trim();
+
+                const host = getVal('smtp_host');
+                const port = getVal('smtp_port');
+                const user = getVal('smtp_user');
+                const pass = getVal('smtp_pass');
+                const encryption = getVal('smtp_encryption') || 'tls';
+                const fromEmail = getVal('from_email');
+                const fromName = getVal('from_name');
+                const adminEmail = getVal('admin_email');
+
+                if (!host || !port || !user || !pass || !fromEmail) {
+                    resultDiv.innerHTML = '';
+                    Swal.fire('' + __('missing_fields', 'Missing Fields') + '', '' + __('fill_smtp_host_port_username_password_and_default_from_email_before_testing', 'Please fill Host, Port, Username, Password and Default From Email Address before testing.') + '', 'warning');
+                    return;
+                }
+
+                btn.disabled = true;
+                resultDiv.innerHTML = `<small class="text-muted"><div class="spinner-border spinner-border-sm" role="status"></div> ${__('sending_test_email', 'Sending test email...')}</small>`;
+
+                try {
+                    const response = await fetch('./includes/settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            action: 'test_email_settings',
+                            smtp_host: host,
+                            smtp_port: port,
+                            smtp_user: user,
+                            smtp_pass: pass,
+                            smtp_encryption: encryption,
+                            from_email: fromEmail,
+                            from_name: fromName,
+                            admin_email: adminEmail
+                        })
+                    });
+                    const result = await response.json();
+                    btn.disabled = false;
+
+                    if (result.success) {
+                        resultDiv.innerHTML = `<small class="text-success"><i class="mdi mdi-check-circle"></i> ${escapeHtml(result.message)}</small>`;
+                        Swal.fire('' + __('success', 'Success') + '', result.message, 'success');
+                    } else {
+                        resultDiv.innerHTML = `<small class="text-danger"><i class="mdi mdi-alert-circle"></i> ${escapeHtml(result.message || '' + __('could_not_send_test_email', 'Could not send test email.') + '')}</small>`;
+                        Swal.fire('' + __('failed', 'Failed') + '', result.message || '' + __('could_not_send_test_email', 'Could not send test email.') + '', 'error');
+                    }
+                } catch (error) {
+                    btn.disabled = false;
+                    resultDiv.innerHTML = `<small class="text-danger">${escapeHtml(error.message)}</small>`;
+                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            });
+        }
+
+        // Superset of the old report-permission user list (includes user_type='employee'
+        // accounts too) - Special Access is also the mechanism for unlocking a normally-blocked
+        // page for one employee, and Report Access now piggybacks on this same picker/list.
+        async function fetchSpecialAccessUsers() {
+            if (Array.isArray(specialAccessUsersRaw)) {
+                return specialAccessUsersRaw;
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_special_access_users' })
+                });
+
+                if (!response.ok) {
+                    throw new Error('' + __('failed_to_load_users') + '');
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.users)) {
+                    throw new Error(data.message || '' + __('failed_to_load_users') + '');
+                }
+
+                specialAccessUsersRaw = data.users;
+                return specialAccessUsersRaw;
+            } catch (error) {
+                console.error('Failed loading special access users:', error);
+                specialAccessUsersRaw = [];
+                return specialAccessUsersRaw;
+            }
+        }
+
+        function updateReportPermissionHiddenValue() {
+            const hidden = document.getElementById('setting-report_visibility_by_user');
+            if (hidden) {
+                hidden.value = JSON.stringify(reportPermissionMap);
+            }
+        }
+
+        // Report Access no longer has its own tab - it's rendered inside the Special Access
+        // editor by buildReportAccessBlockHtml()/wireReportAccessBlock() (see
+        // openSpecialAccessEditModal below), and its assigned-user summary is folded into
+        // renderAssignedSpecialAccessSummary().
+
+        function updateSpecialAccessHiddenValue() {
+            const hidden = document.getElementById('setting-special_access_by_user');
+            if (hidden) {
+                hidden.value = JSON.stringify(specialAccessMap);
+            }
+        }
+
+        // Self-saves specialAccessMap/reportPermissionMap immediately, via the same generic
+        // 'update_settings' action the page-level Save Changes button uses (scoped to just
+        // these two JSON settings). This tab hides that button entirely (see
+        // SELF_SAVING_GROUPS in renderSettingsGroup) - every add/edit/remove here must go
+        // through this instead, or the change is silently lost.
+        async function saveSpecialAccessSettings() {
+            const response = await fetch('./includes/settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'update_settings',
+                    special_access_by_user: JSON.stringify(specialAccessMap),
+                    report_visibility_by_user: JSON.stringify(reportPermissionMap)
+                })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || '' + __('could_not_save_settings') + '');
+            }
+        }
+
+        function setSpecialAccessPanelLoading(isLoading) {
+            const overlay = document.getElementById('special-access-loading-overlay');
+            if (overlay) overlay.style.display = isLoading ? 'flex' : 'none';
+        }
+
+        // Dims the whole panel (select-user card + assigned-users table) behind a spinner
+        // overlay for a moment, then redraws the table - so after confirming the
+        // "Updated"/"Removed" message the admin sees a clear loading state, visible proof
+        // the save applied, not just an instant silent swap. A real timeout (not
+        // requestAnimationFrame) is used deliberately - rAF's callback fires and resolves
+        // its promise in a microtask that runs BEFORE the browser paints, so an
+        // immediate show-then-hide across a single rAF tick never actually renders a
+        // visible frame at all.
+        async function refreshSpecialAccessTableWithLoader() {
+            setSpecialAccessPanelLoading(true);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+            setSpecialAccessPanelLoading(false);
+        }
+
+        function renderAssignedSpecialAccessSummary(users) {
+            const container = document.getElementById('special-access-assigned-users-list');
+            if (!container) return;
+
+            const userMap = new Map((users || []).map(user => [String(user.emp_id || ''), user]));
+            const catalogMap = new Map(getSpecialAccessCatalog().map(item => [item.value, item.label]));
+            const reportCatalogMap = new Map(getReportTypeCatalog().map(item => [item.value, item.label]));
+            const categories = getSpecialAccessCategories();
+
+            // A user counts as "assigned" if they have ability grants OR an explicit report
+            // access override (even one that grants zero reports - that's still a deliberate
+            // restriction worth surfacing here, not the same as "never touched").
+            const abilityEmpIds = Object.keys(specialAccessMap || {}).filter(empId => (specialAccessMap[empId] || []).length > 0);
+            const reportEmpIds = Object.keys(reportPermissionMap || {});
+            const assignedEmpIds = [...new Set([...abilityEmpIds, ...reportEmpIds])];
+
+            const totalBadge = document.getElementById('special-access-total-users-badge');
+            if (totalBadge) {
+                totalBadge.textContent = assignedEmpIds.length + ' ' + __('assigned', 'assigned') + '';
+                totalBadge.classList.toggle('badge-primary', assignedEmpIds.length > 0);
+                totalBadge.classList.toggle('badge-light', assignedEmpIds.length === 0);
+            }
+
+            if (!assignedEmpIds.length) {
+                container.innerHTML = `<div class="special-access-empty-state"><i class="fas fa-user-shield"></i>${__('no_assigned_users_yet')}</div>`;
+                return;
+            }
+
+            // Renders one user's granted keys as badges, grouped under a small uppercase
+            // category label (same categories as the edit grid) instead of one flat run -
+            // makes it scannable at a glance instead of a wall of identical blue badges.
+            function buildGroupedBadges(grantedKeys) {
+                const grantedSet = new Set(grantedKeys);
+                const placed = new Set();
+                let out = '';
+
+                categories.forEach(cat => {
+                    const keysHere = cat.keys.filter(k => grantedSet.has(k));
+                    if (!keysHere.length) return;
+                    keysHere.forEach(k => placed.add(k));
+                    out += `<div class="special-access-group-label"><i class="fa ${cat.icon} mr-1"></i>${escapeHtml(cat.name)}</div>`;
+                    out += keysHere.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                });
+
+                const leftover = grantedKeys.filter(k => !placed.has(k));
+                if (leftover.length) {
+                    out += `<div class="special-access-group-label">${__('other', 'Other')}</div>`;
+                    out += leftover.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                }
+                return out;
+            }
+
+            // Report access only gets a line here when the user has an EXPLICIT entry - if
+            // they've never been touched they're on the "sees everything" default and there's
+            // nothing to call out.
+            function buildReportAccessBadges(empId) {
+                if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
+                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]);
+                let out = `<div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div>`;
+                if (!grantedTypes.length) {
+                    out += `<span class="badge badge-danger mr-1 mb-1">${__('no_reports', 'No reports')}</span>`;
+                } else {
+                    out += grantedTypes.map(type => `<span class="badge badge-purple mr-1 mb-1">${escapeHtml(reportCatalogMap.get(type) || type)}</span>`).join('');
+                }
+                return out;
+            }
+
+            let html = '';
+
+            assignedEmpIds.forEach(empId => {
+                const user = userMap.get(empId);
+                const name = user ? ((user.name || '').trim() || empId) : empId;
+                const role = user ? ((user.user_type || '').trim()) : '';
+                const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
+                const badgeCount = grantedKeys.length + (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId) ? 1 : 0);
+
+                html += '<div class="special-access-user-card">';
+                html += '<div class="d-flex justify-content-between align-items-start">';
+                html += `<div>
+                    <strong>${escapeHtml(name)}</strong>
+                    <span class="text-muted ml-1">#${escapeHtml(empId)}</span>
+                    ${role ? `<span class="badge badge-primary ml-1">${escapeHtml(formatRoleLabel(role))}</span>` : ''}
+                    <span class="badge badge-pill badge-secondary ml-2">${badgeCount}</span>
+                </div>`;
+                html += `<div class="text-nowrap">
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="fas fa-edit"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                </div>`;
+                html += '</div>';
+                html += `<div class="mt-2">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+
+            container.querySelectorAll('.edit-assigned-special-access-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    openSpecialAccessEditModal(empId);
+                });
+            });
+
+            container.querySelectorAll('.remove-assigned-special-access-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    Swal.fire({
+                        title: '' + __('remove_user_assignment') + '',
+                        text: '' + __('this_will_remove_special_access_and_report_access_for_this_user', 'This will remove all special access AND report access customizations for this user.') + '',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '' + __('yes_remove_it') + '',
+                        cancelButtonText: '' + __('cancel') + ''
+                    }).then(async (result) => {
+                        if (!result.isConfirmed) return;
+
+                        delete specialAccessMap[empId];
+                        updateSpecialAccessHiddenValue();
+                        delete reportPermissionMap[empId];
+                        updateReportPermissionHiddenValue();
+                        renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+
+                        Swal.fire({
+                            title: '' + __('saving', 'Saving...') + '',
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
+                        try {
+                            await saveSpecialAccessSettings();
+                            await Swal.fire({
+                                icon: 'success',
+                                title: '' + __('removed') + '',
+                                text: '' + __('your_settings_have_been_updated_successfully') + '',
+                                confirmButtonText: '' + __('ok', 'OK') + ''
+                            });
+                            await refreshSpecialAccessTableWithLoader();
+                        } catch (error) {
+                            Swal.fire('' + __('error') + '', error.message, 'error');
+                        }
+                    });
+                });
+            });
+        }
+
+        // Single entry point for adding/editing a user's special access + report access:
+        // a SweetAlert2 modal, opened either by picking a user from the top select or by
+        // the "Edit" button on an assigned-user card. No inline editor - every change goes
+        // through this modal's explicit Save/Cancel.
+        function openSpecialAccessEditModal(empId) {
+            const targetEmpId = String(empId || '').trim();
+            if (!targetEmpId) return;
+
+            const user = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === targetEmpId);
+            const displayName = user ? ((user.name || '').trim() || targetEmpId) : targetEmpId;
+            const userType = user ? String(user.user_type || '').trim().toLowerCase() : '';
+            const reportAccessApplicable = userType !== 'employee';
+
+            const hasExplicit = Object.prototype.hasOwnProperty.call(specialAccessMap, targetEmpId);
+            const selectedSet = new Set(hasExplicit ? normalizeSpecialAccessList(specialAccessMap[targetEmpId]) : []);
+            const grantedCount = selectedSet.size;
+
+            // Report Access state is tracked locally until Save (mirrors how abilities are only
+            // read from the DOM on preConfirm) - seeded from the current reportPermissionMap so
+            // closing without touching it doesn't silently reset anything.
+            const reportHasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, targetEmpId);
+            let reportAccessMode = reportHasExplicit ? 'custom' : 'default';
+            let reportAccessValues = reportHasExplicit
+                ? normalizeReportTypeList(reportPermissionMap[targetEmpId])
+                : getReportTypeCatalog().map(item => item.value);
+
+            const { panels, labelByKey } = buildSpecialAccessPanelData();
+            const defaultPanelId = panels.length ? panels[0].id : 'report-access';
+
+            let navHtml = '';
+            panels.forEach((p, i) => {
+                const granted = p.keys.filter(k => selectedSet.has(k)).length;
+                navHtml += `
+                    <div class="sae-tab${i === 0 ? ' active' : ''}" data-panel-target="${p.id}">
+                        <span><i class="fa ${p.icon}"></i> ${escapeHtml(p.name)}</span>
+                        <span class="badge ${granted ? 'badge-success' : 'badge-light'} sae-tab-count" data-count-for="${p.id}" data-total="${p.keys.length}">${granted}/${p.keys.length}</span>
+                    </div>
+                `;
+            });
+            if (reportAccessApplicable) {
+                navHtml += `
+                    <div class="sae-tab${panels.length === 0 ? ' active' : ''}" data-panel-target="report-access">
+                        <span><i class="fa fa-chart-bar"></i> ${__('report_access', 'Report Access')}</span>
+                        <span class="badge ${reportHasExplicit ? 'badge-info' : 'badge-light'}" id="swal-special-access-report-mode">${reportHasExplicit ? '' + __('custom', 'Custom') + '' : '' + __('all_default', 'All (default)') + ''}</span>
+                    </div>
+                `;
+            }
+
+            let panelsHtml = '';
+            panels.forEach((p, i) => {
+                panelsHtml += `<div class="sae-panel${i === 0 ? ' sae-panel-visible' : ''}" data-panel-id="${p.id}">`;
+                panelsHtml += `<div class="sae-panel-title"><i class="fa ${p.icon} mr-1"></i> ${escapeHtml(p.name)}</div>`;
+                panelsHtml += renderSpecialAccessCheckboxGrid('swal-special-access', p.keys, labelByKey, selectedSet);
+                panelsHtml += `</div>`;
+            });
+            if (reportAccessApplicable) {
+                panelsHtml += `<div class="sae-panel${panels.length === 0 ? ' sae-panel-visible' : ''}" data-panel-id="report-access">`;
+                panelsHtml += `<div class="sae-panel-title"><i class="fa fa-chart-bar mr-1"></i> ${__('report_access', 'Report Access')}</div>`;
+                panelsHtml += buildReportAccessBlockHtml('swal-special-access', targetEmpId, false);
+                panelsHtml += `</div>`;
+            }
+
+            let gridHtml = '<div class="text-left">';
+            gridHtml += `<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">`;
+            gridHtml += `<p class="text-muted mb-0 mr-2" style="font-size:.85rem;">${__('currently_granted', 'Currently granted')}: <span class="badge badge-${grantedCount ? 'success' : 'light'}" id="swal-special-access-total-badge">${grantedCount}</span></p>`;
+            gridHtml += '<input type="text" class="form-control form-control-sm" id="swal-special-access-search" style="max-width:260px;" placeholder="' + __('search') + '...">';
+            gridHtml += '</div>';
+            gridHtml += '<div class="sae-layout">';
+            gridHtml += `<div class="sae-sidebar" id="swal-special-access-sidebar">${navHtml}</div>`;
+            gridHtml += `<div class="sae-content" id="swal-special-access-content">`;
+            gridHtml += panelsHtml;
+            gridHtml += `<div class="sae-empty-state" id="swal-special-access-no-results" style="display:none;">${__('no_matching_settings', 'No matching settings.')}</div>`;
+            gridHtml += `</div>`;
+            gridHtml += '</div>';
+            gridHtml += '<div class="d-flex justify-content-end mt-2">';
+            gridHtml += '<div class="btn-group">';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary" id="swal-special-access-select-all">' + __('select_all_visible', 'Select All (visible)') + '</button>';
+            gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all">' + __('clear_all_visible', 'Clear All (visible)') + '</button>';
+            gridHtml += '</div>';
+            gridHtml += '</div>';
+            gridHtml += '</div>';
+
+            Swal.fire({
+                title: displayName,
+                html: gridHtml,
+                width: '78%',
+                showCancelButton: true,
+                confirmButtonText: '' + __('save_changes') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                focusConfirm: false,
+                didOpen: () => {
+                    const popup = Swal.getPopup();
+                    const sidebar = popup.querySelector('#swal-special-access-sidebar');
+                    const totalBadge = popup.querySelector('#swal-special-access-total-badge');
+                    let activePanelId = defaultPanelId;
+                    let searching = false;
+
+                    panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+
+                    function updateTotalBadge() {
+                        if (!totalBadge) return;
+                        const total = popup.querySelectorAll('.special-access-checkbox:checked').length;
+                        totalBadge.textContent = String(total);
+                        totalBadge.classList.toggle('badge-success', total > 0);
+                        totalBadge.classList.toggle('badge-light', total === 0);
+                    }
+
+                    function showTab(panelId) {
+                        activePanelId = panelId;
+                        popup.querySelectorAll('.sae-tab').forEach(tab => {
+                            tab.classList.toggle('active', tab.getAttribute('data-panel-target') === panelId);
+                        });
+                        popup.querySelectorAll('.sae-panel').forEach(panel => {
+                            panel.classList.toggle('sae-panel-visible', panel.getAttribute('data-panel-id') === panelId);
+                        });
+                    }
+
+                    if (sidebar) {
+                        sidebar.querySelectorAll('.sae-tab').forEach(tab => {
+                            tab.addEventListener('click', () => {
+                                if (searching) return;
+                                showTab(tab.getAttribute('data-panel-target'));
+                            });
+                        });
+                    }
+
+                    popup.querySelectorAll('.special-access-checkbox').forEach(checkbox => {
+                        checkbox.addEventListener('change', () => {
+                            const panel = checkbox.closest('.sae-panel');
+                            if (panel) updateSpecialAccessTabCount(popup, panel.getAttribute('data-panel-id'));
+                            updateTotalBadge();
+                        });
+                    });
+
+                    wireReportAccessBlock(popup, 'swal-special-access', (mode, values) => {
+                        reportAccessMode = mode;
+                        reportAccessValues = values;
+                    });
+
+                    // Searching temporarily reveals every panel (ignoring the active tab) and
+                    // hides only the non-matching items within them, so a setting buried in a
+                    // category the user hasn't clicked into is still one keystroke away.
+                    const searchInput = popup.querySelector('#swal-special-access-search');
+                    const noResultsEl = popup.querySelector('#swal-special-access-no-results');
+                    if (searchInput) {
+                        searchInput.addEventListener('input', function() {
+                            const term = this.value.trim().toLowerCase();
+                            searching = term !== '';
+
+                            if (!searching) {
+                                if (noResultsEl) noResultsEl.style.display = 'none';
+                                popup.querySelectorAll('.special-access-item').forEach(item => { item.style.display = ''; });
+                                showTab(activePanelId);
+                                return;
+                            }
+
+                            popup.querySelectorAll('.sae-tab').forEach(tab => tab.classList.remove('active'));
+                            let anyVisible = false;
+                            popup.querySelectorAll('.sae-panel').forEach(panel => {
+                                if (panel.getAttribute('data-panel-id') === 'report-access') {
+                                    panel.classList.remove('sae-panel-visible');
+                                    return;
+                                }
+                                let panelHasMatch = false;
+                                panel.querySelectorAll('.special-access-item').forEach(item => {
+                                    const matches = (item.getAttribute('data-search-label') || '').includes(term);
+                                    item.style.display = matches ? '' : 'none';
+                                    if (matches) panelHasMatch = true;
+                                });
+                                panel.classList.toggle('sae-panel-visible', panelHasMatch);
+                                if (panelHasMatch) anyVisible = true;
+                            });
+                            if (noResultsEl) noResultsEl.style.display = anyVisible ? 'none' : '';
+                        });
+                    }
+
+                    const selectAllBtn = popup.querySelector('#swal-special-access-select-all');
+                    if (selectAllBtn) {
+                        selectAllBtn.addEventListener('click', () => {
+                            popup.querySelectorAll('.sae-panel.sae-panel-visible .special-access-checkbox').forEach(el => {
+                                if (el.closest('.special-access-item').style.display !== 'none') el.checked = true;
+                            });
+                            panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+                            updateTotalBadge();
+                        });
+                    }
+                    const clearAllBtn = popup.querySelector('#swal-special-access-clear-all');
+                    if (clearAllBtn) {
+                        clearAllBtn.addEventListener('click', () => {
+                            popup.querySelectorAll('.sae-panel.sae-panel-visible .special-access-checkbox').forEach(el => {
+                                if (el.closest('.special-access-item').style.display !== 'none') el.checked = false;
+                            });
+                            panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+                            updateTotalBadge();
+                        });
+                    }
+                },
+                preConfirm: () => {
+                    const popup = Swal.getPopup();
+                    const abilities = Array.from(popup.querySelectorAll('.special-access-checkbox:checked')).map(el => el.value);
+                    return { abilities, reportAccessApplicable, reportAccessMode, reportAccessValues };
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+
+                const { abilities, reportAccessApplicable, reportAccessMode: finalMode, reportAccessValues: finalValues } = result.value || {};
+
+                specialAccessMap[targetEmpId] = normalizeSpecialAccessList(abilities || []);
+                updateSpecialAccessHiddenValue();
+
+                if (reportAccessApplicable) {
+                    if (finalMode === 'default') {
+                        delete reportPermissionMap[targetEmpId];
+                    } else {
+                        reportPermissionMap[targetEmpId] = normalizeReportTypeList(finalValues || []);
+                    }
+                    updateReportPermissionHiddenValue();
+                }
+
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+
+                Swal.fire({
+                    title: '' + __('saving', 'Saving...') + '',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                try {
+                    await saveSpecialAccessSettings();
+
+                    await Swal.fire({
+                        icon: 'success',
+                        title: '' + __('updated', 'Updated') + '',
+                        text: '' + __('your_settings_have_been_updated_successfully') + '',
+                        confirmButtonText: '' + __('ok', 'OK') + ''
+                    });
+                    await refreshSpecialAccessTableWithLoader();
+                } catch (error) {
+                    Swal.fire('' + __('error') + '', error.message, 'error');
+                }
+            });
+        }
+
+        function renderRequestTypeBlocksSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-request_type_blocks" role="tabpanel">
+                    <h5 class="mb-0">${__('manage_request_type_blocks', 'Manage Request Type Blocks')}</h5>
+                    <p class="text-muted font-14 mt-2">
+                        ${__('manage_request_type_blocks_hint', 'Blocking a request type here disables it for every employee at once. To exempt a specific employee from a global block (or to block just one employee for a type that isn\'t globally blocked), use the "Block Specific Request Types" section on that employee\'s Edit Employee page.')}
+                    </p>
+                    <div id="requestTypeBlockList" class="mt-4">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2">${__('loading')}</span>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button type="button" id="saveRequestTypeBlocksBtn" class="btn btn-primary waves-effect waves-light">
+                            <i class="fa fa-save"></i> ${__('save_changes')}
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            const listContainer = document.getElementById('requestTypeBlockList');
+            const saveBtn = document.getElementById('saveRequestTypeBlocksBtn');
+
+            function renderCheckboxes(blockedTypes) {
+                const blockedSet = new Set(blockedTypes || []);
+                let html = '<div class="row">';
+                Object.keys(requestTypeBlockLabels).forEach((key) => {
+                    const label = requestTypeBlockLabels[key];
+                    const checked = blockedSet.has(key) ? 'checked' : '';
+                    html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input request-type-block-checkbox" id="blockType_${key}" value="${key}" ${checked}>
+                                <label class="custom-control-label" for="blockType_${key}">${label}</label>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                listContainer.innerHTML = html;
+            }
+
+            function loadBlockedTypes() {
+                fetch('./includes/ajaxFile/globalRequestBlockHandler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_global_blocked_types' })
+                })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) {
+                        throw new Error(data.message || '' + __('failed_to_load_current_blocks', 'Failed to load current blocks.') + '');
+                    }
+                    renderCheckboxes(data.blocked_types);
+                })
+                .catch((error) => {
+                    listContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+                });
+            }
+
+            saveBtn.addEventListener('click', () => {
+                const checked = Array.from(document.querySelectorAll('.request-type-block-checkbox:checked')).map((el) => el.value);
+
+                fetch('./includes/ajaxFile/globalRequestBlockHandler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_global_blocked_types', blocked_types: JSON.stringify(checked) })
+                })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) {
+                        throw new Error(data.message || '' + __('failed_to_save', 'Failed to save.') + '');
+                    }
+                    Swal.fire('' + __('success') + '', '' + __('settings_updated_successfully', 'Settings updated successfully.') + '', 'success');
+                    renderCheckboxes(data.blocked_types);
+                })
+                .catch((error) => {
+                    Swal.fire('' + __('Error!') + '', error.message, 'error');
+                });
+            });
+
+            loadBlockedTypes();
+        }
+
+        async function renderLicenseSettings() {
+            const licenseSettings = groupedSettings['license'] || [];
+            const getVal = (name) => {
+                const row = licenseSettings.find(s => s.setting_name === name);
+                return row ? row.setting_value : '';
+            };
+
+            const apiUrl = getVal('license_api_url');
+            const serialKey = getVal('license_serial_key');
+            const token = getVal('license_token');
+            const maskedKey = serialKey.length > 8 ? (serialKey.slice(0, 4) + '...' + serialKey.slice(-4)) : serialKey;
+            const maskedToken = token.length > 8 ? (token.slice(0, 4) + '...' + token.slice(-4)) : token;
+            const cacheValid = getVal('license_cache_valid') === '1';
+            const cacheStatus = getVal('license_cache_status') || 'not_configured';
+            const cacheMessage = getVal('license_cache_message') || 'No license key configured yet.';
+            const cacheExpiresAt = getVal('license_cache_expires_at');
+            const lastVerifiedAt = getVal('license_last_verified_at');
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-license" role="tabpanel">
+                    <h5 class="mb-3"><i class="fas fa-key mr-2 text-primary"></i>License</h5>
+
+                    <div class="alert ${cacheValid ? 'alert-success' : 'alert-danger'} py-2" id="license-status-banner">
+                        <strong>${cacheValid ? 'Active' : 'Inactive'}</strong> (${cacheStatus}) - ${cacheMessage}
+                        ${cacheExpiresAt ? `<div class="small font-weight-bold">Expires: ${cacheExpiresAt}</div>` : ''}
+                        ${lastVerifiedAt ? `<div class="small text-muted">Last verified: ${lastVerifiedAt}</div>` : ''}
+                    </div>
+
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Current Key</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" value="${maskedKey}" readonly disabled>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">Current Token</label>
+                        <div class="col-sm-9">
+                            <input type="text" class="form-control" value="${maskedToken}" readonly disabled>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">New Serial Key</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="license-serial-key-input" class="form-control" value="" placeholder="Leave blank to keep the current key - only fill in to replace it">
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-3 col-form-label">New Verify URL</label>
+                        <div class="col-sm-9">
+                            <input type="text" id="license-verify-url-input" class="form-control" value="" placeholder="Leave blank to keep current - paste the full Verify URL from the license admin panel to replace it">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary" id="license-save-verify-btn">
+                        <i class="fas fa-check-circle"></i> Save & Verify
+                    </button>
+                    <span id="license-verify-spinner" class="ml-2" style="display:none;">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    </span>
+                </div>
+            `;
+
+            document.getElementById('license-save-verify-btn').addEventListener('click', async function () {
+                const key = document.getElementById('license-serial-key-input').value.trim() || serialKey;
+                const verifyUrlRaw = document.getElementById('license-verify-url-input').value.trim();
+
+                let url = apiUrl;
+                let tok = token;
+                if (verifyUrlRaw) {
+                    try {
+                        const parsed = new URL(verifyUrlRaw);
+                        tok = parsed.searchParams.get('token');
+                        url = parsed.origin + parsed.pathname;
+                    } catch (e) {
+                        Swal.fire('Invalid URL', 'Verify URL is not a valid URL.', 'warning');
+                        return;
+                    }
+                    if (!tok) {
+                        Swal.fire('Invalid URL', 'Verify URL must contain a ?token=... parameter - paste the full URL from the license admin panel.', 'warning');
+                        return;
+                    }
+                }
+                if (!url || !key || !tok) {
+                    Swal.fire('Missing info', 'Enter a serial key and Verify URL (server has no license configured yet).', 'warning');
+                    return;
+                }
+                const $btn = this;
+                $btn.disabled = true;
+                document.getElementById('license-verify-spinner').style.display = 'inline-block';
+
+                try {
+                    const response = await fetch('./includes/ajaxFile/ajaxLicenseCheck.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ api_url: url, serial_key: key, token: tok })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        Swal.fire('Error', data.message || 'Could not save the key.', 'error');
+                        return;
+                    }
+                    if (data.valid) {
+                        await Swal.fire('License Active', data.message || 'License verified successfully.', 'success');
+                    } else {
+                        Swal.fire('License Not Active', data.message || 'This key is not valid.', 'error');
+                    }
+                    await loadSettings();
+                    renderSettingsGroup('license');
+                } catch (err) {
+                    Swal.fire('Error', 'Request failed: ' + err.message, 'error');
+                } finally {
+                    $btn.disabled = false;
+                    document.getElementById('license-verify-spinner').style.display = 'none';
+                }
+            });
+        }
+
+        async function renderSpecialAccessSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-special-access" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h5 class="mb-0"><i class="fas fa-user-shield mr-2 text-primary"></i>${__('special_access_by_user')}</h5>
+                        <span class="badge badge-pill badge-light" id="special-access-total-users-badge"></span>
+                    </div>
+                    <p class="text-muted mb-3">${__('select_a_user_and_grant_them_specific_admin_hr_abilities')} ${__('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.')}</p>
+
+                    <div id="special-access-panel">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <label for="special-access-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i>${__('select_user')}</label>
+                                <select id="special-access-user-select" class="form-control select2"></select>
+                                <small class="form-text text-muted">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
+                            </div>
+                        </div>
+
+                        <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i>${__('assigned_users')}</h6>
+                        <div id="special-access-assigned-users-list">
+                            <div class="text-center text-muted">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="ml-2">${__('loading')}</span>
+                            </div>
+                        </div>
+
+                        <div id="special-access-loading-overlay">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Guarantee the loading spinner above actually paints before it gets overwritten
+            // below - fetchSpecialAccessUsers() usually resolves from cache on the very next
+            // microtask, which can otherwise skip straight past the loading frame unnoticed.
+            // A real timeout is used (not requestAnimationFrame) since rAF's promise resolves
+            // in a microtask that runs before the browser paints, so it wouldn't force a
+            // visible frame here either.
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // NOTE: specialAccessMap is intentionally NOT re-initialized from appSettings here.
+            // It's seeded once in loadSettings() right after fetch, and the hidden input that
+            // carries it to Save now lives outside #settings-container (persists across tab
+            // switches). Re-parsing from appSettings on every render of this tab would silently
+            // discard any grant/removal the admin made before navigating to another tab and back.
+
+            // Plain employees are included here on purpose - the "Access Page: ..." special
+            // access keys exist specifically to grant a single employee access to a page that's
+            // normally blocked for their role (see get_special_access_page_labels()).
+            const users = await fetchSpecialAccessUsers();
+            specialAccessEligibleUsers = users;
+            const select = document.getElementById('special-access-user-select');
+
+            if (!select) return;
+
+            if (!users.length) {
+                select.innerHTML = '<option value="">' + __('no_users_found') + '</option>';
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+                return;
+            }
+
+            let options = `<option value="">${__('select_user')}</option>`;
+            users.forEach(user => {
+                const empId = String(user.emp_id || '').trim();
+                if (!empId) return;
+                const displayName = (user.name || '').trim() || empId;
+                const role = (user.user_type || '').trim();
+                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(formatRoleLabel(role)) : ''}</option>`;
+            });
+            select.innerHTML = options;
+
+            if ($(select).hasClass('select2-hidden-accessible')) {
+                $(select).trigger('change.select2');
+            } else {
+                $(select).select2({ width: '100%' });
+            }
+
+            const $select = $(select);
+            $select.off('change.specialAccess select2:select.specialAccess select2:clear.specialAccess');
+            $select.on('change.specialAccess select2:select.specialAccess select2:clear.specialAccess', function() {
+                const selectedEmpId = String($select.val() || '').trim();
+                if (!selectedEmpId) return;
+                openSpecialAccessEditModal(selectedEmpId);
+                // Reset back to the placeholder - the modal is the single source of truth for
+                // editing, this select is only an entry point (works for add and edit alike).
+                $select.val('').trigger('change.select2');
+            });
+
+            renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+        }
+
+        function renderJobTitlesSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
+            let formHtml = `<div class="tab-pane active" id="group-job" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('job_titles_management')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-job-title"><i class="mdi mdi-plus"></i> ${__('add_new_job_title')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('manage_job_titles_in_english_and_arabic')}</p>`;
+            
+            // Search field
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="job-search-input" class="form-control" placeholder="${__('search_job_titles_english_or_arabic')}" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_job_title_in_english_or_arabic')}</small>`;
+            formHtml += `</div>`;
+            
+            formHtml += `<div id="job-titles-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted">`;
+            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
+            formHtml += `<span class="ml-2">${__('loading')}</span>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            hostEl.innerHTML = formHtml;
+
+            // Load job titles
+            loadJobTitles();
+
+            // Attach event listener for "Add Job Title" button
+            const btnAddJobTitle = document.getElementById('btn-add-job-title');
+            if (btnAddJobTitle) {
+                btnAddJobTitle.addEventListener('click', showAddJobTitleModal);
+            }
+            
+            // Attach event listener for search input
+            const searchInput = document.getElementById('job-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterJobTitles(this.value);
+                });
+            }
+        }
+
+        async function loadJobTitles() {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_job_titles' })
+                });
+
+                if (!response.ok) throw new Error('' + __('Failed to load job titles') + '');
+                const data = await response.json();
+
+                const container = document.getElementById('job-titles-container');
+                if (!data.success || !data.jobs || data.jobs.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('No job titles configured yet.') + '</p>';
+                    return;
+                }
+
+                let jobsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('job_title_english') + '</th><th>' + __('job_title_arabic') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
+                data.jobs.forEach((job) => {
+                    jobsHtml += `
+                        <tr>
+                            <td><strong>${job.job || 'N/A'}</strong></td>
+                            <td><strong>${job.job_ar || 'N/A'}</strong></td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-job-btn" data-job-id="${job.id}" title="${__('edit')}">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-job-btn" data-job-id="${job.id}" title="${__('delete')}">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                jobsHtml += '</tbody></table></div>';
+                container.innerHTML = jobsHtml;
+
+                // Attach event listeners
+                container.querySelectorAll('.edit-job-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditJobTitleModal(this.dataset.jobId);
+                    });
+                });
+
+                container.querySelectorAll('.delete-job-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteJobTitle(this.dataset.jobId);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading job titles:', error);
+                const container = document.getElementById('job-titles-container');
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        function showAddJobTitleModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_job_title') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="job-title-en">${__('job_title_english')}</label>
+                        <input type="text" id="job-title-en" class="form-control" placeholder="${__('enter_job_title_in_english')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="job-title-ar">${__('job_title_arabic')}</label>
+                        <input type="text" id="job-title-ar" class="form-control" placeholder="${__('enter_job_title_in_arabic')}">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                preConfirm: () => {
+                    const titleEn = document.getElementById('job-title-en').value.trim();
+                    const titleAr = document.getElementById('job-title-ar').value.trim();
+                    
+                    if (!titleEn) {
+                        Swal.showValidationMessage('' + __('job_title_in_english_is_required') + '');
+                        return false;
+                    }
+                    if (!titleAr) {
+                        Swal.showValidationMessage('' + __('job_title_in_arabic_is_required') + '');
+                        return false;
+                    }
+                    return { titleEn, titleAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addJobTitle(result.value.titleEn, result.value.titleAr);
+                }
+            });
+        }
+
+        async function addJobTitle(titleEn, titleAr) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'add_job_title',
+                        job_title_en: titleEn,
+                        job_title_ar: titleAr
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_add_job_title') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('job_title_added_successfully') + '', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_job_title') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showEditJobTitleModal(jobId) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'get_job_title',
+                        job_id: jobId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_job_title') + '');
+                const data = await response.json();
+
+                if (!data.success || !data.job) {
+                    Swal.fire('' + __('error') + '', '' + __('job_title_not_found') + '', 'error');
+                    return;
+                }
+
+                const job = data.job;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '' + __('edit_job_title') + '',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-job-title-en">${__('job_title_english')}</label>
+                            <input type="text" id="edit-job-title-en" class="form-control" value="${job.job || ''}" placeholder="${__('enter_job_title_in_english')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-job-title-ar">${__('job_title_arabic')}</label>
+                            <input type="text" id="edit-job-title-ar" class="form-control" value="${job.job_ar || ''}" placeholder="${__('enter_job_title_in_arabic')}">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('update') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    preConfirm: () => {
+                        const titleEn = document.getElementById('edit-job-title-en').value.trim();
+                        const titleAr = document.getElementById('edit-job-title-ar').value.trim();
+                        
+                        if (!titleEn) {
+                            Swal.showValidationMessage('' + __('job_title_in_english_is_required') + '');
+                            return false;
+                        }
+                        if (!titleAr) {
+                            Swal.showValidationMessage('' + __('job_title_in_arabic_is_required') + '');
+                            return false;
+                        }
+                        return { titleEn, titleAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateJobTitle(jobId, result.value.titleEn, result.value.titleAr);
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function updateJobTitle(jobId, titleEn, titleAr) {
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'update_job_title',
+                        job_id: jobId,
+                        job_title_en: titleEn,
+                        job_title_ar: titleAr
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_update_job_title') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('updated') + '', '' + __('job_title_updated_successfully') + '', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_update_job_title') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function deleteJobTitle(jobId) {
+            const result = await Swal.fire({
+                title: '' + __('delete_job_title') + '',
+                text: '' + __('this_action_cannot_be_undone') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/job_titles_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'delete_job_title',
+                        job_id: jobId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_delete_job_title') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('deleted') + '', '' + __('job_title_deleted_successfully') + '', 'success');
+                    loadJobTitles(); // Reload the list
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_delete_job_title') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        function filterJobTitles(searchTerm) {
+            const rows = document.querySelectorAll('#job-titles-container tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const jobEn = row.cells[0].textContent.toLowerCase();
+                const jobAr = row.cells[1].textContent.toLowerCase();
+                const searchLower = searchTerm.toLowerCase();
+
+                if (jobEn.includes(searchLower) || jobAr.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Show "no results" message if nothing matches
+            const container = document.getElementById('job-titles-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_job_titles_match_your_search')}`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
+        let citiesListCache = null;
+
+        function renderLocationsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
+            let formHtml = `<div class="tab-pane active" id="group-locations" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('locations_management', 'Locations Management')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-location"><i class="mdi mdi-plus"></i> ${__('add_new_location', 'Add New Location')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('manage_locations_by_city', 'Manage locations and assign each one to a city')}</p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="location-search-input" class="form-control" placeholder="${__('search_locations', 'Search locations or cities')}" style="max-width: 400px;">`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="locations-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2">${__('loading')}</span></div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            hostEl.innerHTML = formHtml;
+
+            loadLocations();
+
+            const btnAddLocation = document.getElementById('btn-add-location');
+            if (btnAddLocation) btnAddLocation.addEventListener('click', showAddLocationModal);
+
+            const searchInput = document.getElementById('location-search-input');
+            if (searchInput) searchInput.addEventListener('input', function() { filterLocations(this.value); });
+        }
+
+        async function fetchCitiesList() {
+            if (citiesListCache) return citiesListCache;
+            const response = await fetch('./includes/locations_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_cities' })
+            });
+            const data = await response.json();
+            citiesListCache = (data.success && data.cities) ? data.cities : [];
+            return citiesListCache;
+        }
+
+        function citySelectOptionsHtml(cities, selectedCityId) {
+            let opts = `<option value="">${__('select_city', 'Select City')}</option>`;
+            cities.forEach(city => {
+                const selected = (String(city.id) === String(selectedCityId)) ? 'selected' : '';
+                opts += `<option value="${city.id}" ${selected}>${city.name_en}</option>`;
+            });
+            return opts;
+        }
+
+        async function loadLocations() {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_locations' })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_locations', 'Failed to load locations') + '');
+                const data = await response.json();
+
+                const container = document.getElementById('locations-container');
+                if (!data.success || !data.locations || data.locations.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_locations_configured_yet', 'No locations configured yet.') + '</p>';
+                    return;
+                }
+
+                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('city') + '</th><th>' + __('location_name_english', 'Location (English)') + '</th><th>' + __('location_name_arabic', 'Location (Arabic)') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
+                data.locations.forEach((loc) => {
+                    html += `
+                        <tr>
+                            <td>${loc.city_name_en || 'N/A'}</td>
+                            <td><strong>${loc.name_en || 'N/A'}</strong></td>
+                            <td><strong>${loc.name_ar || 'N/A'}</strong></td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-location-btn" data-location-id="${loc.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-location-btn" data-location-id="${loc.id}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.edit-location-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { showEditLocationModal(this.dataset.locationId); });
+                });
+                container.querySelectorAll('.delete-location-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { deleteLocation(this.dataset.locationId); });
+                });
+            } catch (error) {
+                console.error('Error loading locations:', error);
+                document.getElementById('locations-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        async function showAddLocationModal() {
+            const cities = await fetchCitiesList();
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_location', 'Add New Location') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="location-city">${__('city')}</label>
+                        <select id="location-city" class="form-control">${citySelectOptionsHtml(cities, '')}</select>
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="location-name-en">${__('location_name_english', 'Location (English)')}</label>
+                        <input type="text" id="location-name-en" class="form-control">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="location-name-ar">${__('location_name_arabic', 'Location (Arabic)')}</label>
+                        <input type="text" id="location-name-ar" class="form-control">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                didOpen: () => {
+                    $('#location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                },
+                preConfirm: () => {
+                    const cityId = document.getElementById('location-city').value;
+                    const nameEn = document.getElementById('location-name-en').value.trim();
+                    const nameAr = document.getElementById('location-name-ar').value.trim();
+                    if (!cityId) { Swal.showValidationMessage('' + __('please_select_a_city', 'Please select a city') + ''); return false; }
+                    if (!nameEn) { Swal.showValidationMessage('' + __('location_name_in_english_is_required', 'Location name in English is required') + ''); return false; }
+                    if (!nameAr) { Swal.showValidationMessage('' + __('location_name_in_arabic_is_required', 'Location name in Arabic is required') + ''); return false; }
+                    return { cityId, nameEn, nameAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) await addLocation(result.value.cityId, result.value.nameEn, result.value.nameAr);
+            });
+        }
+
+        async function addLocation(cityId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'add_location', city_id: cityId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('location_added_successfully', 'Location added successfully') + '', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_location', 'Failed to add location') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showEditLocationModal(locationId) {
+            try {
+                const [cities, response] = await Promise.all([
+                    fetchCitiesList(),
+                    fetch('./includes/locations_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'get_location', location_id: locationId })
+                    })
+                ]);
+
+                const data = await response.json();
+                if (!data.success || !data.location) {
+                    Swal.fire('' + __('error') + '', '' + __('location_not_found', 'Location not found') + '', 'error');
+                    return;
+                }
+
+                const loc = data.location;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '' + __('edit_location', 'Edit Location') + '',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-location-city">${__('city')}</label>
+                            <select id="edit-location-city" class="form-control">${citySelectOptionsHtml(cities, loc.city_id)}</select>
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-location-name-en">${__('location_name_english', 'Location (English)')}</label>
+                            <input type="text" id="edit-location-name-en" class="form-control" value="${loc.name_en || ''}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-location-name-ar">${__('location_name_arabic', 'Location (Arabic)')}</label>
+                            <input type="text" id="edit-location-name-ar" class="form-control" value="${loc.name_ar || ''}">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('update') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    didOpen: () => {
+                        $('#edit-location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                    },
+                    preConfirm: () => {
+                        const cityId = document.getElementById('edit-location-city').value;
+                        const nameEn = document.getElementById('edit-location-name-en').value.trim();
+                        const nameAr = document.getElementById('edit-location-name-ar').value.trim();
+                        if (!cityId) { Swal.showValidationMessage('' + __('please_select_a_city', 'Please select a city') + ''); return false; }
+                        if (!nameEn) { Swal.showValidationMessage('' + __('location_name_in_english_is_required', 'Location name in English is required') + ''); return false; }
+                        if (!nameAr) { Swal.showValidationMessage('' + __('location_name_in_arabic_is_required', 'Location name in Arabic is required') + ''); return false; }
+                        return { cityId, nameEn, nameAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateLocation(locationId, result.value.cityId, result.value.nameEn, result.value.nameAr);
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function updateLocation(locationId, cityId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_location', location_id: locationId, city_id: cityId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('updated') + '', '' + __('location_updated_successfully', 'Location updated successfully') + '', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_update_location', 'Failed to update location') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function deleteLocation(locationId) {
+            const result = await Swal.fire({
+                title: '' + __('delete_location', 'Delete Location') + '',
+                text: '' + __('this_action_cannot_be_undone') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/locations_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_location', location_id: locationId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('deleted') + '', '' + __('location_deleted_successfully', 'Location deleted successfully') + '', 'success');
+                    loadLocations();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_delete_location', 'Failed to delete location') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        function filterLocations(searchTerm) {
+            const rows = document.querySelectorAll('#locations-container tbody tr');
+            const searchLower = searchTerm.toLowerCase();
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
+                else { row.style.display = 'none'; }
+            });
+            const container = document.getElementById('locations-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_locations_match_your_search', 'No locations match your search')}`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
+        let departmentsListCache = null;
+
+        function renderSubDepartmentsSettings() {
+            let formHtml = `<div class="tab-pane active" id="group-sub_departments" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('sub_departments_management', 'Sub-Departments Management')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-sub-department"><i class="mdi mdi-plus"></i> ${__('add_new_sub_department', 'Add New Sub-Department')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('manage_sub_departments_by_department', 'Manage sub-departments and assign each one to a department')}</p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="sub-department-search-input" class="form-control" placeholder="${__('search_sub_departments', 'Search sub-departments or departments')}" style="max-width: 400px;">`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="sub-departments-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2">${__('loading')}</span></div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            loadSubDepartments();
+
+            const btnAdd = document.getElementById('btn-add-sub-department');
+            if (btnAdd) btnAdd.addEventListener('click', showAddSubDepartmentModal);
+
+            const searchInput = document.getElementById('sub-department-search-input');
+            if (searchInput) searchInput.addEventListener('input', function() { filterSubDepartments(this.value); });
+        }
+
+        async function fetchDepartmentsList() {
+            if (departmentsListCache) return departmentsListCache;
+            const response = await fetch('./includes/sub_departments_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_departments' })
+            });
+            const data = await response.json();
+            departmentsListCache = (data.success && data.departments) ? data.departments : [];
+            return departmentsListCache;
+        }
+
+        function departmentSelectOptionsHtml(departments, selectedDeptId) {
+            let opts = `<option value="">${__('select_department', 'Select Department')}</option>`;
+            departments.forEach(dept => {
+                const selected = (String(dept.id) === String(selectedDeptId)) ? 'selected' : '';
+                opts += `<option value="${dept.id}" ${selected}>${dept.dep_nme}</option>`;
+            });
+            return opts;
+        }
+
+        async function loadSubDepartments() {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_sub_departments' })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_sub_departments', 'Failed to load sub-departments') + '');
+                const data = await response.json();
+
+                const container = document.getElementById('sub-departments-container');
+                if (!data.success || !data.sub_departments || data.sub_departments.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_sub_departments_configured_yet', 'No sub-departments configured yet.') + '</p>';
+                    return;
+                }
+
+                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('department_label') + '</th><th>' + __('sub_department_name_english', 'Sub-Department (English)') + '</th><th>' + __('sub_department_name_arabic', 'Sub-Department (Arabic)') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
+                data.sub_departments.forEach((sd) => {
+                    html += `
+                        <tr>
+                            <td>${sd.dep_nme || 'N/A'}</td>
+                            <td><strong>${sd.name_en || 'N/A'}</strong></td>
+                            <td><strong>${sd.name_ar || 'N/A'}</strong></td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-sub-department-btn" data-sub-dept-id="${sd.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-sub-department-btn" data-sub-dept-id="${sd.id}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+
+                container.querySelectorAll('.edit-sub-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { showEditSubDepartmentModal(this.dataset.subDeptId); });
+                });
+                container.querySelectorAll('.delete-sub-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() { deleteSubDepartment(this.dataset.subDeptId); });
+                });
+            } catch (error) {
+                console.error('Error loading sub-departments:', error);
+                document.getElementById('sub-departments-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        async function showAddSubDepartmentModal() {
+            const departments = await fetchDepartmentsList();
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_sub_department', 'Add New Sub-Department') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="sub-department-dept">${__('department_label')}</label>
+                        <select id="sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, '')}</select>
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="sub-department-name-en">${__('sub_department_name_english', 'Sub-Department (English)')}</label>
+                        <input type="text" id="sub-department-name-en" class="form-control">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="sub-department-name-ar">${__('sub_department_name_arabic', 'Sub-Department (Arabic)')}</label>
+                        <input type="text" id="sub-department-name-ar" class="form-control">
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                didOpen: () => {
+                    $('#sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                },
+                preConfirm: () => {
+                    const departmentId = document.getElementById('sub-department-dept').value;
+                    const nameEn = document.getElementById('sub-department-name-en').value.trim();
+                    const nameAr = document.getElementById('sub-department-name-ar').value.trim();
+                    if (!departmentId) { Swal.showValidationMessage('' + __('please_select_a_department', 'Please select a department') + ''); return false; }
+                    if (!nameEn) { Swal.showValidationMessage('' + __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') + ''); return false; }
+                    if (!nameAr) { Swal.showValidationMessage('' + __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') + ''); return false; }
+                    return { departmentId, nameEn, nameAr };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) await addSubDepartment(result.value.departmentId, result.value.nameEn, result.value.nameAr);
+            });
+        }
+
+        async function addSubDepartment(departmentId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'add_sub_department', department_id: departmentId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('sub_department_added_successfully', 'Sub-department added successfully') + '', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_sub_department', 'Failed to add sub-department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showEditSubDepartmentModal(subDeptId) {
+            try {
+                const [departments, response] = await Promise.all([
+                    fetchDepartmentsList(),
+                    fetch('./includes/sub_departments_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'get_sub_department', sub_dept_id: subDeptId })
+                    })
+                ]);
+
+                const data = await response.json();
+                if (!data.success || !data.sub_department) {
+                    Swal.fire('' + __('error') + '', '' + __('sub_department_not_found', 'Sub-department not found') + '', 'error');
+                    return;
+                }
+
+                const sd = data.sub_department;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '' + __('edit_sub_department', 'Edit Sub-Department') + '',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-dept">${__('department_label')}</label>
+                            <select id="edit-sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, sd.department_id)}</select>
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-name-en">${__('sub_department_name_english', 'Sub-Department (English)')}</label>
+                            <input type="text" id="edit-sub-department-name-en" class="form-control" value="${sd.name_en || ''}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-sub-department-name-ar">${__('sub_department_name_arabic', 'Sub-Department (Arabic)')}</label>
+                            <input type="text" id="edit-sub-department-name-ar" class="form-control" value="${sd.name_ar || ''}">
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('update') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    didOpen: () => {
+                        $('#edit-sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+                    },
+                    preConfirm: () => {
+                        const departmentId = document.getElementById('edit-sub-department-dept').value;
+                        const nameEn = document.getElementById('edit-sub-department-name-en').value.trim();
+                        const nameAr = document.getElementById('edit-sub-department-name-ar').value.trim();
+                        if (!departmentId) { Swal.showValidationMessage('' + __('please_select_a_department', 'Please select a department') + ''); return false; }
+                        if (!nameEn) { Swal.showValidationMessage('' + __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') + ''); return false; }
+                        if (!nameAr) { Swal.showValidationMessage('' + __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') + ''); return false; }
+                        return { departmentId, nameEn, nameAr };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateSubDepartment(subDeptId, result.value.departmentId, result.value.nameEn, result.value.nameAr);
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function updateSubDepartment(subDeptId, departmentId, nameEn, nameAr) {
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'update_sub_department', sub_dept_id: subDeptId, department_id: departmentId, name_en: nameEn, name_ar: nameAr })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('updated') + '', '' + __('sub_department_updated_successfully', 'Sub-department updated successfully') + '', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_update_sub_department', 'Failed to update sub-department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function deleteSubDepartment(subDeptId) {
+            const result = await Swal.fire({
+                title: '' + __('delete_sub_department', 'Delete Sub-Department') + '',
+                text: '' + __('this_action_cannot_be_undone') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/sub_departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_sub_department', sub_dept_id: subDeptId })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    Swal.fire('' + __('deleted') + '', '' + __('sub_department_deleted_successfully', 'Sub-department deleted successfully') + '', 'success');
+                    loadSubDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_delete_sub_department', 'Failed to delete sub-department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        function filterSubDepartments(searchTerm) {
+            const rows = document.querySelectorAll('#sub-departments-container tbody tr');
+            const searchLower = searchTerm.toLowerCase();
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
+                else { row.style.display = 'none'; }
+            });
+            const container = document.getElementById('sub-departments-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_sub_departments_match_your_search', 'No sub-departments match your search')}`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
+        function renderDepartmentsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
+            let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('department_management', 'Department Management')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-department"><i class="mdi mdi-plus"></i> ${__('add_new_department', 'Add New Department')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('manage_departments_in_english_and_arabic', 'Manage departments in English and Arabic.')}</p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="department-search-input" class="form-control" placeholder="${__('search_departments_english_or_arabic', 'Search departments (English or Arabic)...')}" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_department_in_english_or_arabic', 'Search by department in English or Arabic')}</small>`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="departments-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted">`;
+            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
+            formHtml += `<span class="ml-2">${__('loading')}</span>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            hostEl.innerHTML = formHtml;
+
+            loadDepartments();
+
+            const btnAddDepartment = document.getElementById('btn-add-department');
+            if (btnAddDepartment) {
+                btnAddDepartment.addEventListener('click', showAddDepartmentModal);
+            }
+
+            const searchInput = document.getElementById('department-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterDepartments(this.value);
+                });
+            }
+        }
+
+        async function loadDepartments() {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_departments' })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_departments', 'Failed to load departments') + '');
+                const data = await response.json();
+
+                const container = document.getElementById('departments-container');
+                if (!data.success || !data.departments || data.departments.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_departments_configured_yet', 'No departments configured yet') + '</p>';
+                    return;
+                }
+
+                let departmentsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('department_english', 'Department (English)') + '</th><th>' + __('department_arabic', 'Department (Arabic)') + '</th><th>' + __('department_color', 'Color') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
+                data.departments.forEach((department) => {
+                    const rawColor = String(department.dept_clr || '').trim();
+                    const allowedColors = ['custom', 'purple', 'primary', 'success'];
+                    const safeColorClass = allowedColors.includes(rawColor.toLowerCase()) ? rawColor.toLowerCase() : 'custom';
+                    departmentsHtml += `
+                        <tr>
+                            <td><strong>${department.dep_nme || 'N/A'}</strong></td>
+                            <td><strong>${department.dep_nme_ar || 'N/A'}</strong></td>
+                            <td>
+                                <span class="badge ${safeColorClass}">${safeColorClass}</span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-department-btn" data-department-id="${department.id}" title="${__('edit')}">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-department-btn" data-department-id="${department.id}" title="${__('delete')}">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                departmentsHtml += '</tbody></table></div>';
+                container.innerHTML = departmentsHtml;
+
+                container.querySelectorAll('.edit-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditDepartmentModal(this.dataset.departmentId);
+                    });
+                });
+
+                container.querySelectorAll('.delete-department-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteDepartment(this.dataset.departmentId);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading departments:', error);
+                const container = document.getElementById('departments-container');
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        function showAddDepartmentModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_department', 'Add New Department') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="department-title-en">${__('department_english', 'Department (English)')}</label>
+                        <input type="text" id="department-title-en" class="form-control" placeholder="${__('enter_department_in_english', 'Enter department in English')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="department-title-ar">${__('department_arabic', 'Department (Arabic)')}</label>
+                        <input type="text" id="department-title-ar" class="form-control" placeholder="${__('enter_department_in_arabic', 'Enter department in Arabic')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="department-color">${__('department_color', 'Color')}</label>
+                        <select id="department-color" class="form-control">
+                            <option value="custom">custom</option>
+                            <option value="purple">purple</option>
+                            <option value="primary">primary</option>
+                            <option value="success">success</option>
+                        </select>
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                preConfirm: () => {
+                    const titleEn = document.getElementById('department-title-en').value.trim();
+                    const titleAr = document.getElementById('department-title-ar').value.trim();
+                    const color = (document.getElementById('department-color').value || '').trim().toLowerCase();
+
+                    if (!titleEn) {
+                        Swal.showValidationMessage('' + __('department_in_english_is_required', 'Department name in English is required') + '');
+                        return false;
+                    }
+                    if (!titleAr) {
+                        Swal.showValidationMessage('' + __('department_in_arabic_is_required', 'Department name in Arabic is required') + '');
+                        return false;
+                    }
+                    if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
+                        Swal.showValidationMessage('' + __('invalid_department_color', 'Please select a valid department color') + '');
+                        return false;
+                    }
+                    return { titleEn, titleAr, color };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addDepartment(result.value.titleEn, result.value.titleAr, result.value.color);
+                }
+            });
+        }
+
+        async function addDepartment(titleEn, titleAr, color) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'add_department',
+                        department_en: titleEn,
+                        department_ar: titleAr,
+                        department_color: color
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_add_department', 'Failed to add department') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('department_added_successfully', 'Department added successfully') + '', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_department', 'Failed to add department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showEditDepartmentModal(departmentId) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'get_department',
+                        department_id: departmentId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_department', 'Failed to load department') + '');
+                const data = await response.json();
+
+                if (!data.success || !data.department) {
+                    Swal.fire('' + __('error') + '', '' + __('department_not_found', 'Department not found') + '', 'error');
+                    return;
+                }
+
+                const department = data.department;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '' + __('edit_department', 'Edit Department') + '',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-department-title-en">${__('department_english', 'Department (English)')}</label>
+                            <input type="text" id="edit-department-title-en" class="form-control" value="${department.dep_nme || ''}" placeholder="${__('enter_department_in_english', 'Enter department in English')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-department-title-ar">${__('department_arabic', 'Department (Arabic)')}</label>
+                            <input type="text" id="edit-department-title-ar" class="form-control" value="${department.dep_nme_ar || ''}" placeholder="${__('enter_department_in_arabic', 'Enter department in Arabic')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-department-color">${__('department_color', 'Color')}</label>
+                            <select id="edit-department-color" class="form-control">
+                                <option value="custom" ${(String(department.dept_clr || '').trim().toLowerCase() === 'custom' || !String(department.dept_clr || '').trim()) ? 'selected' : ''}>custom</option>
+                                <option value="purple" ${String(department.dept_clr || '').trim().toLowerCase() === 'purple' ? 'selected' : ''}>purple</option>
+                                <option value="primary" ${String(department.dept_clr || '').trim().toLowerCase() === 'primary' ? 'selected' : ''}>primary</option>
+                                <option value="success" ${String(department.dept_clr || '').trim().toLowerCase() === 'success' ? 'selected' : ''}>success</option>
+                            </select>
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('update') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    preConfirm: () => {
+                        const titleEn = document.getElementById('edit-department-title-en').value.trim();
+                        const titleAr = document.getElementById('edit-department-title-ar').value.trim();
+                        const color = (document.getElementById('edit-department-color').value || '').trim().toLowerCase();
+
+                        if (!titleEn) {
+                            Swal.showValidationMessage('' + __('department_in_english_is_required', 'Department name in English is required') + '');
+                            return false;
+                        }
+                        if (!titleAr) {
+                            Swal.showValidationMessage('' + __('department_in_arabic_is_required', 'Department name in Arabic is required') + '');
+                            return false;
+                        }
+                        if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
+                            Swal.showValidationMessage('' + __('invalid_department_color', 'Please select a valid department color') + '');
+                            return false;
+                        }
+                        return { titleEn, titleAr, color };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                        await updateDepartment(departmentId, result.value.titleEn, result.value.titleAr, result.value.color);
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+            async function updateDepartment(departmentId, titleEn, titleAr, color) {
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_department',
+                        department_id: departmentId,
+                        department_en: titleEn,
+                            department_ar: titleAr,
+                            department_color: color
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_update_department', 'Failed to update department') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('updated') + '', '' + __('department_updated_successfully', 'Department updated successfully') + '', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_update_department', 'Failed to update department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function deleteDepartment(departmentId) {
+            const result = await Swal.fire({
+                title: '' + __('delete_department', 'Delete Department') + '',
+                text: '' + __('this_action_cannot_be_undone') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/departments_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'delete_department',
+                        department_id: departmentId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_delete_department', 'Failed to delete department') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('deleted') + '', '' + __('department_deleted_successfully', 'Department deleted successfully') + '', 'success');
+                    loadDepartments();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_delete_department', 'Failed to delete department') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        function filterDepartments(searchTerm) {
+            const rows = document.querySelectorAll('#departments-container tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const depEn = row.cells[0].textContent.toLowerCase();
+                const depAr = row.cells[1].textContent.toLowerCase();
+                const depColor = row.cells[2].textContent.toLowerCase();
+                const searchLower = searchTerm.toLowerCase();
+
+                if (depEn.includes(searchLower) || depAr.includes(searchLower) || depColor.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const container = document.getElementById('departments-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_departments_match_your_search', 'No departments match your search')}`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
+        function renderApprovalChainSettings() {
+            //* const defaultRequestTypes = [
+            //*     { id: 'vacation_request', name: '<?//= __('vacation_request') ?>', description: '<?//= __('annual_vacation_and_fly_vacation_approval_chain') ?>' },
+            //*     { id: 'excuse_leave', name: '<?//= __('excuse_leave') ?>', description: '<?//= __('sick_leave_exam_leave_and_other_excuse_types') ?>' },
+            //*     { id: 'loan_request', name: '<?//= __('loan_request') ?>', description: '<?//= __('employee_loan_application_approval_chain') ?>' },
+            //*     { id: 'settlement', name: '<?//= __('settlement_payment') ?>', description: '<?//= __('settlement_payment_processing_approval_chain_after_request_final_approval') ?>' },
+            //*     { id: 'resignation_request', name: '<?//= __('resignation_request') ?>', description: '<?//= __('employee_resignation_approval_chain') ?>' },
+            //*     { id: 'rejoin_request', name: '<?//= __('rejoin_request') ?>', description: '<?//= __('employee_rejoin_after_resignation_approval_chain') ?>' }
+            //* ];
+
+            // Fetch all request types including custom ones
+            fetch('./includes/approval_chain_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'get_all_request_types' })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
+                //* const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
+                // Filter out request types you want to skip from the UI
+                const skipRequestTypes = ['smart_request', 'general_request']; // Add any request types to skip
+                const filteredTypes = requestTypes.filter(type => !skipRequestTypes.includes(type.id));
+                
+                renderApprovalChainUI(filteredTypes);
+            })
+            .catch(error => {
+                console.error('Error loading request types:', error);
+                //* renderApprovalChainUI(defaultRequestTypes);
+            });
+        }
+
+        function renderApprovalChainUI(requestTypes) {
+            let formHtml = `<div class="tab-pane active" id="group-approval" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('approval_chain_configuration')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-request-type"><i class="mdi mdi-plus"></i> ${__('add_new_request_type')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('configure_approval_workflow')}</p>`;
+
+            requestTypes.forEach(requestType => {
+                formHtml += `
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">
+                                <i class="mdi mdi-check-circle-outline mr-2"></i>${translateText(requestType.name)}
+                                <small class="text-muted ml-2">${translateText(requestType.description)}</small>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label>${__('approval_steps_in_order')}</label>
+                                <div id="approval-chain-${requestType.id}" class="approval-chain-container border rounded p-3 bg-light">
+                                    <div class="text-center text-muted">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        <span class="ml-2">${__('loading')}</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2 add-approver-btn" data-request-type="${requestType.id}">
+                                    <i class="mdi mdi-plus"></i> ${__('add_approver')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            formHtml += `</div>`;
+            settingsContainer.innerHTML = formHtml;
+
+            // Load approval chains one at a time (parallel fetches trip the
+            // per-IP concurrency limit in db.php and fail with a 429)
+            (async () => {
+                for (const requestType of requestTypes) {
+                    await loadApprovalChain(requestType.id);
+                }
+            })();
+
+            // Attach event listeners for "Add Approver" buttons
+            document.querySelectorAll('.add-approver-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const requestType = this.dataset.requestType;
+                    showAddApproverModal(requestType);
+                });
+            });
+
+            // Attach event listener for "Add New Request Type" button
+            const btnAddRequestType = document.getElementById('btn-add-request-type');
+            if (btnAddRequestType) {
+                btnAddRequestType.addEventListener('click', showAddNewRequestTypeModal);
+            }
+        }
+
+        async function loadApprovalChain(requestType) {
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'get_approval_chain', 
+                        request_type: requestType 
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_approval_chain') + '');
+                const data = await response.json();
+
+                const container = document.getElementById(`approval-chain-${requestType}`);
+                if (!data.success || !data.chain || data.chain.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_approval_steps_configured_yet') + '</p>';
+                    return;
+                }
+
+                let chainHtml = '<div class="approval-steps">';
+                data.chain.forEach((step, index) => {
+                    chainHtml += `
+                        <div class="approval-step d-flex align-items-center justify-content-between p-2 mb-2 bg-white border rounded" draggable="true" data-level="${step.level}" data-role="${step.user_type}">
+                            <div class="d-flex align-items-center">
+                                <i class="mdi mdi-drag-vertical text-muted mr-1"></i>
+                                <span class="badge badge-primary mr-2">${__('level')} ${step.level}</span>
+                                <span class="font-weight-bold">${translateText(step.role_label)}</span>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-approver-btn" data-request-type="${requestType}" data-level="${step.level}">
+                                <i class="mdi mdi-delete"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+                chainHtml += '</div>';
+                container.innerHTML = chainHtml;
+
+                // Attach remove button listeners
+                container.querySelectorAll('.remove-approver-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        removeApprovalStep(this.dataset.requestType, this.dataset.level);
+                    });
+                });
+
+                enableApprovalDragReorder(container, requestType);
+
+            } catch (error) {
+                console.error('Error loading approval chain:', error);
+                const container = document.getElementById(`approval-chain-${requestType}`);
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        // Native HTML5 drag-and-drop reorder for the approval-step rows - the
+        // markup/CSS (cursor: move) and the backend ('update_approval_order' in
+        // approval_chain_handler.php) were already there, nothing ever actually
+        // wired dragstart/dragover/drop up, so rows just showed the move cursor
+        // without moving. Reorders the DOM live as you drag over other rows,
+        // then persists + reloads (for fresh Level badges) on drop.
+        function enableApprovalDragReorder(container, requestType) {
+            const stepsWrap = container.querySelector('.approval-steps');
+            if (!stepsWrap) return;
+            let draggedEl = null;
+
+            const getDragAfterElement = (y) => {
+                const els = [...stepsWrap.querySelectorAll('.approval-step:not(.dragging)')];
+                return els.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset, element: child };
+                    }
+                    return closest;
+                }, { offset: -Infinity, element: null }).element;
+            };
+
+            stepsWrap.querySelectorAll('.approval-step').forEach(step => {
+                step.addEventListener('dragstart', () => {
+                    draggedEl = step;
+                    // Deferred so the drag ghost image is captured before the class changes it.
+                    setTimeout(() => step.classList.add('dragging'), 0);
+                });
+                step.addEventListener('dragend', () => {
+                    step.classList.remove('dragging');
+                    if (draggedEl) {
+                        draggedEl = null;
+                        persistApprovalOrder(requestType, stepsWrap);
+                    }
+                });
+            });
+
+            stepsWrap.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (!draggedEl) return;
+                const afterElement = getDragAfterElement(e.clientY);
+                if (afterElement == null) {
+                    stepsWrap.appendChild(draggedEl);
+                } else {
+                    stepsWrap.insertBefore(draggedEl, afterElement);
+                }
+            });
+        }
+
+        async function persistApprovalOrder(requestType, stepsWrap) {
+            const order = [...stepsWrap.querySelectorAll('.approval-step')].map(el => el.dataset.role);
+            const params = new URLSearchParams({ action: 'update_approval_order', request_type: requestType });
+            order.forEach(userType => params.append('order[]', userType));
+
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || '' + __('could_not_save_settings') + '');
+                await loadApprovalChain(requestType);
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+                await loadApprovalChain(requestType);
+            }
+        }
+
+        function showAddApproverModal(requestType) {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_approver') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="approver-role">${__('select_approver_role')}</label>
+                        <select id="approver-role" class="form-control">
+                            <option value="">-- ${__('select_role')} --</option>
+                            <option value="administrator">${__('administrator')}</option>
+                            <option value="gm">${__('general_manager_gm')}</option>
+                            <option value="hr_senior_bp">${__('hr_senior_bp')}</option>
+                            <option value="hr_operations">${__('hr_operations')}</option>
+                            <option value="hr_supervisor">${__('hr_supervisor')}</option>
+                            <option value="hr_recruitment">${__('hr_recruitment')}</option>
+                            <option value="hr_payroll">${__('hr_payroll')}</option>
+                            <option value="hr">${__('hr_manager')}</option>
+                            <option value="finance_officer">${__('finance_officer')}</option>
+                            <option value="finance">${__('finance_manager')}</option>
+                            <option value="auditor">${__('auditor')}</option>
+                            <option value="gr_officer">${__('gr_officer')}</option>
+                            <option value="it">${__('it_manager')}</option>
+                            <option value="dept_user">${__('department_user')}</option>
+                            <option value="assistant">${__('assistant')}</option>
+                            <option value="direct_supervisor">${__('direct_supervisor')}</option>
+                            <option value="dept_manager">${__('department_manager')}</option>
+                            <option value="admin_manager">${__('admin_manager')}</option>
+                            <option value="transportation_manager">${__('transportation_manager')}</option>
+                        </select>
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                preConfirm: () => {
+                    const role = document.getElementById('approver-role').value;
+                    if (!role) {
+                        Swal.showValidationMessage('' + __('please_select_a_role') + '');
+                        return false;
+                    }
+                    return { role };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addApprovalStep(requestType, result.value.role);
+                }
+            });
+        }
+
+        async function addApprovalStep(requestType, userType) {
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'add_approval_step', 
+                        request_type: requestType,
+                        user_type: userType
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_add_approval_step') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('approval_step_added_successfully') + '', 'success');
+                    loadApprovalChain(requestType); // Reload the chain
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_approval_step') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function removeApprovalStep(requestType, level) {
+            const result = await Swal.fire({
+                title: '' + __('remove_approval_step') + '',
+                text: '' + __('this_will_remove_this_approval_level_from_the_chain') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_remove_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'remove_approval_step', 
+                        request_type: requestType,
+                        level: level
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_remove_approval_step') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('removed') + '', '' + __('approval_step_removed_successfully') + '', 'success');
+                    loadApprovalChain(requestType); // Reload the chain
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_remove_approval_step') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showAddNewRequestTypeModal() {
+            const result = await Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_request_type') + '',
+                html: `
+                    <div class="text-left">
+                        <div class="form-group">
+                            <label for="new-request-type-id">${__('request_type_id')} <small class="text-danger">(${__('lowercase, underscores')})</small></label>
+                            <input type="text" id="new-request-type-id" class="form-control" placeholder="${__('e.g., travel_request, business_trip')}" pattern="[a-z_]+" title="${__('use_lowercase_letters_and_underscores_only')}">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-request-type-name">${__('request_type_name')}</label>
+                            <input type="text" id="new-request-type-name" class="form-control" placeholder="${__('e.g., Travel Request')}">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-main-table-name">${__('main_table_name')} <small class="text-muted">(${__('optional')})</small></label>
+                            <input type="text" id="new-main-table-name" class="form-control" placeholder="${__('e.g., travel_requests')}">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-request-type-description">${__('description')}</label>
+                            <textarea id="new-request-type-description" class="form-control" rows="2" placeholder="${__('brief_description_of_this_request_type')}"></textarea>
+                        </div>
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('create') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                preConfirm: () => {
+                    const id = document.getElementById('new-request-type-id').value.trim().toLowerCase();
+                    const name = document.getElementById('new-request-type-name').value.trim();
+                    const mainTable = document.getElementById('new-main-table-name').value.trim();
+                    const description = document.getElementById('new-request-type-description').value.trim();
+
+                    if (!id) {
+                        Swal.showValidationMessage('' + __('request_type_id_is_required') + '');
+                        return false;
+                    }
+                    if (!name) {
+                        Swal.showValidationMessage('' + __('request_type_name_is_required') + '');
+                        return false;
+                    }
+                    if (!/^[a-z_]+$/.test(id)) {
+                        Swal.showValidationMessage('' + __('request_type_id_must_contain_only_lowercase_letters_and_underscores') + '');
+                        return false;
+                    }
+                    return { id, name, mainTable, description };
+                }
+            });
+
+            if (result.isConfirmed) {
+                await addNewRequestType(result.value.id, result.value.name, result.value.mainTable, result.value.description);
+            }
+        }
+
+        async function addNewRequestType(requestTypeId, requestTypeName, mainTableName, description) {
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ 
+                        action: 'create_new_request_type',
+                        request_type_id: requestTypeId,
+                        request_type_name: requestTypeName,
+                        main_table_name: mainTableName || '',
+                        request_type_description: description
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to create request type');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('Created!') + '', `${__('New request type')} "${requestTypeName}" ${__('has been added successfully. You can now configure its approval chain.')}`, 'success')
+                        .then(() => {
+                            renderApprovalChainSettings(); // Reload the approval chain settings
+                        });
+                } else {
+                    throw new Error(data.message || '' + __('Failed to create request type') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('Error!') + '', error.message, 'error');
+            }
+        }
+
+        /**
+         * =================================================================
+         * == ASSET CLEARANCE HANDLERS SETTINGS
+         * == Lets an administrator pre-assign, per asset type (Laptop, Mobile,
+         * == SIM, Car...), who clears its return during vacation approval -
+         * == used by processAssetKeepReturnDecision in leaveHandler.php.
+         * =================================================================
+         */
+        async function renderAssetClearanceSettings() {
+            settingsContainer.innerHTML = `
+                <div id="group-asset_clearance" class="tab-pane active">
+                    <h5 class="mb-3">${__('asset_clearance_handlers', 'Asset Clearance Handlers')}</h5>
+                    <p class="text-muted">${__('asset_clearance_handlers_note', "Assign who confirms an asset's return during vacation approval. If left unassigned, the department's manager handles it automatically (or a system administrator, if that manager is the employee's own direct manager).")}</p>
+                    <div id="asset-clearance-table-wrapper" class="approval-chain-container border rounded p-3 bg-light">
+                        <div class="d-flex justify-content-center align-items-center" style="height: 80px;"><div class="loader"></div></div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('./includes/approval_chain_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_asset_clearance_handlers' })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || 'Failed to load asset clearance handlers');
+                renderAssetClearanceTable(data.assets || []);
+            } catch (error) {
+                document.getElementById('asset-clearance-table-wrapper').innerHTML = `<p class="text-danger text-center">${error.message}</p>`;
+            }
+        }
+
+        function renderAssetClearanceTable(assets) {
+            const wrapper = document.getElementById('asset-clearance-table-wrapper');
+            if (assets.length === 0) {
+                wrapper.innerHTML = `<p class="text-muted text-center mb-0">${__('no_asset_types_configured', 'No asset types configured yet.')}</p>`;
+                return;
+            }
+
+            let rowsHtml = '';
+            assets.forEach(asset => {
+                rowsHtml += `
+                    <tr data-asset-id="${asset.asset_id}" data-dept-id="${asset.clearance_dept_id || ''}">
+                        <td>${asset.asset_name}</td>
+                        <td>${asset.dept_name || '<span class="text-muted">-</span>'}</td>
+                        <td style="width:1%;">
+                            <select class="form-control form-control-sm asset-handler-select" multiple>
+                            </select>
+                        </td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary asset-handler-save">${__('save', 'Save')}</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            wrapper.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead>
+                            <tr>
+                                <th>${__('asset_type', 'Asset Type')}</th>
+                                <th>${__('department', 'Department')}</th>
+                                <th>${__('handler', 'Handler')}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            `;
+
+            // One shared employee list for every row - the handler pool is no longer
+            // restricted by department, so there's nothing to fetch per-row.
+            fetch('./includes/ajaxFile/leaveHandler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ ajaxType: 'get_asset_department_employees' })
+            })
+            .then(r => r.json())
+            .then(res => {
+                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
+
+                wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => {
+                    const assetId = tr.dataset.assetId;
+                    const asset = assets.find(a => String(a.asset_id) === assetId);
+                    const select = tr.querySelector('.asset-handler-select');
+                    const assignedIds = (asset && Array.isArray(asset.handlers)) ? asset.handlers.map(h => String(h.emp_id)) : [];
+
+                    let optionsHtml = '';
+                    employees.forEach(emp => {
+                        const selected = assignedIds.includes(String(emp.emp_id)) ? 'selected' : '';
+                        optionsHtml += `<option value="${emp.emp_id}" ${selected}>${emp.name} (${emp.emp_id})</option>`;
+                    });
+                    select.innerHTML = optionsHtml;
+                    $(select).select2({
+                        width: '400px',
+                        multiple: true,
+                        allowClear: true,
+                        placeholder: __('automatic', 'Automatic (department manager)')
+                    });
+                });
+            })
+            .catch(() => {
+                wrapper.querySelectorAll('.asset-handler-select').forEach(select => {
+                    select.innerHTML = '';
+                    $(select).select2({ width: '400px', multiple: true });
+                });
+            });
+
+            wrapper.querySelectorAll('.asset-handler-save').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const tr = btn.closest('tr');
+                    const assetId = tr.dataset.assetId;
+                    const select = tr.querySelector('.asset-handler-select');
+                    const handlerEmpIds = Array.from(select.selectedOptions).map(o => o.value);
+
+                    const params = new URLSearchParams({ action: 'set_asset_clearance_handler', asset_id: assetId });
+                    handlerEmpIds.forEach(id => params.append('handler_emp_id[]', id));
+
+                    btn.disabled = true;
+                    try {
+                        const response = await fetch('./includes/approval_chain_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: params
+                        });
+                        const data = await response.json();
+                        if (!data.success) throw new Error(data.message || 'Failed to save');
+                        Swal.fire({ icon: 'success', title: __('saved', 'Saved'), text: data.message, timer: 1500, showConfirmButton: false });
+                    } catch (error) {
+                        Swal.fire(__('Error!', 'Error!'), error.message, 'error');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
+            });
+        }
+
+        function attachPreviewListeners() {
+            appSettings.forEach(setting => {
+                const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
+                if (isImagePath) {
+                    const inputEl = document.getElementById(`setting-${setting.setting_name}`);
+                    const previewEl = document.getElementById(`preview-${setting.setting_name}`);
+                    if (inputEl && previewEl) {
+                        inputEl.addEventListener('change', (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                previewEl.src = URL.createObjectURL(file);
+                            }
+                        });
+                        previewEl.addEventListener('error', () => {
+                            previewEl.src = 'assets/images/placeholder.png';
+                        });
+                    }
+                }
+            });
+        }
+
+        function attachEmailListListeners() {
+            const addEmailBtn = document.getElementById('add-email-btn');
+            if (addEmailBtn) {
+                addEmailBtn.addEventListener('click', function() {
+                    const container = document.getElementById('email-list-container');
+                    const newEmailHtml = `
+                        <div class="email-item mb-2">
+                            <div class="input-group">
+                                <input type="email" class="form-control email-input" placeholder="email@example.com" value="">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-danger remove-email-btn"><i class="mdi mdi-delete"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', newEmailHtml);
+                    attachRemoveEmailListeners();
+                    updateEmailListHiddenField();
+                });
+            }
+            
+            attachRemoveEmailListeners();
+            updateEmailListHiddenField();
+        }
+
+        function attachRemoveEmailListeners() {
+            document.querySelectorAll('.remove-email-btn').forEach(btn => {
+                btn.replaceWith(btn.cloneNode(true)); // Remove old listeners
+            });
+            
+            document.querySelectorAll('.remove-email-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const emailItems = document.querySelectorAll('.email-item');
+                    if (emailItems.length > 1) {
+                        this.closest('.email-item').remove();
+                        updateEmailListHiddenField();
+                    } else {
+                        Swal.fire('' + __('Notice') + '', '' + __('At least one email field must remain') + '', 'info');
+                    }
+                });
+            });
+
+            // Update hidden field on email input change
+            document.querySelectorAll('.email-input').forEach(input => {
+                input.removeEventListener('input', updateEmailListHiddenField);
+                input.addEventListener('input', updateEmailListHiddenField);
+            });
+        }
+
+        function updateEmailListHiddenField() {
+            const emailInputs = document.querySelectorAll('.email-input');
+            const emails = Array.from(emailInputs)
+                .map(input => input.value.trim())
+                .filter(email => email !== '');
+            
+            const hiddenField = document.getElementById('setting-traveling_company_email');
+            if (hiddenField) {
+                hiddenField.value = JSON.stringify(emails);
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                // Restricted (non-admin) special-access users only ever get Departments/Job
+                // Titles tabs, which are backed by their own handlers, not app_settings rows.
+                // Skip fetching the full settings payload entirely so sensitive settings
+                // (SMTP credentials, other employees' special-access grants, etc.) never
+                // reach a browser that only has partial access.
+                if (!isFullSettingsAdmin) {
+                    groupedSettings = {};
+                    if (canAccessDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab) {
+                        groupedSettings['org_structure'] = [];
+                    }
+                    if (canAccessSubDepartmentsTab) {
+                        groupedSettings['sub_departments'] = [];
+                    }
+                    if (canAccessRequestBlocksTab) {
+                        groupedSettings['request type blocks'] = [];
+                    }
+                    if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab || canAccessSalaryIncrementSettingsTab) {
+                        groupedSettings['payroll_settings'] = [];
+                    }
+                    if (canAccessAttendanceConfigTab) {
+                        groupedSettings['attendance_config'] = [];
+                    }
+
+                    const savedGroup = localStorage.getItem('app_settings_active_group');
+                    const groups = Object.keys(groupedSettings).sort();
+
+                    let restrictedNavHtml = '';
+                    groups.forEach((group) => {
+                        const isActive = (savedGroup === group);
+                        const translatedGroup = translateText(group.replace(/_/g, ' '));
+                        restrictedNavHtml += `
+                            <li class="nav-item">
+                                <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
+                                    <span class="text-capitalize">${translatedGroup}</span>
+                                </a>
+                            </li>
+                        `;
+                    });
+                    settingsNav.innerHTML = restrictedNavHtml;
+
+                    const restrictedInitialGroup = (savedGroup && groups.includes(savedGroup)) ? savedGroup : groups[0];
+                    if (restrictedInitialGroup) {
+                        renderSettingsGroup(restrictedInitialGroup);
+                    } else {
+                        settingsContainer.innerHTML = '<p class="text-center">' + __('No settings found.') + '</p>';
+                    }
+
+                    settingsNav.querySelectorAll('a').forEach(link => {
+                        link.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const group = link.dataset.group;
+                            renderSettingsGroup(group);
+                            localStorage.setItem('app_settings_active_group', group);
+                            settingsNav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+                            link.classList.add('active');
+                        });
+                    });
+                    return;
+                }
+
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_settings' })
+                });
+                if (!response.ok) throw new Error(`${__('Network response was not ok:')} ${response.statusText}`);
+
+                const data = await response.json();
+                if (!data.success) throw new Error(data.message || '' + __('Failed to retrieve settings.') + '');
+
+                // These 4 groups are rendered only as sub-tabs inside the single "Payroll
+                // Settings" hub (see renderPayrollSettingsHub / PAYROLL_SETTINGS_SUB_TABS),
+                // never as their own top-level nav entries - drop their raw rows here so
+                // they don't also show up mixed in alphabetically with unrelated tabs.
+                const payrollSubGroupKeys = PAYROLL_SETTINGS_SUB_TABS.map(t => t.key);
+                // 'page_role_access' stores its data as a raw JSON blob (page -> allowed roles)
+                // with no dedicated UI here - it only has a generic text input via the default
+                // renderer, which is unusable for editing and not meant to be admin-facing on
+                // this screen. Drop it so it doesn't show up as its own tab; the setting itself
+                // (read by includes/page_access_helper.php) and its save path in
+                // settings_handler.php are untouched.
+                // 'report_permissions' (report_visibility_by_user) no longer gets its own tab -
+                // it's now managed per-user from inside the Special Access tab (see the "Report
+                // Access" group in renderSpecialAccessSettings). Drop its raw row the same way;
+                // get_allowed_report_types_for_user() and settings_handler.php are untouched.
+                // 'social' (facebook_url/twitter_url/instagram_url/linkedin_url) isn't read
+                // anywhere else in the app - dead tab, hidden here. Rows are left in the DB
+                // untouched in case the feature comes back.
+                // 'office_hours_settings' is superseded by the default company Timetable
+                // under Attendance Config - hidden the same way, rows untouched.
+                const hiddenGroups = ['page_role_access', 'report_permissions', 'social', 'office_hours_settings'];
+                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group) && !hiddenGroups.includes(s.setting_group));
+                groupedSettings = appSettings.reduce((acc, setting) => {
+                    const group = setting.setting_group;
+                    if (!acc[group]) acc[group] = [];
+                    acc[group].push(setting);
+                    return acc;
+                }, {});
+
+                // Seed specialAccessMap from the real DB value as soon as settings load - not
+                // only when the Special Access tab happens to be rendered. The hidden input
+                // that carries this to Save is now a persistent field outside #settings-container
+                // (see form skeleton), so it survives switching to other settings tabs. Without
+                // this early seed, saving before ever opening the Special Access tab would submit
+                // an empty "{}" and wipe out every existing grant.
+                const specialAccessSetting = appSettings.find(s => s.setting_name === 'special_access_by_user');
+                specialAccessMap = parseSpecialAccessMap(specialAccessSetting ? specialAccessSetting.setting_value : '{}');
+                updateSpecialAccessHiddenValue();
+
+                // Same early-seed as above, for report access. Its row was just filtered out of
+                // appSettings (its old standalone tab is gone), so read it from the unfiltered
+                // data.settings instead - otherwise this would always seed as "{}" and wipe every
+                // existing per-user report restriction on first Save.
+                const reportVisibilitySetting = data.settings.find(s => s.setting_name === 'report_visibility_by_user');
+                reportPermissionMap = parseReportPermissionMap(reportVisibilitySetting ? reportVisibilitySetting.setting_value : '{}');
+                updateReportPermissionHiddenValue();
+
+                // Ensure custom management tabs always exist
+                if (!groupedSettings['org_structure']) {
+                    groupedSettings['org_structure'] = [];
+                }
+                if (!groupedSettings['sub_departments']) {
+                    groupedSettings['sub_departments'] = [];
+                }
+                if (!groupedSettings['approval']) {
+                    groupedSettings['approval'] = [];
+                }
+                if (!groupedSettings['request type blocks']) {
+                    groupedSettings['request type blocks'] = [];
+                }
+                if (!groupedSettings['payroll_settings']) {
+                    groupedSettings['payroll_settings'] = [];
+                }
+                if (!groupedSettings['attendance_config']) {
+                    groupedSettings['attendance_config'] = [];
+                }
+                if (isFullSettingsAdmin) {
+                if (!groupedSettings['license']) {
+                    groupedSettings['license'] = [];
+                }
+                if (!groupedSettings['asset_clearance']) {
+                    groupedSettings['asset_clearance'] = [];
+                }
+                }
+
+                // Restore last active group from localStorage if available
+                const savedGroup = localStorage.getItem('app_settings_active_group');
+                // 'announcement_config' renders only as a sub-tab inside the Email hub, and
+                // 'device_monitor' only inside the Attendance Config hub (see
+                // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
+                // outer nav so they don't also show up as their own top-level tabs.
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor'];
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
+
+                let navHtml = '';
+                groups.forEach((group) => {
+                    const isActive = (savedGroup === group);
+                    const displayGroup = group.replace(/_/g, ' '); // Display with spaces instead of underscores
+                    const translatedGroup = translateText(displayGroup); // Translate the group name
+                    navHtml += `
+                        <li class="nav-item">
+                            <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
+                                <span class="text-capitalize">${translatedGroup}</span>
+                            </a>
+                        </li>
+                    `;
+                });
+                settingsNav.innerHTML = navHtml;
+
+                // Determine initial group to render
+                const initialGroup = (savedGroup && groups.includes(savedGroup)) ? savedGroup : groups[0];
+                if(initialGroup) {
+                    renderSettingsGroup(initialGroup);
+                } else {
+                    settingsContainer.innerHTML = '<p class="text-center">' + __('No settings found.') + '</p>';
+                }
+
+                // Click handlers: render and persist active group, update nav active class
+                settingsNav.querySelectorAll('a').forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const group = link.dataset.group;
+                        renderSettingsGroup(group);
+                        localStorage.setItem('app_settings_active_group', group);
+                        // Toggle active class on nav links
+                        settingsNav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+                        link.classList.add('active');
+                    });
+                });
+
+            } catch (error) {
+                settingsContainer.innerHTML = `<p class="text-danger text-center">${error.message}</p>`;
+                Swal.fire('' + __('Error!') + '', `${__('Could not load settings:')} ${error.message}`, 'error');
+            }
+        }
+
+        settingsForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            // Validate email list before submitting
+            const emailInputs = document.querySelectorAll('.email-input');
+            let hasInvalidEmail = false;
+            emailInputs.forEach(input => {
+                if (input.value.trim() !== '' && !input.checkValidity()) {
+                    hasInvalidEmail = true;
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+            
+            if (hasInvalidEmail) {
+                Swal.fire('' + __('Validation Error') + '', '' + __('Please enter valid email addresses') + '', 'error');
+                return;
+            }
+            
+            // Update hidden field one more time before submission
+            updateEmailListHiddenField();
+            
+            const formData = new FormData();
+            formData.append('action', 'update_settings');
+
+            appSettings.forEach(setting => {
+                const element = document.getElementById(`setting-${setting.setting_name}`);
+                if (element) {
+                    const isImagePath = setting.setting_name.includes('logo') || setting.setting_name.includes('favicon');
+                    const isSessionTimeout = setting.setting_name === 'session_timeout';
+                    
+                    if (isImagePath) {
+                        if (element.files.length > 0) {
+                            formData.append(setting.setting_name, element.files[0]);
+                        }
+                    } else if (isSessionTimeout) {
+                        // Evaluate session timeout expression before sending
+                        let value = element.value.trim();
+                        if (value) {
+                            const evaluated = evaluateExpression(value);
+                            if (evaluated !== null) {
+                                formData.append(setting.setting_name, evaluated);
+                            } else {
+                                throw new Error(`${__('Invalid session timeout expression:')} "${value}". ${__('Please use only numbers and operators (+, -, *, /, parentheses).')}`);
+                            }
+                        }
+                    } else if (setting.setting_name === 'full_access_emp_ids') {
+                        const selected = $(`#setting-${setting.setting_name}`).val() || [];
+                        formData.append(setting.setting_name, JSON.stringify(selected));
+                    } else {
+                        // Simplified logic: this works for both standard inputs and select2.
+                        formData.append(setting.setting_name, element.value);
+                    }
+                }
+            });
+
+            Swal.fire({
+                title: '' + __('saving') + '',
+                text: '' + __('your_settings_are_being_updated') + '',
+                allowOutsideClick: false,
+                onBeforeOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error(await response.text());
+                
+                const result = await response.json();
+                Swal.close();
+
+                if (result.success) {
+                    Swal.fire({
+                        title: '' + __('saved') + '',
+                        text: '' + __('your_settings_have_been_updated_successfully') + '',
+                        icon: 'success',
+                        confirmButtonText: '' + __('ok') + '',
+                        allowOutsideClick: false
+                    }).then(() => window.location.reload());
+                } else {
+                    Swal.fire('' + __('error') + '', result.message || '' + __('could_not_save_settings') + '', 'error');
+                }
+
+            } catch (error) {
+                Swal.close();
+                Swal.fire('' + __('request_failed') + '', `${__('an_error_occurred')} ${error.message}`, 'error');
+            }
+        });
+
+        loadSettings();
+    });
