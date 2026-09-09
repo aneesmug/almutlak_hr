@@ -27,6 +27,9 @@ switch ($action) {
     case 'delete_timetable':
         delete_timetable($conDB);
         break;
+    case 'toggle_timetable_active':
+        toggle_timetable_active($conDB);
+        break;
     case 'list_companies':
         list_companies($conDB);
         break;
@@ -59,6 +62,23 @@ function list_timetables($conDB) {
             $row['days'][(int) $dayRow['weekday']] = $dayRow;
         }
         mysqli_stmt_close($dayStmt);
+
+        // Structured company list (in addition to the flattened 'companies'
+        // string above) so the UI can render each name as its own chip
+        // instead of one run-on comma-separated line - company names can
+        // themselves contain slashes/commas, making the flattened string
+        // unreliable to split back apart on the client.
+        $row['company_list'] = [];
+        $compStmt = mysqli_prepare($conDB, "SELECT comp_id, comp_name FROM companies WHERE timetable_id = ? ORDER BY comp_name ASC");
+        $timetableIdForComps = (int) $row['id'];
+        mysqli_stmt_bind_param($compStmt, 'i', $timetableIdForComps);
+        mysqli_stmt_execute($compStmt);
+        $compResult = mysqli_stmt_get_result($compStmt);
+        while ($compRow = mysqli_fetch_assoc($compResult)) {
+            $row['company_list'][] = $compRow;
+        }
+        mysqli_stmt_close($compStmt);
+
         if ((int) $row['is_temporary'] === 1) {
             $empStmt = mysqli_prepare(
                 $conDB,
@@ -191,10 +211,14 @@ function add_edit_timetable($conDB) {
             return;
         }
     } else {
-        // A company already locked to a different custom (non-Default) timetable
-        // can't be silently stolen from this screen - it has to be unassigned
-        // there first. Guards the case where the UI's disabled checkboxes were
-        // bypassed or the assignment changed elsewhere since the page loaded.
+        // A company already locked to a different custom (non-Default) *active*
+        // timetable can't be silently stolen from this screen - it has to be
+        // unassigned there first. Guards the case where the UI's disabled
+        // checkboxes were bypassed or the assignment changed elsewhere since
+        // the page loaded. An inactive/draft timetable doesn't govern that
+        // company's attendance right now, so it isn't locked - claiming it
+        // here just leaves the other (inactive) timetable's own company list
+        // stale until someone edits it, which is harmless since it's not live.
         if (!empty($companyIds)) {
             $placeholders = implode(',', array_fill(0, count($companyIds), '?'));
             $types = str_repeat('i', count($companyIds));
@@ -203,7 +227,7 @@ function add_edit_timetable($conDB) {
                 "SELECT c.comp_name, t.name AS timetable_name FROM companies c
                  JOIN timetables t ON t.id = c.timetable_id
                  WHERE c.comp_id IN ({$placeholders}) AND c.timetable_id IS NOT NULL
-                   AND c.timetable_id != 1 AND c.timetable_id != ?"
+                   AND c.timetable_id != 1 AND c.timetable_id != ? AND t.is_active = 1"
             );
             mysqli_stmt_bind_param($lockStmt, $types . 'i', ...array_merge($companyIds, [$id]));
             mysqli_stmt_execute($lockStmt);
@@ -265,9 +289,13 @@ function add_edit_timetable($conDB) {
         }
         mysqli_stmt_close($stmt);
     } else {
+        // New timetables start inactive (draft) - has to be explicitly
+        // switched on via 'toggle_timetable_active' before it affects any
+        // company's/employee's attendance calculations. Keeps a
+        // half-configured schedule from going live the moment it's saved.
         $stmt = mysqli_prepare(
             $conDB,
-            "INSERT INTO timetables (name, is_temporary, start_date, end_date) VALUES (?, ?, ?, ?)"
+            "INSERT INTO timetables (name, is_temporary, start_date, end_date, is_active) VALUES (?, ?, ?, ?, 0)"
         );
         $isTemporaryInt = $isTemporary ? 1 : 0;
         $startDateParam = ($isTemporary && $startDate !== '') ? $startDate : null;
@@ -416,4 +444,115 @@ function delete_timetable($conDB) {
         mysqli_stmt_close($deleteStmt);
         echo json_encode(['status' => 'error', 'message' => 'Failed to delete timetable.']);
     }
+}
+
+function toggle_timetable_active($conDB) {
+    $id = (int) ($_POST['id'] ?? 0);
+    $active = !empty($_POST['active']) ? 1 : 0;
+
+    if ($id <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid id.']);
+        return;
+    }
+    if ($id === 1 && $active === 0) {
+        echo json_encode(['status' => 'error', 'message' => 'The Default timetable is always active and cannot be deactivated.']);
+        return;
+    }
+
+    $ttStmt = mysqli_prepare($conDB, "SELECT id, name, is_temporary, start_date, end_date FROM timetables WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($ttStmt, 'i', $id);
+    mysqli_stmt_execute($ttStmt);
+    $timetable = mysqli_stmt_get_result($ttStmt)->fetch_assoc();
+    mysqli_stmt_close($ttStmt);
+    if (!$timetable) {
+        echo json_encode(['status' => 'error', 'message' => 'Timetable not found.']);
+        return;
+    }
+    $isTemporary = (int) $timetable['is_temporary'] === 1;
+
+    if ($active === 1) {
+        if ($isTemporary) {
+            // Employee-wise timetables aren't mutually exclusive at the DB
+            // level like company timetables are (an employee could in theory
+            // be added to more than one), so this is the one case a real
+            // conflict can occur: the same employee ending up covered by two
+            // *active* overrides with overlapping windows, leaving it
+            // ambiguous which one governs their attendance.
+            $myStart = $timetable['start_date']; // null = permanent
+            $myEnd = $timetable['end_date'];
+
+            $candidateStmt = mysqli_prepare(
+                $conDB,
+                "SELECT DISTINCT e.name AS emp_name, t2.name AS other_name, t2.start_date, t2.end_date
+                 FROM timetable_employees te
+                 JOIN timetable_employees te2 ON te2.emp_id = te.emp_id AND te2.timetable_id != te.timetable_id
+                 JOIN timetables t2 ON t2.id = te2.timetable_id
+                 JOIN employees e ON e.emp_id = te.emp_id
+                 WHERE te.timetable_id = ? AND t2.is_temporary = 1 AND t2.is_active = 1"
+            );
+            mysqli_stmt_bind_param($candidateStmt, 'i', $id);
+            mysqli_stmt_execute($candidateStmt);
+            $candidates = mysqli_stmt_get_result($candidateStmt);
+            $conflict = null;
+            while ($cand = mysqli_fetch_assoc($candidates)) {
+                // A NULL/NULL window is permanent - always overlaps. Two
+                // dated windows overlap only if they actually intersect.
+                $overlaps = ($myStart === null || $cand['start_date'] === null)
+                    || ($myStart <= $cand['end_date'] && $cand['start_date'] <= $myEnd);
+                if ($overlaps) {
+                    $conflict = $cand;
+                    break;
+                }
+            }
+            mysqli_stmt_close($candidateStmt);
+            if ($conflict) {
+                echo json_encode(['status' => 'error', 'message' => "{$conflict['emp_name']} is already covered by the active timetable \"{$conflict['other_name']}\" for an overlapping period - remove them there first."]);
+                return;
+            }
+        }
+        // Company timetables have nothing to check here: companies.timetable_id
+        // points to exactly one timetable at a time (see the "assigned
+        // elsewhere" lock in add_edit_timetable()), so a company can never
+        // simultaneously belong to two timetables for this to conflict with -
+        // whichever timetable currently owns it is the only one that can be
+        // activated/deactivated for it.
+    }
+
+    $updStmt = mysqli_prepare($conDB, "UPDATE timetables SET is_active = ? WHERE id = ?");
+    mysqli_stmt_bind_param($updStmt, 'ii', $active, $id);
+    if (!mysqli_stmt_execute($updStmt)) {
+        mysqli_stmt_close($updStmt);
+        echo json_encode(['status' => 'error', 'message' => 'Failed to update status.']);
+        return;
+    }
+    mysqli_stmt_close($updStmt);
+
+    $affectedEmpIds = [];
+    $empStmt = mysqli_prepare($conDB, "SELECT emp_id FROM timetable_employees WHERE timetable_id = ?");
+    mysqli_stmt_bind_param($empStmt, 'i', $id);
+    mysqli_stmt_execute($empStmt);
+    $empResult = mysqli_stmt_get_result($empStmt);
+    while ($row = mysqli_fetch_assoc($empResult)) {
+        $affectedEmpIds[] = (int) $row['emp_id'];
+    }
+    mysqli_stmt_close($empStmt);
+
+    $compStmt = mysqli_prepare($conDB, "SELECT comp_id FROM companies WHERE timetable_id = ?");
+    mysqli_stmt_bind_param($compStmt, 'i', $id);
+    mysqli_stmt_execute($compStmt);
+    $compResult = mysqli_stmt_get_result($compStmt);
+    $compIds = [];
+    while ($row = mysqli_fetch_assoc($compResult)) {
+        $compIds[] = (int) $row['comp_id'];
+    }
+    mysqli_stmt_close($compStmt);
+    $affectedEmpIds = array_merge($affectedEmpIds, employees_of_companies($conDB, $compIds));
+
+    attendance_recalculate_states($conDB, $affectedEmpIds);
+
+    echo json_encode([
+        'status' => 'success',
+        'message' => $active ? 'Timetable activated.' : 'Timetable deactivated.',
+        'is_active' => $active,
+    ]);
 }

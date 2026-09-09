@@ -1477,7 +1477,7 @@
             hostEl.innerHTML = `
                 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap: 0.75rem;">
                     <div style="min-width: 0; flex: 1 1 320px;">
-                        <h5 class="mb-1"><?= __('attendance_config', 'Attendance Config') ?></h5>
+                        <h5 class="mb-1"><?= __('attendance_config', 'Attendance Configuration') ?></h5>
                         <p class="text-muted mb-0"><?= __('attendance_config_hint', 'Timetables define office hours and weekly days off. Assign each company to a timetable - every employee of that company follows it. A Temporary timetable instead targets specific employees for a limited date range, overriding their company\'s timetable while it\'s active.') ?></p>
                     </div>
                     <button type="button" class="btn btn-sm btn-success flex-shrink-0" id="btn-add-timetable"><i class="mdi mdi-plus"></i> <?= __('add_new', 'Add New') ?></button>
@@ -1515,6 +1515,7 @@
                         <tr>
                             <th><?= __('name') ?></th>
                             <th><?= __('type', 'Type') ?></th>
+                            <th><?= __('status', 'Status') ?></th>
                             <th><?= __('weekly_schedule', 'Weekly Schedule') ?></th>
                             <th><?= __('assigned_to', 'Assigned To') ?></th>
                             <th><?= __('actions') ?></th>
@@ -1537,7 +1538,10 @@
                         assignedTo = `${empNames}` + (hasRange ? `<br><small class="text-muted">${t.start_date} &rarr; ${t.end_date}</small>` : '');
                     } else {
                         typeBadge = `<span class="badge badge-light border"><?= __('company', 'Company') ?></span>`;
-                        assignedTo = t.companies || '<span class="text-muted"><?= __('none', 'None') ?></span>';
+                        const companyList = t.company_list || [];
+                        assignedTo = companyList.length
+                            ? `<div class="d-flex flex-wrap" style="gap: 0.25rem;">${companyList.map(c => `<span class="badge badge-light border" title="${escapeHtml(c.comp_name)}">${escapeHtml(c.comp_name)}</span>`).join('')}</div>`
+                            : '<span class="text-muted"><?= __('none', 'None') ?></span>';
                     }
                     const days = t.days || {};
                     const scheduleHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
@@ -1547,15 +1551,35 @@
                         }
                         return `<span class="badge badge-light border" title="${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)">${WEEKDAY_ABBR[w]} ${d.check_in}-${d.check_out}</span>`;
                     }).join(' ');
+                    const isActive = Number(t.is_active) === 1;
+                    const isDefault = Number(t.id) === 1;
+                    // Default is always active and locked - every other timetable
+                    // is a draft (built with its days/companies/employees) until
+                    // explicitly activated, and going active is guarded server-side
+                    // so it can never leave a company/employee covered by two
+                    // active timetables at once (see toggle_timetable_active()).
+                    const statusHtml = `<span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${isActive ? '<?= __('active', 'Active') ?>' : '<?= __('inactive', 'Inactive') ?>'}</span>`;
+                    // Default is always active and locked - ev Low carb I mean shown motel, maybe so maybe shitshion playing already sectionery other timetable
+                    // is a draft (built with its days/companies/employees) until
+                    // explicitly activated, and going active is guarded server-side
+                    // so it can never leave a company/employee covered by two
+                    // active timetables at once (see toggle_timetable_active()).
+                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-outline-success'} btn-toggle-timetable-active" data-id="${t.id}" data-name="${t.name}" data-active="${isActive ? 0 : 1}" title="${isActive ? '<?= __('deactivate', 'Deactivate') ?>' : '<?= __('activate', 'Activate') ?>'}">
+                            <i class="mdi ${isActive ? 'mdi-toggle-switch-off' : 'mdi-toggle-switch'}"></i>
+                        </button>`;
                     tableHtml += `
                         <tr>
                             <td><strong>${t.name}</strong></td>
                             <td>${typeBadge}</td>
+                            <td>${statusHtml}</td>
                             <td><div class="d-flex flex-wrap" style="gap: 0.25rem;">${scheduleHtml}</div></td>
                             <td>${assignedTo}</td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary btn-edit-timetable" data-id="${t.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
-                                ${Number(t.id) !== 1 ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-timetable" data-id="${t.id}" data-name="${t.name}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>` : ''}
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit-timetable" data-id="${t.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                    ${Number(t.id) !== 1 ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-timetable" data-id="${t.id}" data-name="${t.name}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>` : ''}
+                                    ${toggleBtnHtml}
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -1568,6 +1592,9 @@
                 });
                 container.querySelectorAll('.btn-delete-timetable').forEach(btn => {
                     btn.addEventListener('click', () => deleteTimetable(btn.dataset.id, btn.dataset.name));
+                });
+                container.querySelectorAll('.btn-toggle-timetable-active').forEach(btn => {
+                    btn.addEventListener('click', () => toggleTimetableActive(btn.dataset.id, btn.dataset.name, btn.dataset.active === '1'));
                 });
             } catch (error) {
                 container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
@@ -1595,7 +1622,11 @@
             });
             const timetablesData = await timetablesRes.json();
             const timetableNameById = {};
-            (timetablesData.timetables || []).forEach(t => { timetableNameById[t.id] = t.name; });
+            const timetableActiveById = {};
+            (timetablesData.timetables || []).forEach(t => {
+                timetableNameById[t.id] = t.name;
+                timetableActiveById[t.id] = Number(t.id) === 1 || Number(t.is_active) === 1;
+            });
 
             const isEdit = !!timetable;
             const t = timetable || { id: 0, name: '', days: {}, is_temporary: 0, start_date: '', end_date: '', employees: [] };
@@ -1644,11 +1675,14 @@
 
             // A company already locked to a different custom (non-Default) timetable
             // can't be checked here - it has to be freed from that timetable first.
+            // That only applies while the other timetable is actually active though -
+            // an inactive/draft timetable isn't governing that company's attendance
+            // right now, so there's nothing live to conflict with.
             let companyCheckboxesHtml = '';
             companies.forEach(c => {
                 const compTimetableId = Number(c.timetable_id) || 1;
                 const currentlyOn = timetableNameById[c.timetable_id] || 'Default';
-                const lockedElsewhere = compTimetableId !== 1 && compTimetableId !== tId;
+                const lockedElsewhere = compTimetableId !== 1 && compTimetableId !== tId && timetableActiveById[compTimetableId];
                 companyCheckboxesHtml += `
                     <div class="custom-control custom-checkbox">
                         <input type="checkbox" class="custom-control-input tt-company" id="tt-company-${c.comp_id}" value="${c.comp_id}"
@@ -1957,6 +1991,39 @@
             });
         }
 
+        function toggleTimetableActive(id, name, activate) {
+            const doToggle = () => {
+                fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'toggle_timetable_active', id, active: activate ? 1 : 0 })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success') {
+                        loadTimetables();
+                    } else {
+                        Swal.fire('<?= __('error') ?>', res.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    }
+                });
+            };
+
+            if (!activate) {
+                Swal.fire({
+                    title: '<?= __('are_you_sure') ?>',
+                    text: name,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: APP_COLORS.danger_dark,
+                    cancelButtonColor: APP_COLORS.primary,
+                    confirmButtonText: '<?= __('deactivate', 'Deactivate') ?>',
+                    cancelButtonText: '<?= __('cancel') ?>',
+                }).then(result => {
+                    if (result.isConfirmed) doToggle();
+                });
+                return;
+            }
+            doToggle();
+        }
+
         // Salary components an admin can pick from for the deduction base (e.g. GOSI base).
         const DEDUCTION_BASE_COMPONENT_LABELS = {
             basic_salary: '<?= __('basic_salary', 'Basic Salary') ?>',
@@ -2125,12 +2192,14 @@
                                 </div>
                             </td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary edit-deduction-type-btn" data-id="${type.id}" data-name="${type.name}" title="<?= __('edit') ?>">
-                                    <i class="mdi mdi-pencil"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-deduction-type-btn" data-id="${type.id}" title="<?= __('delete') ?>">
-                                    <i class="mdi mdi-delete"></i>
-                                </button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-deduction-type-btn" data-id="${type.id}" data-name="${type.name}" title="<?= __('edit') ?>">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-deduction-type-btn" data-id="${type.id}" title="<?= __('delete') ?>">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -2583,8 +2652,10 @@
                     <span class="badge badge-pill badge-secondary ml-2">${badgeCount}</span>
                 </div>`;
                 html += `<div class="text-nowrap">
-                    <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="<?= __('edit') ?>"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user ml-1" data-emp-id="${escapeHtml(empId)}" title="<?= __('remove') ?>"><i class="fas fa-trash-alt"></i></button>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="<?= __('edit') ?>"><i class="fas fa-edit"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="<?= __('remove') ?>"><i class="fas fa-trash-alt"></i></button>
+                    </div>
                 </div>`;
                 html += '</div>';
                 html += `<div class="mt-2">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
@@ -3245,12 +3316,14 @@
                             <td><strong>${job.job || 'N/A'}</strong></td>
                             <td><strong>${job.job_ar || 'N/A'}</strong></td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary edit-job-btn" data-job-id="${job.id}" title="<?= __('edit') ?>">
-                                    <i class="mdi mdi-pencil"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-job-btn" data-job-id="${job.id}" title="<?= __('delete') ?>">
-                                    <i class="mdi mdi-delete"></i>
-                                </button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-job-btn" data-job-id="${job.id}" title="<?= __('edit') ?>">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-job-btn" data-job-id="${job.id}" title="<?= __('delete') ?>">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -3576,8 +3649,10 @@
                             <td><strong>${loc.name_en || 'N/A'}</strong></td>
                             <td><strong>${loc.name_ar || 'N/A'}</strong></td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary edit-location-btn" data-location-id="${loc.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-location-btn" data-location-id="${loc.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-location-btn" data-location-id="${loc.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-location-btn" data-location-id="${loc.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -3863,8 +3938,10 @@
                             <td><strong>${sd.name_en || 'N/A'}</strong></td>
                             <td><strong>${sd.name_ar || 'N/A'}</strong></td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary edit-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-sub-department-btn" data-sub-dept-id="${sd.id}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -4143,12 +4220,14 @@
                                 <span class="badge ${safeColorClass}">${safeColorClass}</span>
                             </td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary edit-department-btn" data-department-id="${department.id}" title="<?= __('edit') ?>">
-                                    <i class="mdi mdi-pencil"></i>
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger delete-department-btn" data-department-id="${department.id}" title="<?= __('delete') ?>">
-                                    <i class="mdi mdi-delete"></i>
-                                </button>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-department-btn" data-department-id="${department.id}" title="<?= __('edit') ?>">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-department-btn" data-department-id="${department.id}" title="<?= __('delete') ?>">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -4820,7 +4899,7 @@
                             </select>
                         </td>
                         <td>
-                            <button type="button" class="btn btn-sm btn-primary asset-handler-save"><?= htmlspecialchars(__('save', 'Save')) ?></button>
+                            <button type="button" class="btn btn-sm btn-outline-primary asset-handler-save"><?= htmlspecialchars(__('save', 'Save')) ?></button>
                         </td>
                     </tr>
                 `;

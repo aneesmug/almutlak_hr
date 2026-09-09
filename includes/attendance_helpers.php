@@ -99,7 +99,12 @@ if (!function_exists('attendance_resolve_timetable')) {
      * includes/helper_functions.php's company-filter joins). Every company
      * has a `timetable_id` (defaults to 1 "Default") - falls back to a
      * hardcoded array (Fri+Sat off) if even that day's row is somehow
-     * missing, so this never fatals.
+     * missing, so this never fatals. Both the employee override and the
+     * company timetable are only honored while `timetables.is_active = 1`
+     * (see db_updates/add_timetable_is_active.sql) - an inactive/draft
+     * timetable is skipped as if the employee/company weren't assigned to
+     * it, falling through to Default. The Default timetable (id 1) is
+     * always active and can't be deactivated.
      */
     function attendance_resolve_timetable($conn, $empId, $compNo, $date) {
         $empId = (int) $empId;
@@ -112,7 +117,7 @@ if (!function_exists('attendance_resolve_timetable')) {
                 $conn,
                 "SELECT t.id FROM timetable_employees te
                  JOIN timetables t ON t.id = te.timetable_id
-                 WHERE te.emp_id = ? AND t.is_temporary = 1
+                 WHERE te.emp_id = ? AND t.is_temporary = 1 AND t.is_active = 1
                    AND (
                      (t.start_date IS NULL AND t.end_date IS NULL)
                      OR (t.start_date IS NOT NULL AND t.end_date IS NOT NULL AND ? BETWEEN t.start_date AND t.end_date)
@@ -132,7 +137,16 @@ if (!function_exists('attendance_resolve_timetable')) {
             $timetableId = 1;
             $compNo = trim((string) $compNo);
             if ($compNo !== '') {
-                $stmt = mysqli_prepare($conn, "SELECT timetable_id FROM companies WHERE comp_id = ? LIMIT 1");
+                // Only an *active* company timetable takes effect - a draft
+                // timetable a company is assigned to but hasn't been
+                // activated yet must not silently change what's expected of
+                // its employees, so it falls back to Default until switched on.
+                $stmt = mysqli_prepare(
+                    $conn,
+                    "SELECT c.timetable_id FROM companies c
+                     JOIN timetables t ON t.id = c.timetable_id
+                     WHERE c.comp_id = ? AND t.is_active = 1 LIMIT 1"
+                );
                 mysqli_stmt_bind_param($stmt, 's', $compNo);
                 mysqli_stmt_execute($stmt);
                 $row = mysqli_stmt_get_result($stmt)->fetch_assoc();
