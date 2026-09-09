@@ -1,0 +1,186 @@
+﻿[
+    {
+        "terminal_sn":  "CKJW204960198",
+        "pin":  "2539",
+        "punch_time":  "2026-09-08 16:28:40",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960938",
+        "pin":  "4962",
+        "punch_time":  "2026-09-08 16:26:20",
+        "status":  "255",
+        "verify":  "25",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960281",
+        "pin":  "5409",
+        "punch_time":  "2026-09-08 16:22:47",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960274",
+        "pin":  "2352",
+        "punch_time":  "2026-09-08 16:22:23",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960198",
+        "pin":  "5242",
+        "punch_time":  "2026-09-08 16:21:36",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960274",
+        "pin":  "3325",
+        "punch_time":  "2026-09-08 16:20:22",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960192",
+        "pin":  "2553",
+        "punch_time":  "2026-09-08 16:17:38",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960274",
+        "pin":  "4220",
+        "punch_time":  "2026-09-08 16:15:29",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960251",
+        "pin":  "5486",
+        "punch_time":  "2026-09-08 16:14:32",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "6620220200012",
+        "pin":  "4124",
+        "punch_time":  "2026-09-08 16:12:39",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  "0"
+    },
+    {
+        "terminal_sn":  "CKJW204960938",
+        "pin":  "4288",
+        "punch_time":  "2026-09-08 16:07:45",
+        "status":  "255",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960938",
+        "pin":  "5491",
+        "punch_time":  "2026-09-08 16:07:34",
+        "status":  "255",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960252",
+        "pin":  "3286",
+        "punch_time":  "2026-09-08 16:04:30",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "6620220200012",
+        "pin":  "3231",
+        "punch_time":  "2026-09-08 16:03:04",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  "0"
+    },
+    {
+        "terminal_sn":  "6620220200012",
+        "pin":  "4736",
+        "punch_time":  "2026-09-08 16:02:59",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  "0"
+    },
+    {
+        "terminal_sn":  "6620220200012",
+        "pin":  "3724",
+        "punch_time":  "2026-09-08 16:02:52",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  "0"
+    },
+    {
+        "terminal_sn":  "CKJW204960251",
+        "pin":  "5484",
+        "punch_time":  "2026-09-08 16:02:40",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960252",
+        "pin":  "4930",
+        "punch_time":  "2026-09-08 16:02:23",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960251",
+        "pin":  "5479",
+        "punch_time":  "2026-09-08 16:01:40",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "6620220200012",
+        "pin":  "5230",
+        "punch_time":  "2026-09-08 16:01:39",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  "0"
+    },
+    {
+        "terminal_sn":  "CKJW204960251",
+        "pin":  "5485",
+        "punch_time":  "2026-09-08 15:59:27",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960251",
+        "pin":  "5469",
+        "punch_time":  "2026-09-08 15:59:14",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960878",
+        "pin":  "5426",
+        "punch_time":  "2026-09-08 15:56:27",
+        "status":  "255",
+        "verify":  "15",
+        "work_code":  ""
+    }
+]

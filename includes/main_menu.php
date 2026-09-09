@@ -25,6 +25,8 @@ $locationsLink = 'all_locations.php';
 $machinesLink = 'all_machines.php';
 $itemsLink = 'all_menu_item.php';
 $assetInventoryLink = 'asset_inventory.php';
+$zkDevicesLink = 'zk_devices.php';
+$attendanceLink = 'attendance.php';
 $ordersLink = 'all_orders.php';
 $customersLink = 'odr_customers.php';
 $quotationsLink = 'all_quotations.php';
@@ -891,6 +893,12 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php endif; ?>
         <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
             <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
+        <?php endif; ?>
+        <?php if ($is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_device_monitor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
+            <li><a href="<?= $zkDevicesLink ?>"><i class="fa fa-fingerprint"></i><span><?=__('zk_devices', 'Biometric Devices') ?></span></a></li>
+        <?php endif; ?>
+        <?php if ($is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
+            <li><a href="<?= $attendanceLink ?>"><i class="fa fa-calendar-check"></i><span><?=__('attendance_record', 'Attendance Record') ?></span></a></li>
         <?php endif; ?>
 
         <?php

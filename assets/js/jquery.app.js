@@ -79,17 +79,20 @@ loadResource('./plugins/croppie/exif.js', 'js', { async: true, defer: true }, 'h
 loadResource('./plugins/dropzone/dropzone.js', 'js', { async: true, defer: true }, 'head');
 // Time Picker
 loadResource('./plugins/bootstrap-timepicker/bootstrap-timepicker.js', 'js', { async: true, defer: true }, 'head');
-// moment.js must execute before the hijri picker files below (they patch/extend the global
-// moment object with the 'iYYYY'/'iMM'/'iDD' tokens) - async:false keeps them non-blocking
-// but forces execution in declaration order, since dynamically-inserted <script> elements
-// are async by default and ignore the defer attribute otherwise.
+// moment.js must execute before the hijri picker files and daterangepicker.js
+// below (all read the global `moment` at parse/init time) - async:false keeps
+// them non-blocking but forces execution in declaration order, since
+// dynamically-inserted <script> elements are async by default and ignore the
+// defer attribute otherwise. daterangepicker.js used to be marked async:true,
+// a race that intermittently executed it before moment.js finished loading
+// ("TypeError: moment is not a function") - moved into this in-order group.
 loadResource('./plugins/moment/moment.js', 'js', { async: false, defer: true }, 'head');
 loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js', 'js', { async: false, defer: true }, 'head');
 loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js', 'js', { async: false, defer: true }, 'head');
 loadResource('./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js', 'js', { async: false, defer: true }, 'head');
+loadResource('./plugins/bootstrap-daterangepicker/daterangepicker.js', 'js', { async: false, defer: true }, 'head');
 loadResource('./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/clockpicker/js/bootstrap-clockpicker.min.js', 'js', { async: true, defer: true }, 'head');
-loadResource('./plugins/bootstrap-daterangepicker/daterangepicker.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js', 'js', { async: true, defer: true }, 'head');
 // Validate
 loadResource('./assets/js/jquery.validate.js', 'js', { async: true, defer: true }, 'head');

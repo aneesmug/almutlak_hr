@@ -58,6 +58,10 @@ if (!function_exists('get_special_access_labels')) {
             'asset_inventory_edit' => 'Asset Inventory: Edit Asset',
             'asset_inventory_delete' => 'Asset Inventory: Delete Asset',
             'apply_loan_with_active_loan' => 'Loan: Allow Applying for a New Loan While Another Is Pending/Awaiting',
+            'manage_device_monitor' => 'Biometric Devices: View & Manage Devices Page',
+            'manage_attendance' => 'Attendance Record: View & Manage Attendance Page',
+            'manage_attendance_config' => 'Attendance: View & Manage Attendance Config (Timetables) Page',
+            'view_employee_attendance_tab' => 'Attendance: View Employee Profile\'s Attendance Record Tab',
         ] + get_special_access_page_labels();
     }
 }
@@ -213,6 +217,20 @@ if (!function_exists('get_special_access_categories')) {
                     'asset_inventory_add',
                     'asset_inventory_edit',
                     'asset_inventory_delete',
+                ],
+            ],
+            'Biometric Devices' => [
+                'icon' => 'fa-fingerprint',
+                'keys' => [
+                    'manage_device_monitor',
+                ],
+            ],
+            'Attendance' => [
+                'icon' => 'fa-calendar-check',
+                'keys' => [
+                    'manage_attendance',
+                    'manage_attendance_config',
+                    'view_employee_attendance_tab',
                 ],
             ],
             'Other Special Actions' => [

@@ -11,6 +11,7 @@
     $canAccessOvertimeSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_overtime_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessDeductionSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_deduction_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessSalaryIncrementSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_salary_increment_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessAttendanceConfigTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance_config', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -30,7 +31,19 @@
 
     <!-- Plugins -->
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
+    <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <style>
+        /* Keep the date-range calendars side-by-side inside SweetAlert modals - same override manage_holidays.php uses */
+        .swal2-container .daterangepicker { z-index: 2200 !important; min-width: 650px; }
+        .swal2-container .daterangepicker .drp-calendar { max-width: none; }
+        .swal2-container .daterangepicker.show-calendar .drp-calendar.left,
+        .swal2-container .daterangepicker.show-calendar .drp-calendar.right { display: inline-block; float: none; vertical-align: top; }
+        @media (max-width: 767px) {
+            .swal2-container .daterangepicker { min-width: 0; width: 100%; }
+        }
+    </style>
 
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -456,6 +469,7 @@
         const canAccessOvertimeSettingsTab = <?= $canAccessOvertimeSettingsTab ? 'true' : 'false' ?>;
         const canAccessDeductionSettingsTab = <?= $canAccessDeductionSettingsTab ? 'true' : 'false' ?>;
         const canAccessSalaryIncrementSettingsTab = <?= $canAccessSalaryIncrementSettingsTab ? 'true' : 'false' ?>;
+        const canAccessAttendanceConfigTab = <?= $canAccessAttendanceConfigTab ? 'true' : 'false' ?>;
         const requestTypeBlockLabels = <?= json_encode(get_blockable_request_type_labels(), JSON_UNESCAPED_UNICODE) ?>;
         let appSettings = [];
         let groupedSettings = {};
@@ -924,7 +938,8 @@
             return result.slice(0, -1).join(', ') + ' and ' + result[result.length - 1]
         }
 
-        function renderSettingsGroup(groupName) {
+        function renderSettingsGroup(groupName, hostEl) {
+            hostEl = hostEl || settingsContainer;
             let formHtml = '';
             // Normalize group name to use underscores for comparison
             const normalizedGroupName = groupName.replace(/ /g, '_');
@@ -936,7 +951,7 @@
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['departments', 'job_titles', 'locations', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance'];
+            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -960,21 +975,10 @@
                 return;
             }
 
-            // Special handling for job titles configuration
-            if (normalizedGroupName === 'job_titles') {
-                renderJobTitlesSettings();
-                return;
-            }
-
-            // Special handling for departments configuration
-            if (normalizedGroupName === 'departments') {
-                renderDepartmentsSettings();
-                return;
-            }
-
-            // Special handling for locations configuration
-            if (normalizedGroupName === 'locations') {
-                renderLocationsSettings();
+            // Departments / Job Titles / Locations share one top-level tab (org_structure),
+            // each as its own canAccess()-gated sub-tab - see renderOrgStructureHub.
+            if (normalizedGroupName === 'org_structure') {
+                renderOrgStructureHub();
                 return;
             }
 
@@ -1007,6 +1011,23 @@
             // interleaved alphabetically with unrelated tabs like Departments or Email).
             if (normalizedGroupName === 'payroll_settings') {
                 renderPayrollSettingsHub();
+                return;
+            }
+
+            // Special handling for Attendance Config: Timetables (own tables, not
+            // app_settings rows) plus Device Monitor (zk_sync_secret_key / offline
+            // threshold) as a second sub-tab - see renderAttendanceConfigHub.
+            if (normalizedGroupName === 'attendance_config') {
+                renderAttendanceConfigHub();
+                return;
+            }
+
+            // Email + Announcement Config share one top-level "Email" tab as sub-tabs -
+            // see renderEmailSettingsHub. Both still hit the generic field renderer below
+            // (guarded to only fire from the outer nav, not the hub's own sub-tab calls
+            // into this same function, which pass their own hostEl and must fall through).
+            if (normalizedGroupName === 'email' && hostEl === settingsContainer) {
+                renderEmailSettingsHub();
                 return;
             }
 
@@ -1115,7 +1136,7 @@
             }
 
             formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            hostEl.innerHTML = formHtml;
 
             // Initialize Select2 with a width setting for better Bootstrap integration.
             $('.select2').select2({
@@ -1138,6 +1159,11 @@
         // Overtime / Deduction as inner sub-tabs, so these parameters stay grouped
         // together and never get interleaved alphabetically with unrelated tabs
         // (Departments, Email, Security, ...) in the outer nav.
+        // Rendered as a toggle switch instead of a text input in renderPayrollParamGroup() -
+        // these are '0'/'1' flags (see includes/payroll_settings_handler.php's defaults),
+        // not numeric thresholds like the rest of the Overtime/Deduction settings.
+        const PAYROLL_BOOLEAN_SETTING_NAMES = ['overtime_auto_attendance_enabled', 'deduction_auto_attendance_enabled'];
+
         const PAYROLL_SETTINGS_SUB_TABS = [
             { key: 'loan_settings', label: '<?= __('loan_settings', 'Loan Settings') ?>', canAccess: () => canAccessLoanSettingsTab },
             { key: 'vacation_payroll', label: '<?= __('vacation_payroll_settings', 'Vacation Payroll Settings') ?>', canAccess: () => canAccessVacationPayrollTab },
@@ -1226,6 +1252,20 @@
                 let formHtml = '';
                 data.settings.forEach(setting => {
                     const id = `payroll-param-${setting.setting_name}`;
+                    if (PAYROLL_BOOLEAN_SETTING_NAMES.includes(setting.setting_name)) {
+                        formHtml += `
+                            <div class="form-group row">
+                                <div class="col-sm-4"></div>
+                                <div class="col-sm-8">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input payroll-param-input" id="${id}" data-setting-name="${setting.setting_name}" ${setting.setting_value === '1' ? 'checked' : ''}>
+                                        <label class="custom-control-label" for="${id}">${translateText(setting.description)}</label>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        return;
+                    }
                     formHtml += `
                         <div class="form-group row">
                             <label for="${id}" class="col-sm-4 col-form-label">${translateText(setting.description)}</label>
@@ -1241,7 +1281,7 @@
                 document.getElementById(`btn-save-${group}`).addEventListener('click', async function() {
                     const payload = new URLSearchParams({ action: 'update_payroll_settings', group });
                     container.querySelectorAll('.payroll-param-input').forEach(input => {
-                        payload.append(input.dataset.settingName, input.value.trim());
+                        payload.append(input.dataset.settingName, input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value.trim());
                     });
 
                     try {
@@ -1263,6 +1303,658 @@
             } catch (error) {
                 document.getElementById(`payroll-param-fields-${group}`).innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
             }
+        }
+
+        // --- Org Structure Hub ---
+        // Departments / Job Titles / Locations each have their own special-access key
+        // (canAccessDepartmentsTab / canAccessJobTitlesTab / canAccessLocationsTab), so a
+        // restricted grantee may only have one or two of them - same canAccess()-gated
+        // sub-tab pattern as PAYROLL_SETTINGS_SUB_TABS above.
+        const ORG_STRUCTURE_SUB_TABS = [
+            { key: 'departments', label: '<?= __('departments', 'Departments') ?>', canAccess: () => canAccessDepartmentsTab },
+            { key: 'job_titles', label: '<?= __('job_titles', 'Job Titles') ?>', canAccess: () => canAccessJobTitlesTab },
+            { key: 'locations', label: '<?= __('locations', 'Locations') ?>', canAccess: () => canAccessLocationsTab },
+        ];
+
+        function renderOrgStructureHub() {
+            const visibleTabs = ORG_STRUCTURE_SUB_TABS.filter(tab => tab.canAccess());
+
+            let navHtml = '<ul class="nav nav-pills mb-3" id="org-structure-sub-nav">';
+            visibleTabs.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-org_structure" role="tabpanel">
+                    ${navHtml}
+                    <div id="org-structure-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('org-structure-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (key === 'departments') renderDepartmentsSettings(subContent);
+                else if (key === 'job_titles') renderJobTitlesSettings(subContent);
+                else if (key === 'locations') renderLocationsSettings(subContent);
+            }
+
+            document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            if (visibleTabs.length > 0) {
+                renderSubTab(visibleTabs[0].key);
+            } else {
+                subContent.innerHTML = '<p class="text-center text-danger"><?= __('access_denied', 'Access denied') ?></p>';
+            }
+        }
+
+        // --- Email Settings Hub ---
+        // Announcement Config (announcement_smtp_*) is its own SMTP block used only for
+        // the announcement-sending feature, kept as a sub-tab next to the main Email/SMTP
+        // settings instead of its own top-level tab. Both sub-tabs render through the
+        // generic renderSettingsGroup() field renderer (see the hostEl-guarded 'email'
+        // branch there) and save through the same outer "Save Changes" button/form -
+        // switching sub-tabs before saving discards unsaved edits in the one left, same
+        // as switching any other top-level tab today.
+        const EMAIL_SETTINGS_SUB_TABS = [
+            { key: 'email', label: '<?= __('email', 'Email') ?>' },
+            { key: 'announcement_config', label: '<?= __('announcement_config', 'Announcement Config') ?>' },
+        ];
+
+        function renderEmailSettingsHub() {
+            let navHtml = '<ul class="nav nav-pills mb-3" id="email-settings-sub-nav">';
+            EMAIL_SETTINGS_SUB_TABS.forEach((tab, idx) => {
+                navHtml += `
+                    <li class="nav-item">
+                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
+                    </li>
+                `;
+            });
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-email" role="tabpanel">
+                    ${navHtml}
+                    <div id="email-settings-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('email-settings-sub-content');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#email-settings-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                renderSettingsGroup(key, subContent);
+            }
+
+            document.querySelectorAll('#email-settings-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            renderSubTab(EMAIL_SETTINGS_SUB_TABS[0].key);
+        }
+
+        // --- Attendance Config Hub ---
+        // Timetables is the main attendance-config surface, restricted grantees
+        // (canAccessAttendanceConfigTab) get this alone. Device Monitor (zk_sync_secret_key
+        // / device_offline_threshold_minutes) is a second sub-tab, admin-only since it's a
+        // shared secret key, not per-grantee attendance config.
+        function renderAttendanceConfigHub() {
+            const showDeviceMonitor = isFullSettingsAdmin;
+            let navHtml = '<ul class="nav nav-pills mb-3" id="attendance-config-sub-nav">';
+            navHtml += `<li class="nav-item"><a class="nav-link active" href="#" data-sub-tab="timetables"><?= __('timetables', 'Timetables') ?></a></li>`;
+            if (showDeviceMonitor) {
+                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="device_monitor"><?= __('device_monitor', 'Device Monitor') ?></a></li>`;
+            }
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-attendance_config" role="tabpanel">
+                    ${navHtml}
+                    <div id="attendance-config-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('attendance-config-sub-content');
+            const saveBtnWrapper = document.getElementById('saveBtnWrapper');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#attendance-config-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (saveBtnWrapper) {
+                    // Timetables self-saves per-row via its own modal; Device Monitor uses
+                    // the generic outer Save button.
+                    saveBtnWrapper.style.display = (key === 'device_monitor') ? '' : 'none';
+                }
+                if (key === 'device_monitor') {
+                    renderSettingsGroup('device_monitor', subContent);
+                } else {
+                    renderAttendanceConfigGroup(subContent);
+                }
+            }
+
+            document.querySelectorAll('#attendance-config-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            renderSubTab('timetables');
+        }
+
+        // Attendance Config: named Timetables (office hours + weekly days-off), each
+        // assignable to one or more companies - see includes/ajaxFile/timetableAjax.php
+        // and includes/attendance_helpers.php's attendance_resolve_timetable(). This is
+        // rendered as the default sub-tab of the Attendance Config hub above (see
+        // renderAttendanceConfigHub) since it's backed by its own `timetables`/
+        // `companies.timetable_id` tables, not app_settings rows.
+        const DAY_OFF_LABELS = {
+            1: '<?= __('monday', 'Monday') ?>', 2: '<?= __('tuesday', 'Tuesday') ?>', 3: '<?= __('wednesday', 'Wednesday') ?>',
+            4: '<?= __('thursday', 'Thursday') ?>', 5: '<?= __('friday', 'Friday') ?>', 6: '<?= __('saturday', 'Saturday') ?>',
+            7: '<?= __('sunday', 'Sunday') ?>',
+        };
+
+        async function renderAttendanceConfigGroup(hostEl) {
+            hostEl.innerHTML = `
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap: 0.75rem;">
+                    <div style="min-width: 0; flex: 1 1 320px;">
+                        <h5 class="mb-1"><?= __('attendance_config', 'Attendance Config') ?></h5>
+                        <p class="text-muted mb-0"><?= __('attendance_config_hint', 'Timetables define office hours and weekly days off. Assign each company to a timetable - every employee of that company follows it. A Temporary timetable instead targets specific employees for a limited date range, overriding their company\'s timetable while it\'s active.') ?></p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-success flex-shrink-0" id="btn-add-timetable"><i class="mdi mdi-plus"></i> <?= __('add_new', 'Add New') ?></button>
+                </div>
+                <div id="timetables-container" class="border rounded p-3 bg-light">
+                    <div class="text-center text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ml-2"><?= __('loading') ?></span>
+                    </div>
+                </div>
+            `;
+
+            loadTimetables();
+            document.getElementById('btn-add-timetable').addEventListener('click', () => showTimetableModal(null));
+        }
+
+        async function loadTimetables() {
+            const container = document.getElementById('timetables-container');
+            try {
+                const response = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'list_timetables' })
+                });
+                const data = await response.json();
+                if (data.status !== 'success') {
+                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '<?= __('access_denied', 'Access denied') ?>'}</p>`;
+                    return;
+                }
+
+                const WEEKDAY_ABBR = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+                const todayStr = new Date().toISOString().slice(0, 10);
+                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th><?= __('name') ?></th>
+                            <th><?= __('type', 'Type') ?></th>
+                            <th><?= __('weekly_schedule', 'Weekly Schedule') ?></th>
+                            <th><?= __('assigned_to', 'Assigned To') ?></th>
+                            <th><?= __('actions') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                data.timetables.forEach(t => {
+                    const isTemporary = Number(t.is_temporary) === 1;
+                    let typeBadge;
+                    let assignedTo;
+                    if (isTemporary) {
+                        const hasRange = !!(t.start_date && t.end_date);
+                        const active = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
+                        const statusBadge = !hasRange
+                            ? `<span class="badge badge-success"><?= __('permanent', 'Permanent') ?></span>`
+                            : `<span class="badge ${active ? 'badge-success' : 'badge-secondary'}">${active ? '<?= __('active', 'Active') ?>' : '<?= __('expired', 'Expired') ?>'}</span>`;
+                        typeBadge = `<span class="badge badge-info"><?= __('employee_wise', 'Employee-wise') ?></span> ${statusBadge}`;
+                        const empNames = (t.employees || []).map(e => e.name).join(', ') || '<span class="text-muted"><?= __('none', 'None') ?></span>';
+                        assignedTo = `${empNames}` + (hasRange ? `<br><small class="text-muted">${t.start_date} &rarr; ${t.end_date}</small>` : '');
+                    } else {
+                        typeBadge = `<span class="badge badge-light border"><?= __('company', 'Company') ?></span>`;
+                        assignedTo = t.companies || '<span class="text-muted"><?= __('none', 'None') ?></span>';
+                    }
+                    const days = t.days || {};
+                    const scheduleHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
+                        const d = days[w] || days[String(w)];
+                        if (!d || Number(d.is_off) === 1) {
+                            return `<span class="badge badge-danger" title="<?= __('day_off', 'Day off') ?>">${WEEKDAY_ABBR[w]}</span>`;
+                        }
+                        return `<span class="badge badge-light border" title="${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)">${WEEKDAY_ABBR[w]} ${d.check_in}-${d.check_out}</span>`;
+                    }).join(' ');
+                    tableHtml += `
+                        <tr>
+                            <td><strong>${t.name}</strong></td>
+                            <td>${typeBadge}</td>
+                            <td><div class="d-flex flex-wrap" style="gap: 0.25rem;">${scheduleHtml}</div></td>
+                            <td>${assignedTo}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary btn-edit-timetable" data-id="${t.id}" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></button>
+                                ${Number(t.id) !== 1 ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-timetable" data-id="${t.id}" data-name="${t.name}" title="<?= __('delete') ?>"><i class="mdi mdi-delete"></i></button>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+                tableHtml += '</tbody></table></div>';
+                container.innerHTML = tableHtml;
+
+                container.querySelectorAll('.btn-edit-timetable').forEach(btn => {
+                    btn.addEventListener('click', () => showTimetableModal(data.timetables.find(t => Number(t.id) === Number(btn.dataset.id))));
+                });
+                container.querySelectorAll('.btn-delete-timetable').forEach(btn => {
+                    btn.addEventListener('click', () => deleteTimetable(btn.dataset.id, btn.dataset.name));
+                });
+            } catch (error) {
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+            }
+        }
+
+        async function showTimetableModal(timetable) {
+            let companies = [];
+            try {
+                const response = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'list_companies' })
+                });
+                const data = await response.json();
+                companies = data.status === 'success' ? data.companies : [];
+            } catch (error) {
+                companies = [];
+            }
+
+            const timetablesRes = await fetch('./includes/ajaxFile/timetableAjax.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ action: 'list_timetables' })
+            });
+            const timetablesData = await timetablesRes.json();
+            const timetableNameById = {};
+            (timetablesData.timetables || []).forEach(t => { timetableNameById[t.id] = t.name; });
+
+            const isEdit = !!timetable;
+            const t = timetable || { id: 0, name: '', days: {}, is_temporary: 0, start_date: '', end_date: '', employees: [] };
+            const tId = Number(t.id);
+            const isTemporary = Number(t.is_temporary) === 1;
+            const assignedCompanyIds = new Set(companies.filter(c => Number(c.timetable_id) === tId).map(c => Number(c.comp_id)));
+
+            const defaultDayFor = iso => ({
+                is_off: (iso === 5 || iso === 6) ? 1 : 0,
+                check_in: '08:00', check_in_start: '07:45', check_in_end: '08:15',
+                check_out: '17:00', check_out_start: '16:45', check_out_end: '17:15',
+                standard_hours: 8,
+            });
+
+            // Landscape layout: one compact table row per weekday instead of a
+            // stacked card per day - keeps the modal wide/short instead of tall.
+            // Day Off just greys/disables that row's time fields in place rather
+            // than hiding/reflowing them, so every row keeps the same column shape.
+            const timeCell = (cls, d, disabled) => `
+                <td>
+                    <div class="input-group input-group-sm clockpicker" style="min-width: 92px; ${disabled ? 'opacity: 0.5; pointer-events: none;' : ''}">
+                        <input type="text" class="form-control ${cls} tt-time-input" autocomplete="off" ${disabled ? 'disabled' : ''} value="${d[cls.replace('tt-', '')] || ''}">
+                        <span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+                    </div>
+                </td>`;
+            let dayRowsHtml = '';
+            [1, 2, 3, 4, 5, 6, 7].forEach(iso => {
+                const d = (t.days && (t.days[iso] || t.days[String(iso)])) || defaultDayFor(iso);
+                const isOff = Number(d.is_off) === 1;
+                dayRowsHtml += `
+                    <tr class="tt-day-row" data-weekday="${iso}">
+                        <td class="align-middle"><strong>${DAY_OFF_LABELS[iso]}</strong></td>
+                        <td class="align-middle text-center">
+                            <input type="checkbox" class="tt-day-off" id="tt-day-off-${iso}" style="width: 18px; height: 18px; margin: 0;" ${isOff ? 'checked' : ''}>
+                        </td>
+                        ${timeCell('tt-check_in_start', d, isOff)}
+                        ${timeCell('tt-check_in', d, isOff)}
+                        ${timeCell('tt-check_in_end', d, isOff)}
+                        ${timeCell('tt-check_out_start', d, isOff)}
+                        ${timeCell('tt-check_out', d, isOff)}
+                        ${timeCell('tt-check_out_end', d, isOff)}
+                        <td><input type="text" class="form-control form-control-sm tt-standard_hours" style="min-width: 60px;" readonly value="${d.standard_hours}"></td>
+                    </tr>
+                `;
+            });
+
+            // A company already locked to a different custom (non-Default) timetable
+            // can't be checked here - it has to be freed from that timetable first.
+            let companyCheckboxesHtml = '';
+            companies.forEach(c => {
+                const compTimetableId = Number(c.timetable_id) || 1;
+                const currentlyOn = timetableNameById[c.timetable_id] || 'Default';
+                const lockedElsewhere = compTimetableId !== 1 && compTimetableId !== tId;
+                companyCheckboxesHtml += `
+                    <div class="custom-control custom-checkbox">
+                        <input type="checkbox" class="custom-control-input tt-company" id="tt-company-${c.comp_id}" value="${c.comp_id}"
+                            ${assignedCompanyIds.has(Number(c.comp_id)) ? 'checked' : ''} ${lockedElsewhere ? 'disabled' : ''}>
+                        <label class="custom-control-label" for="tt-company-${c.comp_id}">${c.comp_name}
+                            <small class="text-muted">(<?= __('currently', 'currently') ?>: ${currentlyOn})</small>
+                            ${lockedElsewhere ? `<i class="mdi mdi-lock text-warning" title="<?= __('remove_from_other_timetable_first', 'Assigned elsewhere - remove it there first') ?>"></i>` : ''}
+                        </label>
+                    </div>
+                `;
+            });
+
+            const result = await Swal.fire({
+                title: isEdit ? '<?= __('edit_timetable', 'Edit Timetable') ?>' : '<?= __('add_timetable', 'Add Timetable') ?>',
+                width: '90%',
+                html: `
+                    <div class="form-group text-left">
+                        <label><?= __('name') ?> *</label>
+                        <input type="text" id="tt-name" class="form-control" value="${t.name}" ${tId === 1 ? 'readonly' : ''}>
+                    </div>
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link active tt-tab-link" data-target="tt-tab-assignment"><?= __('assignment', 'Assignment') ?></a></li>
+                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link tt-tab-link" data-target="tt-tab-schedule"><?= __('weekly_schedule', 'Weekly Schedule') ?></a></li>
+                    </ul>
+                    <div id="tt-tab-assignment" class="tt-tab-pane">
+                        ${tId !== 1 ? `
+                        <div class="form-group text-left">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" name="tt-assign-type" id="tt-assign-company" class="custom-control-input" value="company" ${!isTemporary ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-assign-company"><?= __('company_wise', 'Company-wise') ?></label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" name="tt-assign-type" id="tt-assign-employee" class="custom-control-input" value="employee" ${isTemporary ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-assign-employee"><?= __('employee_wise', 'Employee-wise') ?></label>
+                            </div>
+                            <small class="form-text text-muted"><?= __('employee_wise_hint', "Employee-wise overrides those specific employees' company timetable directly - permanently, or optionally only for a date range.") ?></small>
+                        </div>
+                        ` : ''}
+                        <div id="tt-company-section" class="form-group text-left">
+                            <label><?= __('assigned_companies', 'Assigned Companies') ?></label>
+                            <div style="max-height: 260px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">${companyCheckboxesHtml}</div>
+                        </div>
+                        <div id="tt-employee-section" class="form-group text-left" style="display:none;">
+                            <label><?= __('assigned_employees', 'Assigned Employees') ?> *</label>
+                            <select id="tt-employees" class="form-control" multiple style="width: 100%;"></select>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="tt-use-daterange" ${(t.start_date && t.end_date) ? 'checked' : ''}>
+                                <label class="custom-control-label" for="tt-use-daterange"><?= __('limit_to_date_range', 'Limit to a date range (leave unchecked to always apply)') ?></label>
+                            </div>
+                            <div id="tt-daterange-wrap" class="mt-2" style="${(t.start_date && t.end_date) ? '' : 'display:none;'}">
+                                <input type="text" id="tt-daterange" class="form-control" readonly placeholder="<?= __('select_date_range', 'Select date range') ?>" value="${t.start_date && t.end_date ? `${t.start_date} - ${t.end_date}` : ''}">
+                                <small class="form-text text-muted" id="tt-daterange-duration"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tt-tab-schedule" class="tt-tab-pane" style="display:none;">
+                        <div class="form-group text-left">
+                            <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
+                                <table class="table table-sm table-bordered mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th><?= __('day', 'Day') ?></th>
+                                            <th class="text-center"><?= __('day_off', 'Day Off') ?></th>
+                                            <th><?= __('check_in_start', 'Check-In Earliest') ?></th>
+                                            <th><?= __('check_in', 'Check-In') ?></th>
+                                            <th><?= __('check_in_end', 'Late After') ?></th>
+                                            <th><?= __('check_out_start', 'Early Before') ?></th>
+                                            <th><?= __('check_out', 'Check-Out') ?></th>
+                                            <th><?= __('check_out_end', 'Check-Out Latest') ?></th>
+                                            <th><?= __('hours', 'Hours') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${dayRowsHtml}</tbody>
+                                </table>
+                            </div>
+                            <small class="form-text text-muted"><?= __('standard_hours_auto_hint', 'Hours column auto-calculates from Check-In / Check-Out.') ?></small>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonColor: APP_COLORS.primary,
+                cancelButtonColor: APP_COLORS.danger_dark,
+                confirmButtonText: '<?= __('save', 'Save') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+                showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    const $companySection = $('#tt-company-section');
+                    const $employeeSection = $('#tt-employee-section');
+                    const $empSelect = $('#tt-employees');
+
+                    $empSelect.select2({
+                        theme: 'bootstrap4',
+                        dropdownParent: $(Swal.getPopup()),
+                        placeholder: '<?= __('search_employees', 'Search employees...') ?>',
+                        ajax: {
+                            url: './includes/ajaxFile/timetableAjax.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            delay: 250,
+                            data: params => ({ action: 'search_employees', search: params.term }),
+                            processResults: response => ({ results: response.status === 'success' ? response.results : [] })
+                        }
+                    });
+                    (t.employees || []).forEach(emp => {
+                        $empSelect.append(new Option(`${emp.emp_id} - ${emp.name}`, emp.emp_id, true, true));
+                    });
+                    $empSelect.trigger('change');
+
+                    if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
+                        const $range = $('#tt-daterange');
+                        const $duration = $('#tt-daterange-duration');
+                        const fmt = 'YYYY-MM-DD';
+                        const startVal = t.start_date ? moment(t.start_date, fmt) : moment();
+                        const endVal = t.end_date ? moment(t.end_date, fmt) : moment();
+
+                        const updateDuration = (start, end) => {
+                            // Calendar-aware breakdown (e.g. Sep 8 -> Oct 10 = "1 month, 3 days"),
+                            // not a flat 30-day-per-month estimate - both endpoints count as active days.
+                            const inclusiveEnd = end.clone().add(1, 'day');
+                            const months = inclusiveEnd.diff(start, 'months');
+                            const remainderStart = start.clone().add(months, 'months');
+                            const days = inclusiveEnd.diff(remainderStart, 'days');
+                            const totalDays = inclusiveEnd.diff(start, 'days');
+                            const parts = [];
+                            if (months > 0) parts.push(`${months} <?= __('month_s', 'month(s)') ?>`);
+                            if (days > 0 || months === 0) parts.push(`${days} <?= __('day_s', 'day(s)') ?>`);
+                            $duration.text(`<?= __('duration', 'Duration') ?>: ${parts.join(', ')} (${totalDays} <?= __('days_total', 'days total') ?>)`);
+                        };
+
+                        $range.daterangepicker({
+                            locale: { format: fmt },
+                            autoUpdateInput: true,
+                            parentEl: '.swal2-popup',
+                            sideBySide: true,
+                            opens: 'center',
+                            drops: 'down',
+                            startDate: startVal,
+                            endDate: endVal,
+                        });
+                        if (!t.start_date || !t.end_date) {
+                            $range.val('');
+                            $duration.text('');
+                        } else {
+                            updateDuration(startVal, endVal);
+                        }
+                        $range.off('apply.daterangepicker.timetableDuration').on('apply.daterangepicker.timetableDuration', function(ev, picker) {
+                            updateDuration(picker.startDate, picker.endDate);
+                        });
+                    }
+
+                    const syncSections = () => {
+                        const checkedRadio = document.querySelector('input[name="tt-assign-type"]:checked');
+                        const on = tId === 1 ? false : (checkedRadio ? checkedRadio.value === 'employee' : isTemporary);
+                        $companySection.toggle(!on);
+                        $employeeSection.toggle(on);
+                    };
+                    $(Swal.getPopup()).on('change', 'input[name="tt-assign-type"]', syncSections);
+                    syncSections();
+
+                    $('#tt-use-daterange').on('change', function () {
+                        $('#tt-daterange-wrap').toggle(this.checked);
+                        if (!this.checked) {
+                            $('#tt-daterange').val('');
+                            $('#tt-daterange-duration').text('');
+                        }
+                    });
+
+                    const $popup = $(Swal.getPopup());
+                    $popup.on('click', '.tt-tab-link', function () {
+                        $popup.find('.tt-tab-link').removeClass('active');
+                        $(this).addClass('active');
+                        $popup.find('.tt-tab-pane').hide();
+                        $popup.find('#' + $(this).data('target')).show();
+                    });
+                    if ($.fn.clockpicker) {
+                        $popup.find('.clockpicker').clockpicker({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' });
+                    }
+                    const calcStandardHours = (inVal, outVal) => {
+                        if (!/^\d{2}:\d{2}$/.test(inVal) || !/^\d{2}:\d{2}$/.test(outVal)) return '';
+                        const [ih, im] = inVal.split(':').map(Number);
+                        const [oh, om] = outVal.split(':').map(Number);
+                        let diff = (oh * 60 + om) - (ih * 60 + im);
+                        if (diff < 0) diff += 24 * 60;
+                        return (diff / 60).toFixed(1);
+                    };
+                    $popup.on('change input', '.tt-check_in, .tt-check_out', function () {
+                        const $row = $(this).closest('.tt-day-row');
+                        $row.find('.tt-standard_hours').val(calcStandardHours($row.find('.tt-check_in').val(), $row.find('.tt-check_out').val()));
+                    });
+                    $popup.on('change', '.tt-day-off', function () {
+                        const $row = $(this).closest('.tt-day-row');
+                        const off = this.checked;
+                        $row.find('.tt-time-input').prop('disabled', off);
+                        $row.find('.clockpicker').css({ opacity: off ? 0.5 : 1, pointerEvents: off ? 'none' : 'auto' });
+                    });
+                },
+                preConfirm: () => {
+                    const name = document.getElementById('tt-name').value.trim();
+                    if (!name) {
+                        Swal.showValidationMessage('<?= __('fill_required_fields', 'Please fill all required fields.') ?>');
+                        return false;
+                    }
+                    const assignTypeEl = document.querySelector('input[name="tt-assign-type"]:checked');
+                    const useTemporary = tId !== 1 && !!assignTypeEl && assignTypeEl.value === 'employee';
+
+                    const payload = new URLSearchParams({
+                        action: 'add_edit_timetable',
+                        id: t.id,
+                        name,
+                        is_temporary: useTemporary ? '1' : '0',
+                    });
+
+                    const days = {};
+                    document.querySelectorAll('.tt-day-row').forEach(row => {
+                        const iso = row.dataset.weekday;
+                        const isOff = row.querySelector('.tt-day-off').checked;
+                        days[iso] = {
+                            is_off: isOff ? 1 : 0,
+                            check_in: row.querySelector('.tt-check_in').value,
+                            check_in_start: row.querySelector('.tt-check_in_start').value,
+                            check_in_end: row.querySelector('.tt-check_in_end').value,
+                            check_out: row.querySelector('.tt-check_out').value,
+                            check_out_start: row.querySelector('.tt-check_out_start').value,
+                            check_out_end: row.querySelector('.tt-check_out_end').value,
+                            standard_hours: row.querySelector('.tt-standard_hours').value || '0',
+                        };
+                    });
+                    payload.append('days', JSON.stringify(days));
+
+                    if (useTemporary) {
+                        const empIds = $('#tt-employees').val() || [];
+                        if (empIds.length === 0) {
+                            Swal.showValidationMessage('<?= __('select_at_least_one_employee', 'Select at least one employee.') ?>');
+                            return false;
+                        }
+                        let startDate = '';
+                        let endDate = '';
+                        if (document.getElementById('tt-use-daterange').checked) {
+                            const rangeValue = document.getElementById('tt-daterange').value.trim();
+                            const rangeParts = rangeValue.split(' - ');
+                            startDate = rangeParts[0] || '';
+                            endDate = rangeParts[1] || '';
+                            if (!startDate || !endDate) {
+                                Swal.showValidationMessage('<?= __('fill_required_fields', 'Please fill all required fields.') ?>');
+                                return false;
+                            }
+                        }
+                        payload.append('start_date', startDate);
+                        payload.append('end_date', endDate);
+                        empIds.forEach(id => payload.append('employee_ids[]', id));
+                    } else {
+                        document.querySelectorAll('.tt-company:checked').forEach(cb => payload.append('company_ids[]', cb.value));
+                    }
+
+                    return fetch('./includes/ajaxFile/timetableAjax.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: payload
+                    }).then(r => r.json()).then(res => {
+                        if (res.status !== 'success') {
+                            Swal.showValidationMessage(res.message || '<?= __('could_not_save_settings') ?>');
+                            return false;
+                        }
+                        return res;
+                    }).catch(err => {
+                        Swal.showValidationMessage(err.message);
+                        return false;
+                    });
+                },
+            });
+
+            if (result.isConfirmed) {
+                loadTimetables();
+                const recalculated = (result.value && result.value.recalculated) || 0;
+                const recalcNote = recalculated > 0
+                    ? ` ${recalculated} <?= __('recalculated_days_note', 'attendance day(s) recalculated to match.') ?>`
+                    : '';
+                Swal.fire('<?= __('saved', 'Saved') ?>', `<?= __('timetable_saved', 'Timetable saved.') ?>${recalcNote}`, 'success');
+            }
+        }
+
+        function deleteTimetable(id, name) {
+            Swal.fire({
+                title: '<?= __('are_you_sure') ?>',
+                text: name,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: APP_COLORS.danger_dark,
+                cancelButtonColor: APP_COLORS.primary,
+                confirmButtonText: '<?= __('yes_delete_it') ?>',
+                cancelButtonText: '<?= __('cancel') ?>',
+            }).then(result => {
+                if (!result.isConfirmed) return;
+                fetch('./includes/ajaxFile/timetableAjax.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'delete_timetable', id })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success') {
+                        loadTimetables();
+                    } else {
+                        Swal.fire('<?= __('error') ?>', res.message || '<?= __('could_not_save_settings') ?>', 'error');
+                    }
+                });
+            });
         }
 
         // Salary components an admin can pick from for the deduction base (e.g. GOSI base).
@@ -1330,6 +2022,9 @@
                 } catch (e) {
                     selected = [];
                 }
+                const autoAttendanceSetting = data.settings.find(s => s.setting_name === 'deduction_auto_attendance_enabled');
+                const autoAttendanceEnabled = autoAttendanceSetting && autoAttendanceSetting.setting_value === '1';
+                const autoAttendanceLabel = autoAttendanceSetting ? translateText(autoAttendanceSetting.description) : '<?= __('deduction_auto_attendance_enabled_label', 'Automatically add Late/Early-Leave deductions to payroll from attendance') ?>';
 
                 let checkboxesHtml = '<div class="row">';
                 Object.entries(DEDUCTION_BASE_COMPONENT_LABELS).forEach(([key, label]) => {
@@ -1344,11 +2039,18 @@
                     `;
                 });
                 checkboxesHtml += '</div>';
-                checkboxesHtml += `<button type="button" class="btn btn-primary mt-2" id="btn-save-deduction-base"><?= __('save', 'Save') ?></button>`;
+                checkboxesHtml += `
+                    <div class="custom-control custom-switch mt-3">
+                        <input type="checkbox" class="custom-control-input" id="deduction-auto-attendance-toggle" ${autoAttendanceEnabled ? 'checked' : ''}>
+                        <label class="custom-control-label" for="deduction-auto-attendance-toggle">${autoAttendanceLabel}</label>
+                    </div>
+                `;
+                checkboxesHtml += `<button type="button" class="btn btn-primary mt-3" id="btn-save-deduction-base"><?= __('save', 'Save') ?></button>`;
                 container.innerHTML = checkboxesHtml;
 
                 document.getElementById('btn-save-deduction-base').addEventListener('click', async function() {
                     const chosen = Array.from(container.querySelectorAll('.deduction-base-component-checkbox:checked')).map(cb => cb.value);
+                    const autoAttendance = document.getElementById('deduction-auto-attendance-toggle').checked ? '1' : '0';
                     try {
                         const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
                             method: 'POST',
@@ -1356,7 +2058,8 @@
                             body: new URLSearchParams({
                                 action: 'update_payroll_settings',
                                 group: 'deduction_settings',
-                                deduction_base_components: JSON.stringify(chosen)
+                                deduction_base_components: JSON.stringify(chosen),
+                                deduction_auto_attendance_enabled: autoAttendance
                             })
                         });
                         const saveResult = await saveResponse.json();
@@ -2476,7 +3179,8 @@
             renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
         }
 
-        function renderJobTitlesSettings() {
+        function renderJobTitlesSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
             let formHtml = `<div class="tab-pane active" id="group-job" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
             formHtml += `<h5 class="mb-0"><?= __('job_titles_management') ?></h5>`;
@@ -2497,7 +3201,7 @@
             formHtml += `</div>`;
             formHtml += `</div>`;
             formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            hostEl.innerHTML = formHtml;
 
             // Load job titles
             loadJobTitles();
@@ -2798,7 +3502,8 @@
 
         let citiesListCache = null;
 
-        function renderLocationsSettings() {
+        function renderLocationsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
             let formHtml = `<div class="tab-pane active" id="group-locations" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
             formHtml += `<h5 class="mb-0"><?= __('locations_management', 'Locations Management') ?></h5>`;
@@ -2814,7 +3519,7 @@
             formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2"><?= __('loading') ?></span></div>`;
             formHtml += `</div>`;
             formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            hostEl.innerHTML = formHtml;
 
             loadLocations();
 
@@ -3370,7 +4075,8 @@
             }
         }
 
-        function renderDepartmentsSettings() {
+        function renderDepartmentsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
             let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
             formHtml += `<h5 class="mb-0"><?= __('department_management', 'Department Management') ?></h5>`;
@@ -3390,7 +4096,7 @@
             formHtml += `</div>`;
             formHtml += `</div>`;
             formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            hostEl.innerHTML = formHtml;
 
             loadDepartments();
 
@@ -3791,10 +4497,13 @@
             formHtml += `</div>`;
             settingsContainer.innerHTML = formHtml;
 
-            // Load approval chains for each request type
-            requestTypes.forEach(requestType => {
-                loadApprovalChain(requestType.id);
-            });
+            // Load approval chains one at a time (parallel fetches trip the
+            // per-IP concurrency limit in db.php and fail with a 429)
+            (async () => {
+                for (const requestType of requestTypes) {
+                    await loadApprovalChain(requestType.id);
+                }
+            })();
 
             // Attach event listeners for "Add Approver" buttons
             document.querySelectorAll('.add-approver-btn').forEach(btn => {
@@ -4291,14 +5000,8 @@
                 // reach a browser that only has partial access.
                 if (!isFullSettingsAdmin) {
                     groupedSettings = {};
-                    if (canAccessDepartmentsTab) {
-                        groupedSettings['departments'] = [];
-                    }
-                    if (canAccessJobTitlesTab) {
-                        groupedSettings['job titles'] = [];
-                    }
-                    if (canAccessLocationsTab) {
-                        groupedSettings['locations'] = [];
+                    if (canAccessDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab) {
+                        groupedSettings['org_structure'] = [];
                     }
                     if (canAccessSubDepartmentsTab) {
                         groupedSettings['sub_departments'] = [];
@@ -4308,6 +5011,9 @@
                     }
                     if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab || canAccessSalaryIncrementSettingsTab) {
                         groupedSettings['payroll_settings'] = [];
+                    }
+                    if (canAccessAttendanceConfigTab) {
+                        groupedSettings['attendance_config'] = [];
                     }
 
                     const savedGroup = localStorage.getItem('app_settings_active_group');
@@ -4372,7 +5078,13 @@
                 // it's now managed per-user from inside the Special Access tab (see the "Report
                 // Access" group in renderSpecialAccessSettings). Drop its raw row the same way;
                 // get_allowed_report_types_for_user() and settings_handler.php are untouched.
-                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group) && s.setting_group !== 'page_role_access' && s.setting_group !== 'report_permissions');
+                // 'social' (facebook_url/twitter_url/instagram_url/linkedin_url) isn't read
+                // anywhere else in the app - dead tab, hidden here. Rows are left in the DB
+                // untouched in case the feature comes back.
+                // 'office_hours_settings' is superseded by the default company Timetable
+                // under Attendance Config - hidden the same way, rows untouched.
+                const hiddenGroups = ['page_role_access', 'report_permissions', 'social', 'office_hours_settings'];
+                appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group) && !hiddenGroups.includes(s.setting_group));
                 groupedSettings = appSettings.reduce((acc, setting) => {
                     const group = setting.setting_group;
                     if (!acc[group]) acc[group] = [];
@@ -4399,14 +5111,8 @@
                 updateReportPermissionHiddenValue();
 
                 // Ensure custom management tabs always exist
-                if (!groupedSettings['job titles']) {
-                    groupedSettings['job titles'] = [];
-                }
-                if (!groupedSettings['departments']) {
-                    groupedSettings['departments'] = [];
-                }
-                if (!groupedSettings['locations']) {
-                    groupedSettings['locations'] = [];
+                if (!groupedSettings['org_structure']) {
+                    groupedSettings['org_structure'] = [];
                 }
                 if (!groupedSettings['sub_departments']) {
                     groupedSettings['sub_departments'] = [];
@@ -4420,6 +5126,9 @@
                 if (!groupedSettings['payroll_settings']) {
                     groupedSettings['payroll_settings'] = [];
                 }
+                if (!groupedSettings['attendance_config']) {
+                    groupedSettings['attendance_config'] = [];
+                }
                 <?php if ($is_system_admin ?? false): ?>
                 if (!groupedSettings['license']) {
                     groupedSettings['license'] = [];
@@ -4431,7 +5140,12 @@
 
                 // Restore last active group from localStorage if available
                 const savedGroup = localStorage.getItem('app_settings_active_group');
-                const groups = Object.keys(groupedSettings).sort(); // Sort groups alphabetically
+                // 'announcement_config' renders only as a sub-tab inside the Email hub, and
+                // 'device_monitor' only inside the Attendance Config hub (see
+                // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
+                // outer nav so they don't also show up as their own top-level tabs.
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor'];
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {

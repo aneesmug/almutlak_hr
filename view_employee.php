@@ -97,6 +97,20 @@ if (mysqli_num_rows($query) == 1) {
 			? calculate_current_eos_estimate($conDB, $emprow['empid'] ?? '', $emprow['joining_date'] ?? '')
 			: null;
 
+		// Attendance Record tab - hidden from everyone except sys admin unless an
+		// explicitly granted 'view_employee_attendance_tab' special access (App Settings ->
+		// Special Access). Unlike salary/EOS above, HR/Dept HR do NOT get this by default.
+		$canViewAttendanceTab = (
+			($is_system_admin ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_attendance_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
+		// Manually add/edit a day's punch (e.g. employee forgot to clock in/out) - same
+		// 'manage_attendance' key that already gates the standalone Attendance Record page.
+		$canManageAttendanceRecord = (
+			($is_system_admin ?? false)
+			|| user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+		);
+
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
 		$sql_active_loan = "SELECT * FROM `emp_loan` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status` = 'approved' ORDER BY `id` DESC LIMIT 1";
@@ -398,7 +412,7 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- App css -->
 		<link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-		<!-- <link href="assets/css/icons.css" rel="stylesheet" type="text/css" /> -->
+		<link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
@@ -1332,18 +1346,18 @@ if (mysqli_num_rows($query) == 1) {
 										<?php /*if($user_type <> "dept_user"){*/ ?>
 										<li class="nav-item">
 											<a href="#home1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-buffer"></i> <?= __('vacation_details') ?>
+												<i class="mdi mdi-buffer"></i> <?= __('vacations') ?>
 											</a>
 										</li>
 										<li class="nav-item">
 											<a href="#loan1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-cash-multiple"></i> <?= __('loan_details') ?>
+												<i class="mdi mdi-cash-multiple"></i> <?= __('loans') ?>
 											</a>
 										</li>
 										<?php if ($canViewSalary): ?>
 										<li class="nav-item">
 											<a href="#payroll1" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-file-document-box"></i> <?= __('payroll_details', 'Payroll Details') ?>
+												<i class="mdi mdi-file-document-box"></i> <?= __('payrolls', 'Payroll Details') ?>
 											</a>
 										</li>
 										<?php endif; ?>
@@ -1356,7 +1370,7 @@ if (mysqli_num_rows($query) == 1) {
 										<?php endif; ?>
 										<li class="nav-item">
 											<a href="#assets" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-cash-multiple"></i> <?= __('assets_details') ?>
+												<i class="mdi mdi-cash-multiple"></i> <?= __('assets') ?>
 											</a>
 										</li>
 										<li class="nav-item">
@@ -1385,13 +1399,13 @@ if (mysqli_num_rows($query) == 1) {
 										<?php  ?>
 										<?php /*}*/ ?>
 
-										<?php /* ?>	
-	<li class="nav-item">
-		<a href="#attendance" data-toggle="tab" aria-expanded="false" class="nav-link">
-			<i class="mdi mdi-fingerprint mr-2"></i> Attendance
-		</a>
-	</li>
-	<?php */ ?>
+										<?php if ($canViewAttendanceTab): ?>
+										<li class="nav-item">
+											<a href="#attendance" data-toggle="tab" aria-expanded="false" class="nav-link">
+												<i class="mdi mdi-fingerprint mr-2"></i> <?= __('attendance', 'Attendance Record') ?>
+											</a>
+										</li>
+										<?php endif; ?>
 									</ul>
 									<div class="tab-content">
 										<!-- Profile -->
@@ -2729,16 +2743,29 @@ if (mysqli_num_rows($query) == 1) {
 
 
 										<?php /*}*/ ?>
+										<?php if ($canViewAttendanceTab): ?>
 										<div class="tab-pane" id="attendance">
 											<div class="card-box">
 
-												<h4 class="header-title m-b-30"><?= __('attendance_record', 'Attendance Record') ?></h4>
+												<div class="d-flex flex-wrap justify-content-between align-items-start mb-3" style="gap: 1rem;">
+													<div style="min-width: 0;">
+														<h4 class="header-title mb-2"><?= __('attendance_record', 'Attendance Record') ?></h4>
+														<?php if ($canManageAttendanceRecord): ?>
+														<button type="button" class="btn btn-sm btn-success" id="btn-add-attendance-record" style="display:none;"><i class="mdi mdi-plus"></i> <?= __('add_record', 'Add Record') ?></button>
+														<?php endif; ?>
+														<div class="form-check d-inline-block">
+															<input type="checkbox" class="form-check-input" id="attendanceShowAll">
+															<label class="form-check-label" for="attendanceShowAll"><?= __('show_all_records', 'Show all records') ?></label>
+														</div>
+													</div>
 
-												<div class="col-4 pull-right">
-													<div class="input-group input-daterange">
-														<input type="text" id="FromDate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="<?= __('from', 'From') ?>:">
-														<div class="input-group-addon"><?= __('to', 'to') ?></div>
-														<input type="text" id="Todate" class="form-control date-range-filter" data-date-format="yyyy-mm-dd" placeholder="<?= __('to', 'To') ?>:">
+													<div style="flex: 0 1 300px;">
+														<div class="input-group">
+															<div class="input-group-prepend">
+																<span class="input-group-text"><i class="mdi mdi-calendar-range"></i></span>
+															</div>
+															<input type="text" id="AttendanceDateRange" class="form-control" placeholder="<?= __('select_date_range', 'Select date range') ?>" readonly>
+														</div>
 													</div>
 												</div>
 
@@ -2746,22 +2773,24 @@ if (mysqli_num_rows($query) == 1) {
 												<table id="attendance_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
-															<th><?= __('id') ?></th>
-															<th><?= __('emp_id', 'Emp ID') ?>.</th>
-															<th><?= __('employee_name', 'Employee Name') ?></th>
 															<th><?= __('date') ?></th>
 															<th><?= __('check_in', 'Check In') ?></th>
 															<th><?= __('check_out', 'Check Out') ?></th>
 															<th><?= __('hours') ?></th>
-															<th><?= __('punch_type', 'Punch Type') ?></th>
+															<th><?= __('state', 'State') ?></th>
+															<th><?= __('late_minutes', 'Late (min)') ?></th>
+															<th><?= __('early_leave_minutes', 'Early Leave (min)') ?></th>
 															<th><?= __('note') ?></th>
+															<?php if ($canManageAttendanceRecord): ?>
 															<th><?= __('action') ?></th>
+															<?php endif; ?>
 														</tr>
 													</thead>
 												</table>
 
 											</div>
 										</div>
+										<?php endif; ?>
 										<?php  ?>
 										<div class="tab-pane" id="evaluations">
 											<div class="card-box">
@@ -4027,6 +4056,7 @@ if (mysqli_num_rows($query) == 1) {
 			let noteTable;
 			// Safely pass the PHP employee ID to a JavaScript variable.
 			const employeeId = <?= json_encode($emprow['empid']); ?>;
+			const canManageAttendanceRecord = <?= $canManageAttendanceRecord ? 'true' : 'false' ?>;
 			$(document).ready(function() {
 				// 1. Initialize the DataTable with the correct columns for notes.
 				initializeNotesTable();
@@ -4316,6 +4346,289 @@ if (mysqli_num_rows($query) == 1) {
 					loadingIndicator.addClass('hidden');
 				}
 			}
+
+			// Attendance tab - client-side DataTable (fetches this employee's full
+			// filtered history in one call, no server-side pagination) so the Buttons
+			// export below can cover everything matched, not just whatever page is on
+			// screen. A single daterangepicker field drives the From/To filter, defaulting
+			// to the current month; "Show all records" disables it and bypasses the filter.
+			let attendanceTable;
+			let attendanceTableInitialized = false;
+			$('a[href="#attendance"]').on('shown.bs.tab', function() {
+				if (attendanceTableInitialized) {
+					return;
+				}
+				attendanceTableInitialized = true;
+
+				const today = new Date();
+				const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+				const fmt = function(d) {
+					return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+				};
+
+				const $range = $('#AttendanceDateRange');
+				if ($.fn.daterangepicker && typeof moment !== 'undefined') {
+					$range.daterangepicker({
+						locale: { format: 'YYYY-MM-DD' },
+						autoUpdateInput: true,
+						opens: 'left',
+						startDate: moment(firstOfMonth),
+						endDate: moment(today),
+					}).on('apply.daterangepicker', function() {
+						attendanceTable.ajax.reload();
+					});
+				} else {
+					$range.val(fmt(firstOfMonth) + ' - ' + fmt(today));
+				}
+
+				attendanceTable = $('#attendance_tbl').DataTable({
+					processing: true,
+					serverSide: false,
+					order: [[0, 'desc']],
+					dom: 'Blfrtip',
+					buttons: (function() {
+						const exportColumns = function(idx, data, node) {
+							const colCount = $('#attendance_tbl').DataTable().columns().header().length;
+							return canManageAttendanceRecord ? idx < colCount - 1 : true;
+						};
+						// modifier: page 'all' - export every filtered/sorted row across all
+						// pages of the table (not just whatever page happens to be showing),
+						// search/order 'applied' - respect the current search box + sort.
+						const exportModifier = { page: 'all', search: 'applied', order: 'applied' };
+						const btns = [
+							'copy',
+							{
+								extend: 'excel',
+								text: `<i class="mdi mdi-file-excel"></i> ${__('excel', 'Excel')}`,
+								filename: `attendance_${employeeId}`,
+								exportOptions: { columns: exportColumns, modifier: exportModifier }
+							},
+							{
+								extend: 'pdf',
+								filename: `attendance_${employeeId}`,
+								exportOptions: { columns: exportColumns, modifier: exportModifier }
+							},
+							'print'
+						];
+						if (canManageAttendanceRecord) {
+							btns.push({
+								text: `<i class="mdi mdi-plus"></i> ${__('add_record', 'Add Record')}`,
+								className: 'btn-success',
+								action: function() {
+									$('#btn-add-attendance-record').trigger('click');
+								}
+							});
+						}
+						return btns;
+					})(),
+					ajax: {
+						url: './includes/ajaxFile/attendanceEmpAjaxTbl.php',
+						type: 'POST',
+						dataSrc: 'data',
+						data: function(d) {
+							d.emp_id = employeeId;
+							const showAll = $('#attendanceShowAll').is(':checked');
+							const rangeParts = ($range.val() || '').split(' - ');
+							d.fromdate = showAll ? '' : (rangeParts[0] || '');
+							d.todate = showAll ? '' : (rangeParts[1] || '');
+						}
+					},
+					columns: (function() {
+						const cols = [
+							{ data: 'date' },
+							{ data: 'check_in' },
+							{ data: 'check_out' },
+							{ data: 'hours' },
+							{ data: 'state' },
+							{ data: 'late_minutes' },
+							{ data: 'early_minutes' },
+							{ data: 'note' }
+						];
+						if (canManageAttendanceRecord) {
+							cols.push({ data: 'action', orderable: false, searchable: false });
+						}
+						return cols;
+					})(),
+					language: {
+						search: `<span>${__('search')}:</span> _INPUT_`,
+						searchPlaceholder: `${__('search')}...`,
+						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+						paginate: { first: __('first'), last: __('last'), next: __('next'), previous: __('previous') },
+						emptyTable: __('no_data_available_in_table'),
+						zeroRecords: __('no_matching_records_found'),
+					}
+				});
+
+				$('#attendanceShowAll').on('change', function() {
+					const showAll = $(this).is(':checked');
+					$range.prop('disabled', showAll);
+					attendanceTable.ajax.reload();
+				});
+			});
+
+			// Manual add/edit for a forgotten punch - fixed to this employee, reuses the
+			// same includes/ajaxFile/attendanceAjax.php backend as the standalone
+			// Attendance Record page (attendance.php), just without an employee picker.
+			function profileAttendanceFormHtml(date, timeIn, timeOut, state, note) {
+				const stateOptions = ['Present', 'Late', 'Early Leave', 'Late & Early Leave', 'Incomplete', 'Absent', 'Half Day', 'Leave', 'Day Off'].map(function(s) {
+					return `<option value="${s}" ${s === state ? 'selected' : ''}>${s}</option>`;
+				}).join('');
+				// Infer punch type from existing data so editing a partial record keeps its shape
+				let punchType = 'both';
+				if (timeIn && !timeOut) punchType = 'in';
+				else if (!timeIn && timeOut) punchType = 'out';
+				const punchOptions = [
+					['both', __('punch_both', 'Check In & Check Out')],
+					['in', __('punch_in_only', 'Check In Only')],
+					['out', __('punch_out_only', 'Check Out Only')],
+				].map(function(o) {
+					return `<option value="${o[0]}" ${o[0] === punchType ? 'selected' : ''}>${o[1]}</option>`;
+				}).join('');
+				return `
+					<div class="form-group text-left">
+						<label>${__('date')} *</label>
+						<input type="text" id="pAttDate" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" value="${date || ''}" ${date ? 'disabled' : ''}>
+						<input type="hidden" id="pAttDateValue" value="${date || ''}">
+					</div>
+					<div class="form-group text-left">
+						<label>${__('punch_type', 'Punch Type')} *</label>
+						<select id="pAttPunchType" class="form-control">${punchOptions}</select>
+					</div>
+					<div class="form-group text-left" id="pAttTimeInGroup">
+						<label>${__('check_in', 'Check In')} *</label>
+						<div class="input-group clockpicker">
+							<input type="text" id="pAttTimeIn" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeIn || ''}">
+							<span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+						</div>
+					</div>
+					<div class="form-group text-left" id="pAttTimeOutGroup">
+						<label>${__('check_out', 'Check Out')} *</label>
+						<div class="input-group clockpicker">
+							<input type="text" id="pAttTimeOut" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeOut || ''}">
+							<span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+						</div>
+					</div>
+					<div class="form-group text-left">
+						<label>${__('state', 'State')} *</label>
+						<select id="pAttState" class="form-control">${stateOptions}</select>
+					</div>
+					<div class="form-group text-left">
+						<label>${__('note')}</label>
+						<textarea id="pAttNote" class="form-control">${note || ''}</textarea>
+					</div>
+				`;
+			}
+
+			function applyProfilePunchTypeVisibility() {
+				const type = $('#pAttPunchType').val();
+				$('#pAttTimeInGroup').toggle(type === 'both' || type === 'in');
+				$('#pAttTimeOutGroup').toggle(type === 'both' || type === 'out');
+				if (type === 'in') $('#pAttTimeOut').val('');
+				if (type === 'out') $('#pAttTimeIn').val('');
+			}
+
+			function initProfileAttendancePickers(dateDisabled) {
+				if (!dateDisabled && $.fn.datepicker) {
+					$('#pAttDate').datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true });
+				}
+				if ($.fn.clockpicker) {
+					$('.clockpicker').clockpicker({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' });
+				}
+				applyProfilePunchTypeVisibility();
+				$('#pAttPunchType').on('change', applyProfilePunchTypeVisibility);
+			}
+
+			function saveProfileAttendanceRecord(date) {
+				const punchType = $('#pAttPunchType').val();
+				const timeIn = $('#pAttTimeIn').val();
+				const timeOut = $('#pAttTimeOut').val();
+				const punchOk = (punchType === 'both' && timeIn && timeOut) ||
+								(punchType === 'in' && timeIn) ||
+								(punchType === 'out' && timeOut);
+				if (!date || !punchOk) {
+					Swal.showValidationMessage(__('fill_required_fields', 'Please fill all required fields.'));
+					return false;
+				}
+				return new Promise(function(resolve, reject) {
+					$.ajax({
+						url: './includes/ajaxFile/attendanceAjax.php',
+						type: 'POST',
+						dataType: 'json',
+						data: {
+							action: 'add_edit_attendance',
+							emp_id: employeeId,
+							date: date,
+							time_in: timeIn,
+							time_out: timeOut,
+							state: $('#pAttState').val(),
+							note: $('#pAttNote').val(),
+						},
+					}).done(function(res) {
+						if (res.status !== 'success') {
+							reject(res.message);
+							return;
+						}
+						resolve(res);
+					}).fail(function() {
+						reject(__('unexpected_error', 'Unexpected error.'));
+					});
+				});
+			}
+
+			$(document).on('click', '#btn-add-attendance-record', function() {
+				Swal.fire({
+					title: __('add_attendance', 'Add Record'),
+					html: profileAttendanceFormHtml('', '', '', 'Present', ''),
+					showCancelButton: true,
+					confirmButtonColor: APP_COLORS.primary,
+					cancelButtonColor: APP_COLORS.danger_dark,
+					confirmButtonText: __('save', 'Save'),
+					cancelButtonText: __('cancel'),
+					showLoaderOnConfirm: true,
+					allowOutsideClick: false,
+					didOpen: function() {
+						initProfileAttendancePickers(false);
+					},
+					preConfirm: function() {
+						return saveProfileAttendanceRecord($('#pAttDate').val());
+					},
+				}).then(function(result) {
+					if (result.isConfirmed && attendanceTable) {
+						attendanceTable.ajax.reload(null, false);
+					}
+				});
+			});
+
+			$(document).on('click', '.btn-edit-attendance-record', function() {
+				const date = $(this).data('date');
+				const timeIn = $(this).data('time-in');
+				const timeOut = $(this).data('time-out');
+				const state = $(this).data('state');
+				const note = $(this).data('note');
+
+				Swal.fire({
+					title: __('edit_attendance', 'Edit Record'),
+					html: profileAttendanceFormHtml(date, timeIn, timeOut, state, note),
+					showCancelButton: true,
+					confirmButtonColor: APP_COLORS.primary,
+					cancelButtonColor: APP_COLORS.danger_dark,
+					confirmButtonText: __('save', 'Save'),
+					cancelButtonText: __('cancel'),
+					showLoaderOnConfirm: true,
+					allowOutsideClick: false,
+					didOpen: function() {
+						initProfileAttendancePickers(true);
+					},
+					preConfirm: function() {
+						return saveProfileAttendanceRecord($('#pAttDateValue').val());
+					},
+				}).then(function(result) {
+					if (result.isConfirmed && attendanceTable) {
+						attendanceTable.ajax.reload(null, false);
+					}
+				});
+			});
 
 			function returnVacationRequest(vacationId, returndate, empId, empName) {
 				// Changed to use new rejoin approval system

@@ -17,6 +17,7 @@ require_once("./../../includes/db.php");
 require_once("./../../includes/session_check.php");
 require_once("./../../includes/ApprovalChainManager.php");
 require_once("./../../includes/payroll_approval_helpers.php");
+require_once("./../../includes/attendance_helpers.php");
 
 /**
  * Helper function to get the previous month in 'Y-m' format.
@@ -718,6 +719,12 @@ try {
 
             // --- (NEW) LOAN DEDUCTION LOGIC ---
             addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
+
+            // --- (NEW) AUTOMATIC LATE / EARLY-LEAVE DEDUCTION FROM ATTENDANCE ---
+            addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+
+            // --- (NEW) AUTOMATIC OVERTIME BENEFIT FROM ATTENDANCE ---
+            addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSalary, floatval($salaryComponents['basic_salary']));
         }
 
         // --- (NEW) RECORD LOAN PAYMENTS IN emp_loan_payments FOR THIS MONTH ---
@@ -1234,6 +1241,146 @@ function addOrUpdateLoanDeduction($pdo, $empId, $monthYear) {
     }
 }
 
+
+/**
+ * Auto-generates Late/Early-Leave deductions from that month's attendance, gated by
+ * Payroll Settings -> Deduction Settings -> "Automatically add Late/Early-Leave
+ * deductions..." (deduction_auto_attendance_enabled). Reuses the exact hourly-rate
+ * divisor the Overtime formula already uses (overtime_monthly_hours) rather than
+ * introducing a separate rate setting - straight-time only, no premium multiplier
+ * (that's an overtime concept, not a penalty one). Late hours are measured from the
+ * employee's resolved timetable's scheduled check_in (not check_in_end - the grace
+ * window only decides whether the day gets flagged Late at all, once flagged the
+ * deduction covers the actual time missed from the real shift start). Mirrors the
+ * delete-then-insert pattern of the other addOrUpdate*Deduction functions above so
+ * regenerating with the setting turned off cleanly removes any prior auto rows.
+ */
+function addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSalary) {
+    global $conDB;
+
+    $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction IN ('Late Deduction', 'Early Leave Deduction')");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
+    if ((string) get_setting($conDB, 'deduction_auto_attendance_enabled') !== '1') {
+        return;
+    }
+
+    $stmtEmp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
+    $stmtEmp->execute([':emp_id' => $empId]);
+    $compNo = $stmtEmp->fetchColumn();
+
+    $stmtAttendance = $pdo->prepare("SELECT DATE(date) AS d, state, time_in, time_out FROM attendance
+        WHERE emp_id = :emp_id AND DATE_FORMAT(date, '%Y-%m') = :month_year AND source = 'device'
+          AND (state LIKE '%Late%' OR state LIKE '%Early Leave%')");
+    $stmtAttendance->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $days = $stmtAttendance->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($days)) {
+        return;
+    }
+
+    $overtimeMonthlyHours = get_setting_num($conDB, 'overtime_monthly_hours', 240) ?: 240;
+    $hourlyRate = floatval($totalGrossSalary) / $overtimeMonthlyHours;
+
+    $lateHours = 0.0;
+    $earlyHours = 0.0;
+    foreach ($days as $day) {
+        $state = (string) $day['state'];
+        $timetable = attendance_resolve_timetable($conDB, (int) $empId, $compNo, $day['d']);
+
+        if (strpos($state, 'Late') !== false && $day['time_in'] !== '' && $day['time_in'] > $timetable['check_in']) {
+            $lateHours += (strtotime($day['time_in']) - strtotime($timetable['check_in'])) / 3600;
+        }
+        if (strpos($state, 'Early Leave') !== false && $day['time_out'] !== '' && $day['time_out'] < $timetable['check_out']) {
+            $earlyHours += (strtotime($timetable['check_out']) - strtotime($day['time_out'])) / 3600;
+        }
+    }
+
+    if ($lateHours > 0) {
+        $amount = round($hourlyRate * $lateHours, 2);
+        if ($amount > 0) {
+            $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, hours, calculation_type, month, status) VALUES (:emp_id, 'Late Deduction', :amount, :hours, 'attendance_auto', :month_year, 1)");
+            $stmtInsert->execute([':emp_id' => $empId, ':amount' => number_format($amount, 2, '.', ''), ':hours' => round($lateHours, 2), ':month_year' => $monthYear]);
+        }
+    }
+    if ($earlyHours > 0) {
+        $amount = round($hourlyRate * $earlyHours, 2);
+        if ($amount > 0) {
+            $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, hours, calculation_type, month, status) VALUES (:emp_id, 'Early Leave Deduction', :amount, :hours, 'attendance_auto', :month_year, 1)");
+            $stmtInsert->execute([':emp_id' => $empId, ':amount' => number_format($amount, 2, '.', ''), ':hours' => round($earlyHours, 2), ':month_year' => $monthYear]);
+        }
+    }
+}
+
+/**
+ * Auto-generates an Overtime benefit from that month's attendance, gated by Payroll
+ * Settings -> Overtime Settings -> "Automatically add an Overtime benefit..."
+ * (overtime_auto_attendance_enabled). Only counts days flagged plain 'Present' (no
+ * Late/Early-Leave/Incomplete) - staying late doesn't earn overtime on a day already
+ * penalized for lateness. Hours are checkout time past the employee's resolved
+ * timetable's scheduled check_out. Inserted against benefit_types' existing
+ * calculation_type='overtime_basic' row so the amount uses the exact same formula as
+ * a manually-added Overtime benefit (see the totals loop above, lines ~848-854) -
+ * looked up by calculation_type rather than a hardcoded id in case that row ever
+ * changes. Delete-then-insert, same pattern as addOrUpdateAttendanceDeduction().
+ */
+function addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSalary, $basicSalary) {
+    global $conDB;
+
+    $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND benefit = 'Overtime (Auto)'");
+    $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+
+    if ((string) get_setting($conDB, 'overtime_auto_attendance_enabled') !== '1') {
+        return;
+    }
+
+    $stmtEmp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
+    $stmtEmp->execute([':emp_id' => $empId]);
+    $compNo = $stmtEmp->fetchColumn();
+
+    $stmtAttendance = $pdo->prepare("SELECT DATE(date) AS d, time_out FROM attendance
+        WHERE emp_id = :emp_id AND DATE_FORMAT(date, '%Y-%m') = :month_year AND source = 'device' AND state = 'Present'");
+    $stmtAttendance->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $days = $stmtAttendance->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($days)) {
+        return;
+    }
+
+    $overtimeHours = 0.0;
+    foreach ($days as $day) {
+        if ($day['time_out'] === '') {
+            continue;
+        }
+        $timetable = attendance_resolve_timetable($conDB, (int) $empId, $compNo, $day['d']);
+        if ($day['time_out'] > $timetable['check_out']) {
+            $overtimeHours += (strtotime($day['time_out']) - strtotime($timetable['check_out'])) / 3600;
+        }
+    }
+    $overtimeHours = round($overtimeHours, 2);
+    if ($overtimeHours <= 0) {
+        return;
+    }
+
+    $stmtBenefitType = $pdo->prepare("SELECT id FROM benefit_types WHERE calculation_type = 'overtime_basic' AND status = 1 ORDER BY id ASC LIMIT 1");
+    $stmtBenefitType->execute();
+    $benefitTypeId = $stmtBenefitType->fetchColumn();
+    if (!$benefitTypeId) {
+        return; // No Overtime benefit type configured - nothing to attach this to.
+    }
+
+    $overtimeMonthlyHours = get_setting_num($conDB, 'overtime_monthly_hours', 240) ?: 240;
+    $overtimeExtraMultiplier = get_setting_num($conDB, 'overtime_extra_multiplier', 0.5);
+    $hourlyRate = ($basicSalary / $overtimeMonthlyHours * $overtimeExtraMultiplier) + (floatval($totalGrossSalary) / $overtimeMonthlyHours);
+    $amount = round($hourlyRate * $overtimeHours, 2);
+    if ($amount <= 0) {
+        return;
+    }
+
+    $stmtInsert = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, calculation_type, month, status, type_id) VALUES (:emp_id, 'Overtime (Auto)', :amount, :hours, 'overtime_basic', :month_year, 1, :type_id)");
+    $stmtInsert->execute([
+        ':emp_id' => $empId, ':amount' => number_format($amount, 2, '.', ''),
+        ':hours' => $overtimeHours, ':month_year' => $monthYear, ':type_id' => $benefitTypeId,
+    ]);
+}
 
 /**
  * ENHANCED FUNCTION

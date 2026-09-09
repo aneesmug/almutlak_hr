@@ -555,7 +555,17 @@ $('#activeUsersTable').closest('.dataTables_wrapper').on('click', '.btn-signout'
     }
 });
 
+let refreshInFlight = false;
 async function refresh() {
+    // Guards against overlapping polls piling up (each hits db.php, which caps
+    // concurrent DB-connecting requests per IP at 3 - a slow/stalled response
+    // combined with the unconditional 4s interval below was queuing up new
+    // fetches on top of one still pending, tripping that same-IP limit for
+    // real admins just watching this page).
+    if (refreshInFlight) {
+        return;
+    }
+    refreshInFlight = true;
     try {
         const res = await fetch('connection_monitor_data.php', { cache: 'no-store' });
         if (!res.ok) return;
@@ -646,6 +656,8 @@ async function refresh() {
         }
     } catch (e) {
         // silent - keep last known values on transient network errors
+    } finally {
+        refreshInFlight = false;
     }
 }
 

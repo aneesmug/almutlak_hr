@@ -1,90 +1,138 @@
 <?php
-include './../../includes/db.php';
+header('Content-Type: application/json');
+require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../session_check.php';
+require_once __DIR__ . '/../special_access_helper.php';
+require_once __DIR__ . '/../attendance_helpers.php';
 
-## Read value
-$emp_id = $_POST['emp_id'];
-$FromDate = $_POST['fromdate'];
-$ToDate = $_POST['todate'];
-$draw = $_POST['draw'];
-$row = $_POST['start'];
-$rowperpage = $_POST['length']; // Rows display per page
-$columnIndex = $_POST['order'][0]['column']; // Column index
-$columnName = $_POST['columns'][$columnIndex]['data']; // Column name
-$columnSortOrder = $_POST['order'][0]['dir']; // asc or desc
-$searchValue = mysqli_real_escape_string($conDB,$_POST['search']['value']); // Search value
-$dateFromValue = mysqli_real_escape_string($conDB,$_POST['fromdate']['value']); // Search value
-$dateToValue = mysqli_real_escape_string($conDB,$_POST['todate']['value']); // Search value
-
-## Search 
-/*$searchQuery = " ";
-if($searchValue != ''){
-	$searchQuery = " and (emp_id like '%".$searchValue."%' or 
-        date like '%".$searchValue."%' or
-        type like'%".$searchValue."%' ) ";
-}*/
-
-## Date Search
-$dateSearchQuery = " ";
-if($dateFromValue != '' AND $dateToValue != ''){
-    $dateSearchQuery = " AND (`date` BETWEEN '".$FromDate."' AND '".$ToDate."') ";
+$canViewAttendanceTab = ($is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'view_employee_attendance_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if (!$canViewAttendanceTab) {
+    http_response_code(403);
+    echo json_encode(['draw' => 1, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+    exit;
 }
 
-## Total number of records without filtering
-$totlCount = mysqli_query($conDB,"SELECT COUNT(*) AS `allcount` FROM `attendance` WHERE `emp_id` = '$emp_id' GROUP BY `emp_id`,`date` ");
-$totalRecords = mysqli_num_rows($totlCount);
+$canManageAttendanceRecord = ($is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
-## Total number of records with filtering
-$totlCountFilter = mysqli_query($conDB,"SELECT COUNT(*) AS `allcount` FROM `attendance` WHERE `emp_id` = '$emp_id' AND 1 ".$dateSearchQuery."  GROUP BY `emp_id`, `date`");
-$totalRecordwithFilter = mysqli_num_rows($totlCountFilter);
+$empId = (int) ($_POST['emp_id'] ?? 0);
+$draw = (int) ($_POST['draw'] ?? 1);
+$fromDate = trim((string) ($_POST['fromdate'] ?? ''));
+$toDate = trim((string) ($_POST['todate'] ?? ''));
 
-$empSlryQry = "SELECT ROUND((`basic`/30/8)*1.5,2) AS `perhour` FROM `salary_emp` WHERE `emp_id` = '$emp_id' ORDER BY `id` DESC LIMIT 1";
-$empSlry = mysqli_fetch_assoc(mysqli_query($conDB, $empSlryQry));
-
-$statusout = "<span class='badge-border badge-border-danger'>NO CHECK OUT</span>";
-
-$empQuery = "
-SELECT
-    `attendance`.*, 
-    `employees`.`name`,
-     MIN(`attendance`.`time_in`) as `check_in`,
-     MAX(`attendance`.`time_out`) as `check_out`
-FROM `attendance`
-LEFT JOIN `employees` ON `employees`.`emp_id` = `attendance`.`emp_id`
-WHERE `attendance`.`emp_id` = '".$emp_id."' ".$dateSearchQuery." 
-GROUP BY `attendance`.`emp_id`, `attendance`.`date`
-ORDER BY `attendance`.`date` DESC
-LIMIT ".$row.",".$rowperpage;
-$empRecords = mysqli_query($conDB, $empQuery);
-$data = array();
-
-while ($row = mysqli_fetch_assoc($empRecords)) {
-    $first = new DateTime($row['check_in']);
-    $last = new DateTime($row['check_out']);
-    
-    $tmin = ($row['check_in']>="08:34:00")?"<b class='badge-border badge-border-danger'>".$row['check_in']."</b>":$row['check_in'];
-    $tmout = ($row['check_out']<="14:00:00")?"<b class='badge-border badge-border-danger'>".$row['check_out']."</b>":$row['check_out'];
-
-    $interval = $first->diff($last);
-    $data[] = array(
-    		"uid"         =>$row['uid'],
-    		"emp_id"      =>$row['emp_id'],
-    		"emp_name"    =>$row['name'],
-            "date"        => date('Y-m-d',strtotime($row['date'])),
-    		"check_in"    =>$tmin,
-            "check_out"   =>($row['check_in'] == $row['check_out'])?"N/A":$tmout,
-            "hours"       =>($row['check_in'] == $row['check_out'] AND date("Y-m-d") != date('Y-m-d',strtotime($row['date'])))?$statusout:$interval->format('%H:%I:%S'),
-            "type"        =>($row['type'] == 0?"Password":($row['type'] == 1?"Fingerprint":($row['type'] == 2?"Card":"Card"))),
-            "note"        =>$row['note'],
-            "action"      => "" //($row['check_out']<="11:00:00" AND date("Y-m-d") != date('Y-m-d',strtotime($row['date'])))?"Add Note":"",
-    	);
+if ($empId <= 0) {
+    echo json_encode(['draw' => $draw, 'recordsTotal' => 0, 'recordsFiltered' => 0, 'data' => []]);
+    exit;
 }
 
-## Response
-$response = array(
-    "draw" => intval($draw),
-    "iTotalRecords" => $totalRecords,
-    "iTotalDisplayRecords" => $totalRecordwithFilter,
-    "aaData" => $data
+$dateFilter = '';
+if ($fromDate !== '' && $toDate !== '') {
+    $fromEsc = mysqli_real_escape_string($conDB, $fromDate);
+    $toEsc = mysqli_real_escape_string($conDB, $toDate);
+    $dateFilter = " AND (date BETWEEN '{$fromEsc}' AND '{$toEsc} 23:59:59')";
+}
+
+$totalResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance WHERE emp_id = {$empId}");
+$totalRecords = (int) (mysqli_fetch_assoc($totalResult)['cnt'] ?? 0);
+
+$filteredResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance WHERE emp_id = {$empId}{$dateFilter}");
+$filteredRecords = (int) (mysqli_fetch_assoc($filteredResult)['cnt'] ?? 0);
+
+$compNoResult = mysqli_query($conDB, "SELECT comp_no FROM employees WHERE emp_id = {$empId} LIMIT 1");
+$compNo = $compNoResult ? (mysqli_fetch_assoc($compNoResult)['comp_no'] ?? '') : '';
+
+// Returns every matching row (no LIMIT) - this table runs client-side (serverSide:
+// false) so its Buttons export can include the full filtered history, not just
+// whatever page happens to be on screen (DataTables' server-side mode can't export
+// beyond the current page). Per-employee history is small enough this is cheap.
+$rows = mysqli_query(
+    $conDB,
+    "SELECT id, date, time_in, time_out, state, note
+     FROM attendance
+     WHERE emp_id = {$empId}{$dateFilter}
+     ORDER BY date DESC"
 );
 
-echo json_encode($response);
+$data = [];
+while ($row = mysqli_fetch_assoc($rows)) {
+    $dateOnly = date('Y-m-d', strtotime($row['date']));
+
+    // Some rows written before the pairing fix (or a face-scan device
+    // re-punching at the exact same second) have time_out == time_in - that's
+    // never a real checkout, so treat it as missing here too rather than
+    // showing a fake 0-hour day.
+    if (!empty($row['time_out']) && $row['time_out'] === $row['time_in']) {
+        $row['time_out'] = '';
+    }
+
+    $hours = '';
+    if (!empty($row['time_in']) && !empty($row['time_out'])) {
+        $in = strtotime($row['time_in']);
+        $out = strtotime($row['time_out']);
+        if ($in !== false && $out !== false && $out >= $in) {
+            $hours = gmdate('H:i', $out - $in);
+        }
+    }
+
+    // Late/Early-Leave minutes measured against the resolved timetable's grace
+    // boundaries (check_in_end / check_out_start) - the same cutoffs
+    // attendance_derive_state() uses to decide Late/Early Leave in the first
+    // place, so the minutes shown here match what actually triggered the flag
+    // (e.g. check-in allowed until 8:15 - a 8:20 check-in is "5 min late", not
+    // measured from the 8:00 scheduled start). None shown on a Day Off - the
+    // employee isn't expected in, so there's nothing to be late/early against.
+    $lateMinutes = '-';
+    $earlyMinutes = '-';
+    $timetable = attendance_resolve_timetable($conDB, $empId, $compNo, $dateOnly);
+    if (empty($timetable['is_off'])) {
+        if (!empty($row['time_in']) && $row['time_in'] > $timetable['check_in_end']) {
+            $lateMinutes = (int) round((strtotime($row['time_in']) - strtotime($timetable['check_in_end'])) / 60);
+        }
+        if (!empty($row['time_out']) && $row['time_out'] < $timetable['check_out_start']) {
+            $earlyMinutes = (int) round((strtotime($timetable['check_out_start']) - strtotime($row['time_out'])) / 60);
+        }
+    }
+
+    $entry = [
+        'date' => $dateOnly,
+        'check_in' => $row['time_in'] ?: '-',
+        'check_out' => $row['time_out'] ?: '-',
+        'hours' => $hours ?: '-',
+        'state' => $row['state'],
+        'late_minutes' => $lateMinutes,
+        'early_minutes' => $earlyMinutes,
+        'note' => $row['note'] ?: '',
+    ];
+
+    if ($canManageAttendanceRecord) {
+        $noteEsc = htmlspecialchars($row['note'] ?? '', ENT_QUOTES);
+        $entry['action'] = "
+            <div class='btn-group dropdown'>
+                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+                <div class='dropdown-menu dropdown-menu-right'>
+                    <a class='dropdown-item text-dark btn-edit-attendance-record' href='javascript:void(0);'
+                        data-date=\"{$dateOnly}\"
+                        data-time-in=\"{$row['time_in']}\"
+                        data-time-out=\"{$row['time_out']}\"
+                        data-state=\"" . htmlspecialchars($row['state'], ENT_QUOTES) . "\"
+                        data-note=\"{$noteEsc}\">
+                        <i class='mdi mdi-pencil mr-2'></i>Edit
+                    </a>
+                    <a class='dropdown-item text-danger deleteAjax' href='javascript:void(0);' data-id='{$row['id']}' data-tbl='attendance' data-file='0'>
+                        <i class='fa fa-trash mr-2'></i>Delete
+                    </a>
+                </div>
+            </div>
+        ";
+    }
+
+    $data[] = $entry;
+}
+
+echo json_encode([
+    'draw' => $draw,
+    'recordsTotal' => $totalRecords,
+    'recordsFiltered' => $filteredRecords,
+    'data' => $data,
+]);

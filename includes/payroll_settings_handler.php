@@ -45,7 +45,9 @@ function ensurePayrollParamSettings($conDB) {
         ['vacation_payroll_dropout_days', '30', 'vacation_payroll', "Vacation days after which an employee is dropped from that month's payroll generation"],
         ['overtime_monthly_hours', '240', 'overtime_settings', 'Standard monthly working hours used as the divisor for overtime hourly rate'],
         ['overtime_extra_multiplier', '0.5', 'overtime_settings', 'Extra multiplier applied to the basic-salary hourly portion of overtime pay'],
+        ['overtime_auto_attendance_enabled', '0', 'overtime_settings', 'Automatically add an Overtime benefit to payroll from attendance check-out times past the employee\'s timetable, using the formula above'],
         ['deduction_base_components', '["basic_salary","housing_allowance"]', 'deduction_settings', 'Salary components summed as the base for percentage-based deductions (e.g. GOSI)'],
+        ['deduction_auto_attendance_enabled', '0', 'deduction_settings', 'Automatically add Late / Early-Leave deductions to payroll from attendance, using the Overtime hourly-rate formula'],
         ['salary_increment_max_amount', '2000', 'salary_increment_settings', 'Maximum salary increment amount allowed per request'],
     ];
 
@@ -83,7 +85,7 @@ function ensureDeductionTypesTable($conDB) {
         UNIQUE KEY `name` (`name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
-    $seedNames = ['GOSI', 'Loan Installment', 'Joining Date Deduction', 'Absence', 'Late Deduction', 'Other'];
+    $seedNames = ['GOSI', 'Loan Installment', 'Joining Date Deduction', 'Absence', 'Late Deduction', 'Early Leave Deduction', 'Other'];
     $insertStmt = $conDB->prepare("INSERT IGNORE INTO deduction_types (name, counts_in_net, status) VALUES (?, 1, 1)");
     if ($insertStmt) {
         foreach ($seedNames as $seedName) {
@@ -199,7 +201,7 @@ function updatePayrollSettings($conDB) {
                 throw new Exception("Invalid value for {$settingName}: must be numeric.");
             }
 
-            $updateStmt->bind_param("ss", $value, $settingName);
+            $updateStmt->bind_param("sss", $value, $settingName, $group);
             if (!$updateStmt->execute()) {
                 throw new Exception('DB update failed for setting: ' . $settingName);
             }

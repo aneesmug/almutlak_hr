@@ -1,0 +1,18 @@
+﻿[
+    {
+        "terminal_sn":  "CKJW204960878",
+        "pin":  "4150",
+        "punch_time":  "2026-08-30 16:34:11",
+        "status":  "255",
+        "verify":  "15",
+        "work_code":  ""
+    },
+    {
+        "terminal_sn":  "CKJW204960198",
+        "pin":  "2539",
+        "punch_time":  "2026-08-30 16:30:00",
+        "status":  "0",
+        "verify":  "15",
+        "work_code":  ""
+    }
+]

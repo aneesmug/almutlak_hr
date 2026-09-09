@@ -24,6 +24,16 @@ php_value max_input_time 25
 php_value default_socket_timeout 15
 
 # ============================================================================
+# ZKTECO ADMS DEVICE PUSH ENDPOINTS
+# ============================================================================
+# Device firmware calls these exact, extensionless paths (hardcoded, not
+# configurable on the device side) - map them to the real .php files.
+RewriteEngine On
+RewriteRule ^iclock/cdata$ iclock/cdata.php [L,QSA]
+RewriteRule ^iclock/getrequest$ iclock/getrequest.php [L,QSA]
+RewriteRule ^iclock/devicecmd$ iclock/devicecmd.php [L,QSA]
+
+# ============================================================================
 # MAINTENANCE MODE REDIRECT (Handled by .htaccess)
 # ============================================================================
 
@@ -44,6 +54,7 @@ RewriteCond %{REQUEST_URI} !^/error/ [NC]
 RewriteCond %{REQUEST_URI} !^/db_check_admin/ [NC]
 RewriteCond %{REQUEST_URI} !^/assets/ [NC]
 RewriteCond %{REQUEST_URI} !^/includes/ [NC]
+RewriteCond %{REQUEST_URI} !^/iclock/ [NC]
 RewriteCond %{REQUEST_URI} !\.(?:jpg|jpeg|gif|png|ico|css|js|svg|woff|woff2|ttf|eot|map)$ [NC]
 
 # Check if maintenance flag file EXISTS (file existence = maintenance ON)

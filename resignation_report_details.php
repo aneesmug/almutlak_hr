@@ -75,22 +75,20 @@ if (mysqli_num_rows($query) == 1) {
         $stmt_exit->close();
     }
 
-    // 4. Fetch replacement information
+    // 4. Fetch replacement information (stored on emp_resignations itself)
     $replacement_data = [];
-    // Try to fetch replacement info, but don't fail if table doesn't exist
-    try {
-        $replacement_sql = "SELECT need_replacement, job_title, job_description, experience, certificate, academic_achievement, date_of_joining FROM resignation_replacement_info WHERE resignation_id = ?";
-        $stmt_replacement = $conDB->prepare($replacement_sql);
-        if ($stmt_replacement) {
-            $stmt_replacement->bind_param("i", $resignation_id);
-            $stmt_replacement->execute();
-            $replacement_result = $stmt_replacement->get_result();
-            $replacement_data = $replacement_result->fetch_assoc() ?? [];
-            $stmt_replacement->close();
+    if (!empty($resignation['needs_replacement'])) {
+        $replacement_data['need_replacement'] = $resignation['needs_replacement'] ? 'yes' : 'no';
+        if (!empty($resignation['replacement_data'])) {
+            $decoded = json_decode($resignation['replacement_data'], true);
+            if (is_string($decoded)) {
+                // Handle double-encoded JSON from older records
+                $decoded = json_decode($decoded, true);
+            }
+            if (is_array($decoded)) {
+                $replacement_data = array_merge($replacement_data, $decoded);
+            }
         }
-    } catch (Exception $e) {
-        // Table doesn't exist or query failed - continue without replacement data
-        $replacement_data = [];
     }
 
     // 5. Fetch approval chain
