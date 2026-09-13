@@ -133,6 +133,19 @@ function newEmpApplyAutoNumeric() {
     }
 }
 
+// autoNumeric formats these fields with a thousands separator (e.g. "5,505"). If that
+// formatted string is fed back into .val() when a step is re-rendered (Back/Next), autoNumeric's
+// own re-init logic mistakes the "," for a decimal separator and mangles the value (5,505 -> 6).
+// Reading through autoNumeric('get') returns the raw unformatted number instead, so re-rendering
+// stays safe.
+function newEmpGetNumeric(id) {
+    const $el = $('#' + id);
+    if (window.jQuery && typeof jQuery.fn.autoNumeric === 'function' && $el.data('autoNumeric')) {
+        return $el.autoNumeric('get');
+    }
+    return $el.val();
+}
+
 function newEmpTabGroup(name, options, selectedValue) {
     const items = options.map((opt, idx) => {
         const id = `${name}_${opt.value}`;
@@ -231,7 +244,7 @@ function openCompanyEmployeeModal(data) {
 function newEmpCollectBasicInfo() {
     return {
         name: $('#ceName').val(),
-        emp_id: $('#ceEmpId').val(),
+        emp_id: newEmpGetNumeric('ceEmpId'),
         iqama: $('#ceIqama').val(),
         iqama_exp_g: $('#ceIqamaExpG').val(),
         iqama_exp: $('#ceIqamaExp').val(),
@@ -255,8 +268,8 @@ function openCompanyStep1(data, w) {
     <form id="newCompEmpFormStep1" class="text-left">
         <div class="card-box">
         <div class="form-row">
+            ${newEmpFieldset('employee_id', 'Employee ID', `<input type="text" id="ceEmpId" class="form-control autonumber readonly-data" data-v-max="9999" data-v-min="0" value="${escapeHtml(w.emp_id || data.next_emp_id)}" required readonly style="">`, 'col-md-2', 'fa-id-badge', true)}
             ${newEmpFieldset('employee_name', 'Employee Name', `<input type="text" id="ceName" class="form-control" value="${escapeHtml(w.name || '')}" required>`, 'col-md-4', 'fa-user', true)}
-            ${newEmpFieldset('employee_id', 'Employee ID', `<input type="text" id="ceEmpId" class="form-control autonumber" data-v-max="9999" data-v-min="0" value="${escapeHtml(w.emp_id || data.next_emp_id)}" required>`, 'col-md-2', 'fa-id-badge', true)}
             ${newEmpFieldset('iqama_id', 'Iqama id', `<input type="text" id="ceIqama" class="form-control" value="${escapeHtml(w.iqama || '')}" required>`, 'col-md-2', 'fa-id-card', true)}
             ${newEmpFieldCard(`${__('iqama_id_expiry', 'Iqama / ID expiry')} <span class="text-danger">${__('in_gregorian', 'In Gregorian')} *</span>`, 'col-md-2', 'fa-calendar-alt', `<input type="text" id="ceIqamaExpG" class="form-control" value="${escapeHtml(w.iqama_exp_g || '')}" required>`)}
             ${newEmpFieldCard(`${__('iqama_id_expiry', 'Iqama / ID expiry')} <span class="text-danger">${__('in_hijri', 'In Hijri')} *</span>`, 'col-md-2', 'fa-calendar-alt', `<input type="text" id="ceIqamaExp" class="form-control" value="${escapeHtml(w.iqama_exp || '')}" required>`)}
@@ -466,7 +479,7 @@ function openCompanyStep3(data, w) {
         },
         preDeny: () => {
             return {
-                salary: $('#ceSalary').val(),
+                salary: newEmpGetNumeric('ceSalary'),
                 bank_name: $('#ceBankName').val(),
                 iban: $('#ceIban').val(),
                 email: $('#ceEmail').val(),
@@ -490,7 +503,7 @@ function openCompanyStep3(data, w) {
 
             const payload = Object.assign({}, w, {
                 action: 'create_company_employee',
-                salary: $('#ceSalary').val(),
+                salary: newEmpGetNumeric('ceSalary'),
                 bank_name: $('#ceBankName').val(),
                 iban: $('#ceIban').val(),
                 email: $('#ceEmail').val(),
@@ -546,7 +559,7 @@ function newEmpCollectManPower() {
         sub_dept_id: $('#mpSubDeptId').val(),
         mobile: $('#mpMobile').val(),
         joining_date: $('#mpJoiningDate').val(),
-        salary: $('#mpSalary').val(),
+        salary: newEmpGetNumeric('mpSalary'),
         dob: $('#mpDob').val(),
         sex: $('input[name=mpSex]:checked').val(),
         // File objects can't be reassigned into a fresh <input type="file">'s value for
@@ -634,7 +647,7 @@ function openManPowerEmployeeModal(data, w) {
             formData.append('iqama', $('#mpIqama').val());
             formData.append('iqama_exp_g', $('#mpIqamaExpG').val());
             formData.append('mobile', $('#mpMobile').val());
-            formData.append('salary', $('#mpSalary').val());
+            formData.append('salary', newEmpGetNumeric('mpSalary'));
             formData.append('joining_date', $('#mpJoiningDate').val());
             formData.append('department', $('#mpDepartment').val());
             formData.append('comp_no', $('#mpCompNo').val());

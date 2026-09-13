@@ -8011,6 +8011,12 @@ i.fa-clipboard {
   background-color: #f8f9fc;
 }
 
+.readonly-data[readonly]{
+  color: #808080; 
+  background-color: #f0f0f0; 
+  cursor: not-allowed;
+}
+
 .et-picker-live-days {
   clear: both;
   display: flex;

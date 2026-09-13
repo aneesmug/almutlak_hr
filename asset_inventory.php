@@ -580,7 +580,7 @@
                     let assets = resp.data.assets;
                     
                     // Filter assets based on user role - only show allowed assets
-                    if (!userRole.isSystemAdmin) {
+                    if (!userRole.isSystemAdmin && !userRole.canAdd) {
                         if (userRole.allowedAssets.length > 0) {
                             // Check if asset name contains any of the allowed keywords
                             assets = assets.filter(asset => {
