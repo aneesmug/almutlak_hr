@@ -344,7 +344,48 @@ try {
                                      LEFT JOIN employees e ON ai.assigned_emp_id = e.id
                                      ORDER BY ai.created_at DESC");
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as &$row) {
+                    $row['description'] = split_words($row['description'] ?? '', 40, '...');
+                }
+                unset($row);
                 json_ok(['items' => $rows]);
+            } catch (PDOException $e) {
+                json_fail('Query error: ' . $e->getMessage(), 500);
+            }
+            break;
+
+        case 'get_item_details':
+            $itemId = (int) ($_POST['item_id'] ?? 0);
+            if ($itemId <= 0) {
+                json_fail('Asset item ID is required');
+            }
+
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT ai.id, ai.tracking_id, ai.serial_number, ai.status, ai.description,
+                           ai.assigned_date, ai.return_date,
+                           a.name AS asset_name,
+                           e.id AS emp_pk, e.emp_id, e.name AS employee_name, e.dept, e.mobile, e.email, e.avatar, e.sex,
+                           ea.description AS assignment_note
+                    FROM asset_items ai
+                    LEFT JOIN assets a ON ai.asset_id = a.id
+                    LEFT JOIN employees e ON ai.assigned_emp_id = e.id
+                    LEFT JOIN employee_assets ea ON ea.serial_number = ai.tracking_id AND ea.status = 'Assigned'
+                    WHERE ai.id = :id
+                    LIMIT 1
+                ");
+                $stmt->execute(['id' => $itemId]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$row) {
+                    json_fail('Asset item not found', 404);
+                }
+
+                $row['description'] = split_words($row['description'] ?? '', 150, '...');
+                $row['assignment_note'] = split_words($row['assignment_note'] ?? '', 150, '...');
+                $row['avatar_url'] = $row['emp_pk'] ? getAvatarImagePath($row['avatar'] ?? '', $row['sex'] ?? 1) : '';
+
+                json_ok(['item' => $row]);
             } catch (PDOException $e) {
                 json_fail('Query error: ' . $e->getMessage(), 500);
             }

@@ -45,6 +45,7 @@
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -61,6 +62,85 @@
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
     </script>
+    <style>
+        .asset-detail-header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 10px;
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            color: #fff;
+            text-align: left;
+        }
+        .asset-detail-header .avatar-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-right: 14px;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+        .asset-detail-header .avatar-circle img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        .asset-detail-header .header-sub {
+            font-size: 12.5px;
+            opacity: 0.85;
+        }
+        .asset-detail-header .header-status {
+            margin-left: auto;
+        }
+        .asset-detail-section {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-top: 14px;
+            text-align: left;
+        }
+        .asset-detail-section h6 {
+            font-weight: 700;
+            font-size: 13px;
+            color: #4b5563;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+        .asset-detail-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 5px 0;
+            font-size: 13.5px;
+        }
+        .asset-detail-row .label {
+            color: #6c757d;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .asset-detail-row .value {
+            font-weight: 600;
+            color: #212529;
+            text-align: right;
+            word-break: break-word;
+        }
+        .asset-detail-row.stack {
+            flex-direction: column;
+            gap: 2px;
+        }
+        .asset-detail-row.stack .value {
+            text-align: left;
+        }
+    </style>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -146,6 +226,7 @@
     <script src="assets/js/jquery.core.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
+    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
@@ -198,6 +279,85 @@
             return `<span class="badge badge-${cls}">${translatedStatus || status}</span>`;
         }
 
+        function showAssetDetailsModal(itemId) {
+            Swal.showLoading();
+            $.ajax({
+                url: apiUrl,
+                type: 'POST',
+                data: { action: 'get_item_details', item_id: itemId },
+                dataType: 'json',
+                success: function(resp) {
+                    Swal.close();
+                    if (!resp.success || !resp.data.item) {
+                        Swal.fire('Error', resp.message || 'Could not load asset details', 'error');
+                        return;
+                    }
+
+                    const it = resp.data.item;
+                    const isAssigned = it.status === 'Assigned';
+                    const assetTypeLabel = it.asset_name ? (__(it.asset_name.toLowerCase().replace(/ /g, '_')) || it.asset_name) : '-';
+
+                    const avatarHtml = (isAssigned && it.avatar_url)
+                        ? `<img src="${it.avatar_url}" alt="">`
+                        : `<i class="mdi mdi-${isAssigned ? 'account' : 'package-variant-closed'}"></i>`;
+
+                    const headerHtml = `
+                        <div class="asset-detail-header">
+                            <div class="avatar-circle">${avatarHtml}</div>
+                            <div>
+                                <div style="font-weight:700; font-size:15px;">${isAssigned ? (it.employee_name || '-') : (assetTypeLabel)}</div>
+                                <div class="header-sub">${isAssigned ? ('Emp ID: ' + (it.emp_id || '-')) : ''}${isAssigned ? ' &bull; ' : ''}${it.tracking_id || '-'}</div>
+                            </div>
+                            <div class="header-status">${statusBadge(it.status, __(it.status.toLowerCase()))}</div>
+                        </div>
+                        <div class="asset-detail-section">
+                            <h6><i class="mdi mdi-package-variant mr-1"></i>${__('asset_information', 'Asset Information')}</h6>
+                            <div class="asset-detail-row"><span class="label">${__('asset_type', 'Asset Type')}</span><span class="value">${assetTypeLabel}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('tracking_id', 'Tracking ID')}</span><span class="value">${it.tracking_id || '-'}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('serial_number', 'Serial Number')}</span><span class="value">${it.serial_number || '-'}</span></div>
+                            <div class="asset-detail-row stack"><span class="label">${__('description', 'Description')}</span><span class="value">${it.description || '-'}</span></div>
+                        </div>
+                        ${isAssigned ? `
+                        <div class="asset-detail-section">
+                            <h6><i class="mdi mdi-account-arrow-right mr-1"></i>${__('assignment_information', 'Assignment Information')}</h6>
+                            <div class="asset-detail-row"><span class="label">${__('assigned_to', 'Assigned To')}</span><span class="value">${it.employee_name || '-'}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('employee_id', 'Employee ID')}</span><span class="value">${it.emp_id || '-'}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('department', 'Department')}</span><span class="value">${it.dept || '-'}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('mobile', 'Mobile')}</span><span class="value">${it.mobile || '-'}</span></div>
+                            <div class="asset-detail-row"><span class="label">${__('assigned_date', 'Assigned Date')}</span><span class="value">${it.assigned_date || '-'}</span></div>
+                            ${it.assignment_note ? `<div class="asset-detail-row stack"><span class="label">${__('note', 'Note')}</span><span class="value">${it.assignment_note}</span></div>` : ''}
+                        </div>
+                        ` : ''}
+                        <div class="asset-detail-section" id="asset-detail-actions">
+                            <h6><i class="mdi mdi-link-variant mr-1"></i>${__('actions', 'Actions')}</h6>
+                            <div class="d-flex flex-wrap" style="gap:8px;">
+                                ${isAssigned ? `<button type="button" class="btn btn-info btn-sm print-asset-report" data-id="${it.id}"><i class="fa fa-print mr-1"></i>${__('print_report', 'Print Report')}</button>` : ''}
+                                ${isAssigned ? `<button type="button" class="btn btn-warning btn-sm btn-unassign" data-id="${it.id}" data-tracking="${it.tracking_id || ''}"><i class="fa fa-unlink mr-1"></i>${__('unassign', 'Unassign')}</button>` : ''}
+                                ${(!isAssigned && it.asset_name !== 'Car') ? `<button type="button" class="btn btn-primary btn-sm btn-assign" data-id="${it.id}"><i class="fa fa-link mr-1"></i>${__('assign', 'Assign')}</button>` : ''}
+                                ${(!isAssigned && userRole.canEdit) ? `<button type="button" class="btn btn-light btn-sm editAssetBtn" data-id="${it.id}" data-asset_id="${it.asset_id || ''}" data-asset_name="${it.asset_name || ''}" data-tracking="${it.tracking_id || ''}" data-serial="${it.serial_number || ''}" data-description="${(it.description || '').replace(/"/g, '&quot;')}" data-status="${it.status}"><i class="fa fa-edit mr-1"></i>${__('edit', 'Edit')}</button>` : ''}
+                                ${(!isAssigned && userRole.canDelete) ? `<button type="button" class="btn btn-outline-danger btn-sm deleteAjax" data-tbl="asset_items" data-file="0" data-id="${it.id}"><i class="fa fa-trash mr-1"></i>${__('delete', 'Delete')}</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+
+                    Swal.fire({
+                        title: __('asset_details', 'Asset Details'),
+                        html: headerHtml,
+                        width: "60%",
+                        showConfirmButton: true,
+                        confirmButtonText: __('close', 'Close'),
+                        allowOutsideClick: false,
+                        confirmButtonColor: APP_COLORS.secondary
+                    });
+                },
+                error: function(xhr, status, error) {
+                    Swal.close();
+                    console.error('Get Item Details Error:', status, error, xhr.responseText);
+                    Swal.fire('Error', 'Could not load asset details: ' + (xhr.responseJSON?.message || error), 'error');
+                }
+            });
+        }
+
         function loadInventory() {
             $.ajax({
                 url: apiUrl,
@@ -246,6 +406,10 @@
                                             <i class="mdi mdi-dots-horizontal"></i>
                                         </a>
                                         <div class="dropdown-menu dropdown-menu-right">
+                                            <a href="javascript:void(0);" class="dropdown-item view-asset-details"
+                                                data-id="${row.id}">
+                                                <i class="fa fa-eye mr-2 font-18 vertical-middle"></i>${__('view_details', 'View Details')}
+                                            </a>
                                             ${(row.status !== 'Assigned' && userRole.canEdit) ? `
                                             <a href="javascript:void(0);" class="dropdown-item text-custom editAssetBtn"
                                                 data-id="${row.id}"
@@ -520,7 +684,7 @@
                     </div>
                     <div class="form-group text-left">
                         <label>Assign Date</label>
-                        <input type="date" id="swal-date" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+                        <input type="text" id="swal-date" class="form-control" autocomplete="off" value="${new Date().toISOString().slice(0,10)}">
                     </div>
                     <div class="form-group text-left">
                         <label>Note</label>
@@ -538,7 +702,14 @@
                     }
                     return { emp_id: empId, assigned_date: date, description: note };
                 },
-                didOpen: () => initEmployeeSelect('#swal-emp')
+                didOpen: () => {
+                    initEmployeeSelect('#swal-emp');
+                    $('#swal-date').datepicker({
+                        format: 'yyyy-mm-dd',
+                        autoclose: true,
+                        todayHighlight: true
+                    });
+                }
             });
             if (!form) return;
             Swal.showLoading();
@@ -763,6 +934,10 @@
         // Event handlers
         $(document).on('click', '#btn-add-asset', function() {
             registerAssetModal();
+        });
+
+        $(document).on('click', '.view-asset-details', function() {
+            showAssetDetailsModal($(this).data('id'));
         });
 
         $(document).on('click', '.btn-assign', function() {
