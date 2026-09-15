@@ -785,6 +785,33 @@ try {
 
     $totalDeductionsAmount = 0.0;
     foreach ($pendingDeductions as $pendingDeduction) {
+        $mergedType = $pendingDeduction['type'];
+        $mergedHours = (int)$pendingDeduction['hours'];
+        $mergedMinutes = (int)$pendingDeduction['minutes'];
+        $mergedDays = (int)$pendingDeduction['days'];
+
+        // Two excel rows for the same employee can share one reason text (e.g. a
+        // days-based row and an hours-based row both named "Late Arrival Deduction"),
+        // and get accumulated into a single pending entry above. 'type' there just took
+        // whichever row was processed last - if that happened to be hourly, the days
+        // portion was silently dropped because payroll_deductions stores hours/minutes
+        // OR days, never both. Recompute the type from what actually accumulated so a
+        // day contribution is never lost: fold it into hour-equivalent (days * 8) when
+        // an hour/minute contribution also exists, otherwise keep it as daily_deduction.
+        if ($mergedType !== 'fixed') {
+            $hasHourPortion = ($mergedHours > 0 || $mergedMinutes > 0);
+            $hasDayPortion = ($mergedDays > 0);
+            if ($hasDayPortion && $hasHourPortion) {
+                $mergedHours += $mergedDays * 8;
+                $mergedDays = 0;
+                $mergedType = 'hourly_deduction';
+            } elseif ($hasDayPortion) {
+                $mergedType = 'daily_deduction';
+            } else {
+                $mergedType = 'hourly_deduction';
+            }
+        }
+
         upsertPayrollDeduction(
             $pdo,
             $pendingDeduction['emp_id'],
@@ -792,10 +819,10 @@ try {
             $pendingDeduction['name'],
             $pendingDeduction['amount'],
             $pendingDeduction['status'],
-            $pendingDeduction['type'],
-            (int)$pendingDeduction['hours'],
-            (int)$pendingDeduction['minutes'],
-            (int)$pendingDeduction['days']
+            $mergedType,
+            $mergedHours,
+            $mergedMinutes,
+            $mergedDays
         );
         $totalDeductionsAmount += (float)$pendingDeduction['amount'];
     }

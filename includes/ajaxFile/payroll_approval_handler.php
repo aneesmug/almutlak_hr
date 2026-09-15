@@ -2440,6 +2440,15 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
                 continue;
             }
 
+            // Was hardcoded to 'hourly_deduction' regardless of what the row actually
+            // contained, so a pure days row (no hours/minutes) got tagged hourly here.
+            // The review modal's save step re-infers this from days vs hours/minutes
+            // anyway, but the type sent to the client for the initial hidden field
+            // should still match the row so it isn't misleading before that happens.
+            $deductionTypeGuess = ((float)$deductionDays > 0 && (float)$deductionHours <= 0 && (float)$deductionMinutes <= 0)
+                ? 'daily_deduction'
+                : 'hourly_deduction';
+
             $normalizedRows[] = [
                 'checkpoint_code' => $checkpointCode,
                 'emp_id' => $empId,
@@ -2449,7 +2458,7 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
                 'benefit_hours' => '',
                 'benefit_minutes' => '',
                 'benefit_reason' => '',
-                'deduction_type' => 'hourly_deduction',
+                'deduction_type' => $deductionTypeGuess,
                 'deduction_value' => '',
                 'deduction_hours' => $deductionHours,
                 'deduction_minutes' => $deductionMinutes,
