@@ -8,10 +8,21 @@ require_once(__DIR__ . "/session_check.php");
 require_once(__DIR__ . "/helper_functions.php");
 require_once(__DIR__ . "/special_access_helper.php");
 require_once(__DIR__ . "/page_access_helper.php");
+require_once(__DIR__ . "/screen_settings_helper.php");
 require_once(__DIR__ . "/../vendor/autoload.php");
 
 if ($conDB->connect_error) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed: ' . $conDB->connect_error]);
+    exit();
+}
+
+// Self-service Screen Settings save: a plain user explicitly granted the
+// 'manage_own_screen_settings' Special Access key may update ONLY their own
+// entry in screen_settings_by_user. This must be handled before the coarser
+// $settingsHandlerCanManage gate below (which requires system-admin or one of
+// the settings-tab delegable keys), since these users hold neither.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_own_screen_settings') {
+    update_own_screen_settings($conDB, $empid ?? '', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     exit();
 }
 
@@ -63,6 +74,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'update_page_role_access':
             update_page_role_access($conDB);
             break;
+        case 'get_screen_settings_data':
+            // Managing every user's Screen Settings from one admin table is
+            // system-admin-only, same reasoning as get_special_access_users above.
+            if (!($is_system_admin ?? false)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Access denied.']);
+                break;
+            }
+            get_screen_settings_data($conDB);
+            break;
+        case 'update_screen_settings_map':
+            if (!($is_system_admin ?? false)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Access denied.']);
+                break;
+            }
+            update_screen_settings_map($conDB);
+            break;
         case 'test_email_settings':
             test_email_settings($conDB);
             break;
@@ -89,6 +118,7 @@ function get_all_settings($conDB) {
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
+    ensure_screen_settings_setting($conDB);
 
     $settings = [];
     // db_export_secret_key is auto-generated/rotated from db_export.php's own
@@ -119,6 +149,7 @@ function update_all_settings($conDB) {
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
+    ensure_screen_settings_setting($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
@@ -322,6 +353,160 @@ function ensure_page_role_access_setting($conDB) {
     $insertStmt->bind_param("ss", $settingName, $defaultValue);
     $insertStmt->execute();
     $insertStmt->close();
+}
+
+/**
+ * Ensure the screen-settings map setting exists in app_settings.
+ */
+function ensure_screen_settings_setting($conDB) {
+    $settingName = 'screen_settings_by_user';
+    $defaultValue = '{}';
+
+    $checkSql = "SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1";
+    $checkStmt = $conDB->prepare($checkSql);
+    if (!$checkStmt) {
+        return;
+    }
+
+    $checkStmt->bind_param("s", $settingName);
+    if (!$checkStmt->execute()) {
+        $checkStmt->close();
+        return;
+    }
+
+    $result = $checkStmt->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $checkStmt->close();
+
+    if ($exists) {
+        return;
+    }
+
+    $insertSql = "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'screen_settings', 'screen_settings_by_user_json_map_emp_id_to_scale_resolution_fullscreen', 'text', NULL)";
+    $insertStmt = $conDB->prepare($insertSql);
+    if (!$insertStmt) {
+        return;
+    }
+
+    $insertStmt->bind_param("ss", $settingName, $defaultValue);
+    $insertStmt->execute();
+    $insertStmt->close();
+}
+
+/**
+ * Screen Settings admin table: returns every non-employee user plus the current
+ * screen_settings_by_user map, so screen_settings.php can render one row per user.
+ */
+function get_screen_settings_data($conDB) {
+    ensure_screen_settings_setting($conDB);
+
+    $users = [];
+    $sql = "SELECT al.emp_id, al.id_iqama, al.user_type, al.status, e.name
+            FROM admin_login al
+            LEFT JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id IS NOT NULL
+                AND al.emp_id <> ''
+                AND LOWER(TRIM(COALESCE(al.user_type, ''))) <> 'employee'
+            ORDER BY e.name ASC, al.emp_id ASC";
+    $result = $conDB->query($sql);
+    if (!$result) {
+        echo json_encode(['success' => false, 'message' => 'Error fetching users: ' . $conDB->error]);
+        return;
+    }
+    while ($row = $result->fetch_assoc()) {
+        $rawName = trim((string) ($row['name'] ?? ''));
+        $name = $rawName !== '' ? parseName($rawName) : (string) ($row['id_iqama'] ?? '');
+        $users[] = [
+            'emp_id' => (string) ($row['emp_id'] ?? ''),
+            'name' => $name,
+            'user_type' => (string) ($row['user_type'] ?? ''),
+            'status' => (string) ($row['status'] ?? ''),
+        ];
+    }
+
+    // PHP's json_encode() can't tell an empty map from an empty list - an empty []
+    // array always serializes as a JSON array, not {}. That previously turned into an
+    // empty JS Array on the client, which corrupted the whole map (see
+    // decode_screen_settings_map's comment). Force an object here so the client never
+    // gets handed an array to begin with.
+    $map = get_screen_settings_map($conDB);
+    echo json_encode([
+        'success' => true,
+        'users' => $users,
+        'map' => empty($map) ? new stdClass() : $map,
+        'defaults' => default_screen_settings(),
+    ]);
+}
+
+/**
+ * Admin bulk save for the whole screen_settings_by_user map (Screen Settings page table).
+ */
+function update_screen_settings_map($conDB) {
+    ensure_screen_settings_setting($conDB);
+
+    $raw = $_POST['screen_settings_by_user'] ?? '{}';
+    $normalized = decode_screen_settings_map($raw);
+    $value = json_encode(empty($normalized) ? new stdClass() : $normalized);
+
+    $stmt = $conDB->prepare("UPDATE app_settings SET setting_value = ? WHERE setting_name = 'screen_settings_by_user'");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement: ' . $conDB->error]);
+        return;
+    }
+    $stmt->bind_param('s', $value);
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'screen_settings_by_user' => empty($normalized) ? new stdClass() : $normalized]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to save screen settings: ' . $conDB->error]);
+    }
+    $stmt->close();
+}
+
+/**
+ * Self-service save: a user holding 'manage_own_screen_settings' (or an admin)
+ * may update ONLY their own entry in the map - never anyone else's.
+ */
+function update_own_screen_settings($conDB, $empId, $userRole, $userType, $isSystemAdmin) {
+    $empId = trim((string) $empId);
+    if ($empId === '') {
+        echo json_encode(['success' => false, 'message' => 'No employee context for this account.']);
+        return;
+    }
+
+    if (!$isSystemAdmin && !user_has_special_access($conDB, $empId, 'manage_own_screen_settings', $userRole, $userType, $isSystemAdmin)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Access denied.']);
+        return;
+    }
+
+    ensure_screen_settings_setting($conDB);
+
+    $entry = normalize_screen_setting([
+        'scale' => $_POST['scale'] ?? null,
+        'width' => $_POST['width'] ?? null,
+        'height' => $_POST['height'] ?? null,
+        'fullscreen' => $_POST['fullscreen'] ?? null,
+    ]);
+
+    $map = get_screen_settings_map($conDB);
+    $map[$empId] = $entry;
+    $value = json_encode($map);
+
+    $stmt = $conDB->prepare("UPDATE app_settings SET setting_value = ? WHERE setting_name = 'screen_settings_by_user'");
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Failed to prepare statement: ' . $conDB->error]);
+        return;
+    }
+    $stmt->bind_param('s', $value);
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true, 'settings' => $entry]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Failed to save: ' . $conDB->error]);
+    }
+    $stmt->close();
 }
 
 /**

@@ -27,6 +27,16 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
+// Force every protected page to be re-fetched fresh on a normal reload (not just a
+// cache-busting hard refresh) - without this, some browsers can serve a stale cached
+// copy of a dynamic page on plain F5, which made things like a just-saved Screen
+// Settings scale/fullscreen change (or any other per-request state) appear to need
+// Ctrl+R/Shift+F5 to show up instead of a plain refresh.
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+}
+
 // --- KEEP-ALIVE ENDPOINT ---
 // Handle session extension requests from client-side (extend_session=1)
 // if (isset($_GET['extend_session']) && $_GET['extend_session'] === '1') {

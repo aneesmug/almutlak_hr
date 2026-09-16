@@ -26,6 +26,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_job_title_settings' => 'Access App Settings - Job Titles Tab',
             'manage_location_settings' => 'Access App Settings - Locations Tab',
             'manage_sub_department_settings' => 'Access App Settings - Sub-Departments Tab',
+            'manage_company_settings' => 'Access App Settings - Companies Tab',
             'payroll_checklist_upload_excel' => 'Payroll Checklist Report: Upload Payroll Excel Button',
             'payroll_checklist_review_import' => 'Payroll Checklist Report: Review Manager File & Import Button',
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
@@ -62,6 +63,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_attendance' => 'Attendance Record: View & Manage Attendance Page',
             'manage_attendance_config' => 'Attendance: View & Manage Attendance Config (Timetables) Page',
             'view_employee_attendance_tab' => 'Attendance: View Employee Profile\'s Attendance Record Tab',
+            'manage_own_screen_settings' => 'Screen Settings: Allow User to Edit Own Scale/Resolution/Fullscreen',
         ] + get_special_access_page_labels();
     }
 }
@@ -143,7 +145,7 @@ if (!function_exists('get_special_access_categories')) {
             ],
             'Page Access' => [
                 'icon' => 'fa-door-open',
-                'keys' => array_keys(get_special_access_page_labels()),
+                'keys' => array_merge(array_keys(get_special_access_page_labels()), ['manage_device_monitor', 'manage_attendance', 'manage_attendance_config', 'view_employee_attendance_tab']),
             ],
             'Employee Master' => [
                 'icon' => 'fa-id-badge',
@@ -191,6 +193,8 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_overtime_settings',
                     'manage_deduction_settings',
                     'manage_salary_increment_settings',
+                    'manage_own_screen_settings',
+                    'manage_company_settings',
                 ],
             ],
             'Business Trip' => [
@@ -219,20 +223,6 @@ if (!function_exists('get_special_access_categories')) {
                     'asset_inventory_delete',
                 ],
             ],
-            'Biometric Devices' => [
-                'icon' => 'fa-fingerprint',
-                'keys' => [
-                    'manage_device_monitor',
-                ],
-            ],
-            'Attendance' => [
-                'icon' => 'fa-calendar-check',
-                'keys' => [
-                    'manage_attendance',
-                    'manage_attendance_config',
-                    'view_employee_attendance_tab',
-                ],
-            ],
             'Other Special Actions' => [
                 'icon' => 'fa-star',
                 'keys' => [
@@ -241,6 +231,73 @@ if (!function_exists('get_special_access_categories')) {
                     'assign_payroll_supervisor',
                 ],
             ],
+        ];
+    }
+}
+
+if (!function_exists('get_page_access_subgroups')) {
+    /**
+     * Purely presentational sub-grouping used ONLY inside the "Page Access" category's
+     * checkbox grid (it has 50+ keys - too many to scan as one flat list). This does NOT
+     * change what a key grants or add a new top-level Special Access tab - it's mirrored
+     * by getPageAccessSubgroups() in assets/js/app_settings.js, same as
+     * get_special_access_categories() is mirrored there. Any key not listed here still
+     * shows, bucketed under a trailing "Other" group.
+     */
+    function get_page_access_subgroups() {
+        return [
+            'Dashboard' => ['icon' => 'fa-gauge-high', 'keys' => ['access_dashboard', 'access_dashboardgm']],
+            'Employee Management' => [
+                'icon' => 'fa-users',
+                'keys' => [
+                    'access_add_new_employee', 'access_reg_employee', 'access_edit_employee',
+                    'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors',
+                    'access_all_applied_employee_transfers', 'access_employee_evaluation', 'access_all_employee_evaluations',
+                ],
+            ],
+            'Vacation & Leave' => [
+                'icon' => 'fa-umbrella-beach',
+                'keys' => [
+                    'access_all_applied_vac', 'access_vacation_status_history', 'access_manual_vacation',
+                    'access_vacation_dates_by_inv', 'access_manage_holidays',
+                ],
+            ],
+            'Payroll & Salary' => [
+                'icon' => 'fa-money-bill-wave',
+                'keys' => [
+                    'access_all_payroll_approvals', 'access_payroll_checklist_report', 'access_payroll_status_history',
+                    'access_generate_payroll', 'access_employee_salary_report', 'access_all_applied_salary_increment',
+                    'access_salary_increment_status_history', 'access_diagnose_double_deduction', 'access_fix_double_deduction',
+                ],
+            ],
+            'Loan' => ['icon' => 'fa-hand-holding-usd', 'keys' => ['access_all_applied_loan', 'access_loan_report_details', 'access_add_manual_loan']],
+            'Business Trip' => ['icon' => 'fa-plane', 'keys' => ['access_all_applied_business_trip', 'access_business_trip_status_history']],
+            'Resignation, Rejoin & Settlement' => [
+                'icon' => 'fa-file-signature',
+                'keys' => ['access_all_resignations', 'access_all_settlements', 'access_settlement_status_history', 'access_rejoin_approvals'],
+            ],
+            'Requests' => ['icon' => 'fa-inbox', 'keys' => ['access_all_requests', 'access_all_general_requests']],
+            'Assets & Fleet' => [
+                'icon' => 'fa-warehouse',
+                'keys' => [
+                    'access_all_cars', 'access_view_car', 'access_all_locations', 'access_all_machines',
+                    'access_asset_inventory', 'access_all_menu_item', 'manage_device_monitor',
+                ],
+            ],
+            'Import Tools' => [
+                'icon' => 'fa-file-import',
+                'keys' => ['access_import_medical_insurance', 'access_import_loan_opening_balance', 'access_import_iqama_exp'],
+            ],
+            'Communication & Content' => [
+                'icon' => 'fa-bullhorn',
+                'keys' => [
+                    'access_send_announcement', 'access_vouchers', 'access_all_user_invoices',
+                    'access_file_manager', 'access_gallery', 'access_language',
+                ],
+            ],
+            'System Administration' => ['icon' => 'fa-user-shield', 'keys' => ['access_all_users', 'access_log_activity', 'access_view_activity_logs']],
+            'Attendance' => ['icon' => 'fa-calendar-check', 'keys' => ['manage_attendance', 'manage_attendance_config', 'view_employee_attendance_tab']],
+            'Reports' => ['icon' => 'fa-chart-bar', 'keys' => ['access_reports']],
         ];
     }
 }

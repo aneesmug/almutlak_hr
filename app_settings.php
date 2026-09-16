@@ -1,9 +1,11 @@
 <?php
     require_once __DIR__ . '/includes/session_check.php';
     require_once __DIR__ . '/includes/special_access_helper.php';
+    require_once __DIR__ . '/includes/screen_settings_helper.php';
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLocationsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_location_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessCompaniesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_company_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessSubDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_sub_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessRequestBlocksTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLoanSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_loan_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -12,6 +14,11 @@
     $canAccessDeductionSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_deduction_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessSalaryIncrementSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_salary_increment_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessAttendanceConfigTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance_config', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    // Screen Settings tab: system admins get the full per-user table; a plain user
+    // granted 'manage_own_screen_settings' only ever sees/edits their own single row
+    // (see canManageOwnScreenSettings in the JS permissions payload below).
+    $canAccessScreenSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_own_screen_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $ownScreenSettings = $canAccessScreenSettingsTab ? get_user_screen_settings($conDB, $empid ?? '') : null;
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -334,6 +341,24 @@
         .special-access-group-label:first-child {
             margin-top: 0;
         }
+        /* Page Access sub-group headers - deliberately bigger/bolder/colored than
+           .special-access-group-label above (that one's small-muted style, used for the
+           assigned-users summary badges, was unreadable when reused for these). */
+        .page-access-group-label {
+            font-size: .95rem;
+            font-weight: 700;
+            color: #4fa0e3;
+            margin: 1.1rem 0 .5rem;
+            padding-bottom: .3rem;
+            border-bottom: 2px solid #e3eefb;
+        }
+        .page-access-group-label:first-child {
+            margin-top: 0;
+        }
+        .page-access-group-label i {
+            width: 20px;
+            text-align: center;
+        }
         /* Distinguishes Report Access badges (a different underlying map) from ability
            badges (badge-info/blue) at a glance in the assigned-users list. */
         .badge-purple {
@@ -353,6 +378,7 @@
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,
+            'canAccessCompaniesTab' => (bool) $canAccessCompaniesTab,
             'canAccessSubDepartmentsTab' => (bool) $canAccessSubDepartmentsTab,
             'canAccessRequestBlocksTab' => (bool) $canAccessRequestBlocksTab,
             'canAccessLoanSettingsTab' => (bool) $canAccessLoanSettingsTab,
@@ -361,7 +387,14 @@
             'canAccessDeductionSettingsTab' => (bool) $canAccessDeductionSettingsTab,
             'canAccessSalaryIncrementSettingsTab' => (bool) $canAccessSalaryIncrementSettingsTab,
             'canAccessAttendanceConfigTab' => (bool) $canAccessAttendanceConfigTab,
+            'canAccessScreenSettingsTab' => (bool) $canAccessScreenSettingsTab,
         ]) ?>;
+        // Only meaningful for a non-admin 'manage_own_screen_settings' holder (prefills
+        // their self-only form); full admins load every user's data via ajax instead.
+        window.APP_SETTINGS_OWN_SCREEN_SETTINGS = <?= json_encode($ownScreenSettings ?? default_screen_settings()) ?>;
+        // Lets the Screen Settings save handlers apply the change to THIS tab immediately
+        // (no reload needed) when the emp_id being saved is whoever is currently logged in.
+        window.APP_SETTINGS_CURRENT_EMP_ID = <?= json_encode((string) ($empid ?? '')) ?>;
     </script>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
@@ -428,6 +461,10 @@
                                          "Report Access" group in renderSpecialAccessSettings) instead of its own tab,
                                          so this hidden field must survive tab switches the same way. -->
                                     <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
+                                    <!-- Screen Settings self-saves straight to its own dedicated actions
+                                         (get_screen_settings_data/update_screen_settings_map/update_own_screen_settings)
+                                         - no hidden field needed here, unlike special_access_by_user above. -->
+
 
                                     <div class="form-group text-right m-t-20" id="saveBtnWrapper">
                                         <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">

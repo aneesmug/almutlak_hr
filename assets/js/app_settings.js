@@ -29,6 +29,8 @@ function __(key, def) {
         const canAccessDeductionSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessDeductionSettingsTab;
         const canAccessSalaryIncrementSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessSalaryIncrementSettingsTab;
         const canAccessAttendanceConfigTab = window.APP_SETTINGS_PERMISSIONS.canAccessAttendanceConfigTab;
+        const canAccessScreenSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessScreenSettingsTab;
+        const canAccessCompaniesTab = window.APP_SETTINGS_PERMISSIONS.canAccessCompaniesTab;
         const requestTypeBlockLabels = {
             smart_request: __('smart_request', 'Smart Request'),
             loan_request: __('loan_request', 'Loan Request'),
@@ -50,6 +52,10 @@ function __(key, def) {
         let reportPermissionMap = {};
         let specialAccessEligibleUsers = [];
         let specialAccessMap = {};
+        let screenSettingsUsersRaw = null;
+        let screenSettingsMap = {};
+        let screenSettingsDefaults = { scale: 100, width: 1920, height: 1080, fullscreen: 0 };
+        let companiesTimetablesCache = [];
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
@@ -112,7 +118,7 @@ function __(key, def) {
         }
 
         function getSpecialAccessCatalog() {
-            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"}];
+            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"},{"value":"manage_own_screen_settings","label":"Screen Settings: Allow User to Edit Own Scale\/Resolution\/Fullscreen"},{"value":"manage_company_settings","label":"Access App Settings - Companies Tab"}];
         }
 
         // Purely presentational grouping (icon + ordered keys) for the Special Access
@@ -120,7 +126,7 @@ function __(key, def) {
         // so both stay in sync. Any catalog key not listed in any category here still shows,
         // just bucketed under a trailing "Other" group by buildSpecialAccessPanelData().
         function getSpecialAccessCategories() {
-            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"Biometric Devices","icon":"fa-fingerprint","keys":["manage_device_monitor"]},{"name":"Attendance","icon":"fa-calendar-check","keys":["manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor"]}];
+            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction","manage_device_monitor","manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings","manage_own_screen_settings","manage_company_settings"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor"]}];
         }
 
         // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
@@ -149,6 +155,54 @@ function __(key, def) {
             }
 
             return { panels, labelByKey };
+        }
+
+        // Sub-grouping used ONLY inside the "Page Access" panel's checkbox grid (50+ keys -
+        // too many to scan flat). Mirrors includes/special_access_helper.php::get_page_access_subgroups() -
+        // presentational only, same tab, no new top-level category.
+        function getPageAccessSubgroups() {
+            return [
+                { name: 'Dashboard', icon: 'fa-gauge-high', keys: ['access_dashboard', 'access_dashboardgm'] },
+                { name: 'Employee Management', icon: 'fa-users', keys: ['access_add_new_employee', 'access_reg_employee', 'access_edit_employee', 'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors', 'access_all_applied_employee_transfers', 'access_employee_evaluation', 'access_all_employee_evaluations'] },
+                { name: 'Vacation & Leave', icon: 'fa-umbrella-beach', keys: ['access_all_applied_vac', 'access_vacation_status_history', 'access_manual_vacation', 'access_vacation_dates_by_inv', 'access_manage_holidays'] },
+                { name: 'Payroll & Salary', icon: 'fa-money-bill-wave', keys: ['access_all_payroll_approvals', 'access_payroll_checklist_report', 'access_payroll_status_history', 'access_generate_payroll', 'access_employee_salary_report', 'access_all_applied_salary_increment', 'access_salary_increment_status_history', 'access_diagnose_double_deduction', 'access_fix_double_deduction'] },
+                { name: 'Loan', icon: 'fa-hand-holding-usd', keys: ['access_all_applied_loan', 'access_loan_report_details', 'access_add_manual_loan'] },
+                { name: 'Business Trip', icon: 'fa-plane', keys: ['access_all_applied_business_trip', 'access_business_trip_status_history'] },
+                { name: 'Resignation, Rejoin & Settlement', icon: 'fa-file-signature', keys: ['access_all_resignations', 'access_all_settlements', 'access_settlement_status_history', 'access_rejoin_approvals'] },
+                { name: 'Requests', icon: 'fa-inbox', keys: ['access_all_requests', 'access_all_general_requests'] },
+                { name: 'Assets & Fleet', icon: 'fa-warehouse', keys: ['access_all_cars', 'access_view_car', 'access_all_locations', 'access_all_machines', 'access_asset_inventory', 'access_all_menu_item', 'manage_device_monitor'] },
+                { name: 'Import Tools', icon: 'fa-file-import', keys: ['access_import_medical_insurance', 'access_import_loan_opening_balance', 'access_import_iqama_exp'] },
+                { name: 'Communication & Content', icon: 'fa-bullhorn', keys: ['access_send_announcement', 'access_vouchers', 'access_all_user_invoices', 'access_file_manager', 'access_gallery', 'access_language'] },
+                { name: 'System Administration', icon: 'fa-user-shield', keys: ['access_all_users', 'access_log_activity', 'access_view_activity_logs'] },
+                { name: 'Attendance', icon: 'fa-calendar-check', keys: ['manage_attendance', 'manage_attendance_config', 'view_employee_attendance_tab'] },
+                { name: 'Reports', icon: 'fa-chart-bar', keys: ['access_reports'] }
+            ];
+        }
+
+        // Renders the Page Access panel's checkboxes split into named sub-sections instead
+        // of one flat 50+ item grid - still the same single "Page Access" tab/panel, just
+        // organized. Any key not covered by getPageAccessSubgroups() still shows, under a
+        // trailing "Other" bucket, so a newly-added page is never silently hidden.
+        function renderGroupedCheckboxGrid(idPrefix, subgroups, keysInPanel, labelByKey, selectedSet) {
+            const keysSet = new Set(keysInPanel);
+            const placed = new Set();
+            let html = '';
+
+            subgroups.forEach(group => {
+                const keysHere = group.keys.filter(k => keysSet.has(k));
+                if (!keysHere.length) return;
+                keysHere.forEach(k => placed.add(k));
+                html += `<div class="page-access-group-label"><i class="fa ${group.icon || 'fa-folder'} mr-2"></i>${escapeHtml(group.name)}</div>`;
+                html += renderSpecialAccessCheckboxGrid(idPrefix, keysHere, labelByKey, selectedSet);
+            });
+
+            const leftover = keysInPanel.filter(k => !placed.has(k));
+            if (leftover.length) {
+                html += `<div class="page-access-group-label"><i class="fa fa-ellipsis-h mr-2"></i>${__('other', 'Other')}</div>`;
+                html += renderSpecialAccessCheckboxGrid(idPrefix, leftover, labelByKey, selectedSet);
+            }
+
+            return html;
         }
 
         function renderSpecialAccessCheckboxGrid(idPrefix, keys, labelByKey, selectedSet) {
@@ -515,7 +569,7 @@ function __(key, def) {
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance'];
+            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'screen_settings'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -555,6 +609,13 @@ function __(key, def) {
             // Special handling for special access configuration
             if (normalizedGroupName === 'special_access') {
                 renderSpecialAccessSettings();
+                return;
+            }
+
+            // Screen Settings: full table for admins, self-only form for a plain user
+            // granted 'manage_own_screen_settings'.
+            if (normalizedGroupName === 'screen_settings') {
+                renderScreenSettingsSettings();
                 return;
             }
 
@@ -878,6 +939,7 @@ function __(key, def) {
             { key: 'departments', label: '' + __('departments', 'Departments') + '', canAccess: () => canAccessDepartmentsTab },
             { key: 'job_titles', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
             { key: 'locations', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
+            { key: 'companies', label: '' + __('companies', 'Companies') + '', canAccess: () => canAccessCompaniesTab },
         ];
 
         function renderOrgStructureHub() {
@@ -909,6 +971,7 @@ function __(key, def) {
                 if (key === 'departments') renderDepartmentsSettings(subContent);
                 else if (key === 'job_titles') renderJobTitlesSettings(subContent);
                 else if (key === 'locations') renderLocationsSettings(subContent);
+                else if (key === 'companies') renderCompaniesSettings(subContent);
             }
 
             document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
@@ -2331,7 +2394,9 @@ function __(key, def) {
             panels.forEach((p, i) => {
                 panelsHtml += `<div class="sae-panel${i === 0 ? ' sae-panel-visible' : ''}" data-panel-id="${p.id}">`;
                 panelsHtml += `<div class="sae-panel-title"><i class="fa ${p.icon} mr-1"></i> ${escapeHtml(p.name)}</div>`;
-                panelsHtml += renderSpecialAccessCheckboxGrid('swal-special-access', p.keys, labelByKey, selectedSet);
+                panelsHtml += (p.name === 'Page Access')
+                    ? renderGroupedCheckboxGrid('swal-special-access', getPageAccessSubgroups(), p.keys, labelByKey, selectedSet)
+                    : renderSpecialAccessCheckboxGrid('swal-special-access', p.keys, labelByKey, selectedSet);
                 panelsHtml += `</div>`;
             });
             if (reportAccessApplicable) {
@@ -2722,6 +2787,402 @@ function __(key, def) {
                     document.getElementById('license-verify-spinner').style.display = 'none';
                 }
             });
+        }
+
+        // --- Screen Settings tab (per-user Scale % / reference Resolution / Fullscreen) ---
+        // Mirrors the Special Access tab's UX: search-select a user, edit just that one
+        // user's settings in a modal, see only users with a saved override listed below -
+        // never a table pre-populated with every user.
+        async function renderScreenSettingsSettings() {
+            if (!isFullSettingsAdmin) {
+                const own = window.APP_SETTINGS_OWN_SCREEN_SETTINGS || screenSettingsDefaults;
+                settingsContainer.innerHTML = `
+                    <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
+                        <h5 class="mb-3"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
+                        <p class="text-muted">${__('own_screen_settings_desc', 'Adjust the display scale and fullscreen behavior for your own account. Display Resolution is stored for reference only.')}</p>
+                        <div class="row">
+                            <div class="col-md-3 form-group">
+                                <label>${__('screen_scale', 'Scale %')}</label>
+                                <input type="number" min="25" max="300" step="5" class="form-control" id="own-screen-scale" value="${own.scale}">
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label>${__('display_width', 'Width (px)')}</label>
+                                <input type="number" min="800" max="7680" class="form-control" id="own-screen-width" value="${own.width}">
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label>${__('display_height', 'Height (px)')}</label>
+                                <input type="number" min="600" max="4320" class="form-control" id="own-screen-height" value="${own.height}">
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label class="d-block">&nbsp;</label>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="own-screen-fullscreen" ${own.fullscreen ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="own-screen-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary waves-effect waves-light" id="saveOwnScreenSettingsBtn">${__('save_changes', 'Save Changes')}</button>
+                    </div>
+                `;
+                document.getElementById('saveOwnScreenSettingsBtn').addEventListener('click', saveOwnScreenSettings);
+                return;
+            }
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
+                        <span class="badge badge-pill badge-light" id="screen-settings-total-badge"></span>
+                    </div>
+                    <p class="text-muted mb-3">${__('screen_settings_admin_desc', 'Search a user and set their display scale and fullscreen behavior. Display Resolution is stored for reference only and does not itself change rendering.')}</p>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <label for="screen-settings-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i>${__('select_user')}</label>
+                            <select id="screen-settings-user-select" class="form-control select2"></select>
+                            <small class="form-text text-muted">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
+                        </div>
+                    </div>
+
+                    <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i>${__('assigned_users', 'Assigned Users')}</h6>
+                    <div id="screen-settings-assigned-users-list">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2">${__('loading')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            const { users } = await fetchScreenSettingsData();
+            const select = document.getElementById('screen-settings-user-select');
+            if (!select) return;
+
+            if (!users.length) {
+                select.innerHTML = `<option value="">${__('no_users_found')}</option>`;
+                renderAssignedScreenSettingsSummary(users);
+                return;
+            }
+
+            let options = `<option value="">${__('select_user')}</option>`;
+            users.forEach(user => {
+                const empId = String(user.emp_id || '').trim();
+                if (!empId) return;
+                const displayName = (user.name || '').trim() || empId;
+                const role = (user.user_type || '').trim();
+                options += `<option value="${escapeHtml(empId)}">${escapeHtml(displayName)} (${escapeHtml(empId)})${role ? ' - ' + escapeHtml(formatRoleLabel(role)) : ''}</option>`;
+            });
+            select.innerHTML = options;
+
+            if ($(select).hasClass('select2-hidden-accessible')) {
+                $(select).trigger('change.select2');
+            } else {
+                $(select).select2({ width: '100%' });
+            }
+
+            const $select = $(select);
+            $select.off('change.screenSettings select2:select.screenSettings select2:clear.screenSettings');
+            $select.on('change.screenSettings select2:select.screenSettings select2:clear.screenSettings', function () {
+                const selectedEmpId = String($select.val() || '').trim();
+                if (!selectedEmpId) return;
+                openScreenSettingsEditModal(selectedEmpId, users);
+                // Reset to placeholder - the modal is the single source of truth for editing.
+                $select.val('').trigger('change.select2');
+            });
+
+            renderAssignedScreenSettingsSummary(users);
+        }
+
+        // Applies a Screen Settings change to THIS tab right now, no reload required -
+        // used right after a save succeeds for whichever emp_id matches the currently
+        // logged-in user (see window.APP_SETTINGS_CURRENT_EMP_ID). Mirrors the same zoom/
+        // fullscreen logic includes/main_menu.php injects server-side on every page load,
+        // just applied live instead of waiting for the next navigation.
+        function applyScreenSettingsLive(settings) {
+            if (!settings) return;
+            try {
+                document.documentElement.style.zoom = (settings.scale || 100) + '%';
+            } catch (e) { /* ignore - unsupported browser */ }
+
+            if (settings.fullscreen) {
+                // Keep retrying on every click/keydown (capture phase, so an in-between
+                // element's stopPropagation() can't block it) until requestFullscreen()
+                // actually succeeds - see the matching comment in includes/main_menu.php
+                // for why a naive one-shot { once: true } listener was flaky.
+                function cleanup() {
+                    document.removeEventListener('click', tryEnterFullscreen, true);
+                    document.removeEventListener('keydown', tryEnterFullscreen, true);
+                }
+                function tryEnterFullscreen() {
+                    if (document.fullscreenElement || document.webkitFullscreenElement) {
+                        cleanup();
+                        return;
+                    }
+                    const el = document.documentElement;
+                    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+                    if (!request) { cleanup(); return; }
+                    let result;
+                    try {
+                        result = request.call(el);
+                    } catch (e) {
+                        return;
+                    }
+                    if (result && typeof result.then === 'function') {
+                        result.then(cleanup).catch(function () { /* declined - try again next time */ });
+                    } else {
+                        cleanup();
+                    }
+                }
+                document.addEventListener('click', tryEnterFullscreen, true);
+                document.addEventListener('keydown', tryEnterFullscreen, true);
+            }
+        }
+
+        async function fetchScreenSettingsData() {
+            if (Array.isArray(screenSettingsUsersRaw)) {
+                return { users: screenSettingsUsersRaw, map: screenSettingsMap, defaults: screenSettingsDefaults };
+            }
+
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_screen_settings_data' })
+                });
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.users)) {
+                    throw new Error(data.message || __('failed_to_load_users'));
+                }
+                screenSettingsUsersRaw = data.users;
+                // Guard against an empty map ever coming back as a JSON array ([] instead
+                // of {}) - assigning an emp_id-keyed property onto a real JS Array turns it
+                // into a sparse array (numeric-looking keys become indices), which then
+                // serializes as a huge array of nulls on save and corrupts the stored map.
+                screenSettingsMap = (data.map && typeof data.map === 'object' && !Array.isArray(data.map)) ? data.map : {};
+                screenSettingsDefaults = data.defaults || screenSettingsDefaults;
+            } catch (error) {
+                console.error('Failed loading screen settings:', error);
+                screenSettingsUsersRaw = [];
+            }
+
+            return { users: screenSettingsUsersRaw, map: screenSettingsMap, defaults: screenSettingsDefaults };
+        }
+
+        async function saveScreenSettingsMap() {
+            const response = await fetch('./includes/settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'update_screen_settings_map',
+                    screen_settings_by_user: JSON.stringify(screenSettingsMap)
+                })
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.message || __('could_not_save_settings'));
+            }
+        }
+
+        function renderAssignedScreenSettingsSummary(users) {
+            const container = document.getElementById('screen-settings-assigned-users-list');
+            if (!container) return;
+
+            const userMap = new Map((users || []).map(u => [String(u.emp_id || ''), u]));
+            const assignedEmpIds = Object.keys(screenSettingsMap || {});
+
+            const totalBadge = document.getElementById('screen-settings-total-badge');
+            if (totalBadge) {
+                totalBadge.textContent = assignedEmpIds.length + ' ' + __('assigned', 'assigned');
+                totalBadge.classList.toggle('badge-primary', assignedEmpIds.length > 0);
+                totalBadge.classList.toggle('badge-light', assignedEmpIds.length === 0);
+            }
+
+            if (!assignedEmpIds.length) {
+                container.innerHTML = `<div class="special-access-empty-state"><i class="fas fa-display"></i>${__('no_assigned_users_yet')}</div>`;
+                return;
+            }
+
+            let html = '';
+            assignedEmpIds.forEach(empId => {
+                const user = userMap.get(empId);
+                const name = user ? ((user.name || '').trim() || empId) : empId;
+                const role = user ? ((user.user_type || '').trim()) : '';
+                const s = screenSettingsMap[empId] || screenSettingsDefaults;
+
+                html += '<div class="special-access-user-card">';
+                html += '<div class="d-flex justify-content-between align-items-start">';
+                html += `<div>
+                    <strong>${escapeHtml(name)}</strong>
+                    <span class="text-muted ml-1">#${escapeHtml(empId)}</span>
+                    ${role ? `<span class="badge badge-primary ml-1">${escapeHtml(formatRoleLabel(role))}</span>` : ''}
+                </div>`;
+                html += `<div class="text-nowrap">
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="fas fa-edit"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                </div>`;
+                html += '</div>';
+                html += `<div class="mt-2">
+                    <span class="badge badge-info mr-1 mb-1">${__('screen_scale', 'Scale')}: ${s.scale}%</span>
+                    <span class="badge badge-info mr-1 mb-1">${s.width}x${s.height}</span>
+                    <span class="badge ${s.fullscreen ? 'badge-success' : 'badge-secondary'} mr-1 mb-1">${s.fullscreen ? __('fullscreen_on', 'Fullscreen: On') : __('fullscreen_off', 'Fullscreen: Off')}</span>
+                </div>`;
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+
+            container.querySelectorAll('.edit-assigned-screen-settings-user').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    openScreenSettingsEditModal(empId, users);
+                });
+            });
+
+            container.querySelectorAll('.remove-assigned-screen-settings-user').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const empId = String(this.dataset.empId || '');
+                    if (!empId) return;
+                    Swal.fire({
+                        title: __('remove_user_assignment'),
+                        text: __('this_will_remove_screen_settings_for_this_user', 'This will remove the custom screen settings for this user (they revert to the 100% / no-fullscreen default).'),
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: __('yes_remove_it'),
+                        cancelButtonText: __('cancel')
+                    }).then(async (result) => {
+                        if (!result.isConfirmed) return;
+
+                        delete screenSettingsMap[empId];
+
+                        Swal.fire({
+                            title: __('saving', 'Saving...'),
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
+                        try {
+                            await saveScreenSettingsMap();
+                            await Swal.fire({
+                                icon: 'success',
+                                title: __('removed'),
+                                confirmButtonText: __('ok', 'OK')
+                            });
+                            renderAssignedScreenSettingsSummary(users);
+                        } catch (error) {
+                            Swal.fire(__('error'), error.message, 'error');
+                        }
+                    });
+                });
+            });
+        }
+
+        // Single entry point for adding/editing one user's Screen Settings: a SweetAlert2
+        // modal, opened either by picking a user from the select above or the "Edit" button
+        // on an assigned-user card - mirrors openSpecialAccessEditModal's flow.
+        function openScreenSettingsEditModal(empId, users) {
+            const targetEmpId = String(empId || '').trim();
+            if (!targetEmpId) return;
+
+            const user = (users || []).find(u => String(u.emp_id || '').trim() === targetEmpId);
+            const name = user ? ((user.name || '').trim() || targetEmpId) : targetEmpId;
+            const s = screenSettingsMap[targetEmpId] || screenSettingsDefaults;
+
+            Swal.fire({
+                title: `${__('screen_settings', 'Screen Settings')}: ${escapeHtml(name)}`,
+                html: `
+                    <div class="text-left">
+                        <div class="form-group">
+                            <label>${__('screen_scale', 'Scale %')}</label>
+                            <input type="number" min="25" max="300" step="5" id="swal-ss-scale" class="form-control" value="${s.scale}">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-6">
+                                <label>${__('display_width', 'Width (px)')}</label>
+                                <input type="number" min="800" max="7680" id="swal-ss-width" class="form-control" value="${s.width}">
+                            </div>
+                            <div class="form-group col-6">
+                                <label>${__('display_height', 'Height (px)')}</label>
+                                <input type="number" min="600" max="4320" id="swal-ss-height" class="form-control" value="${s.height}">
+                            </div>
+                        </div>
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="swal-ss-fullscreen" ${s.fullscreen ? 'checked' : ''}>
+                            <label class="custom-control-label" for="swal-ss-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: __('save_changes', 'Save Changes'),
+                cancelButtonText: __('cancel'),
+                focusConfirm: false,
+                preConfirm: () => ({
+                    scale: parseInt(document.getElementById('swal-ss-scale').value, 10) || 100,
+                    width: parseInt(document.getElementById('swal-ss-width').value, 10) || 1920,
+                    height: parseInt(document.getElementById('swal-ss-height').value, 10) || 1080,
+                    fullscreen: document.getElementById('swal-ss-fullscreen').checked ? 1 : 0
+                })
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+
+                screenSettingsMap[targetEmpId] = result.value;
+
+                Swal.fire({
+                    title: __('saving', 'Saving...'),
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                try {
+                    await saveScreenSettingsMap();
+                    // If the admin just edited their OWN row, apply it to this tab right now
+                    // instead of making them reload (or worse, hard-refresh) to see it.
+                    const isEditingSelf = window.APP_SETTINGS_CURRENT_EMP_ID && targetEmpId === String(window.APP_SETTINGS_CURRENT_EMP_ID);
+                    if (isEditingSelf) {
+                        applyScreenSettingsLive(result.value);
+                    }
+                    await Swal.fire({
+                        icon: 'success',
+                        title: __('saved', 'Saved'),
+                        text: isEditingSelf ? __('screen_settings_applied_now', 'Applied to this session immediately.') : '',
+                        confirmButtonText: __('ok', 'OK')
+                    });
+                    renderAssignedScreenSettingsSummary(users);
+                } catch (error) {
+                    Swal.fire(__('error'), error.message, 'error');
+                }
+            });
+        }
+
+        async function saveOwnScreenSettings() {
+            try {
+                const response = await fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_own_screen_settings',
+                        scale: document.getElementById('own-screen-scale').value,
+                        width: document.getElementById('own-screen-width').value,
+                        height: document.getElementById('own-screen-height').value,
+                        fullscreen: document.getElementById('own-screen-fullscreen').checked ? 1 : 0
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    // Self-service always edits the logged-in user's own row - apply it to
+                    // this tab immediately, no reload (hard or otherwise) needed.
+                    applyScreenSettingsLive(data.settings);
+                    Swal.fire(__('success', 'Success'), __('screen_settings_applied_now', 'Applied to this session immediately.'), 'success');
+                } else {
+                    Swal.fire(__('error', 'Error'), data.message || __('generic_error_message', 'An unexpected error occurred.'), 'error');
+                }
+            } catch (error) {
+                Swal.fire(__('error', 'Error'), __('generic_error_message', 'An unexpected error occurred.'), 'error');
+            }
         }
 
         async function renderSpecialAccessSettings() {
@@ -4072,6 +4533,375 @@ function __(key, def) {
             }
         }
 
+        // --- Companies (Org Structure sub-tab) ---
+        // Mirrors renderDepartmentsSettings/loadDepartments/etc. above, against
+        // includes/companies_handler.php and the `companies` table instead of `department`.
+        // No color field (companies has none); adds Company Code (comp_id - the legacy
+        // numeric code employees.comp_no matches against) and an optional Default
+        // Timetable dropdown (companies.timetable_id) that Departments has no analog for.
+        function renderCompaniesSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
+            let formHtml = `<div class="tab-pane active" id="group-companies" role="tabpanel">`;
+            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
+            formHtml += `<h5 class="mb-0">${__('company_management', 'Company Management')}</h5>`;
+            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-company"><i class="mdi mdi-plus"></i> ${__('add_new_company', 'Add New Company')}</button>`;
+            formHtml += `</div>`;
+            formHtml += `<p class="text-muted mb-4">${__('manage_companies_in_english_and_arabic', 'Manage companies in English and Arabic.')}</p>`;
+
+            formHtml += `<div class="form-group mb-3">`;
+            formHtml += `<input type="text" id="company-search-input" class="form-control" placeholder="${__('search_companies_english_or_arabic', 'Search companies (English or Arabic)...')}" style="max-width: 400px;">`;
+            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_company_in_english_or_arabic', 'Search by company in English or Arabic')}</small>`;
+            formHtml += `</div>`;
+
+            formHtml += `<div id="companies-container" class="border rounded p-3 bg-light">`;
+            formHtml += `<div class="text-center text-muted">`;
+            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
+            formHtml += `<span class="ml-2">${__('loading')}</span>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            formHtml += `</div>`;
+            hostEl.innerHTML = formHtml;
+
+            loadCompanies();
+
+            const btnAddCompany = document.getElementById('btn-add-company');
+            if (btnAddCompany) {
+                btnAddCompany.addEventListener('click', showAddCompanyModal);
+            }
+
+            const searchInput = document.getElementById('company-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    filterCompanies(this.value);
+                });
+            }
+        }
+
+        function buildTimetableOptionsHtml(selectedId) {
+            const selected = selectedId != null ? String(selectedId) : '';
+            let options = `<option value="">${__('no_default_timetable', 'No default timetable')}</option>`;
+            companiesTimetablesCache.forEach(t => {
+                options += `<option value="${t.id}" ${String(t.id) === selected ? 'selected' : ''}>${escapeHtml(t.name)}</option>`;
+            });
+            return options;
+        }
+
+        async function loadCompanies() {
+            try {
+                const response = await fetch('./includes/companies_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ action: 'get_companies' })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_companies', 'Failed to load companies') + '');
+                const data = await response.json();
+
+                companiesTimetablesCache = Array.isArray(data.timetables) ? data.timetables : [];
+
+                const container = document.getElementById('companies-container');
+                if (!data.success || !data.companies || data.companies.length === 0) {
+                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_companies_configured_yet', 'No companies configured yet') + '</p>';
+                    return;
+                }
+
+                let companiesHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('company_english', 'Company (English)') + '</th><th>' + __('company_arabic', 'Company (Arabic)') + '</th><th>' + __('company_code', 'Company Code') + '</th><th>' + __('default_timetable', 'Default Timetable') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
+                data.companies.forEach((company) => {
+                    companiesHtml += `
+                        <tr>
+                            <td><strong>${escapeHtml(company.comp_name || 'N/A')}</strong></td>
+                            <td><strong>${escapeHtml(company.comp_name_ar || 'N/A')}</strong></td>
+                            <td>${escapeHtml(String(company.comp_id ?? ''))}</td>
+                            <td>${escapeHtml(company.timetable_name || __('none', 'None'))}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary edit-company-btn" data-company-id="${company.id}" title="${__('edit')}">
+                                        <i class="mdi mdi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-company-btn" data-company-id="${company.id}" title="${__('delete')}">
+                                        <i class="mdi mdi-delete"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                companiesHtml += '</tbody></table></div>';
+                container.innerHTML = companiesHtml;
+
+                container.querySelectorAll('.edit-company-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        showEditCompanyModal(this.dataset.companyId);
+                    });
+                });
+
+                container.querySelectorAll('.delete-company-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        deleteCompany(this.dataset.companyId);
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading companies:', error);
+                const container = document.getElementById('companies-container');
+                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+            }
+        }
+
+        function showAddCompanyModal() {
+            Swal.fire({
+                icon: 'info',
+                title: '' + __('add_new_company', 'Add New Company') + '',
+                html: `
+                    <div class="form-group text-left">
+                        <label for="company-title-en">${__('company_english', 'Company (English)')}</label>
+                        <input type="text" id="company-title-en" class="form-control" placeholder="${__('enter_company_in_english', 'Enter company in English')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="company-title-ar">${__('company_arabic', 'Company (Arabic)')}</label>
+                        <input type="text" id="company-title-ar" class="form-control" placeholder="${__('enter_company_in_arabic', 'Enter company in Arabic')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="company-code">${__('company_code', 'Company Code')}</label>
+                        <input type="number" min="1" id="company-code" class="form-control" placeholder="${__('enter_company_code', 'Enter a unique numeric company code')}">
+                    </div>
+                    <div class="form-group text-left">
+                        <label for="company-timetable">${__('default_timetable', 'Default Timetable')}</label>
+                        <select id="company-timetable" class="form-control">${buildTimetableOptionsHtml(null)}</select>
+                    </div>
+                `,
+                allowOutsideClick: false,
+                showCancelButton: true,
+                confirmButtonText: '' + __('add') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                preConfirm: () => {
+                    const titleEn = document.getElementById('company-title-en').value.trim();
+                    const titleAr = document.getElementById('company-title-ar').value.trim();
+                    const compCode = document.getElementById('company-code').value.trim();
+                    const timetableId = document.getElementById('company-timetable').value;
+
+                    if (!titleEn) {
+                        Swal.showValidationMessage('' + __('company_in_english_is_required', 'Company name in English is required') + '');
+                        return false;
+                    }
+                    if (!titleAr) {
+                        Swal.showValidationMessage('' + __('company_in_arabic_is_required', 'Company name in Arabic is required') + '');
+                        return false;
+                    }
+                    if (!compCode || parseInt(compCode, 10) <= 0) {
+                        Swal.showValidationMessage('' + __('valid_company_code_is_required', 'A valid Company Code is required') + '');
+                        return false;
+                    }
+                    return { titleEn, titleAr, compCode, timetableId };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    await addCompany(result.value.titleEn, result.value.titleAr, result.value.compCode, result.value.timetableId);
+                }
+            });
+        }
+
+        async function addCompany(titleEn, titleAr, compCode, timetableId) {
+            try {
+                const response = await fetch('./includes/companies_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'add_company',
+                        company_en: titleEn,
+                        company_ar: titleAr,
+                        comp_id: compCode,
+                        timetable_id: timetableId || ''
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_add_company', 'Failed to add company') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('added') + '', '' + __('company_added_successfully', 'Company added successfully') + '', 'success');
+                    loadCompanies();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_add_company', 'Failed to add company') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function showEditCompanyModal(companyId) {
+            try {
+                const response = await fetch('./includes/companies_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'get_company',
+                        company_id: companyId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_load_company', 'Failed to load company') + '');
+                const data = await response.json();
+
+                if (!data.success || !data.company) {
+                    Swal.fire('' + __('error') + '', '' + __('company_not_found', 'Company not found') + '', 'error');
+                    return;
+                }
+
+                const company = data.company;
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: '' + __('edit_company', 'Edit Company') + '',
+                    html: `
+                        <div class="form-group text-left">
+                            <label for="edit-company-title-en">${__('company_english', 'Company (English)')}</label>
+                            <input type="text" id="edit-company-title-en" class="form-control" value="${escapeHtml(company.comp_name || '')}" placeholder="${__('enter_company_in_english', 'Enter company in English')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-company-title-ar">${__('company_arabic', 'Company (Arabic)')}</label>
+                            <input type="text" id="edit-company-title-ar" class="form-control" value="${escapeHtml(company.comp_name_ar || '')}" placeholder="${__('enter_company_in_arabic', 'Enter company in Arabic')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-company-code">${__('company_code', 'Company Code')}</label>
+                            <input type="number" min="1" id="edit-company-code" class="form-control" value="${escapeHtml(String(company.comp_id ?? ''))}" placeholder="${__('enter_company_code', 'Enter a unique numeric company code')}">
+                        </div>
+                        <div class="form-group text-left">
+                            <label for="edit-company-timetable">${__('default_timetable', 'Default Timetable')}</label>
+                            <select id="edit-company-timetable" class="form-control">${buildTimetableOptionsHtml(company.timetable_id)}</select>
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('update') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    preConfirm: () => {
+                        const titleEn = document.getElementById('edit-company-title-en').value.trim();
+                        const titleAr = document.getElementById('edit-company-title-ar').value.trim();
+                        const compCode = document.getElementById('edit-company-code').value.trim();
+                        const timetableId = document.getElementById('edit-company-timetable').value;
+
+                        if (!titleEn) {
+                            Swal.showValidationMessage('' + __('company_in_english_is_required', 'Company name in English is required') + '');
+                            return false;
+                        }
+                        if (!titleAr) {
+                            Swal.showValidationMessage('' + __('company_in_arabic_is_required', 'Company name in Arabic is required') + '');
+                            return false;
+                        }
+                        if (!compCode || parseInt(compCode, 10) <= 0) {
+                            Swal.showValidationMessage('' + __('valid_company_code_is_required', 'A valid Company Code is required') + '');
+                            return false;
+                        }
+                        return { titleEn, titleAr, compCode, timetableId };
+                    }
+                });
+
+                if (result.isConfirmed) {
+                    await updateCompany(companyId, result.value.titleEn, result.value.titleAr, result.value.compCode, result.value.timetableId);
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function updateCompany(companyId, titleEn, titleAr, compCode, timetableId) {
+            try {
+                const response = await fetch('./includes/companies_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'update_company',
+                        company_id: companyId,
+                        company_en: titleEn,
+                        company_ar: titleAr,
+                        comp_id: compCode,
+                        timetable_id: timetableId || ''
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_update_company', 'Failed to update company') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('updated') + '', '' + __('company_updated_successfully', 'Company updated successfully') + '', 'success');
+                    loadCompanies();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_update_company', 'Failed to update company') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        async function deleteCompany(companyId) {
+            const result = await Swal.fire({
+                title: '' + __('delete_company', 'Delete Company') + '',
+                text: '' + __('this_action_cannot_be_undone') + '',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: '' + __('yes_delete_it') + '',
+                cancelButtonText: '' + __('cancel') + ''
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch('./includes/companies_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        action: 'delete_company',
+                        company_id: companyId
+                    })
+                });
+
+                if (!response.ok) throw new Error('' + __('failed_to_delete_company', 'Failed to delete company') + '');
+                const data = await response.json();
+
+                if (data.success) {
+                    Swal.fire('' + __('deleted') + '', '' + __('company_deleted_successfully', 'Company deleted successfully') + '', 'success');
+                    loadCompanies();
+                } else {
+                    throw new Error(data.message || '' + __('failed_to_delete_company', 'Failed to delete company') + '');
+                }
+            } catch (error) {
+                Swal.fire('' + __('error') + '', error.message, 'error');
+            }
+        }
+
+        function filterCompanies(searchTerm) {
+            const rows = document.querySelectorAll('#companies-container tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const compEn = row.cells[0].textContent.toLowerCase();
+                const compAr = row.cells[1].textContent.toLowerCase();
+                const compCode = row.cells[2].textContent.toLowerCase();
+                const searchLower = searchTerm.toLowerCase();
+
+                if (compEn.includes(searchLower) || compAr.includes(searchLower) || compCode.includes(searchLower)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const container = document.getElementById('companies-container');
+            let noResultsMsg = container.querySelector('.no-results-msg');
+
+            if (visibleCount === 0 && searchTerm.trim() !== '') {
+                if (!noResultsMsg) {
+                    noResultsMsg = document.createElement('div');
+                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
+                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_companies_match_your_search', 'No companies match your search')}`;
+                    container.appendChild(noResultsMsg);
+                }
+            } else if (noResultsMsg) {
+                noResultsMsg.remove();
+            }
+        }
+
         function renderApprovalChainSettings() {
             //* const defaultRequestTypes = [
             //*     { id: 'vacation_request', name: '<?//= __('vacation_request') ?>', description: '<?//= __('annual_vacation_and_fly_vacation_approval_chain') ?>' },
@@ -4718,7 +5548,7 @@ function __(key, def) {
                 // reach a browser that only has partial access.
                 if (!isFullSettingsAdmin) {
                     groupedSettings = {};
-                    if (canAccessDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab) {
+                    if (canAccessDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab || canAccessCompaniesTab) {
                         groupedSettings['org_structure'] = [];
                     }
                     if (canAccessSubDepartmentsTab) {
@@ -4732,6 +5562,9 @@ function __(key, def) {
                     }
                     if (canAccessAttendanceConfigTab) {
                         groupedSettings['attendance_config'] = [];
+                    }
+                    if (canAccessScreenSettingsTab) {
+                        groupedSettings['screen_settings'] = [];
                     }
 
                     const savedGroup = localStorage.getItem('app_settings_active_group');
@@ -4846,6 +5679,9 @@ function __(key, def) {
                 }
                 if (!groupedSettings['attendance_config']) {
                     groupedSettings['attendance_config'] = [];
+                }
+                if (!groupedSettings['screen_settings']) {
+                    groupedSettings['screen_settings'] = [];
                 }
                 if (isFullSettingsAdmin) {
                 if (!groupedSettings['license']) {

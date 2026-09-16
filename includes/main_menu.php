@@ -81,6 +81,7 @@ $current_page_name = basename($_SERVER['PHP_SELF']);
 $is_employee_user_type = (strtolower((string)$user_type) === 'employee');
 
 require_once __DIR__ . '/special_access_helper.php';
+require_once __DIR__ . '/screen_settings_helper.php';
 
 // Sidebar navigation entries hidden entirely when their request type is globally blocked
 // (or individually blocked for the current logged-in user).
@@ -104,7 +105,7 @@ $isAllVacationMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'v
 // Value can be a single access key, or an array of keys where any one grants access.
 $page_special_access_bypass = [
     'vacation_balance_history.php' => 'view_vacation_balance_history',
-    'app_settings.php' => ['manage_department_settings', 'manage_job_title_settings', 'manage_global_request_blocks'],
+    'app_settings.php' => ['manage_department_settings', 'manage_job_title_settings', 'manage_global_request_blocks', 'manage_own_screen_settings'],
     'all_applied_vac.php' => 'access_all_applied_vac',
     'all_applied_loan.php' => 'access_all_applied_loan',
     'all_applied_business_trip.php' => 'access_all_applied_business_trip',
@@ -906,7 +907,8 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         $can_access_app_settings = $is_system_admin
             || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
             || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-            || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+            || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+            || user_has_special_access($conDB, $empid ?? '', 'manage_own_screen_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         $can_see_vacation_date_editor = in_array($user_role, $page_roles['vacation_dates_by_inv.php'] ?? []) || in_array($user_type, $page_roles['vacation_dates_by_inv.php'] ?? []);
         $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
         $can_import_medical_insurance = $is_system_admin
@@ -1146,4 +1148,67 @@ if (isset($_SESSION['auth_user'], $_SESSION['timeout_duration'], $_SESSION['last
 </script>
 <?php
 }
+
+// Per-user Screen Settings (App Settings/Screen Settings > by user): CSS zoom for
+// Scale %, plus an auto-Fullscreen attempt. Display Resolution is reference-only
+// and intentionally not applied here. Runs on every page that includes this file
+// (i.e. every logged-in page), scoped to whoever is currently signed in.
+$screenSettings = get_user_screen_settings($conDB, $empid ?? '');
+$screenScale = (int) ($screenSettings['scale'] ?? 100);
+$screenFullscreen = !empty($screenSettings['fullscreen']);
+if ($screenScale !== 100 || $screenFullscreen):
 ?>
+<?php if ($screenScale !== 100): ?>
+<style>
+    html { zoom: <?= $screenScale ?>%; }
+</style>
+<?php endif; ?>
+<?php if ($screenFullscreen): ?>
+<script>
+(function () {
+    // Browsers only allow requestFullscreen() from a real user gesture, so a page
+    // load alone can't force fullscreen. Arm it on click/keypress instead.
+    //
+    // Two things previously made this flaky ("sometimes doesn't apply"):
+    // 1. { once: true } removed the listener the instant it FIRED, not the instant it
+    //    SUCCEEDED - if that first click's requestFullscreen() call got rejected (the
+    //    browser can decline depending on what was clicked), every later click was
+    //    silently ignored for the rest of the page's life. Now it keeps retrying on
+    //    every click/keydown until fullscreen actually engages.
+    // 2. A bubble-phase listener never runs at all if some other click handler on an
+    //    element in between (a dropdown, a modal, etc.) calls stopPropagation() first.
+    //    Capture phase runs before that, at the document level, so it can't be blocked
+    //    that way.
+    function cleanup() {
+        document.removeEventListener('click', tryEnterFullscreen, true);
+        document.removeEventListener('keydown', tryEnterFullscreen, true);
+    }
+    function tryEnterFullscreen() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            cleanup();
+            return;
+        }
+        var el = document.documentElement;
+        var request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (!request) {
+            cleanup();
+            return;
+        }
+        var result;
+        try {
+            result = request.call(el);
+        } catch (e) {
+            return; // ignore - try again on the next click/keydown
+        }
+        if (result && typeof result.then === 'function') {
+            result.then(cleanup).catch(function () { /* declined - try again next time */ });
+        } else {
+            cleanup(); // older webkit-prefixed API has no promise - assume it worked
+        }
+    }
+    document.addEventListener('click', tryEnterFullscreen, true);
+    document.addEventListener('keydown', tryEnterFullscreen, true);
+})();
+</script>
+<?php endif; ?>
+<?php endif; ?>
