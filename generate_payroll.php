@@ -1092,11 +1092,11 @@
                                                         <th scope="col" class="text-center" style="width: 50px;">
                                                             <input class="" type="checkbox" id="selectAllEmployees">
                                                         </th>
-                                                        <th scope="col" style="width: 120px;"><?=__('employee_id')?></th>
-                                                        <th scope="col"><?=__('name')?></th>
-                                                        <th scope="col" style="width: 230px;"><?=__('company_label')?></th>
-                                                        <th scope="col" style="width: 160px;"><?=__('salary_payment_type_label')?></th>
-                                                        <th scope="col" style="width: 200px;"><?=__('salary_label')?></th>
+                                                        <th scope="col" style="width: 100px;"><?=__('employee_id')?></th>
+                                                        <th scope="col" style="width: 300px;"><?=__('name')?></th>
+                                                        <th scope="col" style="width: 200px;"><?=__('company_label')?></th>
+                                                        <th scope="col" style="width: 130px;"><?=__('salary_payment_type_label')?></th>
+                                                        <th scope="col" style="width: 120px;"><?=__('salary_label')?></th>
                                                         <th scope="col" style="width: 100px;"><?=__('actions_label')?></th>
                                                     </tr>
                                                 </thead>
@@ -2133,7 +2133,7 @@ function initializeDataTable() {
                 }
             },
             { data: 'emp_id' },
-            { data: 'name' },
+            { data: 'parsed_name' }, // parseName()'d short name (get_employees.php already computes this)
                 { data: 'comp_name' }, // Company name
                 { 
                     data: 'payment_type',
