@@ -242,7 +242,8 @@ try {
             basic_salary, housing_allowance, transport_allowance, food_allowance,
             miscellaneous_allowance, cashier_allowance, fuel_allowance, telephone_allowance,
             other_allowance, guard_allowance, total_gross_salary, total_benefits,
-            total_deductions, net_salary, status, generated_at
+            total_deductions, net_salary, status, generated_at,
+            auto_deduction_enabled, auto_benefit_enabled
         FROM payrolls
         WHERE emp_id = :emp_id AND month_year = :month_year
     ");
@@ -435,7 +436,9 @@ try {
                 'total_benefits' => 0.00,
                 'total_deductions' => $totalPreviewDeductions,
                 'net_salary' => $fullGrossPreview - $totalPreviewDeductions,
-                'status' => 'not_generated'
+                'status' => 'not_generated',
+                'auto_deduction_enabled' => 1,
+                'auto_benefit_enabled' => 1
             ];
         } else {
              // Handle case where employee has no salary data either

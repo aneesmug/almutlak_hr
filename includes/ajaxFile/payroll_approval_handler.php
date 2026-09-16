@@ -73,6 +73,14 @@ switch ($action) {
         getPayrollSupervisorAssignmentsList($pdo, $conDB, $currentUserId);
         break;
 
+    case 'remove_payroll_supervisor_assignment':
+        removePayrollSupervisorAssignment($pdo, $conDB, $currentUserId);
+        break;
+
+    case 'delete_payroll_supervisor_group':
+        deletePayrollSupervisorGroup($pdo, $conDB, $currentUserId);
+        break;
+
     case 'upload_manager_payroll_excel':
         uploadManagerPayrollExcel($pdo, $conDB, $currentUserId);
         break;
@@ -2091,6 +2099,73 @@ function getPayrollSupervisorAssignmentsList(PDO $pdo, $conDB, string $currentUs
                     'effective_month' => (string)($row['effective_month'] ?? '')
                 ];
             }, $rows)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// Removes exactly one (emp_id, effective_month) row - i.e. undoes that one specific
+// assignment change point, reverting the employee to whatever was in effect right
+// before it (an earlier row, or fully unassigned if this was their first ever
+// assignment). Used both for the single "remove employee" action and, looped, for
+// "delete supervisor group".
+function removePayrollSupervisorAssignment(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to modify payroll supervisor assignments.');
+        }
+
+        $empId = trim((string)($_POST['emp_id'] ?? ''));
+        $effectiveMonth = trim((string)($_POST['effective_month'] ?? ''));
+        if ($empId === '' || !preg_match('/^\d{4}-\d{2}$/', $effectiveMonth)) {
+            throw new Exception('Missing employee or effective month.');
+        }
+
+        $deleteStmt = $pdo->prepare("DELETE FROM payroll_supervisor_assignments
+            WHERE emp_id = :emp_id AND effective_month = :effective_month");
+        $deleteStmt->execute([':emp_id' => $empId, ':effective_month' => $effectiveMonth]);
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Assignment removed successfully.',
+            'removed_count' => $deleteStmt->rowCount()
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// Deletes every assignment row currently grouped under one supervisor at one specific
+// effective_month (i.e. exactly the rows the "View Assignments" list is showing for
+// that supervisor/month group) - the "delete the supervisor" action, which un-assigns
+// all of his employees from that group in one go.
+function deletePayrollSupervisorGroup(PDO $pdo, $conDB, string $currentUserId): void
+{
+    try {
+        ensurePayrollSupervisorAssignmentsTable($pdo);
+
+        if (!currentUserCanManagePayrollSupervisorAssignments($pdo, $conDB, $currentUserId)) {
+            throw new Exception('You are not allowed to modify payroll supervisor assignments.');
+        }
+
+        $supervisorEmpId = trim((string)($_POST['supervisor_emp_id'] ?? ''));
+        $effectiveMonth = trim((string)($_POST['effective_month'] ?? ''));
+        if ($supervisorEmpId === '' || !preg_match('/^\d{4}-\d{2}$/', $effectiveMonth)) {
+            throw new Exception('Missing supervisor or effective month.');
+        }
+
+        $deleteStmt = $pdo->prepare("DELETE FROM payroll_supervisor_assignments
+            WHERE supervisor_emp_id = :supervisor_emp_id AND effective_month = :effective_month");
+        $deleteStmt->execute([':supervisor_emp_id' => $supervisorEmpId, ':effective_month' => $effectiveMonth]);
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Supervisor group removed successfully.',
+            'removed_count' => $deleteStmt->rowCount()
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);

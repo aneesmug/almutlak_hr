@@ -694,37 +694,51 @@ try {
         
         // --- CHECK: Skip automatic calculations if payroll already generated ---
         // If payroll exists and has manually added benefits/deductions, preserve them
-        $stmtCheckPayroll = $pdo->prepare("SELECT id FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year");
+        $stmtCheckPayroll = $pdo->prepare("SELECT id, auto_deduction_enabled, auto_benefit_enabled FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year");
         $stmtCheckPayroll->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
         $existingPayroll = $stmtCheckPayroll->fetch(PDO::FETCH_ASSOC);
-        
+
         $isRegeneration = !empty($existingPayroll);
 
-        addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
-        addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays);
+        // Per-employee/month opt-out (set from the payroll details modal, default checked).
+        // No existing row yet means this is the very first generation for this month, before
+        // the admin has ever had a chance to uncheck anything - always run auto items then.
+        $autoDeductionEnabled = $existingPayroll ? ((int)($existingPayroll['auto_deduction_enabled'] ?? 1) !== 0) : true;
+        $autoBenefitEnabled = $existingPayroll ? ((int)($existingPayroll['auto_benefit_enabled'] ?? 1) !== 0) : true;
 
-        // Runs on every generation, including regeneration - unlike the benefits/deductions
-        // below, it's keyed off source_other_income_id so it never duplicates or touches
-        // manually-added benefits, so it's safe to re-check every time (e.g. a schedule added
-        // *after* the month was first generated still gets picked up on the next regenerate).
-        addOrUpdateScheduledOtherIncome($pdo, $empId, $monthYear);
+        if ($autoDeductionEnabled) {
+            addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
+            addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays);
+        }
+
+        if ($autoBenefitEnabled) {
+            // Runs on every generation, including regeneration - unlike the benefits/deductions
+            // below, it's keyed off source_other_income_id so it never duplicates or touches
+            // manually-added benefits, so it's safe to re-check every time (e.g. a schedule added
+            // *after* the month was first generated still gets picked up on the next regenerate).
+            addOrUpdateScheduledOtherIncome($pdo, $empId, $monthYear);
+        }
 
         if (!$isRegeneration) {
             // Only add automatic benefits/deductions on initial payroll generation
-            // --- LEAVE DEDUCTION LOGIC ---
-            addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+            if ($autoDeductionEnabled) {
+                // --- LEAVE DEDUCTION LOGIC ---
+                addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
 
-            // --- (NEW) VACATION WORKING DAYS SALARY ---
-            addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
+                // --- (NEW) LOAN DEDUCTION LOGIC ---
+                addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
 
-            // --- (NEW) LOAN DEDUCTION LOGIC ---
-            addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
+                // --- (NEW) AUTOMATIC LATE / EARLY-LEAVE DEDUCTION FROM ATTENDANCE ---
+                addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+            }
 
-            // --- (NEW) AUTOMATIC LATE / EARLY-LEAVE DEDUCTION FROM ATTENDANCE ---
-            addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+            if ($autoBenefitEnabled) {
+                // --- (NEW) VACATION WORKING DAYS SALARY ---
+                addVacationWorkingDaysSalary($pdo, $empId, $monthYear, $totalGrossSalary);
 
-            // --- (NEW) AUTOMATIC OVERTIME BENEFIT FROM ATTENDANCE ---
-            addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSalary, floatval($salaryComponents['basic_salary']));
+                // --- (NEW) AUTOMATIC OVERTIME BENEFIT FROM ATTENDANCE ---
+                addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSalary, floatval($salaryComponents['basic_salary']));
+            }
         }
 
         // --- (NEW) RECORD LOAN PAYMENTS IN emp_loan_payments FOR THIS MONTH ---
@@ -789,7 +803,7 @@ try {
 
 
         // --- GOSI Deduction Logic ---
-        if ($employeeData['country'] === '191') {
+        if ($autoDeductionEnabled && $employeeData['country'] === '191') {
             $vacationHasGosi = hasVacationGosiDeductedForMonth($pdo, $empId, $monthYear);
 
             if ($vacationHasGosi) {

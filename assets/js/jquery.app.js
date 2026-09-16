@@ -10919,62 +10919,11 @@ function escapeHtml(str) {
 let alertShown = false;
 let countdownInterval;
 
-function extendSessionAndDismissAlert() {
-    // Reset client-side timer
-    alertShown = false;
-    if (countdownInterval) clearInterval(countdownInterval);
-    
-    console.log('Extend Session clicked - sending request...');
-    
-    // Close current alert first
-    Swal.close();
-    
-    // Keep session alive on server
-    fetch('/includes/session_check.php?extend_session=1', { 
-        method: 'GET', 
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => {
-        console.log('Response status:', response.status);
-        return response.json();
-    })
-    .then(data => {
-        console.log('Session extended:', data);
-        // Reset to current server time
-        window.SERVER_LAST_ACTIVITY = Math.floor(Date.now() / 1000);
-        
-        // Show success toast
-        const Toast = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true,
-        });
-        Toast.fire({
-            icon: 'success',
-            title: 'Session extended for another ' + Math.floor(window.SESSION_TIMEOUT_MS / 60000) + ' minutes'
-        });
-    })
-    .catch(error => {
-        console.error('Extend session error:', error);
-        // Reset anyway even on error
-        window.SERVER_LAST_ACTIVITY = Math.floor(Date.now() / 1000);
-        
-        // Show error toast
-        const Toast = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true,
-        });
-        Toast.fire({
-            icon: 'error',
-            title: 'Failed to extend session'
-        });
-    });
+// Seconds before expiry to show the warning modal
+const PRE_TIMEOUT_WARNING_SECONDS = 5 * 60;
+
+function refreshPageForSession() {
+    window.location.reload();
 }
 
 // Pre-timeout warning system - Initialize when SESSION_TIMEOUT_SECONDS is available
@@ -10992,78 +10941,95 @@ $(document).ready(function() {
     }
 });
 
+// Same key main_menu.php's session-countdown-badge writes to. Reusing it (instead of
+// this tab's own SESSION_TIMEOUT_SECONDS/SERVER_LAST_ACTIVITY snapshot) keeps the
+// warning in sync with every other open tab: any tab's activity refreshes the shared
+// deadline, so a tab that's been idle doesn't fire this alert early off stale data.
+const SESSION_COUNTDOWN_STORAGE_KEY = 'almutlak_session_countdown';
+
+function getSessionRemainingSeconds() {
+    try {
+        const raw = localStorage.getItem(SESSION_COUNTDOWN_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.deadline === 'number') {
+                return Math.round((parsed.deadline - Date.now()) / 1000);
+            }
+        }
+    } catch (e) { /* fall through to per-tab calc below */ }
+
+    // Fallback for pages without the shared badge (e.g. it failed to render)
+    const currentServerTime = Math.floor(Date.now() / 1000);
+    const elapsedSeconds = currentServerTime - window.SERVER_LAST_ACTIVITY;
+    return window.SESSION_TIMEOUT_SECONDS - elapsedSeconds;
+}
+
 function initSessionTimeoutAlert() {
     (function initPreTimeoutAlert() {
         function checkTimeout() {
-            // Calculate elapsed time based on server's last_activity, not client time
-            const currentServerTime = Math.floor(Date.now() / 1000);
-            const elapsedSeconds = currentServerTime - window.SERVER_LAST_ACTIVITY;
-            const remainingSeconds = window.SESSION_TIMEOUT_SECONDS - elapsedSeconds;
-            
-            // Show alert when 30 seconds remain (and hasn't been shown yet)
-            if (remainingSeconds <= 30 && remainingSeconds > 0 && !alertShown) {
+            const remainingSeconds = getSessionRemainingSeconds();
+
+            // Show modal when PRE_TIMEOUT_WARNING_SECONDS remain (and hasn't been shown yet)
+            if (remainingSeconds <= PRE_TIMEOUT_WARNING_SECONDS && remainingSeconds > 0 && !alertShown) {
                 alertShown = true;
                 if (countdownInterval) clearInterval(countdownInterval);
                 showPreTimeoutAlert(remainingSeconds);
             }
         }
-        
+
+        function formatCountdown(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
         function showPreTimeoutAlert(initialCountdown) {
-            let countdown = initialCountdown;
-            
-            const Toast = Swal.mixin({
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: true,
-                confirmButtonText: 'Extend Session',
+            Swal.fire({
+                icon: 'warning',
+                title: 'Session Expiring Soon',
+                html: 'Your session will expire in <strong id="pre-alert-countdown">' + formatCountdown(initialCountdown) + '</strong>. Please refresh the page to stay logged in.',
+                confirmButtonText: 'Refresh Page',
                 showCloseButton: false,
                 allowOutsideClick: false,
                 allowEscapeKey: false,
-                timer: countdown * 1000,
-                timerProgressBar: true,
-            });
-            
-            Toast.fire({
-                icon: 'warning',
-                title: 'Session Expiring Soon',
-                html: 'Your session will expire in <strong id="pre-alert-countdown">' + countdown + '</strong> seconds.'
+                allowEnterKey: false,
             }).then((result) => {
+                if (countdownInterval) clearInterval(countdownInterval);
+                alertShown = false;
                 if (result.isConfirmed) {
-                    // Extend button clicked
-                    console.log('Extend button clicked');
-                    extendSessionAndDismissAlert();
+                    refreshPageForSession();
                 }
             });
-            
-            // Update countdown every second
+
+            // Re-read the shared deadline every tick rather than just decrementing a
+            // local counter, so if another tab refreshes/extends the session while
+            // this modal is open, the countdown (and auto-refresh) stays truthful
+            // instead of firing off this tab's now-stale starting value.
             countdownInterval = setInterval(() => {
-                countdown--;
-                const countdownEl = document.getElementById('pre-alert-countdown');
-                if (countdownEl) countdownEl.textContent = countdown;
-                if (countdown <= 0) {
+                const remaining = getSessionRemainingSeconds();
+
+                if (remaining > PRE_TIMEOUT_WARNING_SECONDS) {
+                    // Another tab extended the session - dismiss and reset.
                     clearInterval(countdownInterval);
+                    alertShown = false;
+                    Swal.close();
+                    return;
+                }
+
+                const countdownEl = document.getElementById('pre-alert-countdown');
+                if (countdownEl) countdownEl.textContent = formatCountdown(Math.max(remaining, 0));
+                if (remaining <= 0) {
+                    // Session has actually timed out - stop ticking but keep the modal up
+                    // (no auto-refresh) until the user clicks Refresh themselves.
+                    clearInterval(countdownInterval);
+                    const titleEl = Swal.getTitle();
+                    if (titleEl) titleEl.textContent = 'Session Expired';
+                    const contentEl = Swal.getHtmlContainer();
+                    if (contentEl) contentEl.innerHTML = 'Your session has expired. Please refresh the page to continue.';
                 }
             }, 1000);
-            
-            // Pause/resume on hover
-            const alertContainer = Toast.getContainer();
-            if (alertContainer) {
-                alertContainer.addEventListener('mouseenter', () => {
-                    Swal.stopTimer();
-                    if (countdownInterval) clearInterval(countdownInterval);
-                });
-                
-                alertContainer.addEventListener('mouseleave', () => {
-                    Swal.resumeTimer();
-                    countdownInterval = setInterval(() => {
-                        countdown--;
-                        const countdownEl = document.getElementById('pre-alert-countdown');
-                        if (countdownEl) countdownEl.textContent = countdown;
-                    }, 1000);
-                });
-            }
         }
-        
+
         // Check for pre-timeout every 500ms
         setInterval(checkTimeout, 500);
     })();

@@ -69,6 +69,11 @@ $empId = $input['emp_id'] ?? '';
 $monthYear = $input['month'] ?? '';
 $updatedBenefits = $input['benefits'] ?? [];
 $updatedDeductions = $input['deductions'] ?? [];
+// Default to enabled (checked) whenever the flag is missing from the payload -
+// old frontend builds or any caller that doesn't send it must not silently
+// disable auto items for this employee/month.
+$autoDeductionEnabled = array_key_exists('auto_deduction_enabled', $input) ? (int)!!$input['auto_deduction_enabled'] : 1;
+$autoBenefitEnabled = array_key_exists('auto_benefit_enabled', $input) ? (int)!!$input['auto_benefit_enabled'] : 1;
 
 // Validate that the employee ID and month/year are provided
 if (empty($empId) || empty($monthYear)) {
@@ -252,10 +257,11 @@ try {
         if (empty($benefitName) && $benefitAmount <= 0) continue;
 
         $calculatedAmount = $benefitAmount;
+        $calculationType = 'fixed';
         if ($benefitTypeId) {
             $stmtBenefitType = $pdo->prepare("SELECT calculation_type FROM benefit_types WHERE id = :id");
             $stmtBenefitType->execute([':id' => $benefitTypeId]);
-            $calculationType = $stmtBenefitType->fetchColumn();
+            $calculationType = $stmtBenefitType->fetchColumn() ?: 'fixed';
 
             if ($calculationType === 'overtime_basic' && $benefitDurationHours > 0) {
                 $basicSalary = (float)$salaryComponents['basic_salary'];
@@ -266,12 +272,16 @@ try {
             }
         }
 
+        // calculation_type must be persisted here too (not just derived at save time),
+        // otherwise it silently reverts to the 'fixed' column default on every save and
+        // reports/PDFs relying on payroll_benefits.calculation_type (e.g. get_payroll_report.php)
+        // can no longer tell an overtime row apart from a plain fixed benefit.
         if ($benefitId) {
-            $stmt = $pdo->prepare("UPDATE payroll_benefits SET benefit = :benefit_name, note = :benefit_amount, hours = :hours, minutes = :minutes, type_id = :type_id WHERE id = :id");
-            $stmt->execute([':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':type_id' => $benefitTypeId, ':id' => $benefitId]);
+            $stmt = $pdo->prepare("UPDATE payroll_benefits SET benefit = :benefit_name, note = :benefit_amount, hours = :hours, minutes = :minutes, type_id = :type_id, calculation_type = :calc_type WHERE id = :id");
+            $stmt->execute([':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':type_id' => $benefitTypeId, ':calc_type' => $calculationType, ':id' => $benefitId]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, minutes, month, status, type_id) VALUES (:emp_id, :benefit_name, :benefit_amount, :hours, :minutes, :month_year, 1, :type_id)");
-            $stmt->execute([':emp_id' => $empId, ':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':month_year' => $monthYear, ':type_id' => $benefitTypeId]);
+            $stmt = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, minutes, month, status, type_id, calculation_type) VALUES (:emp_id, :benefit_name, :benefit_amount, :hours, :minutes, :month_year, 1, :type_id, :calc_type)");
+            $stmt->execute([':emp_id' => $empId, ':benefit_name' => $benefitName, ':benefit_amount' => number_format($calculatedAmount, 2, '.', ''), ':hours' => $benefitHours, ':minutes' => $benefitMinutes, ':month_year' => $monthYear, ':type_id' => $benefitTypeId, ':calc_type' => $calculationType]);
         }
     }
     
@@ -384,7 +394,9 @@ try {
         total_benefits = :total_benefits,
         total_deductions = :total_deductions,
         net_salary = :net_salary,
-        status = 'updated'
+        status = 'updated',
+        auto_deduction_enabled = :auto_deduction_enabled,
+        auto_benefit_enabled = :auto_benefit_enabled
         WHERE emp_id = :emp_id AND month_year = :month_year");
     $stmtUpdateGenerated->execute([
         ':basic_salary' => number_format((float)$salaryComponents['basic_salary'], 2, '.', ''),
@@ -401,6 +413,8 @@ try {
         ':total_benefits' => number_format($totalBenefits, 2, '.', ''),
         ':total_deductions' => number_format($totalDeductions, 2, '.', ''),
         ':net_salary' => number_format($netSalary, 2, '.', ''),
+        ':auto_deduction_enabled' => $autoDeductionEnabled,
+        ':auto_benefit_enabled' => $autoBenefitEnabled,
         ':emp_id' => $empId,
         ':month_year' => $monthYear
     ]);

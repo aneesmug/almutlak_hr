@@ -259,7 +259,7 @@ try {
             pb.hours,
             pb.minutes,
             pb.days,
-            pb.calculation_type
+            COALESCE(bt.calculation_type, pb.calculation_type) AS calculation_type
         FROM payroll_benefits pb
         LEFT JOIN benefit_types bt ON pb.type_id = bt.id
         WHERE pb.emp_id = :emp_id AND pb.month = :month_year AND pb.status = 1

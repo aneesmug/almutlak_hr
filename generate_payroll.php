@@ -1037,7 +1037,7 @@
                                                             </button>
                                                             <?php endif; ?>
                                                             <button type="button" class="dropdown-item" id="actionGenerateReportBtn">
-                                                                <i class="fa fa-solid fa-chart-mixed"></i> <?= __('generate_payroll_report_button') ?>
+                                                                <i class="fa fa-solid fa-chart-mixed"></i> <?= __('payroll_report') ?>
                                                             </button>
                                                             <button type="button" class="dropdown-item hidden" id="actionPayslipsBtn" style="display:none;">
                                                                 <i class="fa fa-solid fa-file-invoice"></i> <?= __('payslips', 'Payslips') ?>
@@ -1670,7 +1670,14 @@ function collectPayrollModalData(employee) {
     const activePayBtn = document.querySelector('#payment-type-tabs .btn.active');
     const paymentType = activePayBtn ? parseInt(activePayBtn.dataset.paytype, 10) : Number(employee?.payment_type || 1);
 
-    return { updatedBenefits, updatedDeductions, paymentType };
+    // Default to checked when the checkbox isn't in the DOM (e.g. modal state collected
+    // before the section rendered) so auto items never get silently disabled.
+    const autoBenefitCheckbox = document.getElementById('autoBenefitEnabledCheckbox');
+    const autoDeductionCheckbox = document.getElementById('autoDeductionEnabledCheckbox');
+    const autoBenefitEnabled = autoBenefitCheckbox ? autoBenefitCheckbox.checked : true;
+    const autoDeductionEnabled = autoDeductionCheckbox ? autoDeductionCheckbox.checked : true;
+
+    return { updatedBenefits, updatedDeductions, paymentType, autoBenefitEnabled, autoDeductionEnabled };
 }
 
 async function navigatePayrollEmployee(targetEmployee, currentEmployee, month, initialModalState) {
@@ -2480,22 +2487,28 @@ async function openAssignPayrollSupervisorModal() {
             throw new Error(__('no_payroll_supervisor_candidates_found', 'No supervisors available to assign.'));
         }
 
-        const supervisorOptionsHtml = supervisors.map(s => {
-            const empId = String(s.emp_id || '');
-            return `<option value="${empId.replace(/"/g, '&quot;')}">${String(s.name || 'N/A')} (${empId})</option>`;
-        }).join('');
-
         // Step 1 - select the Direct Supervisor and the month the change takes effect
         // from. Assignments are effective-dated: picking next month here leaves this
         // month's (and every past month's) reporting exactly as it already is, and
         // only reports generated for the picked month onward use the new supervisor.
-        const defaultEffectiveMonth = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+        // Step 1 <-> Step 2 loop: "Back" on step 2 re-opens step 1 with the previous
+        // picks preselected instead of dropping the admin back to a blank form.
+        let defaultEffectiveMonth = $('#payrollMonth').val() || getCurrentPayrollMonthValue();
+        let defaultSupervisorEmpId = '';
+        let selectedSupervisorEmpId, selectedEffectiveMonth, selectedSupervisorLabel, employees, selectedEmployeeIds;
+
+        while (true) {
+        const supervisorOptionsHtmlForStep1 = supervisors.map(s => {
+            const empId = String(s.emp_id || '');
+            const selectedAttr = empId === String(defaultSupervisorEmpId) ? ' selected="selected"' : '';
+            return `<option value="${empId.replace(/"/g, '&quot;')}"${selectedAttr}>${String(s.name || 'N/A')} (${empId})</option>`;
+        }).join('');
         const step1Result = await Swal.fire({
             title: __('select_payroll_supervisor_modal_title', 'Select Direct Supervisor'),
             html: `
                 <div class="text-left">
-                    <label for="payrollSupervisorAssignSelect" class="font-weight-bold"><?= __('direct_supervisor', 'Direct Supervisor') ?></label>
-                    <select id="payrollSupervisorAssignSelect" class="form-control mb-2"><option value="" selected><?= __('select_direct_supervisor', 'Select Direct Supervisor') ?></option>${supervisorOptionsHtml}</select>
+                    <label for="payrollSupervisorAssignSelect" class="font-weight-bold"><?= __('direct_supervisor', 'Direct Supervisor') ?> <span id="payrollSupervisorAssignedCountBadge" class="badge badge-danger" style="display:none;"></span></label>
+                    <select id="payrollSupervisorAssignSelect" class="form-control mb-2"><option value=""${defaultSupervisorEmpId ? '' : ' selected'}><?= __('select_direct_supervisor', 'Select Direct Supervisor') ?></option>${supervisorOptionsHtmlForStep1}</select>
                     <label class="font-weight-bold"><?= __('effective_from_month_label', 'Effective From') ?></label>
                     <div class="payroll-month-card payroll-filter-card-shared mb-1">
                         <div class="payroll-month-header">
@@ -2532,13 +2545,68 @@ async function openAssignPayrollSupervisorModal() {
             width: '40%',
             didOpen: () => {
                 const select = document.getElementById('payrollSupervisorAssignSelect');
+
+                // Shows how many employees are currently assigned to each supervisor right
+                // in the select2 dropdown list, so a wrong pick is obvious while searching -
+                // not just after confirming it. Counts are month-specific (assignments are
+                // effective-dated), so they're refetched whenever the effective month
+                // changes; select2 re-runs templateResult on every open/search, so it always
+                // reads whatever this map currently holds without needing to reinit select2.
+                let supervisorAssignmentCounts = new Map();
+
+                const $assignedCountBadge = $('#payrollSupervisorAssignedCountBadge');
+
+                function updateAssignedCountBadge() {
+                    const supId = $('#payrollSupervisorAssignSelect').val();
+                    if (!supId) {
+                        $assignedCountBadge.hide();
+                        return;
+                    }
+                    $assignedCountBadge.text(supervisorAssignmentCounts.get(supId) || 0).show();
+                }
+
+                function formatSupervisorOption(option) {
+                    if (!option.id) {
+                        return option.text;
+                    }
+                    const count = supervisorAssignmentCounts.get(String(option.id)) || 0;
+                    return jQuery(
+                        `<span>${jQuery('<div>').text(option.text).html()} <span class="badge badge-danger ml-1">${count}</span></span>`
+                    );
+                }
+
                 if (window.jQuery && typeof jQuery.fn.select2 === 'function' && select) {
                     jQuery(select).select2({
                         width: '100%',
                         dropdownParent: jQuery('.swal2-popup'),
-                        placeholder: __('select_direct_supervisor', 'Select Direct Supervisor')
+                        placeholder: __('select_direct_supervisor', 'Select Direct Supervisor'),
+                        templateResult: formatSupervisorOption,
+                        templateSelection: (option) => option.text
                     });
                 }
+                $('#payrollSupervisorAssignSelect').on('change', updateAssignedCountBadge);
+
+                async function refreshSupervisorAssignmentCounts(month) {
+                    try {
+                        const resp = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                            body: new URLSearchParams({ action: 'get_employees_for_payroll_supervisor_assignment', effective_month: month }).toString()
+                        });
+                        const data = await resp.json();
+                        supervisorAssignmentCounts = new Map();
+                        if (data.status === 'success' && Array.isArray(data.employees)) {
+                            data.employees.forEach(emp => {
+                                const supId = String(emp.supervisor_emp_id || '');
+                                if (supId) {
+                                    supervisorAssignmentCounts.set(supId, (supervisorAssignmentCounts.get(supId) || 0) + 1);
+                                }
+                            });
+                        }
+                    } catch (e) { /* leave counts empty - badges just show 0 */ }
+                    updateAssignedCountBadge();
+                }
+
                 document.getElementById('downloadPayrollSupervisorAssignmentsBtn').addEventListener('click', function() {
                     downloadPayrollSupervisorAssignments($('#payrollSupervisorEffectiveMonth').val());
                 });
@@ -2559,19 +2627,23 @@ async function openAssignPayrollSupervisorModal() {
                 const refreshEffectiveMonthLabel = () => {
                     $effectiveMonthLabel.text(formatPayrollMonthValue($effectiveMonthInput.val()));
                 };
-                refreshEffectiveMonthLabel();
-                $effectiveMonthInput.on('change', refreshEffectiveMonthLabel);
+                const handleEffectiveMonthChanged = () => {
+                    refreshEffectiveMonthLabel();
+                    refreshSupervisorAssignmentCounts($effectiveMonthInput.val());
+                };
+                handleEffectiveMonthChanged();
+                $effectiveMonthInput.on('change', handleEffectiveMonthChanged);
                 $('#prevSupervisorEffectiveMonthBtn').on('click', function() {
                     $effectiveMonthInput.val(shiftMonthValue($effectiveMonthInput.val(), -1));
-                    refreshEffectiveMonthLabel();
+                    handleEffectiveMonthChanged();
                 });
                 $('#nextSupervisorEffectiveMonthBtn').on('click', function() {
                     $effectiveMonthInput.val(shiftMonthValue($effectiveMonthInput.val(), 1));
-                    refreshEffectiveMonthLabel();
+                    handleEffectiveMonthChanged();
                 });
                 $('#currentSupervisorEffectiveMonthBtn').on('click', function() {
                     $effectiveMonthInput.val(getCurrentPayrollMonthValue());
-                    refreshEffectiveMonthLabel();
+                    handleEffectiveMonthChanged();
                 });
             },
             preConfirm: () => {
@@ -2592,9 +2664,9 @@ async function openAssignPayrollSupervisorModal() {
         if (!step1Result.isConfirmed || !step1Result.value) {
             return;
         }
-        const selectedSupervisorEmpId = step1Result.value.supervisorEmpId;
-        const selectedEffectiveMonth = step1Result.value.effectiveMonth;
-        const selectedSupervisorLabel = supervisors.find(s => String(s.emp_id) === String(selectedSupervisorEmpId));
+        selectedSupervisorEmpId = step1Result.value.supervisorEmpId;
+        selectedEffectiveMonth = step1Result.value.effectiveMonth;
+        selectedSupervisorLabel = supervisors.find(s => String(s.emp_id) === String(selectedSupervisorEmpId));
 
         // Step 2 - multi-select which employees report to that supervisor
         Swal.fire({
@@ -2617,15 +2689,13 @@ async function openAssignPayrollSupervisorModal() {
             throw new Error(employeesData.message || 'Failed to load employees.');
         }
 
-        const employees = Array.isArray(employeesData.employees) ? employeesData.employees : [];
+        employees = Array.isArray(employeesData.employees) ? employeesData.employees : [];
         const employeeOptionsHtml = employees.map(emp => {
             const empId = String(emp.emp_id || '');
             const isCurrentlyAssigned = !!(emp.supervisor_emp_id && String(emp.supervisor_emp_id) !== '');
             const isSameSupervisor = isCurrentlyAssigned && String(emp.supervisor_emp_id) === String(selectedSupervisorEmpId);
             const selectedAttr = isSameSupervisor ? ' selected="selected"' : '';
-            const label = isCurrentlyAssigned
-                ? `${String(emp.name || 'N/A')} (${empId}) - ${__('currently_assigned_to', 'Currently')}: ${String(emp.supervisor_name || '')}`
-                : `${String(emp.name || 'N/A')} (${empId})`;
+            const label = `${String(emp.name || 'N/A')} (${empId})`;
             return `<option value="${empId.replace(/"/g, '&quot;')}"${selectedAttr}>${label}</option>`;
         }).join('');
 
@@ -2639,8 +2709,11 @@ async function openAssignPayrollSupervisorModal() {
                 </div>
             `,
             showCancelButton: true,
+            showDenyButton: true,
             confirmButtonColor: '#28a745',
             confirmButtonText: __('assign', 'Assign'),
+            denyButtonText: __('back', 'Back'),
+            denyButtonColor: '#6c757d',
             cancelButtonText: __('cancel', 'Cancel'),
             allowOutsideClick: false,
             width: '55%',
@@ -2664,8 +2737,19 @@ async function openAssignPayrollSupervisorModal() {
             }
         });
 
+        if (step2Result.isDenied) {
+            // Back to step 1, preselecting what was already picked.
+            defaultSupervisorEmpId = selectedSupervisorEmpId;
+            defaultEffectiveMonth = selectedEffectiveMonth;
+            continue;
+        }
+
         if (!step2Result.isConfirmed || !step2Result.value) {
             return;
+        }
+
+        selectedEmployeeIds = step2Result.value;
+        break;
         }
 
         Swal.fire({
@@ -2681,7 +2765,7 @@ async function openAssignPayrollSupervisorModal() {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
             body: new URLSearchParams({
                 action: 'assign_payroll_supervisor',
-                employee_ids: JSON.stringify(step2Result.value),
+                employee_ids: JSON.stringify(selectedEmployeeIds),
                 supervisor_emp_id: selectedSupervisorEmpId,
                 effective_month: selectedEffectiveMonth
             }).toString()
@@ -2703,6 +2787,27 @@ async function openAssignPayrollSupervisorModal() {
 function downloadPayrollSupervisorAssignments(effectiveMonth) {
     const month = effectiveMonth || $('#payrollMonth').val() || getCurrentPayrollMonthValue();
     window.open('./download_payroll_supervisor_assignments.php?effective_month=' + encodeURIComponent(month), '_blank');
+}
+
+// Groups the flat assignments list by (supervisor_emp_id, effective_month) - each
+// group is exactly one batch of DB rows an Edit/Delete action can act on together.
+// Two employees under the same supervisor but assigned in different months stay in
+// separate groups on purpose: they're different historical change points.
+function groupPayrollSupervisorAssignments(assignments) {
+    const groups = new Map();
+    assignments.forEach(row => {
+        const key = `${row.supervisor_emp_id}::${row.effective_month}`;
+        if (!groups.has(key)) {
+            groups.set(key, {
+                supervisor_emp_id: row.supervisor_emp_id,
+                supervisor_name: row.supervisor_name,
+                effective_month: row.effective_month,
+                employees: []
+            });
+        }
+        groups.get(key).employees.push(row);
+    });
+    return Array.from(groups.values());
 }
 
 async function viewPayrollSupervisorAssignments(effectiveMonth) {
@@ -2730,47 +2835,196 @@ async function viewPayrollSupervisorAssignments(effectiveMonth) {
         }
 
         const assignments = Array.isArray(data.assignments) ? data.assignments : [];
-        const rowsHtml = assignments.map(row => `
-            <tr>
-                <td>${escapeHtml(row.emp_id)}</td>
-                <td>${escapeHtml(row.name)}</td>
-                <td>${escapeHtml(row.department)}</td>
-                <td>${escapeHtml(row.company)}</td>
-                <td>${escapeHtml(row.supervisor_emp_id)}</td>
-                <td>${escapeHtml(row.supervisor_name)}</td>
-                <td>${escapeHtml(row.effective_month)}</td>
-            </tr>
-        `).join('');
+        const groups = groupPayrollSupervisorAssignments(assignments);
 
-        const tableHtml = assignments.length ? `
-            <div class="table-responsive" style="max-height:50vh;overflow-y:auto;">
-                <table class="table table-sm table-bordered table-striped mb-0">
-                    <thead class="thead-light" style="position:sticky;top:0;">
-                        <tr>
-                            <th><?= __('emp_id', 'Emp ID') ?></th>
-                            <th><?= __('name', 'Emp Name') ?></th>
-                            <th><?= __('department', 'Department') ?></th>
-                            <th><?= __('company', 'Company') ?></th>
-                            <th><?= __('supervisor_emp_id', 'Supervisor Emp ID') ?></th>
-                            <th><?= __('direct_supervisor', 'Direct Supervisor') ?></th>
-                            <th><?= __('effective_from_month_label', 'Effective From') ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>${rowsHtml}</tbody>
-                </table>
+        // Groups render collapsed (header only) by default - with 16 supervisors and some
+        // groups running 80-130+ employees, auto-expanding every table at once buried
+        // everything past the first group off-screen inside the scroll area. "Edit" toggles
+        // that one group's employee table open, where each row has its own remove (X).
+        const groupsHtml = groups.length ? groups.map((group, groupIndex) => `
+            <div class="card border-0 shadow-sm mb-2 psa-group-card">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong>${escapeHtml(group.supervisor_name)}</strong>
+                            <span class="text-muted small">(${escapeHtml(group.supervisor_emp_id)})</span>
+                            &middot; <span class="small text-muted"><?= __('effective_from_month_label', 'Effective From') ?>: ${escapeHtml(formatPayrollMonthValue(group.effective_month))}</span>
+                            &middot; <span class="badge badge-secondary">${group.employees.length}</span>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-primary psa-edit-group-btn" data-group-index="${groupIndex}">
+                                <i class="fa fa-solid fa-pen"></i> <span class="psa-edit-btn-label"><?= __('edit', 'Edit') ?></span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger psa-delete-group-btn" data-group-index="${groupIndex}">
+                                <i class="fa fa-solid fa-trash"></i> <?= __('delete', 'Delete') ?>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="psa-group-employees mt-2 d-none" data-group-index="${groupIndex}">
+                        <input type="text" class="form-control form-control-sm mb-2 psa-group-search" data-group-index="${groupIndex}" placeholder="<?= __('search_by_name_or_emp_id', 'Search by name or Emp ID') ?>">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th><?= __('emp_id', 'Emp ID') ?></th>
+                                        <th><?= __('name', 'Emp Name') ?></th>
+                                        <th><?= __('department', 'Department') ?></th>
+                                        <th><?= __('company', 'Company') ?></th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${group.employees.map(emp => `
+                                        <tr data-search="${escapeHtml((String(emp.emp_id || '') + ' ' + String(emp.name || '')).toLowerCase())}">
+                                            <td>${escapeHtml(emp.emp_id)}</td>
+                                            <td>${escapeHtml(emp.name)}</td>
+                                            <td>${escapeHtml(emp.department)}</td>
+                                            <td>${escapeHtml(emp.company)}</td>
+                                            <td class="text-right">
+                                                <button type="button" class="btn btn-sm btn-outline-danger psa-remove-emp-btn" data-emp-id="${escapeHtml(emp.emp_id)}" data-effective-month="${escapeHtml(group.effective_month)}" title="<?= __('remove', 'Remove') ?>">
+                                                    <i class="fa fa-solid fa-xmark"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            <div class="text-center text-muted small py-2 psa-group-no-match d-none">No matching employees.</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        ` : `<div class="text-center text-muted py-3"><?= __('no_data_available_in_table', 'No data available') ?></div>`;
+        `).join('') : `<div class="text-center text-muted py-3"><?= __('no_data_available_in_table', 'No data available') ?></div>`;
+
+        const containerHtml = `<div style="max-height:60vh;overflow-y:auto;text-align:left;">${groupsHtml}</div>`;
 
         Swal.fire({
             title: `<?= __('download_payroll_supervisor_assignments_button', 'Payroll Supervisor Assignments') ?> - ${escapeHtml(formatPayrollMonthValue(month))}`,
-            html: tableHtml,
-            width: '75%',
+            html: containerHtml,
+            width: '85%',
             confirmButtonText: __('close', 'Close'),
-            confirmButtonColor: '#6c757d'
+            confirmButtonColor: '#6c757d',
+            didOpen: () => {
+                const container = Swal.getHtmlContainer();
+
+                container.querySelectorAll('.psa-edit-group-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const groupIndex = btn.dataset.groupIndex;
+                        const employeesTable = container.querySelector(`.psa-group-employees[data-group-index="${groupIndex}"]`);
+                        const labelEl = btn.querySelector('.psa-edit-btn-label');
+                        if (!employeesTable) return;
+                        const nowExpanded = employeesTable.classList.toggle('d-none') === false;
+                        if (labelEl) {
+                            labelEl.textContent = nowExpanded ? '<?= __('collapse', 'Collapse') ?>' : '<?= __('edit', 'Edit') ?>';
+                        }
+                    });
+                });
+
+                container.querySelectorAll('.psa-delete-group-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const group = groups[parseInt(btn.dataset.groupIndex, 10)];
+                        deletePayrollSupervisorGroup(group, month);
+                    });
+                });
+
+                container.querySelectorAll('.psa-remove-emp-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        removeSinglePayrollSupervisorAssignment(btn.dataset.empId, btn.dataset.effectiveMonth, month);
+                    });
+                });
+
+                container.querySelectorAll('.psa-group-search').forEach(input => {
+                    input.addEventListener('input', () => {
+                        const groupIndex = input.dataset.groupIndex;
+                        const wrapper = container.querySelector(`.psa-group-employees[data-group-index="${groupIndex}"]`);
+                        if (!wrapper) return;
+                        const term = input.value.trim().toLowerCase();
+                        const rows = wrapper.querySelectorAll('tbody tr');
+                        let visibleCount = 0;
+                        rows.forEach(row => {
+                            const matches = !term || (row.dataset.search || '').includes(term);
+                            row.classList.toggle('d-none', !matches);
+                            if (matches) visibleCount++;
+                        });
+                        wrapper.querySelector('.psa-group-no-match').classList.toggle('d-none', visibleCount > 0);
+                    });
+                });
+            }
         });
     } catch (error) {
         Swal.close();
         await Swal.fire(__('error', 'Error'), error.message || 'Failed to load assignments.', 'error');
+    }
+}
+
+// Removes one employee's row for this exact effective_month, reverting them to
+// whatever supervisor (or none) was in effect right before that change. Reopens the
+// list for `viewedMonth` (the month the admin was actually browsing) afterward.
+async function removeSinglePayrollSupervisorAssignment(empId, effectiveMonth, viewedMonth) {
+    const confirmResult = await Swal.fire({
+        icon: 'warning',
+        title: __('are_you_sure', 'Are you sure?'),
+        text: __('remove_payroll_supervisor_assignment_confirm', 'Remove this employee from this supervisor assignment?'),
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        confirmButtonText: __('yes_remove', 'Yes, remove'),
+        cancelButtonText: __('cancel', 'Cancel')
+    });
+    if (!confirmResult.isConfirmed) {
+        return;
+    }
+
+    Swal.fire({ title: __('please_wait', 'Please wait'), allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false, didOpen: () => Swal.showLoading() });
+
+    try {
+        const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'remove_payroll_supervisor_assignment', emp_id: empId, effective_month: effectiveMonth }).toString()
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.message || 'Failed to remove assignment.');
+        }
+        await viewPayrollSupervisorAssignments(viewedMonth);
+    } catch (error) {
+        Swal.close();
+        await Swal.fire(__('error', 'Error'), error.message || 'Failed to remove assignment.', 'error');
+    }
+}
+
+// Deletes every row in this group (one supervisor, one effective_month) - i.e. the
+// "delete the supervisor" action, which un-assigns all of his employees at once.
+async function deletePayrollSupervisorGroup(group, viewedMonth) {
+    const confirmResult = await Swal.fire({
+        icon: 'warning',
+        title: __('are_you_sure', 'Are you sure?'),
+        html: `${__('delete_payroll_supervisor_group_confirm', 'This will remove ALL employees assigned to this supervisor for this effective month:')}<br><strong>${escapeHtml(group.supervisor_name)} (${escapeHtml(group.supervisor_emp_id)})</strong>`,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        confirmButtonText: __('yes_delete', 'Yes, delete'),
+        cancelButtonText: __('cancel', 'Cancel')
+    });
+    if (!confirmResult.isConfirmed) {
+        return;
+    }
+
+    Swal.fire({ title: __('please_wait', 'Please wait'), allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false, didOpen: () => Swal.showLoading() });
+
+    try {
+        const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ action: 'delete_payroll_supervisor_group', supervisor_emp_id: group.supervisor_emp_id, effective_month: group.effective_month }).toString()
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.message || 'Failed to delete supervisor group.');
+        }
+        await viewPayrollSupervisorAssignments(viewedMonth);
+    } catch (error) {
+        Swal.close();
+        await Swal.fire(__('error', 'Error'), error.message || 'Failed to delete supervisor group.', 'error');
     }
 }
 
@@ -5240,7 +5494,7 @@ function updateNetSalaryDisplay(grossSalary) {
     netSalaryDisplay.textContent = formatCurrency(netSalary);
 }
 
-async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions, paymentType) {
+async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions, paymentType, autoBenefitEnabled, autoDeductionEnabled) {
     Swal.fire({
         title: __('saving_changes_title'),
         html: __('please_wait_fetching_data'),
@@ -5259,7 +5513,9 @@ async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductio
                 emp_id: empId,
                 month: month,
                 benefits: updatedBenefits,
-                deductions: updatedDeductions
+                deductions: updatedDeductions,
+                auto_benefit_enabled: autoBenefitEnabled !== false,
+                auto_deduction_enabled: autoDeductionEnabled !== false
             }),
         });
         const result = await response.json();
@@ -5640,29 +5896,28 @@ async function showPayrollDetails(empId, empName, month) {
                         </div>
                     </div>
                     
-                    <!-- Payment Type Tabs -->
-                    <div class="card border-0 shadow-sm mb-3">
-                        <div class="card-body py-2">
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <div class="small text-muted fw-bold">${__('salary_payment_type_label') || 'Payment Type'}</div>
-                                <div class="btn-group btn-group-sm" id="payment-type-tabs" role="group" aria-label="Payment Type">
-                                    <button type="button" class="btn btn-outline-info${Number(employee.payment_type||1)===1?' active':''}" data-paytype="1">
-                                        <i class="fas fa-university"></i> ${__('bank_option') || 'Bank'}
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary${Number(employee.payment_type||1)===2?' active':''}" data-paytype="2">
-                                        <i class="fas fa-money-bill-wave"></i> ${__('cash_option') || 'Cash'}
-                                    </button>
-                                    <button type="button" class="btn btn-outline-warning${Number(employee.payment_type||1)===3?' active':''}" data-paytype="3">
-                                        <i class="fas fa-pause-circle"></i> ${__('hold_option') || 'Hold'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div class="section-content">
                         <!-- Salary Section (default visible) -->
                         <div class="section-pane active" id="salary-section">
+                            <!-- Payment Type Tabs -->
+                            <div class="card border-0 shadow-sm mb-3">
+                                <div class="card-body py-2">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <div class="small text-muted fw-bold">${__('salary_payment_type_label') || 'Payment Type'}</div>
+                                        <div class="btn-group btn-group-sm" id="payment-type-tabs" role="group" aria-label="Payment Type">
+                                            <button type="button" class="btn btn-outline-info${Number(employee.payment_type||1)===1?' active':''}" data-paytype="1">
+                                                <i class="fas fa-university"></i> ${__('bank_option') || 'Bank'}
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary${Number(employee.payment_type||1)===2?' active':''}" data-paytype="2">
+                                                <i class="fas fa-money-bill-wave"></i> ${__('cash_option') || 'Cash'}
+                                            </button>
+                                            <button type="button" class="btn btn-outline-warning${Number(employee.payment_type||1)===3?' active':''}" data-paytype="3">
+                                                <i class="fas fa-pause-circle"></i> ${__('hold_option') || 'Hold'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             ${salaryBreakdownHtml}
                         </div>
                         
@@ -5670,11 +5925,17 @@ async function showPayrollDetails(empId, empName, month) {
                         <div class="section-pane d-none" id="benefits-section">
                             <div class="card border-0 shadow-sm mb-3">
                                 <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
                                         <h6 class="mb-0">${__('benefits_section')}</h6>
                                         <button id="addBenefitBtn" class="btn btn-sm btn-success">
                                             <i class="fas fa-plus-circle me-1"></i> ${__('add_benefit_button')}
                                         </button>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input type="checkbox" class="form-check-input" id="autoBenefitEnabledCheckbox" ${Number(payroll.auto_benefit_enabled ?? 1) !== 0 ? 'checked' : ''}>
+                                        <label class="form-check-label small" for="autoBenefitEnabledCheckbox">
+                                            ${__('auto_add_benefit_checkbox_label', 'Auto add Benefit (Vacation working days, Attendance overtime, Scheduled other income) while generating payroll')}
+                                        </label>
                                     </div>
                                     <div id="benefits-list">
                                         ${benefitsHtml}
@@ -5687,11 +5948,17 @@ async function showPayrollDetails(empId, empName, month) {
                         <div class="section-pane d-none" id="deductions-section">
                             <div class="card border-0 shadow-sm mb-3">
                                 <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
                                         <h6 class="mb-0">${__('deductions_section')}</h6>
                                         <button id="addDeductionBtn" class="btn btn-sm btn-danger">
                                             <i class="fas fa-plus-circle me-1"></i> ${__('add_deduction_button')}
                                         </button>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input type="checkbox" class="form-check-input" id="autoDeductionEnabledCheckbox" ${Number(payroll.auto_deduction_enabled ?? 1) !== 0 ? 'checked' : ''}>
+                                        <label class="form-check-label small" for="autoDeductionEnabledCheckbox">
+                                            ${__('auto_add_deduction_checkbox_label') || 'Auto add Deduction (GOSI, Loan, Attendance, Joining/Vacation return) while generating payroll'}
+                                        </label>
                                     </div>
                                     <div id="deductions-list">
                                         ${deductionsHtml}
@@ -6313,7 +6580,7 @@ async function showPayrollDetails(empId, empName, month) {
             }).then((result) => {
                 addEventListeners();
                 if (result.isConfirmed) {
-                    savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions, result.value.paymentType);
+                    savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions, result.value.paymentType, result.value.autoBenefitEnabled, result.value.autoDeductionEnabled);
                 }
             });
         } else {
@@ -6838,30 +7105,40 @@ function openPayslipsFile(base, data) {
                     ? p.benefits_list.map(b => {
                         const amount = parseFloat(b.note || 0).toFixed(2);
                         const hoursVal = parseFloat(b.hours || 0);
+                        const minutesVal = parseFloat(b.minutes || 0);
                         const daysVal = parseFloat(b.days || 0);
-                        
+
                         // Determine format based on calculation type
                         let detailsText = '';
-                        
+
+                        const benefitLabel = b.benefit || 'Benefit';
                         if (b.calculation_type === 'by_days') {
                             // Show days and amount
                             if (daysVal > 0) {
-                                detailsText = `${daysVal} Days: ${amount}`;
+                                detailsText = `${benefitLabel} (${daysVal}d): ${amount}`;
                             } else {
-                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                                detailsText = `${benefitLabel}: ${amount}`;
                             }
                         } else if (b.calculation_type === 'by_hours' || b.calculation_type === 'overtime_basic' || b.calculation_type === 'overtime_total') {
-                            // Show hours and amount
-                            if (hoursVal > 0) {
-                                detailsText = `${hoursVal} Hours: ${amount}`;
+                            // Show exact hours and minutes (no rounding) and amount
+                            if (hoursVal > 0 || minutesVal > 0) {
+                                let hm;
+                                if (hoursVal > 0 && minutesVal > 0) {
+                                    hm = `${hoursVal}h ${minutesVal}m`;
+                                } else if (minutesVal > 0) {
+                                    hm = `${minutesVal}m`;
+                                } else {
+                                    hm = `${hoursVal}h`;
+                                }
+                                detailsText = `${benefitLabel} (${hm}): ${amount}`;
                             } else {
-                                detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                                detailsText = `${benefitLabel}: ${amount}`;
                             }
                         } else {
                             // For fixed or other types, show name and amount
-                            detailsText = `${b.benefit || 'Benefit'}: ${amount}`;
+                            detailsText = `${benefitLabel}: ${amount}`;
                         }
-                        
+
                         return detailsText;
                     }).join('\n')
                     : 'N/A';
@@ -6871,28 +7148,38 @@ function openPayslipsFile(base, data) {
                     ? p.deductions_list.map(d => {
                         const amount = parseFloat(d.note || 0).toFixed(2);
                         const hoursVal = parseFloat(d.hours || 0);
+                        const minutesVal = parseFloat(d.minutes || 0);
                         const daysVal = parseFloat(d.days || 0);
-                        
+
                         // Determine format based on calculation type
                         let detailsText = '';
-                        
+
+                        const deductionLabel = d.deduction || 'Deduction';
                         if (d.calculation_type === 'daily_deduction') {
                             // Show days and amount
                             if (daysVal > 0) {
-                                detailsText = `${daysVal} Days: ${amount}`;
+                                detailsText = `${deductionLabel} (${daysVal}d): ${amount}`;
                             } else {
-                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                                detailsText = `${deductionLabel}: ${amount}`;
                             }
-                        } else if (d.calculation_type === 'hourly_deduction' || d.calculation_type === 'hourly') {
-                            // Show hours and amount
-                            if (hoursVal > 0) {
-                                detailsText = `${hoursVal} Hours: ${amount}`;
+                        } else if (d.calculation_type === 'hourly_deduction' || d.calculation_type === 'hourly' || d.calculation_type === 'minute_deduction') {
+                            // Show exact hours and minutes (no rounding) and amount
+                            if (hoursVal > 0 || minutesVal > 0) {
+                                let hm;
+                                if (hoursVal > 0 && minutesVal > 0) {
+                                    hm = `${hoursVal}h ${minutesVal}m`;
+                                } else if (minutesVal > 0) {
+                                    hm = `${minutesVal}m`;
+                                } else {
+                                    hm = `${hoursVal}h`;
+                                }
+                                detailsText = `${deductionLabel} (${hm}): ${amount}`;
                             } else {
-                                detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                                detailsText = `${deductionLabel}: ${amount}`;
                             }
                         } else {
                             // For fixed or other types, show name and amount
-                            detailsText = `${d.deduction || 'Deduction'}: ${amount}`;
+                            detailsText = `${deductionLabel}: ${amount}`;
                         }
                         
                         return detailsText;
