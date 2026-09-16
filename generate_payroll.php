@@ -326,198 +326,211 @@
                 font-weight: 700;
             }
             .payroll-toolbar-actions {
-                display: flex;
-                align-items: center;
-                justify-content: flex-end;
-                gap: 8px;
-                flex-wrap: nowrap;
+                align-items: stretch;
+                justify-content: flex-start;
                 align-self: stretch;
-                min-height: 104px;
             }
             .payroll-toolbar-actions .btn {
-                min-height: 42px;
-                height: 42px;
-                padding: 8px 14px;
+                height: 50px;
+                padding: 15px 29px;
+                box-sizing: border-box;
                 border-radius: 10px;
                 font-weight: 700;
-                font-size: 14px;
+                font-size: 15px;
                 white-space: nowrap;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                width: 100%;
             }
             .payroll-toolbar-actions #generatePayrollBtn {
                 background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
                 border-color: #1d4ed8;
             }
             .payroll-toolbar-actions #payrollActionsToggle {
-                background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-                border-color: #1d4ed8;
+                background: linear-gradient(145deg, #a855f7 0%, #8b5cf6 40%, #7c3aed 75%, #5b21b6 100%);
+                border: none;
                 color: #fff;
-                min-width: 220px;
-                justify-content: space-between;
                 gap: 10px;
+                letter-spacing: 0.2px;
+                box-shadow: 0 8px 18px rgba(124, 58, 237, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+                transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
             }
-            .payroll-actions-menu {
-                min-width: 260px;
-                border-radius: 12px;
-                border: 1px solid #d9e3e9;
-                box-shadow: 0 12px 28px rgba(15, 23, 42, 0.15);
+            .payroll-toolbar-actions #payrollActionsToggle i {
+                font-size: 17px;
             }
-            .payroll-actions-menu .dropdown-item {
-                padding: 9px 14px;
-                font-weight: 600;
-                color: #1e293b;
-                position: relative;
-                padding-left: 20px;
-                transform: translateX(0);
-                transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+            .payroll-toolbar-actions #payrollActionsToggle:hover,
+            .payroll-toolbar-actions #payrollActionsToggle:focus {
+                background: linear-gradient(145deg, #c084fc 0%, #a855f7 40%, #8b31f0 75%, #6d28d9 100%);
+                box-shadow: 0 12px 24px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+                transform: translateY(-2px);
+                color: #fff;
             }
-            .payroll-actions-menu .dropdown-item::before {
-                content: '';
-                position: absolute;
-                left: 6px;
-                top: 8px;
-                bottom: 8px;
-                width: 4px;
-                border-radius: 999px;
-                background: transparent;
-                opacity: 0;
-                transition: opacity 0.18s ease, background-color 0.18s ease;
+            .payroll-toolbar-actions #payrollActionsToggle:active {
+                transform: translateY(0);
+                box-shadow: 0 4px 10px rgba(124, 58, 237, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
             }
-            .payroll-actions-menu .dropdown-item i {
-                width: 18px;
-                margin-right: 8px;
-                text-align: center;
+            .payroll-view-only-popup input:disabled,
+            .payroll-view-only-popup input[readonly],
+            .payroll-view-only-popup select:disabled,
+            .payroll-view-only-popup textarea[readonly] {
+                background-color: #f1f3f5 !important;
+                cursor: not-allowed;
+                opacity: 0.85;
             }
-            .payroll-actions-menu .dropdown-item:hover,
-            .payroll-actions-menu .dropdown-item:focus {
-                background-color: #eff6ff;
-                transform: translateX(6px);
-                cursor: pointer;
+            .payroll-toolbar-actions #payrollActionsToggle:disabled {
+                background: linear-gradient(145deg, #c4c9d4 0%, #aab0bc 100%);
+                box-shadow: none;
+                cursor: not-allowed;
+                opacity: 0.75;
+                transform: none;
             }
-            .payroll-actions-menu .dropdown-item:hover::before,
-            .payroll-actions-menu .dropdown-item:focus::before {
-                opacity: 1;
+            /* "More Actions" SweetAlert2 modal - same concept as includes/emp_top_info.php's
+               employee-card More menu, applied to the payroll toolbar Actions dropdown. */
+            .payroll-actions-modal .swal2-popup {
+                border-radius: 16px;
+                box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+                overflow: hidden;
+                background: #f7f8fa;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn {
+            .payroll-actions-modal .swal2-title {
+                font-size: 1.2rem;
+                font-weight: 700;
                 color: #1f2937;
+                padding: 1.1rem 1.5rem 0.9rem;
+                margin: 0;
+                text-align: left;
+                background: #fff;
+                border-bottom: 1px solid #eef0f4;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn:hover,
-            .payroll-actions-menu #actionGeneratePayrollBtn:focus {
-                color: #111827;
+            .payroll-actions-modal .swal2-html-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn:hover::before,
-            .payroll-actions-menu #actionGeneratePayrollBtn:focus::before {
-                background-color: #111827;
+            .payroll-actions-modal .menu-items-container {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin: 0;
+                padding: 10px 10px 14px;
+                width: 100%;
+                background: #f7f8fa;
+                max-height: 60vh;
+                overflow-y: auto;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn:disabled {
+            .payroll-actions-modal .menu-item {
+                display: flex !important;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 12px !important;
+                margin: 0 !important;
+                cursor: pointer !important;
+                transition: all 0.2s ease;
+                border: 1px solid transparent;
+                border-radius: 12px;
+                font-weight: 600;
+                font-size: 14.5px;
+                user-select: none;
+                box-sizing: border-box;
+                background-color: #fff;
+                position: relative;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            }
+            .payroll-actions-modal .menu-item:hover {
+                transform: translateX(2px);
+                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+                border-color: currentColor;
+            }
+            .payroll-actions-modal .menu-item:active {
+                transform: translateX(2px) scale(0.99);
+            }
+            .payroll-actions-modal .menu-item i {
+                font-size: 15px;
+                width: 34px;
+                height: 34px;
+                border-radius: 10px;
+                text-align: center;
+                flex-shrink: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: rgba(108, 117, 125, 0.14);
+            }
+            .payroll-actions-modal .menu-item span {
+                font-size: 14.5px;
+                white-space: nowrap;
+                flex: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                color: #374151;
+            }
+            .payroll-actions-modal .menu-item .badge {
+                flex: 0 0 auto;
+                margin-inline-start: auto;
+            }
+            .payroll-actions-modal .menu-item::after {
+                content: '\f105';
+                font-family: 'Font Awesome 5 Free', 'FontAwesome';
+                font-weight: 900;
+                font-size: 13px;
+                color: #c7cbd1;
+                flex-shrink: 0;
+                transition: transform 0.2s ease, color 0.2s ease;
+            }
+            .payroll-actions-modal .menu-item:hover::after {
+                transform: translateX(3px);
+                color: currentColor;
+            }
+            /* Color schemes - icon badge tinted to its own action color, mirrors the
+               per-button colors the old Bootstrap dropdown used. */
+            .payroll-actions-modal .menu-item.mi-dark { color: #1f2937; }
+            .payroll-actions-modal .menu-item.mi-dark i { background-color: rgba(31, 41, 55, 0.12); }
+            .payroll-actions-modal .menu-item.mi-neutral { color: #1e293b; }
+            .payroll-actions-modal .menu-item.mi-neutral i { background-color: rgba(30, 41, 59, 0.12); }
+            .payroll-actions-modal .menu-item.mi-primary { color: #1d4ed8; }
+            .payroll-actions-modal .menu-item.mi-primary i { background-color: rgba(29, 78, 216, 0.12); }
+            .payroll-actions-modal .menu-item.mi-teal { color: #0f766e; }
+            .payroll-actions-modal .menu-item.mi-teal i { background-color: rgba(15, 118, 110, 0.12); }
+            .payroll-actions-modal .menu-item.mi-danger { color: #dc2626; }
+            .payroll-actions-modal .menu-item.mi-danger i { background-color: rgba(220, 38, 38, 0.12); }
+            .payroll-actions-modal .menu-item.mi-purple { color: #7c3aed; }
+            .payroll-actions-modal .menu-item.mi-purple i { background-color: rgba(124, 58, 237, 0.12); }
+            .payroll-actions-modal .menu-item.mi-amber { color: #d97706; }
+            .payroll-actions-modal .menu-item.mi-amber i { background-color: rgba(217, 119, 6, 0.12); }
+            .payroll-actions-modal .menu-item.mi-indigo { color: #4f46e5; }
+            .payroll-actions-modal .menu-item.mi-indigo i { background-color: rgba(79, 70, 229, 0.12); }
+            .payroll-actions-modal .menu-item.mi-cyan { color: #0891b2; }
+            .payroll-actions-modal .menu-item.mi-cyan i { background-color: rgba(8, 145, 178, 0.12); }
+            .payroll-actions-modal .menu-item.mi-rose { color: #db2777; }
+            .payroll-actions-modal .menu-item.mi-rose i { background-color: rgba(219, 39, 119, 0.12); }
+            .payroll-actions-modal .menu-item.is-disabled {
                 color: #9ca3af !important;
                 opacity: 0.6;
-                cursor: not-allowed;
+                cursor: not-allowed !important;
                 pointer-events: none;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:hover,
-            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:focus {
+            .payroll-actions-modal .menu-item.is-disabled i {
+                background-color: rgba(156, 163, 175, 0.15) !important;
                 color: #9ca3af !important;
             }
-            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:hover::before,
-            .payroll-actions-menu #actionGeneratePayrollBtn:disabled:focus::before {
-                background-color: transparent;
-            }
-            .payroll-actions-menu #actionImportPayrollExcelBtn {
-                color: #1d4ed8;
-            }
-            .payroll-actions-menu #actionImportPayrollExcelBtn:hover,
-            .payroll-actions-menu #actionImportPayrollExcelBtn:focus {
-                color: #1e40af;
-            }
-            .payroll-actions-menu #actionImportPayrollExcelBtn:hover::before,
-            .payroll-actions-menu #actionImportPayrollExcelBtn:focus::before {
-                background-color: #1e40af;
-            }
-            .payroll-actions-menu #actionRegeneratePayrollBtn {
-                color: #0f766e;
-            }
-            .payroll-actions-menu #actionRegeneratePayrollBtn:hover,
-            .payroll-actions-menu #actionRegeneratePayrollBtn:focus {
-                color: #115e59;
-            }
-            .payroll-actions-menu #actionRegeneratePayrollBtn:hover::before,
-            .payroll-actions-menu #actionRegeneratePayrollBtn:focus::before {
-                background-color: #115e59;
-            }
-            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled {
-                color: #9ca3af !important;
-                opacity: 0.6;
-                cursor: not-allowed;
-                pointer-events: none;
-            }
-            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:hover,
-            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:focus {
+            .payroll-actions-modal .menu-item.is-disabled span {
                 color: #9ca3af !important;
             }
-            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:hover::before,
-            .payroll-actions-menu #actionRegeneratePayrollBtn:disabled:focus::before {
-                background-color: transparent;
+            .payroll-actions-modal .menu-divider {
+                height: 1px;
+                background: #e5e9ef;
+                margin: 4px 6px;
+                flex-shrink: 0;
             }
-            .payroll-actions-menu #actionUngeneratePayrollBtn {
-                color: #dc2626;
+            .payroll-actions-modal .swal2-close {
+                font-size: 1.5rem;
+                color: #9aa1ac;
+                width: 36px;
+                height: 36px;
             }
-            .payroll-actions-menu #actionUngeneratePayrollBtn:hover,
-            .payroll-actions-menu #actionUngeneratePayrollBtn:focus {
-                color: #b91c1c;
-            }
-            .payroll-actions-menu #actionUngeneratePayrollBtn:hover::before,
-            .payroll-actions-menu #actionUngeneratePayrollBtn:focus::before {
-                background-color: #b91c1c;
-            }
-            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled {
-                color: #9ca3af !important;
-                opacity: 0.6;
-                cursor: not-allowed;
-                pointer-events: none;
-            }
-            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:hover,
-            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:focus {
-                color: #9ca3af !important;
-            }
-            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:hover::before,
-            .payroll-actions-menu #actionUngeneratePayrollBtn:disabled:focus::before {
-                background-color: transparent;
-            }
-            .payroll-actions-menu #actionGenerateReportBtn {
-                color: #7c3aed;
-            }
-            .payroll-actions-menu #actionGenerateReportBtn:hover,
-            .payroll-actions-menu #actionGenerateReportBtn:focus {
-                color: #6d28d9;
-            }
-            .payroll-actions-menu #actionGenerateReportBtn:hover::before,
-            .payroll-actions-menu #actionGenerateReportBtn:focus::before {
-                background-color: #6d28d9;
-            }
-            .payroll-actions-menu #actionToggleFeedbackFilterBtn {
-                color: #d97706;
-            }
-            .payroll-actions-menu #actionToggleFeedbackFilterBtn:hover,
-            .payroll-actions-menu #actionToggleFeedbackFilterBtn:focus {
-                color: #b45309;
-            }
-            .payroll-actions-menu #actionToggleFeedbackFilterBtn:hover::before,
-            .payroll-actions-menu #actionToggleFeedbackFilterBtn:focus::before {
-                background-color: #b45309;
-            }
-            .payroll-actions-menu #actionStartApprovalBtn {
-                color: #dc2626;
-            }
-            .payroll-actions-menu #actionStartApprovalBtn:hover,
-            .payroll-actions-menu #actionStartApprovalBtn:focus {
-                color: #b91c1c;
-            }
-            .payroll-actions-menu #actionStartApprovalBtn:hover::before,
-            .payroll-actions-menu #actionStartApprovalBtn:focus::before {
-                background-color: #b91c1c;
+            .payroll-actions-modal .swal2-close:hover {
+                color: #f46a6a;
             }
             .payroll-import-review-summary {
                 display: flex;
@@ -1011,50 +1024,54 @@
                                                     </div>
                                                 </div>
 
-                                                <div class="payroll-toolbar-actions">
-                                                    <div class="dropdown">
-                                                        <button id="payrollActionsToggle" class="btn dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                            <span><i class="mdi mdi-clipboard-list-outline"></i> <?= __('actions_label') ?: 'Actions' ?></span>
+                                                <div class="payroll-toolbar-actions payroll-month-card payroll-filter-card-shared">
+                                                    <div class="payroll-month-header">
+                                                        <label class="payroll-month-label"><?= __('actions_label') ?: 'Actions' ?></label>
+                                                    </div>
+                                                    <button id="payrollActionsToggle" class="btn" type="button" aria-haspopup="dialog" disabled>
+                                                        <span><i class="mdi mdi-clipboard-list-outline"></i> <?= __('more', 'More') ?></span>
+                                                    </button>
+                                                    <!-- Real action buttons stay here (hidden) so all existing JS bindings/visibility/disabled logic
+                                                         keep working untouched; the SweetAlert2 "More Actions" modal below just mirrors their state
+                                                         and forwards clicks to them, same concept as includes/emp_top_info.php. -->
+                                                    <div id="payrollActionsSource" class="payroll-actions-menu" style="display:none;">
+                                                        <button type="button" class="dropdown-item" id="actionGeneratePayrollBtn" data-mi-color="dark">
+                                                            <i class="fa fa-solid fa-calculator-simple"></i> <?= __('generate_payroll_for_selected_button') ?>
                                                         </button>
-                                                        <div class="dropdown-menu dropdown-menu-right payroll-actions-menu" aria-labelledby="payrollActionsToggle">
-                                                            <button type="button" class="dropdown-item" id="actionGeneratePayrollBtn">
-                                                                <i class="fa fa-solid fa-calculator-simple"></i> <?= __('generate_payroll_for_selected_button') ?>
-                                                            </button>
-                                                            <?php if ($canAssignPayrollSupervisor): ?>
-                                                            <button type="button" class="dropdown-item" id="actionAssignPayrollSupervisorBtn">
-                                                                <i class="fa fa-solid fa-user-tie"></i> <?= __('assign_payroll_supervisor_button', 'Assign Direct Supervisor (Payroll)') ?>
-                                                            </button>
-                                                            <?php endif; ?>
-                                                            <button type="button" class="dropdown-item hidden" id="actionImportPayrollExcelBtn" style="display:none;">
-                                                                <i class="fa fa-solid fa-file-arrow-up"></i> <?= __('upload_payroll_excel') ?: 'Upload Payroll Excel' ?>
-                                                            </button>
-                                                            <button type="button" class="dropdown-item hidden" id="actionRegeneratePayrollBtn" style="display:none;" title="Re-generate payroll and skip hold employees">
-                                                                <i class="fa fa-solid fa-refresh"></i> <?= __('regenerate_payroll_button') ?? 'Re-generate Payroll' ?>
-                                                            </button>
-                                                            <?php if ($canUngeneratePayroll): ?>
-                                                            <button type="button" class="dropdown-item hidden" id="actionUngeneratePayrollBtn" style="display:none;" title="Remove generated payroll for this month (not-yet-paid employees only)">
-                                                                <i class="fa fa-solid fa-trash-can"></i> <?= __('ungenerate_payroll_button', 'Un-Generate Payroll') ?>
-                                                            </button>
-                                                            <?php endif; ?>
-                                                            <button type="button" class="dropdown-item" id="actionGenerateReportBtn">
-                                                                <i class="fa fa-solid fa-chart-mixed"></i> <?= __('payroll_report') ?>
-                                                            </button>
-                                                            <button type="button" class="dropdown-item hidden" id="actionPayslipsBtn" style="display:none;">
-                                                                <i class="fa fa-solid fa-file-invoice"></i> <?= __('payslips', 'Payslips') ?>
-                                                            </button>
-                                                            <button type="button" class="dropdown-item hidden" id="actionPayrollSummaryReportBtn" style="display:none;">
-                                                                <i class="fa fa-solid fa-file-invoice-dollar"></i> <?= __('payroll_summary_report', 'Payroll Summary Report') ?>
-                                                            </button>
-                                                            <button type="button" class="dropdown-item hidden" id="actionToggleFeedbackFilterBtn" style="display:none;">
-                                                                <i class="fa fa-solid fa-comment-dots"></i>
-                                                                <span class="feedback-filter-btn-label"><?= __('show_feedback_employees', 'Show Feedback Employees') ?></span>
-                                                                <span class="badge badge-warning ml-2" id="feedbackFilterCountBadge" style="display:none;"></span>
-                                                            </button>
-                                                            <div class="dropdown-divider"></div>
-                                                            <button type="button" class="dropdown-item hidden" id="actionStartApprovalBtn" style="display:none;">
-                                                                <i class="fa fa-solid fa-paper-plane"></i> <?= __('start_approval', 'Start Approval') ?>
-                                                            </button>
-                                                        </div>
+                                                        <?php if ($canAssignPayrollSupervisor): ?>
+                                                        <button type="button" class="dropdown-item" id="actionAssignPayrollSupervisorBtn" data-mi-color="indigo">
+                                                            <i class="fa fa-solid fa-user-tie"></i> <?= __('assign_payroll_supervisor_button', 'Assign Direct Supervisor (Payroll)') ?>
+                                                        </button>
+                                                        <?php endif; ?>
+                                                        <button type="button" class="dropdown-item" id="actionImportPayrollExcelBtn" style="display:none;" data-mi-color="primary">
+                                                            <i class="fa fa-solid fa-file-arrow-up"></i> <?= __('upload_payroll_excel') ?: 'Upload Payroll Excel' ?>
+                                                        </button>
+                                                        <button type="button" class="dropdown-item" id="actionRegeneratePayrollBtn" style="display:none;" title="Re-generate payroll and skip hold employees" data-mi-color="teal">
+                                                            <i class="fa fa-solid fa-refresh"></i> <?= __('regenerate_payroll_button') ?? 'Re-generate Payroll' ?>
+                                                        </button>
+                                                        <?php if ($canUngeneratePayroll): ?>
+                                                        <button type="button" class="dropdown-item" id="actionUngeneratePayrollBtn" style="display:none;" title="Remove generated payroll for this month (not-yet-paid employees only)" data-mi-color="danger">
+                                                            <i class="fa fa-solid fa-trash-can"></i> <?= __('ungenerate_payroll_button', 'Un-Generate Payroll') ?>
+                                                        </button>
+                                                        <?php endif; ?>
+                                                        <button type="button" class="dropdown-item" id="actionGenerateReportBtn" data-mi-color="purple">
+                                                            <i class="fa fa-solid fa-chart-mixed"></i> <?= __('payroll_report') ?>
+                                                        </button>
+                                                        <button type="button" class="dropdown-item" id="actionPayslipsBtn" style="display:none;" data-mi-color="cyan">
+                                                            <i class="fa fa-solid fa-file-invoice"></i> <?= __('payslips', 'Payslips') ?>
+                                                        </button>
+                                                        <button type="button" class="dropdown-item" id="actionPayrollSummaryReportBtn" style="display:none;" data-mi-color="rose">
+                                                            <i class="fa fa-solid fa-file-invoice-dollar"></i> <?= __('payroll_summary_report', 'Payroll Summary Report') ?>
+                                                        </button>
+                                                        <button type="button" class="dropdown-item" id="actionToggleFeedbackFilterBtn" style="display:none;" data-mi-color="amber">
+                                                            <i class="fa fa-solid fa-comment-dots"></i>
+                                                            <span class="feedback-filter-btn-label"><?= __('show_feedback_employees', 'Show Feedback Employees') ?></span>
+                                                            <span class="badge badge-warning ml-2" id="feedbackFilterCountBadge" style="display:none;"></span>
+                                                        </button>
+                                                        <div class="dropdown-divider"></div>
+                                                        <button type="button" class="dropdown-item" id="actionStartApprovalBtn" style="display:none;" data-mi-color="danger">
+                                                            <i class="fa fa-solid fa-paper-plane"></i> <?= __('start_approval', 'Start Approval') ?>
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1266,6 +1283,74 @@ async function updateStartApprovalButtonVisibility(monthValue = null) {
     }
 }
 
+// Build the "More Actions" SweetAlert2 menu HTML from the current state of the real,
+// hidden #payrollActionsSource buttons (visibility/disabled/label all read live), same
+// concept as the employee card's More menu in includes/emp_top_info.php.
+function buildPayrollActionsMenuHtml() {
+    let html = '';
+    $('#payrollActionsSource').children().each(function() {
+        const $el = $(this);
+
+        if ($el.hasClass('dropdown-divider')) {
+            html += '<div class="menu-divider"></div>';
+            return;
+        }
+
+        // Check the item's own inline display, not :visible - its parent
+        // (#payrollActionsSource) is permanently display:none.
+        if ($el.css('display') === 'none') {
+            return;
+        }
+
+        const id = $el.attr('id');
+        const color = $el.data('mi-color') || 'neutral';
+        const disabled = $el.prop('disabled');
+        const title = $el.attr('title') || '';
+
+        const $clone = $el.clone();
+        const $icon = $clone.find('i').first();
+        const iconHtml = $icon.length ? $icon.prop('outerHTML') : '';
+        $icon.remove();
+
+        const $badge = $clone.find('#feedbackFilterCountBadge');
+        const badgeHtml = $badge.length ? $badge.prop('outerHTML') : '';
+        $badge.remove();
+
+        const labelHtml = $clone.html().trim();
+
+        html += `<div class="menu-item mi-${color}${disabled ? ' is-disabled' : ''}" data-target-id="${id}"${title ? ` title="${title}"` : ''}>${iconHtml}<span>${labelHtml}</span>${badgeHtml}</div>`;
+    });
+    return html;
+}
+
+function openPayrollActionsModal() {
+    Swal.fire({
+        title: __('actions_label', 'Actions'),
+        html: '<div class="menu-items-container">' + buildPayrollActionsMenuHtml() + '</div>',
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: {
+            container: 'payroll-actions-modal',
+            popup: 'swal2-popup',
+            closeButton: 'swal2-close'
+        },
+        width: '440px',
+        padding: '0',
+        didOpen: function() {
+            $(Swal.getHtmlContainer()).find('.menu-item').on('click', function() {
+                if ($(this).hasClass('is-disabled')) {
+                    return;
+                }
+                const targetId = $(this).data('target-id');
+                Swal.close();
+                setTimeout(function() {
+                    $('#' + targetId).trigger('click');
+                }, 100);
+            });
+        }
+    });
+}
+
 async function updateStartApprovalButtonLabel(monthValue) {
     const btn = $('#actionStartApprovalBtn');
     let approvalStatus = 'none';
@@ -1279,8 +1364,10 @@ async function updateStartApprovalButtonLabel(monthValue) {
 
     if (approvalStatus === 'pending_approval') {
         btn.html(`<i class="fa fa-solid fa-hourglass-half"></i> ${__('approval_under_process', 'Approval Under Process')}`);
+        btn.prop('disabled', true);
     } else {
         btn.html(`<i class="fa fa-solid fa-paper-plane"></i> ${__('start_approval', 'Start Approval')}`);
+        btn.prop('disabled', false);
     }
 }
 
@@ -2078,10 +2165,12 @@ function initializeDataTable() {
                     const isPayrollPaid = row.payroll_status && (row.payroll_status === 'paid');
                     const isPayrollGenerated = row.payroll_status && (row.payroll_status === 'generated');
                     
-                    // Locked for paid payrolls
+                    // Paid payrolls are locked - open the same details modal but read-only
+                    // (view-edit-btn's own delegated click handler decides read-only mode
+                    // from the fetched payroll's own status, see showPayrollDetails()).
                     if (isPayrollPaid) {
-                        return `<button class="btn btn-danger btn-sm btn-rounded" disabled style="cursor: not-allowed; opacity: 0.6;" title="${__('payroll_is_locked')}">
-                                    <i class="mdi mdi-lock"></i> ${__('locked')}
+                        return `<button class="btn btn-secondary btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${__('view_payroll_readonly_title', 'View payroll (read-only, already paid)')}">
+                                    <i class="mdi mdi-eye-outline"></i> ${__('view_only_button', 'View Only')}
                                 </button>`;
                     }
                     
@@ -2130,6 +2219,7 @@ async function fetchEmployees() {
     loadingIndicator.removeClass('d-none').show();
     noDataMessage.addClass('d-none').text('');
     tableWrapper.hide();
+    $('#payrollActionsToggle').prop('disabled', true);
     try {
         // Ensure this path is correct for your server setup
         const response = await fetch(`./includes/api/get_employees.php?month=${selectedMonth}`);
@@ -2169,6 +2259,7 @@ async function fetchEmployees() {
     } finally {
         loadingIndicator.hide();
         await updateStartApprovalButtonVisibility();
+        $('#payrollActionsToggle').prop('disabled', false);
     }
 }
 
@@ -2377,6 +2468,10 @@ function addEventListeners() {
     };
     $('#employeeTable').off('click', '.view-edit-btn', viewEditBtnHandler).on('click', '.view-edit-btn', viewEditBtnHandler);
     currentEventListeners.push(() => $('#employeeTable').off('click', '.view-edit-btn', viewEditBtnHandler));
+    // "More Actions" trigger (SweetAlert2 modal mirroring #payrollActionsSource)
+    $('#payrollActionsToggle').off('click', openPayrollActionsModal).on('click', openPayrollActionsModal);
+    currentEventListeners.push(() => $('#payrollActionsToggle').off('click', openPayrollActionsModal));
+
     // Generate Payroll button
     $('#actionGeneratePayrollBtn').off('click', generatePayroll).on('click', generatePayroll);
     currentEventListeners.push(() => $('#actionGeneratePayrollBtn').off('click', generatePayroll));
@@ -5016,6 +5111,9 @@ async function startPayrollApproval(monthOverride = null) {
                     window.location.href = './all_payroll_approvals.php';
                 }
             });
+            // Reflect the now-pending approval immediately, without a page reload,
+            // so the button disables and shows "Approval Under Process" right away.
+            updateStartApprovalButtonLabel(payrollMonth);
             return;
         }
 
@@ -5575,6 +5673,10 @@ async function showPayrollDetails(empId, empName, month) {
 
         if (data.status === 'success') {
             payroll = data.payroll; // Set global payroll object
+            // Paid payrolls are locked: this employee's payroll for the month has already
+            // been paid, so the modal opens read-only with no Save Changes button and no
+            // editable fields - once paid, last month's payroll can no longer be changed.
+            const isReadOnly = String(payroll.status || '').toLowerCase() === 'paid';
             const employee = data.employee;
             const benefits = data.benefits;
             let deductions = data.deductions;
@@ -6025,11 +6127,28 @@ async function showPayrollDetails(empId, empName, month) {
                 footer: modalFooterHtml,
                 width: '900px',
                 showCancelButton: true,
+                showConfirmButton: !isReadOnly,
                 confirmButtonText: __('save_changes_button'),
                 confirmButtonColor: '#6366f1',
                 cancelButtonText: __('close'),
                 allowOutsideClick: false,
+                customClass: isReadOnly ? { popup: 'payroll-view-only-popup' } : {},
                 didOpen: () => {
+                    if (isReadOnly) {
+                        const popupEl = Swal.getPopup();
+                        // Lock every field so a paid month's payroll can't be edited from here.
+                        popupEl.querySelectorAll('input, textarea').forEach(el => { el.readOnly = true; });
+                        popupEl.querySelectorAll('select, input[type="checkbox"], input[type="radio"], button').forEach(el => {
+                            if (el.hasAttribute('data-section') || el.id === 'prevEmployeeBtn' || el.id === 'nextEmployeeBtn' || el.id === 'toggleFeedbackBlockBtn'
+                                || el.classList.contains('swal2-cancel') || el.classList.contains('swal2-close')) {
+                                return;
+                            }
+                            el.disabled = true;
+                        });
+                        popupEl.querySelectorAll('#addBenefitBtn, #addDeductionBtn, .delete-benefit-btn, .delete-deduction-btn, .mark-feedback-resolved-btn').forEach(el => {
+                            el.style.display = 'none';
+                        });
+                    }
                     const originalGrossSalary = parseFloat(payroll.total_gross_salary);
                     const updateDynamicNetSalary = () => updateNetSalaryDisplay(originalGrossSalary);
                     const initialModalState = collectPayrollModalData(employee);

@@ -7,7 +7,20 @@
 header('Content-Type: application/json');
 require_once("./../../includes/db.php"); // Adjust this path as needed
 require_once("./../../includes/session_check.php"); // Include session for user permissions
+// Release the session file lock immediately - this endpoint never writes to $_SESSION
+// again below. Without this, the payroll page's several concurrent AJAX calls (this,
+// get_payroll_approval_status.php, get_available_months.php, etc.) all serialize behind
+// PHP's per-session file lock, so this query's own runtime gets added to every other
+// request's wait time too, which is what was pushing them all past max_execution_time.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 require_once("./../../includes/payroll_approval_helpers.php");
+
+// This query joins over vacation/settlement history for every active employee, which
+// gets noticeably heavier for months with a full generated/paid roster. The app-wide
+// 25s cap (.htaccess) is too tight for that case; raise it just for this endpoint.
+set_time_limit(90);
 
 $pdo = getDbConnection();
 ensurePayrollChecklistFeedbackTable($pdo);

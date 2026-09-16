@@ -7,6 +7,12 @@
 header('Content-Type: application/json');
 require_once("./../../includes/db.php"); // Include your database connection file
 require_once("./../../includes/session_check.php");
+// Release the session file lock immediately - see get_employees.php for why this
+// matters. This file only reads $_SESSION afterward, never writes it, so the read
+// values below are unaffected.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 require_once("./../../includes/payroll_approval_helpers.php");
 
 function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {

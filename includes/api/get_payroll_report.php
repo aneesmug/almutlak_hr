@@ -14,6 +14,12 @@ header('Content-Type: application/json');
 
 require_once("./../../includes/db.php"); 
 require_once("./../../includes/session_check.php"); // Include session to get user permissions
+// Release the session file lock immediately - see get_employees.php for why this
+// matters (this report query can run long over a full month, and would otherwise
+// block every other concurrent payroll AJAX call on the same session lock).
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 require_once("./../../includes/payroll_approval_helpers.php");
 
 $pdo = getDbConnection();

@@ -5,6 +5,12 @@ header('Content-Type: application/json');
 
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
+// Release the session file lock immediately - see get_employees.php for why this
+// matters (this endpoint is polled concurrently alongside other payroll API calls
+// that all block on the same session lock otherwise).
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 require_once __DIR__ . '/../../includes/ApprovalChainManager.php';
 require_once __DIR__ . '/../../includes/payroll_approval_helpers.php';
 
