@@ -22,6 +22,10 @@ if (
     exit();
 }
 
+// A temp-role replacement can act on the original employee's pending approvals too -
+// request_approvers.approver_id / current_approver_id still point at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 // Get Request Type ID for 'settlement'
 $typeQuery = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'settlement' LIMIT 1");
 if (!$typeQuery || mysqli_num_rows($typeQuery) == 0) {
@@ -553,7 +557,7 @@ if ($canSeeAllDepts) {
                                             // Check if this settlement is pending approval with the current user
                                             // Support both 'pending' and 'pending_approval' status for backward compatibility
                                             $isPendingStatus = in_array($settlement['settlement_status'], ['pending', 'pending_approval']);
-                                            $is_pending_with_me = ($isPendingStatus && !empty($settlement['current_approver_id']) && (int)$settlement['current_approver_id'] === (int)$empid);
+                                            $is_pending_with_me = ($isPendingStatus && !empty($settlement['current_approver_id']) && ((int)$settlement['current_approver_id'] === (int)$empid || ($delegatedFromEmpId !== null && (int)$settlement['current_approver_id'] === (int)$delegatedFromEmpId)));
                                             
                                             // Calculate payable amount from vacation data (same logic as vacation_report_details.php)
                                             $payableAmount = 0;

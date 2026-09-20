@@ -19,6 +19,8 @@
     // (see canManageOwnScreenSettings in the JS permissions payload below).
     $canAccessScreenSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_own_screen_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $ownScreenSettings = $canAccessScreenSettingsTab ? get_user_screen_settings($conDB, $empid ?? '') : null;
+    $canAccessVacationBlackoutTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_vacation_blackout_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessTempRoleTransferTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_temp_role_transfer', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -388,6 +390,8 @@
             'canAccessSalaryIncrementSettingsTab' => (bool) $canAccessSalaryIncrementSettingsTab,
             'canAccessAttendanceConfigTab' => (bool) $canAccessAttendanceConfigTab,
             'canAccessScreenSettingsTab' => (bool) $canAccessScreenSettingsTab,
+            'canAccessTempRoleTransferTab' => (bool) $canAccessTempRoleTransferTab,
+            'canAccessVacationBlackoutTab' => (bool) $canAccessVacationBlackoutTab,
         ]) ?>;
         // Only meaningful for a non-admin 'manage_own_screen_settings' holder (prefills
         // their self-only form); full admins load every user's data via ajax instead.

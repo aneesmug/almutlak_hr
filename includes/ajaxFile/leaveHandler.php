@@ -387,7 +387,13 @@ elseif ($ajaxType == 'canApplyVacation') {
             'ok' => true,
             'can_apply' => true,
             'remaining_balance' => $remaining_balance,
-            'active_return_date' => $active_return_date
+            'active_return_date' => $active_return_date,
+            // Lets the apply form grey out blocked days in its date pickers (server still enforces in applyVacation).
+            'blackout_dates' => array_values(array_map(function ($b) {
+                return ['start_date' => $b['start_date'], 'end_date' => $b['end_date'], 'reason' => $b['reason']];
+            }, array_filter(getVacationBlackoutDates($conDB, true), function ($b) {
+                return $b['end_date'] >= date('Y-m-d', strtotime('-10 days'));
+            })))
         ]);
     } catch (Exception $e) {
         echo json_encode(['ok' => false, 'message' => 'Error: ' . $e->getMessage()]);
@@ -447,6 +453,26 @@ elseif ($ajaxType == 'applyVacation') {
         $replacement_per = escape_string($replacement_per_raw);
         $start_date = escape_string($_POST['start_date'] ?? '');
         $end_date = escape_string($_POST['end_date'] ?? '');
+
+        // 1.2 Vacation blackout dates (App Settings > Vacation Blackout Dates): no vacation
+        // may overlap a blocked range. Encashed requests don't take time off, so they're exempt.
+        if ($vac_type !== 'Encashed') {
+            $blackout = getVacationBlackoutConflict($conDB, $start_date, $end_date);
+            if ($blackout) {
+                $range = ($blackout['start_date'] === $blackout['end_date'])
+                    ? $blackout['start_date']
+                    : $blackout['start_date'] . ' - ' . $blackout['end_date'];
+                $msg = 'Vacation requests are not allowed during ' . $range . '.';
+                if (!empty($blackout['reason'])) {
+                    $msg .= ' Reason: ' . $blackout['reason'];
+                }
+                http_response_code(200);
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'title' => 'Vacation Dates Blocked', 'message' => $msg, 'type' => 'error']);
+                exit;
+            }
+        }
+
         $departure_date = escape_string($_POST['departure_date'] ?? '');
         $arrival_date = escape_string($_POST['arrival_date'] ?? '');
         $notes = escape_string($_POST['remarks'] ?? ''); // Changed from 'notes' to 'remarks' to match form field

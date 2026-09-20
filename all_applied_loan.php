@@ -26,6 +26,11 @@ if (
     exit();
 }
 
+// A temp-role replacement (App Settings > Temporary Role Transfer, or vacation-based
+// "Transfer Role (Temp)") can act on the original employee's pending approvals too -
+// request_approvers.approver_id / current_approver_id still point at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 $can_cancel_loan_requests = (
     !empty($is_system_admin)
     || user_has_special_access($conDB, $empid ?? '', 'cancel_loan_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
@@ -440,7 +445,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                                                                         <?php
                                                                             // Button visibility: Only show if pending with logged-in user
                                                                             $can_take_action = false;
-                                                                            if ($loan['current_approver_id'] == $empid) {
+                                                                            if ($loan['current_approver_id'] == $empid || ($delegatedFromEmpId !== null && $loan['current_approver_id'] == $delegatedFromEmpId)) {
                                                                                 $can_take_action = true;
                                                                             }
                                                                         ?>

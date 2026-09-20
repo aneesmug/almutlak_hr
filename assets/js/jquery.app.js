@@ -6279,6 +6279,7 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             dataType: 'json',
             data: { ajaxType: 'canApplyVacation', emp_id: empid, is_emergency: 0 },
         }).done(function(res) {
+            window.vacationBlackoutRanges = (res && res.blackout_dates) || [];
             if (!res || res.ok === false) {
                 Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' ,allowOutsideClick:false});
                 return;
@@ -6494,14 +6495,16 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     format: "yyyy-mm-dd",
                     todayHighlight: false,
                     autoclose: true,
-                    startDate: minStartDateString
+                    startDate: minStartDateString,
+                    beforeShowDay: window.vacationBlackoutBeforeShowDay
                 };
                 
                 const endDateConfig = {
                     format: "yyyy-mm-dd",
                     todayHighlight: false,
                     autoclose: true,
-                    startDate: minStartDateString
+                    startDate: minStartDateString,
+                    beforeShowDay: window.vacationBlackoutBeforeShowDay
                 };
                 
                 console.log('📅 Date picker configuration - startDate (string):', minStartDateString);
@@ -6527,6 +6530,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     $('#end_date').datepicker('setStartDate', startDate);
                     $('#departure_date').datepicker('setStartDate', startDate);
                     $('#arrival_date').datepicker('setStartDate', startDate);
+                    window.checkVacationBlackoutOverlap('#start_date', '#end_date');
                     calculateVacationDays();
                 });
 
@@ -6538,6 +6542,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     $('#start_date').datepicker('setEndDate', endDate);
                     $('#departure_date').datepicker('setEndDate', endDate);
                     $('#arrival_date').datepicker('setEndDate', endDate);
+                    window.checkVacationBlackoutOverlap('#start_date', '#end_date');
                     calculateVacationDays();
                 });
             };
@@ -13071,3 +13076,43 @@ function addManualVacationHistory(empid, empname, country) {
         }
     });
 }
+
+
+// --- Vacation blackout dates (App Settings > Vacation Blackout Dates) ---
+// window.vacationBlackoutRanges is filled from leaveHandler.php's canApplyVacation response.
+// Blocked days are disabled in the vacation apply form's date pickers; applyVacation
+// re-checks server-side, so this is convenience only.
+(function () {
+    if (window.vacationBlackoutBeforeShowDay) return;
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function toStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    window.vacationBlackoutRanges = window.vacationBlackoutRanges || [];
+    window.vacationBlackoutBeforeShowDay = function (date) {
+        var s = toStr(date);
+        var ranges = window.vacationBlackoutRanges || [];
+        for (var i = 0; i < ranges.length; i++) {
+            if (s >= ranges[i].start_date && s <= ranges[i].end_date) {
+                return { enabled: false, tooltip: 'Vacations not allowed' + (ranges[i].reason ? ': ' + ranges[i].reason : '') };
+            }
+        }
+    };
+    window.checkVacationBlackoutOverlap = function (startSel, endSel) {
+        var s = $(startSel).val(), e = $(endSel).val();
+        if (!s || !e) return false;
+        var ranges = window.vacationBlackoutRanges || [];
+        for (var i = 0; i < ranges.length; i++) {
+            if (s <= ranges[i].end_date && e >= ranges[i].start_date) {
+                var range = ranges[i].start_date === ranges[i].end_date ? ranges[i].start_date : ranges[i].start_date + ' - ' + ranges[i].end_date;
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Vacation Dates Blocked',
+                    text: 'Vacation requests are not allowed during ' + range + '.' + (ranges[i].reason ? ' Reason: ' + ranges[i].reason : '') + ' Please choose different dates.',
+                    allowOutsideClick: false
+                });
+                $(endSel).datepicker('clearDates');
+                return true;
+            }
+        }
+        return false;
+    };
+})();

@@ -29,6 +29,9 @@ if (empty($_SESSION['empid'])) {
 
 $action = $_POST['action'] ?? '';
 $currentUserId = $_SESSION['empid'];
+// A temp-role replacement covers the original employee's pending approvals too -
+// request_approvers.approver_id still points at the original employee.
+$delegatedFromForApproval = (int)(getDelegatedFromEmpId($conDB, $currentUserId) ?? $currentUserId);
 
 switch ($action) {
     case 'create_settlement':
@@ -194,8 +197,8 @@ function checkFinalApproval($currentUserId) {
                    (SELECT approval_level FROM request_approvers 
                     WHERE request_inv_no = '{$settlement['request_inv_no']}' 
                     AND request_type_id = $typeId 
-                    AND status = 'pending' 
-                    AND approver_id = $currentUserId 
+                    AND status = 'pending'
+                    AND approver_id IN ($currentUserId, $delegatedFromForApproval)
                     LIMIT 1) as current_level
             FROM request_approvers 
             WHERE request_inv_no = '{$settlement['request_inv_no']}' 
@@ -424,11 +427,11 @@ function approveSettlement($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
-            AND ra.approver_id = $currentUserId
+            AND ra.approver_id IN ($currentUserId, $delegatedFromForApproval)
             ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
-        
+
         if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
             $hasPendingQry = mysqli_query($conDB, "
                 SELECT 1
@@ -458,12 +461,12 @@ function approveSettlement($settlementManager, $currentUserId) {
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
             SET status = 'approved', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $approvalComment) . "'
-            WHERE request_inv_no = '$settlementInvNo' 
+            WHERE request_inv_no = '$settlementInvNo'
             AND request_type_id = $typeId
-            AND approver_id = $currentUserId
+            AND approver_id IN ($currentUserId, $delegatedFromForApproval)
             AND status = 'pending'
-        "); 
-        
+        ");
+
         if (!$updateQry) {
             echo json_encode(['success' => false, 'message' => 'Failed to update approval status']);
             return;
@@ -1151,11 +1154,11 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
-            AND ra.approver_id = $currentUserId
+            AND ra.approver_id IN ($currentUserId, $delegatedFromForApproval)
             ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
-        
+
         if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
             $hasPendingQry = mysqli_query($conDB, "
                 SELECT 1
@@ -1165,7 +1168,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 AND status = 'pending'
                 LIMIT 1
             ");
-            
+
             if ($hasPendingQry && mysqli_num_rows($hasPendingQry) > 0) {
                 mysqli_free_result($hasPendingQry);
                 echo json_encode(['success' => false, 'message' => 'You are not the assigned approver for this settlement']);
@@ -1177,20 +1180,20 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
             }
             return;
         }
-        
+
         $current = mysqli_fetch_assoc($currentQry);
         mysqli_free_result($currentQry);
-        
+
         // Begin transaction
         $pdo->beginTransaction();
-        
+
         // Update approval status to 'approved' for current assigned approver row only
         $updateQry = mysqli_query($conDB, "
-            UPDATE request_approvers 
+            UPDATE request_approvers
             SET status = 'approved', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $approvalComment) . "'
-            WHERE request_inv_no = '$settlementInvNo' 
+            WHERE request_inv_no = '$settlementInvNo'
             AND request_type_id = $typeId
-            AND approver_id = $currentUserId
+            AND approver_id IN ($currentUserId, $delegatedFromForApproval)
             AND status = 'pending'
         ");
         
@@ -1601,11 +1604,11 @@ function rejectSettlement($settlementManager, $currentUserId) {
             WHERE ra.request_inv_no = '$settlementInvNo' 
             AND ra.request_type_id = $typeId
             AND ra.status = 'pending'
-            AND ra.approver_id = $currentUserId
+            AND ra.approver_id IN ($currentUserId, $delegatedFromForApproval)
             ORDER BY ra.approval_level ASC, ra.id ASC
             LIMIT 1
         ");
-        
+
         if (!$currentQry || mysqli_num_rows($currentQry) == 0) {
             echo json_encode(['success' => false, 'message' => 'No pending approval found']);
             return;
@@ -1620,12 +1623,12 @@ function rejectSettlement($settlementManager, $currentUserId) {
         $updateQry = mysqli_query($conDB, "
             UPDATE request_approvers 
             SET status = 'rejected', action_date = NOW(), note = '" . mysqli_real_escape_string($conDB, $rejectionReason) . "'
-            WHERE request_inv_no = '$settlementInvNo' 
+            WHERE request_inv_no = '$settlementInvNo'
             AND request_type_id = $typeId
-            AND approver_id = $currentUserId
+            AND approver_id IN ($currentUserId, $delegatedFromForApproval)
             AND status = 'pending'
         ");
-        
+
         if (!$updateQry) {
             echo json_encode(['success' => false, 'message' => 'Failed to update rejection status']);
             return;

@@ -364,8 +364,11 @@ if ($ajaxType === 'approveEmployeeTransfer' || $ajaxType === 'rejectEmployeeTran
             throw new Exception(__('request_already_finalized', 'This request is already finalized and cannot be actioned again.'));
         }
 
-        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
-        mysqli_stmt_bind_param($pending_stmt, "sis", $request_inv_no, $request_type_id, $current_user_id);
+        // A temp-role replacement covers the original employee's pending approvals too -
+        // request_approvers.approver_id still points at the original employee.
+        $delegated_from_id = (string)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ?) AND status = 'pending' LIMIT 1");
+        mysqli_stmt_bind_param($pending_stmt, "siss", $request_inv_no, $request_type_id, $current_user_id, $delegated_from_id);
         mysqli_stmt_execute($pending_stmt);
         $pending_res = mysqli_stmt_get_result($pending_stmt);
         $has_pending_access = $pending_res && mysqli_num_rows($pending_res) > 0;
@@ -470,8 +473,10 @@ if ($ajaxType === 'getEmployeeTransferDetails') {
         $is_requester = ((string)$transfer['emp_id'] === (string)$current_user_id);
         $is_in_chain = false;
         if (!$can_see_all && !$is_requester && $request_type_id > 0) {
-            $chain_check_stmt = mysqli_prepare($conDB, "SELECT id FROM `request_approvers` WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1");
-            mysqli_stmt_bind_param($chain_check_stmt, "sis", $request_inv_no, $request_type_id, $current_user_id);
+            // A temp-role replacement can view a request they're covering approval for too.
+            $delegated_from_id_for_view = (string)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+            $chain_check_stmt = mysqli_prepare($conDB, "SELECT id FROM `request_approvers` WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ?) LIMIT 1");
+            mysqli_stmt_bind_param($chain_check_stmt, "siss", $request_inv_no, $request_type_id, $current_user_id, $delegated_from_id_for_view);
             mysqli_stmt_execute($chain_check_stmt);
             $chain_check_res = mysqli_stmt_get_result($chain_check_stmt);
             $is_in_chain = $chain_check_res && mysqli_num_rows($chain_check_res) > 0;

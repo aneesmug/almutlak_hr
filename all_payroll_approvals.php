@@ -16,6 +16,10 @@ if (
     exit();
 }
 
+// A temp-role replacement can act on the original employee's pending approvals too -
+// request_approvers.approver_id / current_approver_id still point at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 $currentUserTypeForAccess = strtolower(trim((string)($user_type ?? '')));
 $currentEmpTypeForAccess = strtolower(trim((string)($emp_type ?? '')));
 $isFinanceOfficerUser = ($currentUserTypeForAccess === 'finance_officer')
@@ -1112,7 +1116,7 @@ if (!empty($requests)) {
                                     <?php foreach ($requests as $request): ?>
                                         <?php
                                         $approvalStatus = $request['approval_status'] ?? null;
-                                        $isPendingWithMe = ($approvalStatus === 'pending_approval' && !empty($request['current_approver_id']) && (string)$request['current_approver_id'] === (string)$empid);
+                                        $isPendingWithMe = ($approvalStatus === 'pending_approval' && !empty($request['current_approver_id']) && ((string)$request['current_approver_id'] === (string)$empid || ($delegatedFromEmpId !== null && (string)$request['current_approver_id'] === (string)$delegatedFromEmpId)));
                                         // Union across EVERY officer assigned to this request, not just the one
                                         // representative row picked up by the fin_verify JOIN used for the main list query.
                                         $assignedCompanyIds = !empty($request['request_inv_no'])

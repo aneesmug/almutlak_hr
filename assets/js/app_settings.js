@@ -31,6 +31,8 @@ function __(key, def) {
         const canAccessAttendanceConfigTab = window.APP_SETTINGS_PERMISSIONS.canAccessAttendanceConfigTab;
         const canAccessScreenSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessScreenSettingsTab;
         const canAccessCompaniesTab = window.APP_SETTINGS_PERMISSIONS.canAccessCompaniesTab;
+        const canAccessTempRoleTransferTab = window.APP_SETTINGS_PERMISSIONS.canAccessTempRoleTransferTab;
+        const canAccessVacationBlackoutTab = window.APP_SETTINGS_PERMISSIONS.canAccessVacationBlackoutTab;
         const requestTypeBlockLabels = {
             smart_request: __('smart_request', 'Smart Request'),
             loan_request: __('loan_request', 'Loan Request'),
@@ -118,7 +120,7 @@ function __(key, def) {
         }
 
         function getSpecialAccessCatalog() {
-            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"},{"value":"manage_own_screen_settings","label":"Screen Settings: Allow User to Edit Own Scale\/Resolution\/Fullscreen"},{"value":"manage_company_settings","label":"Access App Settings - Companies Tab"}];
+            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"},{"value":"manage_own_screen_settings","label":"Screen Settings: Allow User to Edit Own Scale\/Resolution\/Fullscreen"},{"value":"manage_company_settings","label":"Access App Settings - Companies Tab"},{"value":"manage_temp_role_transfer","label":"Access App Settings - Temporary Role Transfer Tab"},{"value":"manage_vacation_blackout_dates","label":"Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)"}];
         }
 
         // Purely presentational grouping (icon + ordered keys) for the Special Access
@@ -126,7 +128,7 @@ function __(key, def) {
         // so both stay in sync. Any catalog key not listed in any category here still shows,
         // just bucketed under a trailing "Other" group by buildSpecialAccessPanelData().
         function getSpecialAccessCategories() {
-            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction","manage_device_monitor","manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings","manage_own_screen_settings","manage_company_settings"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor"]}];
+            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction","manage_device_monitor","manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings","manage_own_screen_settings","manage_company_settings","manage_temp_role_transfer","manage_vacation_blackout_dates"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor"]}];
         }
 
         // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
@@ -569,7 +571,7 @@ function __(key, def) {
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'screen_settings'];
+            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'screen_settings', 'temp_role_transfer', 'vacation_blackout_dates'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -616,6 +618,19 @@ function __(key, def) {
             // granted 'manage_own_screen_settings'.
             if (normalizedGroupName === 'screen_settings') {
                 renderScreenSettingsSettings();
+                return;
+            }
+
+            // Special handling for the Temporary Role Transfer tab (HR-initiated,
+            // vacation-independent version of the "Transfer Role (Temp)" mechanism)
+            if (normalizedGroupName === 'temp_role_transfer') {
+                renderTempRoleTransferSettings();
+                return;
+            }
+
+            // Vacation Blackout Dates: specific date ranges where no vacation can be applied for
+            if (normalizedGroupName === 'vacation_blackout_dates') {
+                renderVacationBlackoutSettings();
                 return;
             }
 
@@ -2670,6 +2685,441 @@ function __(key, def) {
             });
 
             loadBlockedTypes();
+        }
+
+        // --- Vacation Blackout Dates tab ---
+        // Date ranges during which no employee can apply for a vacation; enforced
+        // server-side in leaveHandler.php 'applyVacation'. See vacationBlackoutHandler.php.
+        function renderVacationBlackoutSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-vacation_blackout_dates" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0"><i class="fas fa-calendar-times mr-2 text-primary"></i>${__('vacation_blackout_dates', 'Vacation Blackout Dates')}</h5>
+                        <button type="button" id="vbd-add-btn" class="btn btn-primary btn-sm">
+                            <i class="mdi mdi-plus"></i> ${__('block_vacation_dates', 'Block Vacation Dates')}
+                        </button>
+                    </div>
+                    <p class="text-muted font-14">
+                        ${__('vacation_blackout_hint', 'No employee can submit a vacation request that overlaps a blocked date range below. Encashed vacations (no time off) are not affected. Already-submitted requests are not changed.')}
+                    </p>
+                    <div id="vbd-list-container" class="mt-3">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2">${__('loading')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const listContainer = document.getElementById('vbd-list-container');
+            const endpoint = './includes/ajaxFile/vacationBlackoutHandler.php';
+
+            function post(params) {
+                return fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(params)
+                }).then(r => r.json());
+            }
+
+            function loadList() {
+                post({ ajaxType: 'listVacationBlackouts' })
+                .then(data => {
+                    if (data.status !== 'success') {
+                        throw new Error(data.message || __('failed_to_load', 'Failed to load.'));
+                    }
+                    const rows = data.results || [];
+                    if (rows.length === 0) {
+                        listContainer.innerHTML = `<p class="text-center text-muted">${__('no_vacation_blackouts', 'No blocked vacation dates. Employees can apply for any dates.')}</p>`;
+                        return;
+                    }
+                    const today = new Date().toISOString().slice(0, 10);
+                    let html = `<div class="table-responsive"><table class="table table-sm table-bordered align-middle">
+                        <thead class="bg-light"><tr>
+                            <th>${__('from', 'From')}</th>
+                            <th>${__('to', 'To')}</th>
+                            <th>${__('reason', 'Reason')}</th>
+                            <th>${__('status', 'Status')}</th>
+                            <th>${__('added_by', 'Added By')}</th>
+                            <th>${__('actions', 'Actions')}</th>
+                        </tr></thead><tbody>`;
+                    rows.forEach(row => {
+                        const past = row.end_date < today;
+                        html += `<tr>
+                            <td>${escapeHtml(row.start_date)}</td>
+                            <td>${escapeHtml(row.end_date)}</td>
+                            <td>${escapeHtml(row.reason || '-')}</td>
+                            <td>${past ? '<span class="badge badge-secondary">past</span>' : '<span class="badge badge-danger">blocked</span>'}</td>
+                            <td>${escapeHtml(row.created_by_name || row.created_by_emp_id || '-')}</td>
+                            <td><button type="button" class="btn btn-outline-danger btn-sm vbd-remove-btn" data-id="${row.id}"><i class="mdi mdi-delete"></i> ${__('remove', 'Remove')}</button></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    listContainer.innerHTML = html;
+                    listContainer.querySelectorAll('.vbd-remove-btn').forEach(btn => {
+                        btn.addEventListener('click', () => removeBlackout(btn.dataset.id));
+                    });
+                })
+                .catch(err => {
+                    listContainer.innerHTML = `<p class="text-danger">${escapeHtml(err.message)}</p>`;
+                });
+            }
+
+            function removeBlackout(id) {
+                Swal.fire({
+                    title: '' + __('are_you_sure', 'Are you sure?') + '',
+                    text: '' + __('remove_blackout_confirm', 'Employees will be able to apply for vacations on these dates again.') + '',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('yes_remove_it', 'Yes, remove it') + '',
+                    cancelButtonText: '' + __('cancel') + ''
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    post({ ajaxType: 'removeVacationBlackout', id: id })
+                    .then(data => {
+                        if (data.type !== 'success') {
+                            throw new Error(data.message || __('failed_to_remove', 'Failed to remove.'));
+                        }
+                        Swal.fire('' + __('success') + '', data.message || '', 'success');
+                        loadList();
+                    })
+                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                });
+            }
+
+            function openAddModal() {
+                Swal.fire({
+                    title: '' + __('block_vacation_dates', 'Block Vacation Dates') + '',
+                    html: `
+                        <div class="text-left">
+                            <div class="form-group">
+                                <label>${__('blocked_period', 'Blocked Period (start - end)')}</label>
+                                <input type="text" id="vbd-daterange" class="form-control" readonly>
+                                <small id="vbd-duration" class="form-text text-muted"></small>
+                            </div>
+                            <div class="form-group">
+                                <label>${__('reason', 'Reason')} <small class="text-muted">(${__('optional', 'optional')})</small></label>
+                                <input type="text" id="vbd-reason" class="form-control" maxlength="255" placeholder="${__('vacation_blackout_reason_placeholder', 'e.g. Peak season, company event')}">
+                            </div>
+                        </div>
+                    `,
+                    width: 520,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('block', 'Block') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
+                            const fmt = 'YYYY-MM-DD';
+                            const start = moment();
+                            const end = moment();
+                            const $range = $('#vbd-daterange');
+                            const $duration = $('#vbd-duration');
+                            const updateDuration = (s, e) => {
+                                const days = e.clone().add(1, 'day').diff(s, 'days');
+                                $duration.text(`${__('duration', 'Duration')}: ${days} ${__('day_s', 'day(s)')}`);
+                            };
+                            $range.daterangepicker({
+                                locale: { format: fmt },
+                                autoUpdateInput: true,
+                                parentEl: '.swal2-popup',
+                                minDate: moment(),
+                                startDate: start,
+                                endDate: end
+                            }, updateDuration);
+                            $range.val(`${start.format(fmt)} - ${end.format(fmt)}`);
+                            updateDuration(start, end);
+                        }
+                    },
+                    preConfirm: () => {
+                        const picker = $('#vbd-daterange').data('daterangepicker');
+                        if (!picker) {
+                            Swal.showValidationMessage('' + __('select_blocked_period', 'Please select a period.') + '');
+                            return false;
+                        }
+                        return {
+                            start_date: picker.startDate.format('YYYY-MM-DD'),
+                            end_date: picker.endDate.format('YYYY-MM-DD'),
+                            reason: $('#vbd-reason').val().trim()
+                        };
+                    }
+                }).then(result => {
+                    if (!result.isConfirmed || !result.value) return;
+                    post({ ajaxType: 'addVacationBlackout', ...result.value })
+                    .then(data => {
+                        if (data.type !== 'success') {
+                            throw new Error(data.message || __('failed_to_save', 'Failed to save.'));
+                        }
+                        Swal.fire('' + __('success') + '', data.message || '', 'success');
+                        loadList();
+                    })
+                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                });
+            }
+
+            document.getElementById('vbd-add-btn').addEventListener('click', openAddModal);
+            loadList();
+        }
+
+        // --- Temporary Role Transfer tab ---
+        // HR-initiated, vacation-independent version of the "Transfer Role (Temp)"
+        // mechanism on view_employee.php: HR picks a direct supervisor (or any
+        // role-holder) going on leave, a replacement employee, and a date window.
+        // Backed by the same emp_temp_role_assignments table / session_check.php
+        // override as the vacation-based flow - see includes/ajaxFile/tempRoleHandler.php.
+        function renderTempRoleTransferSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-temp_role_transfer" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="mb-0"><i class="fas fa-user-clock mr-2 text-primary"></i>${__('temp_role_transfer', 'Temporary Role Transfer')}</h5>
+                        <button type="button" id="trt-add-btn" class="btn btn-primary btn-sm">
+                            <i class="mdi mdi-plus"></i> ${__('grant_new_temp_role', 'Grant New Temporary Role')}
+                        </button>
+                    </div>
+                    <p class="text-muted font-14">
+                        ${__('temp_role_transfer_hint', 'Temporarily hand a supervisor/manager\'s role to a replacement employee for a fixed period (e.g. while they are on vacation). Access reverts to the original employee automatically once the end date passes. The HR user who grants this will get an email reminder one day before it expires.')}
+                    </p>
+                    <div id="trt-list-container" class="mt-3">
+                        <div class="text-center text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            <span class="ml-2">${__('loading')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const listContainer = document.getElementById('trt-list-container');
+
+            function statusBadge(status) {
+                const map = { active: 'badge-success', expired: 'badge-secondary', revoked: 'badge-danger' };
+                return `<span class="badge ${map[status] || 'badge-secondary'}">${escapeHtml(status)}</span>`;
+            }
+
+            function loadList() {
+                fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ ajaxType: 'listTempRoleAssignments' })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status !== 'success') {
+                        throw new Error(data.message || __('failed_to_load', 'Failed to load.'));
+                    }
+                    const rows = data.results || [];
+                    if (rows.length === 0) {
+                        listContainer.innerHTML = `<p class="text-center text-muted">${__('no_temp_role_transfers_found', 'No temporary role transfers found.')}</p>`;
+                        return;
+                    }
+                    let html = `<div class="table-responsive"><table class="table table-sm table-bordered align-middle">
+                        <thead class="bg-light"><tr>
+                            <th>${__('original_role_holder', 'Original Role Holder')}</th>
+                            <th>${__('covered_by', 'Covered By')}</th>
+                            <th>${__('role_transferred', 'Role')}</th>
+                            <th>${__('valid_from', 'Valid From')}</th>
+                            <th>${__('valid_to', 'Valid To')}</th>
+                            <th>${__('status', 'Status')}</th>
+                            <th>${__('granted_by', 'Granted By')}</th>
+                            <th>${__('actions', 'Actions')}</th>
+                        </tr></thead><tbody>`;
+                    rows.forEach(row => {
+                        html += `<tr>
+                            <td>${escapeHtml(row.employee_name || row.employee_emp_id)}</td>
+                            <td>${escapeHtml(row.replacement_name || row.replacement_emp_id)}</td>
+                            <td>${escapeHtml(formatRoleLabel(row.granted_role))}</td>
+                            <td>${escapeHtml(row.valid_from)}</td>
+                            <td>${escapeHtml(row.valid_to)}</td>
+                            <td>${statusBadge(row.status)}</td>
+                            <td>${escapeHtml(row.granted_by_name || row.granted_by_emp_id || '-')}</td>
+                            <td>${row.status === 'active' ? `<button type="button" class="btn btn-outline-danger btn-sm trt-revoke-btn" data-id="${row.id}"><i class="mdi mdi-close-circle"></i> ${__('revoke', 'Revoke')}</button>` : ''}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    listContainer.innerHTML = html;
+
+                    listContainer.querySelectorAll('.trt-revoke-btn').forEach(btn => {
+                        btn.addEventListener('click', () => revokeAssignment(btn.dataset.id));
+                    });
+                })
+                .catch(err => {
+                    listContainer.innerHTML = `<p class="text-danger">${escapeHtml(err.message)}</p>`;
+                });
+            }
+
+            function revokeAssignment(id) {
+                Swal.fire({
+                    title: '' + __('are_you_sure', 'Are you sure?') + '',
+                    text: '' + __('revoke_temp_role_confirm', 'This will immediately return the role to the original employee.') + '',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('yes_revoke_it', 'Yes, revoke it') + '',
+                    cancelButtonText: '' + __('cancel') + ''
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ ajaxType: 'revokeManualTempRole', id: id })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.type !== 'success') {
+                            throw new Error(data.message || __('failed_to_revoke', 'Failed to revoke.'));
+                        }
+                        Swal.fire('' + __('success') + '', data.message || '', 'success');
+                        loadList();
+                    })
+                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                });
+            }
+
+            function openGrantModal() {
+                Swal.fire({
+                    title: '' + __('grant_new_temp_role', 'Grant New Temporary Role') + '',
+                    html: `
+                        <div class="text-left">
+                            <div class="form-group">
+                                <label>${__('employee_on_leave', 'Employee Going on Leave (role to hand over)')}</label>
+                                <select id="trt-employee" class="form-control" style="width:100%;"></select>
+                                <small id="trt-employee-role" class="form-text"></small>
+                            </div>
+                            <div class="form-group">
+                                <label>${__('replacement_employee', 'Replacement Employee')}</label>
+                                <select id="trt-replacement" class="form-control" style="width:100%;"></select>
+                            </div>
+                            <div class="form-group">
+                                <label>${__('coverage_period', 'Coverage Period (start - end)')}</label>
+                                <input type="text" id="trt-daterange" class="form-control" readonly>
+                                <small id="trt-duration" class="form-text text-muted"></small>
+                            </div>
+                        </div>
+                    `,
+                    width: 560,
+                    showCancelButton: true,
+                    confirmButtonText: '' + __('grant', 'Grant') + '',
+                    cancelButtonText: '' + __('cancel') + '',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        const $popup = $(Swal.getPopup());
+                        const empSelectOpts = {
+                            dropdownParent: $popup,
+                            placeholder: '' + __('search_employees', 'Search employees...') + '',
+                            width: '100%',
+                            ajax: {
+                                url: './includes/ajaxFile/timetableAjax.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                delay: 250,
+                                data: params => ({ action: 'search_employees', search: params.term }),
+                                processResults: response => ({ results: response.status === 'success' ? response.results : [] })
+                            }
+                        };
+                        $('#trt-employee').select2(empSelectOpts);
+                        $('#trt-replacement').select2(empSelectOpts);
+
+                        const $roleHint = $('#trt-employee-role');
+                        $('#trt-employee').on('select2:select', function() {
+                            const empId = $(this).val();
+                            $roleHint.removeClass('text-danger text-success').addClass('text-muted').text(__('loading') + '...');
+                            fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: new URLSearchParams({ ajaxType: 'getEmployeeCurrentRole', emp_id: empId })
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.status !== 'success') {
+                                    $roleHint.removeClass('text-muted text-success').addClass('text-danger').text(data.message || __('failed_to_load', 'Failed to load.'));
+                                    return;
+                                }
+                                const noRole = !data.role || data.role.toLowerCase() === 'employee';
+                                $roleHint.removeClass('text-muted text-danger text-success')
+                                    .addClass(noRole ? 'text-danger' : 'text-success')
+                                    .text(`${__('current_role', 'Current Role')}: ${data.role_label}` + (noRole ? ` (${__('no_role_to_hand_over', 'no elevated role to hand over')})` : ''));
+                            })
+                            .catch(() => {
+                                $roleHint.removeClass('text-muted text-success').addClass('text-danger').text(__('failed_to_load', 'Failed to load.'));
+                            });
+                        });
+                        $('#trt-employee').on('select2:clear', function() {
+                            $roleHint.removeClass('text-danger text-success').text('');
+                        });
+
+                        if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
+                            const fmt = 'YYYY-MM-DD';
+                            const start = moment();
+                            const end = moment().add(1, 'days');
+                            const $range = $('#trt-daterange');
+                            const $duration = $('#trt-duration');
+
+                            const updateDuration = (s, e) => {
+                                const inclusiveEnd = e.clone().add(1, 'day');
+                                const months = inclusiveEnd.diff(s, 'months');
+                                const remainderStart = s.clone().add(months, 'months');
+                                const days = inclusiveEnd.diff(remainderStart, 'days');
+                                const parts = [];
+                                if (months > 0) parts.push(`${months} ${__('month_s', 'month(s)')}`);
+                                if (days > 0 || months === 0) parts.push(`${days} ${__('day_s', 'day(s)')}`);
+                                $duration.text(`${__('duration', 'Duration')}: ${parts.join(', ')}`);
+                            };
+
+                            $range.daterangepicker({
+                                locale: { format: fmt },
+                                autoUpdateInput: true,
+                                parentEl: '.swal2-popup',
+                                minDate: moment(),
+                                startDate: start,
+                                endDate: end
+                            }, updateDuration);
+                            $range.val(`${start.format(fmt)} - ${end.format(fmt)}`);
+                            updateDuration(start, end);
+                        }
+                    },
+                    preConfirm: () => {
+                        const employee_emp_id = $('#trt-employee').val();
+                        const replacement_emp_id = $('#trt-replacement').val();
+                        const $range = $('#trt-daterange');
+                        const picker = $range.data('daterangepicker');
+                        if (!employee_emp_id || !replacement_emp_id) {
+                            Swal.showValidationMessage('' + __('select_both_employees', 'Please select both employees.') + '');
+                            return false;
+                        }
+                        if (employee_emp_id === replacement_emp_id) {
+                            Swal.showValidationMessage('' + __('replacement_cannot_match', 'Replacement cannot be the same employee.') + '');
+                            return false;
+                        }
+                        if (!picker) {
+                            Swal.showValidationMessage('' + __('select_coverage_period', 'Please select a coverage period.') + '');
+                            return false;
+                        }
+                        return {
+                            employee_emp_id,
+                            replacement_emp_id,
+                            valid_from: picker.startDate.format('YYYY-MM-DD'),
+                            valid_to: picker.endDate.format('YYYY-MM-DD')
+                        };
+                    }
+                }).then(result => {
+                    if (!result.isConfirmed || !result.value) return;
+                    fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ ajaxType: 'grantManualTempRole', ...result.value })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.type !== 'success') {
+                            throw new Error(data.message || __('failed_to_grant', 'Failed to grant.'));
+                        }
+                        Swal.fire('' + __('success') + '', data.message || '', 'success');
+                        loadList();
+                    })
+                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                });
+            }
+
+            document.getElementById('trt-add-btn').addEventListener('click', openGrantModal);
+            loadList();
         }
 
         async function renderLicenseSettings() {
@@ -5566,6 +6016,12 @@ function __(key, def) {
                     if (canAccessScreenSettingsTab) {
                         groupedSettings['screen_settings'] = [];
                     }
+                    if (canAccessTempRoleTransferTab) {
+                        groupedSettings['temp_role_transfer'] = [];
+                    }
+                    if (canAccessVacationBlackoutTab) {
+                        groupedSettings['vacation_blackout_dates'] = [];
+                    }
 
                     const savedGroup = localStorage.getItem('app_settings_active_group');
                     const groups = Object.keys(groupedSettings).sort();
@@ -5690,6 +6146,12 @@ function __(key, def) {
                 if (!groupedSettings['asset_clearance']) {
                     groupedSettings['asset_clearance'] = [];
                 }
+                }
+                if (!groupedSettings['temp_role_transfer']) {
+                    groupedSettings['temp_role_transfer'] = [];
+                }
+                if (!groupedSettings['vacation_blackout_dates']) {
+                    groupedSettings['vacation_blackout_dates'] = [];
                 }
 
                 // Restore last active group from localStorage if available

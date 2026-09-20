@@ -14,6 +14,10 @@ if (
     exit();
 }
 
+// A temp-role replacement can act on the original employee's pending approvals too -
+// request_approvers.approver_id / current_approver_id still point at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 // --- Get Request Type ID for 'employee_transfer_request' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'employee_transfer_request' LIMIT 1");
 if (!$type_query || mysqli_num_rows($type_query) == 0) {
@@ -360,7 +364,7 @@ if ($total_items > 0) {
                                                 $status_badge_class = 'warning';
                                             }
 
-                                            $can_take_action = ((string)($req['current_approver_id'] ?? '') === (string)$empid) && (($req['current_status'] ?? '') === 'pending_approval');
+                                            $can_take_action = ((string)($req['current_approver_id'] ?? '') === (string)$empid || ($delegatedFromEmpId !== null && (string)($req['current_approver_id'] ?? '') === (string)$delegatedFromEmpId)) && (($req['current_status'] ?? '') === 'pending_approval');
                                             $type_label = ($req['transfer_type'] === 'temporary') ? __('temporary', 'Temporary') : __('permanent', 'Permanent');
                                             $dates_text = htmlspecialchars((string)$req['start_date']) . (!empty($req['end_date']) ? ' → ' . htmlspecialchars((string)$req['end_date']) : '');
                                             ?>

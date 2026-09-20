@@ -14,6 +14,10 @@ if (
     exit();
 }
 
+// A temp-role replacement can act on the original employee's pending approvals too -
+// request_approvers.approver_id still points at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 $can_cancel_resignation_requests = (
     !empty($is_system_admin)
     || user_has_special_access($conDB, $empid ?? '', 'cancel_resignation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
@@ -457,7 +461,7 @@ if ($can_see_all_depts) {
                                                     // Check for both 'pending' (first level) and 'awaiting' (subsequent levels) statuses
                                                     if (in_array($approval['status'], ['pending', 'awaiting'])) {
                                                         $awaiting_approver_id = $approval['approver_id'] ?? null;
-                                                        if ($awaiting_approver_id == $empid) {
+                                                        if ($awaiting_approver_id == $empid || ($delegatedFromEmpId !== null && $awaiting_approver_id == $delegatedFromEmpId)) {
                                                             $user_has_pending_approval = true;
                                                             break;
                                                         }

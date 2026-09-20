@@ -12,6 +12,10 @@ if (
     exit();
 }
 
+// A temp-role replacement can act on the original employee's pending approvals too -
+// request_approvers.approver_id / current_approver_id still point at the original employee.
+$delegatedFromEmpId = getDelegatedFromEmpId($conDB, $empid ?? '');
+
 $can_cancel_business_trip_requests = (
     !empty($is_system_admin)
     || user_has_special_access($conDB, $empid ?? '', 'cancel_business_trip_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
@@ -374,7 +378,7 @@ if ($can_see_all_depts) {
                                                 $status_badge_class = 'warning';
                                             }
 
-                                            $can_take_action = ((int)($trip['current_approver_id'] ?? 0) === (int)$empid) && (($trip['current_status'] ?? '') === 'pending_approval');
+                                            $can_take_action = ((int)($trip['current_approver_id'] ?? 0) === (int)$empid || ($delegatedFromEmpId !== null && (int)($trip['current_approver_id'] ?? 0) === (int)$delegatedFromEmpId)) && (($trip['current_status'] ?? '') === 'pending_approval');
                                             ?>
                                             <div class="col-lg-4 col-md-6 mb-4">
                                                 <div class="card request-card h-100">

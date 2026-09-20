@@ -812,10 +812,13 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'approveSalaryIncrement'
             exit;
         }
 
-        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
+        // A temp-role replacement covers the original employee's pending approvals too -
+        // request_approvers.approver_id still points at the original employee.
+        $delegated_from_id = (int)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ?) AND status = 'pending' LIMIT 1");
         $has_pending_access = false;
         if ($pending_stmt) {
-            mysqli_stmt_bind_param($pending_stmt, 'sii', $request_inv_no, $request_type_id, $current_user_id);
+            mysqli_stmt_bind_param($pending_stmt, 'siii', $request_inv_no, $request_type_id, $current_user_id, $delegated_from_id);
             mysqli_stmt_execute($pending_stmt);
             $pending_res = mysqli_stmt_get_result($pending_stmt);
             $has_pending_access = ($pending_res && mysqli_num_rows($pending_res) > 0);
@@ -926,10 +929,13 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'rejectSalaryIncrement')
             exit;
         }
 
-        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
+        // A temp-role replacement covers the original employee's pending approvals too -
+        // request_approvers.approver_id still points at the original employee.
+        $delegated_from_id = (int)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+        $pending_stmt = mysqli_prepare($conDB, "SELECT id FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ?) AND status = 'pending' LIMIT 1");
         $has_pending_access = false;
         if ($pending_stmt) {
-            mysqli_stmt_bind_param($pending_stmt, 'sii', $request_inv_no, $request_type_id, $current_user_id);
+            mysqli_stmt_bind_param($pending_stmt, 'siii', $request_inv_no, $request_type_id, $current_user_id, $delegated_from_id);
             mysqli_stmt_execute($pending_stmt);
             $pending_res = mysqli_stmt_get_result($pending_stmt);
             $has_pending_access = ($pending_res && mysqli_num_rows($pending_res) > 0);

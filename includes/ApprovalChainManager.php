@@ -125,6 +125,8 @@
  * @version 2.0
  * @since 2024
  */
+require_once __DIR__ . '/helper_functions.php'; // isEffectiveApproverFor() / getDelegatedFromEmpId()
+
 class ApprovalChainManager {
     private $conDB;      // mysqli connection
     private $pdo;        // PDO connection
@@ -422,7 +424,14 @@ class ApprovalChainManager {
         
         error_log("VERIFY_APPROVER_COMPARISON: approver_id_int=$approver_id_int vs currentUserId_int=$currentUserId_int");
         
-        if ($approver_id_int !== $currentUserId_int) {
+        // A temp-role replacement (App Settings > Temporary Role Transfer, or the
+        // vacation-based "Transfer Role (Temp)" flow) covers the ORIGINAL employee's
+        // approval-chain items too, not just their $user_type - request_approvers.approver_id
+        // still points at the original employee, since temp role transfer never rewrites it.
+        $isDelegatedApprover = function_exists('isEffectiveApproverFor')
+            && isEffectiveApproverFor($this->conDB, $currentUserId, $approver_id);
+
+        if ($approver_id_int !== $currentUserId_int && !$isDelegatedApprover) {
             error_log($debugInfo . " => MISMATCH: approver_id_int($approver_id_int) !== currentUserId_int($currentUserId_int)");
             error_log("VERIFY_APPROVER_FAILED: User not authorized");
             return ['authorized' => false, 'level' => null, 'message' => 'You are not authorized to approve this request'];

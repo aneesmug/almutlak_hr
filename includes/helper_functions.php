@@ -353,7 +353,7 @@ if (!function_exists('getActiveTempRoleForEmployee')) {
             return null;
         }
 
-        $stmt = mysqli_prepare($conDB, "SELECT id, vacation_id, granted_role, valid_from, valid_to
+        $stmt = mysqli_prepare($conDB, "SELECT id, vacation_id, employee_emp_id, granted_role, valid_from, valid_to
             FROM emp_temp_role_assignments
             WHERE replacement_emp_id = ? AND status = 'active' AND CURDATE() >= valid_from AND CURDATE() < valid_to
             ORDER BY id DESC LIMIT 1");
@@ -406,6 +406,442 @@ if (!function_exists('getReplacementTempRoleCandidate')) {
         mysqli_stmt_close($stmt);
 
         return $row ?: null;
+    }
+}
+
+if (!function_exists('getDelegatedFromEmpId')) {
+    /**
+     * If $emp_id is currently covering someone else's role via an active temporary role
+     * transfer (vacation-based or manual), returns that original employee's emp_id -
+     * otherwise null. Used to let a temp-role replacement act on the ORIGINAL employee's
+     * pending approval-chain items (request_approvers.approver_id still points at the
+     * original employee - temp role transfer only swaps $user_type, it never rewrites
+     * approver_id rows), without granting them any other employee's approvals.
+     */
+    function getDelegatedFromEmpId($conDB, $emp_id)
+    {
+        $active = getActiveTempRoleForEmployee($conDB, $emp_id);
+        if (!$active || empty($active['employee_emp_id'])) {
+            return null;
+        }
+        return (string)$active['employee_emp_id'];
+    }
+}
+
+if (!function_exists('isEffectiveApproverFor')) {
+    /**
+     * True if $emp_id is either literally the given $approver_id, or is currently covering
+     * $approver_id's role via an active temporary role transfer. Use this (or
+     * getDelegatedFromEmpId()) anywhere approval-chain authorization compares a logged-in
+     * emp_id against request_approvers.approver_id, so a temp-role replacement can act on
+     * the original employee's pending approvals.
+     */
+    function isEffectiveApproverFor($conDB, $emp_id, $approver_id)
+    {
+        if ($approver_id === null || $approver_id === '') {
+            return false;
+        }
+        if ((string)$emp_id === (string)$approver_id) {
+            return true;
+        }
+        $delegatedFrom = getDelegatedFromEmpId($conDB, $emp_id);
+        return $delegatedFrom !== null && $delegatedFrom === (string)$approver_id;
+    }
+}
+
+
+if (!function_exists('grantManualTemporaryRoleAssignment')) {
+    /**
+     * HR-initiated temporary role transfer, independent of any vacation record.
+     * Hands $employee_emp_id's current admin_login.user_type to $replacement_emp_id
+     * for the given date window. Picked up automatically by the same session_check.php
+     * override (getActiveTempRoleForEmployee) the vacation-based flow uses, so access
+     * disappears on its own once valid_to passes - no restore step required.
+     */
+    function grantManualTemporaryRoleAssignment($conDB, $employee_emp_id, $replacement_emp_id, $valid_from, $valid_to, $granted_by_emp_id)
+    {
+        $employee_emp_id = trim((string)$employee_emp_id);
+        $replacement_emp_id = trim((string)$replacement_emp_id);
+        $granted_by_emp_id = trim((string)$granted_by_emp_id);
+
+        if ($employee_emp_id === '' || $replacement_emp_id === '') {
+            return ['success' => false, 'message' => 'Both the supervisor and the replacement employee are required.'];
+        }
+        if ($employee_emp_id === $replacement_emp_id) {
+            return ['success' => false, 'message' => 'Replacement employee cannot be the same employee.'];
+        }
+
+        $valid_from_ts = strtotime((string)$valid_from);
+        $valid_to_ts = strtotime((string)$valid_to);
+        if (!$valid_from_ts || !$valid_to_ts || $valid_to_ts <= $valid_from_ts) {
+            return ['success' => false, 'message' => 'Invalid date range.'];
+        }
+        $valid_from = date('Y-m-d', $valid_from_ts);
+        $valid_to = date('Y-m-d', $valid_to_ts);
+
+        // Confirm the employee actually holds a role to hand over.
+        $stmtEmpRole = mysqli_prepare($conDB, "SELECT user_type FROM admin_login WHERE emp_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmtEmpRole, "s", $employee_emp_id);
+        mysqli_stmt_execute($stmtEmpRole);
+        $empRoleRes = mysqli_stmt_get_result($stmtEmpRole);
+        $empRoleRow = $empRoleRes ? mysqli_fetch_assoc($empRoleRes) : null;
+        if ($empRoleRes) mysqli_free_result($empRoleRes);
+        mysqli_stmt_close($stmtEmpRole);
+
+        $granted_role = trim((string)($empRoleRow['user_type'] ?? ''));
+        if ($granted_role === '' || strtolower($granted_role) === 'employee') {
+            return ['success' => false, 'message' => 'This employee has no elevated role to hand over.'];
+        }
+
+        // Confirm the replacement is a real, active employee.
+        $stmtRepl = mysqli_prepare($conDB, "SELECT emp_id FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1");
+        mysqli_stmt_bind_param($stmtRepl, "s", $replacement_emp_id);
+        mysqli_stmt_execute($stmtRepl);
+        $replRes = mysqli_stmt_get_result($stmtRepl);
+        $replExists = ($replRes && mysqli_num_rows($replRes) > 0);
+        if ($replRes) mysqli_free_result($replRes);
+        mysqli_stmt_close($stmtRepl);
+        if (!$replExists) {
+            return ['success' => false, 'message' => 'Replacement employee not found or inactive.'];
+        }
+
+        // Only one active coverage window per employee at a time.
+        $stmtActive = mysqli_prepare($conDB, "SELECT id FROM emp_temp_role_assignments WHERE employee_emp_id = ? AND status = 'active' LIMIT 1");
+        mysqli_stmt_bind_param($stmtActive, "s", $employee_emp_id);
+        mysqli_stmt_execute($stmtActive);
+        $activeRes = mysqli_stmt_get_result($stmtActive);
+        $alreadyActive = ($activeRes && mysqli_num_rows($activeRes) > 0);
+        if ($activeRes) mysqli_free_result($activeRes);
+        mysqli_stmt_close($stmtActive);
+        if ($alreadyActive) {
+            return ['success' => false, 'message' => 'This employee already has an active temporary role transfer. Revoke it first.'];
+        }
+
+        $stmtInsert = mysqli_prepare($conDB, "INSERT INTO emp_temp_role_assignments (
+                vacation_id, employee_emp_id, replacement_emp_id, granted_role, source,
+                valid_from, valid_to, status, granted_by_emp_id, granted_at
+            ) VALUES (NULL, ?, ?, ?, 'manual', ?, ?, 'active', ?, NOW())");
+        if (!$stmtInsert) {
+            return ['success' => false, 'message' => 'Failed to prepare temporary role assignment insert.'];
+        }
+        mysqli_stmt_bind_param(
+            $stmtInsert,
+            "ssssss",
+            $employee_emp_id,
+            $replacement_emp_id,
+            $granted_role,
+            $valid_from,
+            $valid_to,
+            $granted_by_emp_id
+        );
+        if (!mysqli_stmt_execute($stmtInsert)) {
+            mysqli_stmt_close($stmtInsert);
+            return ['success' => false, 'message' => 'Failed to save temporary role assignment.'];
+        }
+        $newId = mysqli_insert_id($conDB);
+        mysqli_stmt_close($stmtInsert);
+
+        return [
+            'success' => true,
+            'id' => $newId,
+            'replacement_emp_id' => $replacement_emp_id,
+            'granted_role' => $granted_role,
+            'valid_from' => $valid_from,
+            'valid_to' => $valid_to,
+        ];
+    }
+}
+
+if (!function_exists('closeTemporaryRoleAssignmentById')) {
+    /**
+     * Ends an active temporary role assignment by its own id - used by the manual
+     * (non-vacation) "Temporary Role Transfer" App Settings tab, where there's no
+     * vacation_id to key off of the way closeTemporaryRoleAssignment() does.
+     */
+    function closeTemporaryRoleAssignmentById($conDB, $id, $closed_by_emp_id = null, $status = 'revoked')
+    {
+        $id = (int)$id;
+        $status = in_array($status, ['expired', 'revoked'], true) ? $status : 'revoked';
+        $closed_by_emp_id = ($closed_by_emp_id !== null) ? (string)$closed_by_emp_id : null;
+
+        $stmtUpdate = mysqli_prepare($conDB, "UPDATE emp_temp_role_assignments SET status = ?, closed_by_emp_id = ?, closed_at = NOW() WHERE id = ? AND status = 'active'");
+        if (!$stmtUpdate) {
+            return ['success' => false, 'message' => 'Failed to prepare temporary role assignment close.'];
+        }
+        mysqli_stmt_bind_param($stmtUpdate, "ssi", $status, $closed_by_emp_id, $id);
+        if (!mysqli_stmt_execute($stmtUpdate)) {
+            mysqli_stmt_close($stmtUpdate);
+            return ['success' => false, 'message' => 'Failed to close temporary role assignment.'];
+        }
+        $affected = mysqli_stmt_affected_rows($stmtUpdate);
+        mysqli_stmt_close($stmtUpdate);
+
+        if ($affected === 0) {
+            return ['success' => false, 'message' => 'No active temporary role assignment found with that id.'];
+        }
+        return ['success' => true];
+    }
+}
+
+if (!function_exists('getManualTempRoleAssignments')) {
+    /**
+     * Lists temporary role assignments for the App Settings "Temporary Role Transfer"
+     * tab - both manual (HR-created) and vacation-based, newest first, so HR has one
+     * place to see every active/expired/revoked coverage window.
+     */
+    function getManualTempRoleAssignments($conDB)
+    {
+        $sql = "SELECT a.id, a.vacation_id, a.employee_emp_id, a.replacement_emp_id, a.granted_role,
+                       a.source, a.valid_from, a.valid_to, a.status, a.granted_by_emp_id, a.granted_at,
+                       a.closed_by_emp_id, a.closed_at,
+                       e1.name AS employee_name, e2.name AS replacement_name, e3.name AS granted_by_name
+                FROM emp_temp_role_assignments a
+                LEFT JOIN employees e1 ON e1.emp_id = a.employee_emp_id
+                LEFT JOIN employees e2 ON e2.emp_id = a.replacement_emp_id
+                LEFT JOIN employees e3 ON e3.emp_id = a.granted_by_emp_id
+                ORDER BY a.id DESC
+                LIMIT 200";
+        $result = mysqli_query($conDB, $sql);
+        $rows = [];
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rows[] = $row;
+            }
+            mysqli_free_result($result);
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('sendTempRoleExpiryReminders')) {
+    /**
+     * Cron entry point: emails whoever granted a temporary role assignment (HR) one
+     * day before it expires, so they know to reassign/extend it - the access itself
+     * still reverts automatically via getActiveTempRoleForEmployee()'s date check,
+     * this is purely a heads-up. expiry_notified_at guards against sending twice.
+     */
+    function sendTempRoleExpiryReminders($conDB)
+    {
+        $summary = ['notified' => 0, 'skipped' => 0, 'errors' => []];
+
+        $sql = "SELECT a.id, a.employee_emp_id, a.replacement_emp_id, a.granted_role, a.valid_to,
+                       a.granted_by_emp_id,
+                       e1.name AS employee_name, e2.name AS replacement_name,
+                       al.email AS granted_by_email, e3.name AS granted_by_name
+                FROM emp_temp_role_assignments a
+                LEFT JOIN employees e1 ON e1.emp_id = a.employee_emp_id
+                LEFT JOIN employees e2 ON e2.emp_id = a.replacement_emp_id
+                LEFT JOIN employees e3 ON e3.emp_id = a.granted_by_emp_id
+                LEFT JOIN admin_login al ON al.emp_id = a.granted_by_emp_id
+                WHERE a.status = 'active'
+                  AND a.expiry_notified_at IS NULL
+                  AND a.valid_to = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+        $result = mysqli_query($conDB, $sql);
+        if (!$result) {
+            $summary['errors'][] = mysqli_error($conDB);
+            return $summary;
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            $to_email = trim((string)($row['granted_by_email'] ?? ''));
+            $rowId = (int)$row['id'];
+            if ($to_email === '' || !filter_var($to_email, FILTER_VALIDATE_EMAIL)) {
+                $summary['skipped']++;
+                continue;
+            }
+
+            $sent = send_temp_role_expiry_reminder_email($conDB, $to_email, $row['granted_by_name'] ?? $to_email, [
+                'EMPLOYEE_NAME' => $row['employee_name'] ?? $row['employee_emp_id'],
+                'REPLACEMENT_NAME' => $row['replacement_name'] ?? $row['replacement_emp_id'],
+                'GRANTED_ROLE' => function_exists('getRoleLabel') ? getRoleLabel($row['granted_role']) : $row['granted_role'],
+                'VALID_TO' => $row['valid_to'],
+            ]);
+
+            $stmtMark = mysqli_prepare($conDB, "UPDATE emp_temp_role_assignments SET expiry_notified_at = NOW() WHERE id = ?");
+            mysqli_stmt_bind_param($stmtMark, "i", $rowId);
+            mysqli_stmt_execute($stmtMark);
+            mysqli_stmt_close($stmtMark);
+
+            if ($sent) {
+                $summary['notified']++;
+            } else {
+                $summary['errors'][] = "Failed to email reminder for assignment #{$rowId}";
+            }
+        }
+        mysqli_free_result($result);
+
+        return $summary;
+    }
+}
+
+if (!function_exists('send_temp_role_expiry_reminder_email')) {
+    function send_temp_role_expiry_reminder_email($conDB, $to_email, $to_name, $data)
+    {
+        if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
+            return false;
+        }
+
+        $smtp_host = get_setting($conDB, 'smtp_host');
+        $smtp_port = (int)get_setting($conDB, 'smtp_port');
+        $smtp_user = get_setting($conDB, 'smtp_user');
+        $smtp_pass = get_setting($conDB, 'smtp_pass');
+        $smtp_from_email = get_setting($conDB, 'from_email');
+        $smtp_from_name = get_setting($conDB, 'from_name', 'Al Mutlak HR System');
+        $smtp_secure = get_setting($conDB, 'smtp_encryption');
+
+        if (empty($smtp_host) || empty($smtp_port) || empty($smtp_user) || empty($smtp_pass) || empty($smtp_from_email)) {
+            return false;
+        }
+
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = $smtp_host;
+            $mail->SMTPAuth = true;
+            $mail->Username = $smtp_user;
+            $mail->Password = $smtp_pass;
+            switch (strtolower($smtp_secure)) {
+                case 'tls':
+                    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                    break;
+                case 'ssl':
+                    $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                    break;
+                default:
+                    $mail->SMTPSecure = false;
+                    break;
+            }
+            $mail->Port = $smtp_port;
+            $mail->CharSet = 'UTF-8';
+            $mail->Timeout = 8;
+
+            $mail->setFrom($smtp_from_email, $smtp_from_name);
+            $mail->addAddress($to_email, $to_name);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'Temporary Role Transfer Expiring Tomorrow';
+            $mail->Body = '<div style="font-family:Segoe UI,Arial,sans-serif;color:#222;">'
+                . '<h2 style="margin:0 0 10px;">Temporary Role Transfer Expiring Tomorrow</h2>'
+                . '<p>The temporary role you granted is expiring on <strong>' . htmlspecialchars($data['VALID_TO'], ENT_QUOTES, 'UTF-8') . '</strong> (tomorrow).</p>'
+                . '<table style="border-collapse:collapse;margin:12px 0;">'
+                . '<tr><td style="padding:4px 10px 4px 0;color:#666;">Original role holder:</td><td><strong>' . htmlspecialchars($data['EMPLOYEE_NAME'], ENT_QUOTES, 'UTF-8') . '</strong></td></tr>'
+                . '<tr><td style="padding:4px 10px 4px 0;color:#666;">Currently covered by:</td><td><strong>' . htmlspecialchars($data['REPLACEMENT_NAME'], ENT_QUOTES, 'UTF-8') . '</strong></td></tr>'
+                . '<tr><td style="padding:4px 10px 4px 0;color:#666;">Role transferred:</td><td><strong>' . htmlspecialchars($data['GRANTED_ROLE'], ENT_QUOTES, 'UTF-8') . '</strong></td></tr>'
+                . '</table>'
+                . '<p>Access will automatically return to the original employee once this date passes. If coverage needs to continue, please extend or create a new temporary role transfer from App Settings before then.</p>'
+                . '</div>';
+            $mail->AltBody = strip_tags($mail->Body);
+
+            $mail->send();
+            return true;
+        } catch (\Exception $e) {
+            error_log('TEMP_ROLE_EXPIRY_EMAIL: ' . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+
+if (!function_exists('getVacationBlackoutConflict')) {
+    /**
+     * Returns the first active vacation blackout range overlapping [$start_date, $end_date]
+     * (inclusive on both ends), or null if the requested dates are clear.
+     */
+    function getVacationBlackoutConflict($conDB, $start_date, $end_date)
+    {
+        $s = strtotime((string)$start_date);
+        $e = strtotime((string)$end_date);
+        if (!$s || !$e) {
+            return null;
+        }
+        if ($e < $s) {
+            $e = $s;
+        }
+        $start = date('Y-m-d', $s);
+        $end = date('Y-m-d', $e);
+
+        $stmt = mysqli_prepare($conDB, "SELECT id, start_date, end_date, reason FROM vacation_blackout_dates
+            WHERE is_active = 1 AND start_date <= ? AND end_date >= ? ORDER BY start_date ASC LIMIT 1");
+        if (!$stmt) {
+            return null;
+        }
+        mysqli_stmt_bind_param($stmt, "ss", $end, $start);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        if ($res) mysqli_free_result($res);
+        mysqli_stmt_close($stmt);
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('getVacationBlackoutDates')) {
+    function getVacationBlackoutDates($conDB, $activeOnly = true)
+    {
+        $sql = "SELECT b.id, b.start_date, b.end_date, b.reason, b.is_active, b.created_by_emp_id, b.created_at,
+                       e.name AS created_by_name
+                FROM vacation_blackout_dates b
+                LEFT JOIN employees e ON e.emp_id = b.created_by_emp_id"
+             . ($activeOnly ? " WHERE b.is_active = 1" : "")
+             . " ORDER BY b.start_date DESC, b.id DESC LIMIT 300";
+        $result = mysqli_query($conDB, $sql);
+        $rows = [];
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rows[] = $row;
+            }
+            mysqli_free_result($result);
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('addVacationBlackoutDate')) {
+    function addVacationBlackoutDate($conDB, $start_date, $end_date, $reason, $created_by_emp_id)
+    {
+        $s = strtotime((string)$start_date);
+        $e = strtotime((string)$end_date);
+        if (!$s || !$e || $e < $s) {
+            return ['success' => false, 'message' => 'Invalid date range.'];
+        }
+        $start = date('Y-m-d', $s);
+        $end = date('Y-m-d', $e);
+        $reason = mb_substr(trim((string)$reason), 0, 255);
+
+        $stmt = mysqli_prepare($conDB, "INSERT INTO vacation_blackout_dates (start_date, end_date, reason, is_active, created_by_emp_id, created_at)
+            VALUES (?, ?, ?, 1, ?, NOW())");
+        if (!$stmt) {
+            return ['success' => false, 'message' => 'Failed to prepare blackout insert.'];
+        }
+        $createdBy = (string)$created_by_emp_id;
+        mysqli_stmt_bind_param($stmt, "ssss", $start, $end, $reason, $createdBy);
+        if (!mysqli_stmt_execute($stmt)) {
+            mysqli_stmt_close($stmt);
+            return ['success' => false, 'message' => 'Failed to save blackout dates.'];
+        }
+        $id = mysqli_insert_id($conDB);
+        mysqli_stmt_close($stmt);
+        return ['success' => true, 'id' => $id, 'start_date' => $start, 'end_date' => $end];
+    }
+}
+
+if (!function_exists('removeVacationBlackoutDate')) {
+    function removeVacationBlackoutDate($conDB, $id, $removed_by_emp_id)
+    {
+        $id = (int)$id;
+        $removedBy = (string)$removed_by_emp_id;
+        $stmt = mysqli_prepare($conDB, "UPDATE vacation_blackout_dates SET is_active = 0, removed_by_emp_id = ?, removed_at = NOW() WHERE id = ? AND is_active = 1");
+        if (!$stmt) {
+            return ['success' => false, 'message' => 'Failed to prepare blackout removal.'];
+        }
+        mysqli_stmt_bind_param($stmt, "si", $removedBy, $id);
+        mysqli_stmt_execute($stmt);
+        $affected = mysqli_stmt_affected_rows($stmt);
+        mysqli_stmt_close($stmt);
+        if ($affected === 0) {
+            return ['success' => false, 'message' => 'Blackout not found or already removed.'];
+        }
+        return ['success' => true];
     }
 }
 

@@ -64,6 +64,8 @@ if (!function_exists('get_special_access_labels')) {
             'manage_attendance_config' => 'Attendance: View & Manage Attendance Config (Timetables) Page',
             'view_employee_attendance_tab' => 'Attendance: View Employee Profile\'s Attendance Record Tab',
             'manage_own_screen_settings' => 'Screen Settings: Allow User to Edit Own Scale/Resolution/Fullscreen',
+            'manage_temp_role_transfer' => 'Access App Settings - Temporary Role Transfer Tab',
+            'manage_vacation_blackout_dates' => 'Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)',
         ] + get_special_access_page_labels();
     }
 }
@@ -195,6 +197,8 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_salary_increment_settings',
                     'manage_own_screen_settings',
                     'manage_company_settings',
+                    'manage_temp_role_transfer',
+                    'manage_vacation_blackout_dates',
                 ],
             ],
             'Business Trip' => [
