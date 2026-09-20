@@ -52,8 +52,8 @@ while ($row = mysqli_fetch_assoc($result)) {
     }
 }
 
-// zk_insert_live_attendance() logs its own "unknown/inactive employee" line
-// per still-unmatched punch (same as before) - not duplicated here.
+// Still-unmatched punches (unknown/inactive employee) are skipped silently -
+// zk_insert_live_attendance() no longer error_logs them.
 
 echo date('Y-m-d H:i:s') . " - Scanned: {$total} - Newly recovered into zk_attendance: {$recovered}\n";
 echo "Now run: php cron_zk_attendance_pairing.php\n";

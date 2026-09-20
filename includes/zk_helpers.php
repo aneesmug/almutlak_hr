@@ -48,7 +48,8 @@ if (!function_exists('zk_insert_live_attendance')) {
      * emp_name/punch_time/punch_state columns; the code that assumed those
      * (import_csv/uploadCsv.php, attendanceEmpAjaxfile.php) is legacy/unwired.
      * PIN = employees.emp_id (confirmed 1:1 with device enrollment numbers).
-     * Punches from an unknown/inactive employee are logged and skipped, not fatal -
+     * Punches from an unknown/inactive employee are silently skipped (deliberately not
+     * written to error_log - it flooded the log), not fatal -
      * callers should keep re-attempting this same punch on later syncs (as long as
      * it's still within whatever window gets re-sent) rather than treating one
      * failed attempt as final: an employee added to HR *after* a device flushes
@@ -65,7 +66,6 @@ if (!function_exists('zk_insert_live_attendance')) {
         mysqli_stmt_close($empStmt);
 
         if (!$emp) {
-            error_log("[ZK] Punch for unknown/inactive employee PIN={$pin} at {$punchTime} skipped");
             return false;
         }
 
@@ -81,6 +81,81 @@ if (!function_exists('zk_insert_live_attendance')) {
         $inserted = mysqli_stmt_affected_rows($insert) > 0;
         mysqli_stmt_close($insert);
         return $inserted;
+    }
+}
+
+if (!function_exists('zk_attendance_retention_days')) {
+    /**
+     * Attendance data older than this many calendar days (counting today as day 1) is
+     * purged - see zk_purge_old_attendance(). Editable in App Settings > Attendance
+     * Config > Data Retention (app_settings.attendance_retention_days). Falls back to
+     * 60 if unset/invalid, and is clamped to a 7-day floor so a typo (0, blank) can
+     * never wipe the attendance tables.
+     */
+    function zk_attendance_retention_days($conn = null) {
+        $days = 60;
+        if ($conn) {
+            $result = mysqli_query($conn, "SELECT setting_value FROM app_settings WHERE setting_name = 'attendance_retention_days' LIMIT 1");
+            if ($result) {
+                $row = mysqli_fetch_assoc($result);
+                mysqli_free_result($result);
+                if ($row && ctype_digit(trim((string) $row['setting_value']))) {
+                    $days = (int) trim((string) $row['setting_value']);
+                }
+            }
+        }
+        return max(7, $days);
+    }
+}
+
+if (!function_exists('zk_attendance_cutoff_date')) {
+    /** Oldest date (Y-m-d) still kept: today is day 1, so N days = today minus (N-1). */
+    function zk_attendance_cutoff_date($conn = null) {
+        return date('Y-m-d', strtotime('-' . (zk_attendance_retention_days($conn) - 1) . ' days'));
+    }
+}
+
+if (!function_exists('zk_purge_old_attendance')) {
+    /**
+     * Deletes attendance data older than the retention window from the punch tables
+     * (zk_attendance_raw, zk_attendance) and the daily `attendance` table, in
+     * batches so a big first-time purge doesn't hold long locks. Runs at most once
+     * per calendar day (guarded by cron_logs/last_attendance_retention_report.json,
+     * same pattern as the cron_*.php scripts) unless $force is true.
+     */
+    function zk_purge_old_attendance($conn, $force = false) {
+        $reportFile = __DIR__ . '/../cron_logs/last_attendance_retention_report.json';
+        if (!$force && file_exists($reportFile)) {
+            $last = json_decode((string) @file_get_contents($reportFile), true);
+            if (is_array($last) && isset($last['timestamp']) && substr($last['timestamp'], 0, 10) === date('Y-m-d')) {
+                return null;
+            }
+        }
+
+        $cutoff = zk_attendance_cutoff_date($conn);
+        $targets = [
+            'zk_attendance_raw' => 'punch_time',
+            'zk_attendance' => 'punch_date',
+            'attendance' => 'date',
+        ];
+
+        $deleted = [];
+        foreach ($targets as $table => $column) {
+            $deleted[$table] = 0;
+            do {
+                $ok = mysqli_query($conn, "DELETE FROM `{$table}` WHERE `{$column}` < '{$cutoff}' LIMIT 5000");
+                $affected = $ok ? mysqli_affected_rows($conn) : 0;
+                $deleted[$table] += $affected;
+            } while ($affected > 0);
+        }
+
+        @file_put_contents($reportFile, json_encode([
+            'timestamp' => date('Y-m-d H:i:s'),
+            'cutoff_date' => $cutoff,
+            'deleted' => $deleted,
+        ], JSON_PRETTY_PRINT));
+
+        return $deleted;
     }
 }
 

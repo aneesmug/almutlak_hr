@@ -97,6 +97,8 @@ $rawStmt = mysqli_prepare(
 $insertedCount = 0;
 $skippedDuplicate = 0;
 $skippedInvalid = 0;
+$skippedOld = 0;
+$retentionCutoff = zk_attendance_cutoff_date($conn);
 // (pin, punch_date) pairs touched by a newly-inserted punch this batch - the
 // pairing step below only needs to re-aggregate these, not every day ever
 // synced. Keyed by "pin|date" to dedupe within the batch.
@@ -121,6 +123,13 @@ foreach ($punches as $punch) {
         continue;
     }
     $punchTime = date('Y-m-d H:i:s', $timestamp);
+
+    // Outside the retention window (see zk_purge_old_attendance()) - don't store it, or the
+    // daily purge would just delete it again and every re-sent old punch would churn.
+    if (date('Y-m-d', $timestamp) < $retentionCutoff) {
+        $skippedOld++;
+        continue;
+    }
 
     mysqli_stmt_bind_param($rawStmt, 'ssssss', $serial, $pin, $punchTime, $status, $verify, $workCode);
     mysqli_stmt_execute($rawStmt);
@@ -198,11 +207,44 @@ foreach ($affectedDays as $day) {
     }
 }
 
+// Keep only the configured number of days of attendance (default 60, App Settings >
+// Attendance Config > Data Retention): on day N+1 the oldest day is removed.
+// Runs at most once per calendar day (no-op on every other sync).
+$purged = zk_purge_old_attendance($conn);
+
+// This server has no cron jobs - the BioTime sync push is the only thing that runs on a
+// timer - so the once-a-day "temporary role expires tomorrow" reminder email
+// (cron_temp_role_expiry_reminder.php's logic) is piggybacked here with the same daily
+// guard file that script uses. Failures must never break the attendance sync itself.
+$tempRoleReminderReport = __DIR__ . '/cron_logs/last_temp_role_expiry_reminder_report.json';
+$tempRoleReminderDone = false;
+if (file_exists($tempRoleReminderReport)) {
+    $lastReminder = json_decode((string) @file_get_contents($tempRoleReminderReport), true);
+    $tempRoleReminderDone = is_array($lastReminder) && substr((string) ($lastReminder['timestamp'] ?? ''), 0, 10) === date('Y-m-d');
+}
+if (!$tempRoleReminderDone) {
+    try {
+        require_once __DIR__ . '/includes/db.php';
+        require_once __DIR__ . '/includes/helper_functions.php';
+        $reminderSummary = sendTempRoleExpiryReminders($conDB);
+        @file_put_contents($tempRoleReminderReport, json_encode([
+            'timestamp' => date('Y-m-d H:i:s'),
+            'notified' => $reminderSummary['notified'],
+            'skipped' => $reminderSummary['skipped'],
+            'errors' => $reminderSummary['errors'],
+        ], JSON_PRETTY_PRINT));
+    } catch (\Throwable $e) {
+        error_log('[ZK] temp role expiry reminder failed: ' . $e->getMessage());
+    }
+}
+
 echo json_encode([
     'status' => 'success',
     'inserted' => $insertedCount,
     'skipped_duplicate' => $skippedDuplicate,
     'skipped_invalid' => $skippedInvalid,
+    'skipped_old' => $skippedOld,
+    'purged_old_attendance' => $purged,
     'devices_synced' => $devicesSynced,
     'terminals_received' => count($terminals),
     'attendance_paired' => $attendancePaired,

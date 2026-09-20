@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  * Fetches all settings from the database.
  */
 function get_all_settings($conDB) {
+    ensure_attendance_retention_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -145,6 +146,7 @@ function get_all_settings($conDB) {
  * Updates settings, handling both file uploads and text inputs.
  */
 function update_all_settings($conDB) {
+    ensure_attendance_retention_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -269,6 +271,33 @@ function ensure_report_visibility_setting($conDB) {
     $insertStmt->bind_param("ss", $settingName, $defaultValue);
     $insertStmt->execute();
     $insertStmt->close();
+}
+
+/**
+ * Ensure the attendance data-retention days setting exists (App Settings > Attendance
+ * Config > Data Retention). Read by zk_attendance_retention_days() in zk_helpers.php.
+ */
+function ensure_attendance_retention_setting($conDB) {
+    $check = $conDB->prepare("SELECT id FROM app_settings WHERE setting_name = 'attendance_retention_days' LIMIT 1");
+    if (!$check) {
+        return;
+    }
+    $check->execute();
+    $result = $check->get_result();
+    $exists = ($result && $result->num_rows > 0);
+    if ($result) {
+        $result->free();
+    }
+    $check->close();
+    if ($exists) {
+        return;
+    }
+
+    $insert = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES ('attendance_retention_days', '60', 'attendance_retention', 'Days of attendance data to keep (older attendance and punch records are deleted automatically once a day - minimum 7)', 'text', NULL)");
+    if ($insert) {
+        $insert->execute();
+        $insert->close();
+    }
 }
 
 /**

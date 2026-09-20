@@ -1064,6 +1064,7 @@ function __(key, def) {
             navHtml += `<li class="nav-item"><a class="nav-link active" href="#" data-sub-tab="timetables">${__('timetables', 'Timetables')}</a></li>`;
             if (showDeviceMonitor) {
                 navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="device_monitor">${__('device_monitor', 'Device Monitor')}</a></li>`;
+                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="attendance_retention">${__('data_retention', 'Data Retention')}</a></li>`;
             }
             navHtml += '</ul>';
 
@@ -1084,10 +1085,13 @@ function __(key, def) {
                 if (saveBtnWrapper) {
                     // Timetables self-saves per-row via its own modal; Device Monitor uses
                     // the generic outer Save button.
-                    saveBtnWrapper.style.display = (key === 'device_monitor') ? '' : 'none';
+                    saveBtnWrapper.style.display = (key === 'device_monitor' || key === 'attendance_retention') ? '' : 'none';
                 }
-                if (key === 'device_monitor') {
-                    renderSettingsGroup('device_monitor', subContent);
+                if (key === 'device_monitor' || key === 'attendance_retention') {
+                    renderSettingsGroup(key, subContent);
+                    if (key === 'attendance_retention') {
+                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-3 mb-0 font-13"><i class="mdi mdi-alert-outline"></i> ${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div>`);
+                    }
                 } else {
                     renderAttendanceConfigGroup(subContent);
                 }
@@ -6160,7 +6164,7 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor'];
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention'];
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
