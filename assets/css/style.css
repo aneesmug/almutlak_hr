@@ -347,6 +347,13 @@ File: Main Css File
 .enlarged #wrapper .left.side-menu {
   width: 70px;
   z-index: 5;
+  /* Fixed to the viewport with its own scrollbar so every icon is reachable on short screens.
+     Hover flyouts/labels are positioned fixed by initCollapsedSidebarFlyouts (jquery.app.js)
+     so this overflow doesn't clip them. */
+  position: fixed;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 
 .enlarged #wrapper .left.side-menu #sidebar-menu>ul>li>a {
