@@ -169,10 +169,72 @@ include(__DIR__ . '/session_config_js.php');
             </li>
             <li>
                 <div class="page-title-box">
-                    <h4 class="page-title"><?=__('human_resource_system'); ?></h4>
+                    <h4 class="page-title"><?= htmlspecialchars(trim((string)get_setting($conDB, 'company_name') . ' ' . __('business_suite')), ENT_QUOTES, 'UTF-8') ?></h4>
                     <ol class="breadcrumb">
-                        <li class="breadcrumb-item active"><?=__('welcome_to_al-mutlak_co._admin_panel'); ?></li>
+                        <?php
+                        // Signed-in user's companies / departments / role shown under the page title.
+                        // Own company/department first, then any extra ones granted via
+                        // admin_login.allowed_companies / allowed_departments (no duplicates).
+                        $tbIsAr = (($current_lang ?? 'en') === 'ar');
+                        $tbCompanies = [];
+                        $tbDepts = [];
+                        if (!empty($conDB)) {
+                            $tbCompIds = array_values(array_unique(array_filter(array_map('intval', array_merge([(int)($user_company ?? 0)], (array)($allowed_companies ?? []))))));
+                            if ($tbCompIds) {
+                                $tbIn = implode(',', $tbCompIds);
+                                $tbRes = mysqli_query($conDB, "SELECT id, comp_id, comp_name, comp_name_ar FROM companies WHERE comp_id IN ($tbIn) OR id IN ($tbIn)");
+                                $tbFound = [];
+                                while ($tbRes && ($tbRow = mysqli_fetch_assoc($tbRes))) {
+                                    $tbFound[(int)$tbRow['comp_id']] = ($tbIsAr && $tbRow['comp_name_ar'] !== '') ? $tbRow['comp_name_ar'] : $tbRow['comp_name'];
+                                }
+                                // own company first (matched by comp_id), then the rest
+                                $tbOwn = (int)($user_company ?? 0);
+                                if (isset($tbFound[$tbOwn])) { $tbCompanies[] = $tbFound[$tbOwn]; unset($tbFound[$tbOwn]); }
+                                foreach ($tbFound as $tbName) { $tbCompanies[] = $tbName; }
+                            }
+                            $tbDeptIds = array_values(array_unique(array_filter(array_map('intval', array_merge([(int)($user_dept ?? 0)], (array)($allowed_departments_array ?? []))))));
+                            if ($tbDeptIds) {
+                                $tbIn = implode(',', $tbDeptIds);
+                                $tbRes = mysqli_query($conDB, "SELECT id, dep_nme, dep_nme_ar FROM department WHERE id IN ($tbIn)");
+                                $tbFound = [];
+                                while ($tbRes && ($tbRow = mysqli_fetch_assoc($tbRes))) {
+                                    $tbFound[(int)$tbRow['id']] = ($tbIsAr && $tbRow['dep_nme_ar'] !== '') ? $tbRow['dep_nme_ar'] : $tbRow['dep_nme'];
+                                }
+                                $tbOwn = (int)($user_dept ?? 0);
+                                if (isset($tbFound[$tbOwn])) { $tbDepts[] = $tbFound[$tbOwn]; unset($tbFound[$tbOwn]); }
+                                foreach ($tbFound as $tbName) { $tbDepts[] = $tbName; }
+                            }
+                        }
+                        $tbRoleMap = ['administrator' => 'Administrator', 'hr' => 'Human Resource', 'dephead' => 'Department Head', 'dept_user' => 'Department Head', 'user' => 'Employee'];
+                        $tbRoleKey = (string)($user_type ?? '');
+                        $tbRole = $tbRoleMap[$tbRoleKey] ?? ucwords(str_replace('_', ' ', $tbRoleKey));
+                        if (!empty($is_temp_role_active)) { $tbRole .= ' (Temp)'; }
+                        // [icon, names[], text colour, background]; more than 2 names collapse into a "+N" badge with a tooltip.
+                        $tbGroups = [
+                            ['fa-building', $tbCompanies, '#0e7490', '#cffafe'],
+                            ['fa-sitemap', $tbDepts, '#6d28d9', '#ede9fe'],
+                            ['fa-user-shield', $tbRole !== '' ? [$tbRole] : [], '#15803d', '#dcfce7'],
+                        ];
+                        ?>
+                        <li class="breadcrumb-item active tb-user-badges">
+                            <?php foreach ($tbGroups as $tbG) {
+                                $tbShow = array_slice($tbG[1], 0, 2);
+                                $tbMore = array_slice($tbG[1], 2);
+                                foreach ($tbShow as $tbName) { ?>
+                                <span class="badge tb-user-badge" style="color:<?= $tbG[2] ?>;background:<?= $tbG[3] ?>;"><i class="fa-duotone <?= $tbG[0] ?>"></i> <?= htmlspecialchars($tbName, ENT_QUOTES, 'UTF-8') ?></span>
+                                <?php }
+                                if ($tbMore) { ?>
+                                <span class="badge tb-user-badge" style="color:<?= $tbG[2] ?>;background:<?= $tbG[3] ?>;" title="<?= htmlspecialchars(implode(', ', $tbMore), ENT_QUOTES, 'UTF-8') ?>">+<?= count($tbMore) ?></span>
+                                <?php }
+                            } ?>
+                        </li>
                     </ol>
+                    <style>
+                        .tb-user-badges { display:flex; flex-wrap:wrap; gap:6px; }
+                        .tb-user-badge { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:20px; line-height:1.3; }
+                        .tb-user-badge i { margin-right:4px; }
+                        .breadcrumb-item.tb-user-badges::before { display:none; }
+                    </style>
                 </div>
             </li>
         </ul>
