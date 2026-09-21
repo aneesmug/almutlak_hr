@@ -268,6 +268,10 @@ include(__DIR__ . '/session_config_js.php');
                     </style>
                     <script>
                         (function () {
+                            var tb = document.querySelector('.content-page > .topbar'), cp = document.querySelector('.content-page');
+                            if (tb && cp && window.ResizeObserver) {
+                                new ResizeObserver(function () { cp.style.setProperty('--tb-h', tb.offsetHeight + 'px'); }).observe(tb);
+                            }
                             var li = document.querySelector('.tbx-search'), btn = document.getElementById('tbxSearchBtn'), form = document.getElementById('tbxSearchForm');
                             if (!li || !btn || !form) return;
                             var input = form.querySelector('input');

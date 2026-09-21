@@ -282,3 +282,36 @@ body.sbv2.sbv2-light #wrapper .left.side-menu { box-shadow: 1px 0 0 var(--sb-lin
 body.sbv2.sbv2-light #sidebar-menu { scrollbar-color: rgba(15, 23, 42, .25) transparent; }
 body.sbv2.sbv2-light #sidebar-menu::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, .25); }
 body.sbv2.sbv2-light #sidebar-menu .menu-title { color: rgba(75, 85, 99, .75); }
+
+/* ---------- Fixed top bar (stays visible while the page scrolls) ---------- */
+@media (min-width: 1025px) {
+    body.sbv2 .content-page { padding-top: var(--tb-h, 96px) !important; }
+    body.sbv2 .content-page > .topbar {
+        position: fixed;
+        top: 0;
+        left: var(--sb-w);
+        right: 0;
+        z-index: 999;
+        margin: 0;
+        padding: 0 25px;
+        background: #f3f6f8;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, .06), 0 6px 16px -8px rgba(15, 23, 42, .12);
+        transition: left .2s ease;
+    }
+}
+
+/* ---------- RTL fixes: mobile menu button + content offset + fixed top bar side ---------- */
+@media (max-width: 991.98px) {
+    /* style_rtl.css keeps a 240px right margin and hides .menu-left (the hamburger) on phones */
+    html[dir="rtl"] body.sbv2 .content-page { margin-right: 0 !important; }
+}
+@media (max-width: 768px) {
+    html[dir="rtl"] body.sbv2 .navbar-custom .menu-left { display: block !important; }
+}
+@media (max-width: 575.98px) {
+    html[dir="rtl"] body.sbv2 .navbar-custom .menu-left .page-title-box { display: none; }
+}
+@media (min-width: 1025px) {
+    html[dir="rtl"] body.sbv2 .content-page > .topbar { left: 0; right: var(--sb-w); transition: right .2s ease; }
+}
+html[dir="rtl"] body.sbv2 .navbar-custom .menu-left > li.float-left { float: right !important; }
