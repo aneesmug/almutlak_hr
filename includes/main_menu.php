@@ -914,8 +914,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
             || user_has_special_access($conDB, $empid ?? '', 'access_import_medical_insurance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         $can_see_biometric_devices = $is_system_admin
             || user_has_special_access($conDB, $empid ?? '', 'manage_device_monitor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $can_see_dynamic_import = $is_system_admin
+            || user_has_special_access($conDB, $empid ?? '', 'access_import_excel_dynamic', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         ?>
-        <?php if ($is_system_admin || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+        <?php if ($is_system_admin || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
@@ -930,6 +932,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php endif; ?>
                 <?php if ($can_see_biometric_devices): ?>
                 <li><a href="<?= $zkDevicesLink ?>"><i class="fa fa-fingerprint"></i><span><?=__('zk_devices', 'Biometric Devices') ?></span></a></li>
+                <?php endif; ?>
+                <?php if ($can_see_dynamic_import): ?>
+                <li><a href="import_excel_dynamic.php"><i class="fa fa-file-excel"></i><span><?=__('dynamic_excel_import', 'Dynamic Excel Import') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_view_vac_balance_history): ?>
                 <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>

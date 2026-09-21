@@ -66,6 +66,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_own_screen_settings' => 'Screen Settings: Allow User to Edit Own Scale/Resolution/Fullscreen',
             'manage_temp_role_transfer' => 'Access App Settings - Temporary Role Transfer Tab',
             'manage_vacation_blackout_dates' => 'Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)',
+            'access_import_excel_dynamic' => 'Tools: Dynamic Excel Import (Import Excel Into Any Table)',
         ] + get_special_access_page_labels();
     }
 }
@@ -232,6 +233,7 @@ if (!function_exists('get_special_access_categories')) {
                 'keys' => [
                     'direct_rejoin_bypass_approval',
                     'ungenerate_payroll',
+                    'access_import_excel_dynamic',
                     'assign_payroll_supervisor',
                 ],
             ],

@@ -409,7 +409,38 @@ function tableApiFindTablesByColumn(PDO $pdo, string $mainTable, string $column)
         }
     }
 
+    // Dynamic lookup: tables where this same column name is the primary key.
+    $stmt = $pdo->prepare(
+        "SELECT TABLE_NAME FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = :col AND COLUMN_KEY = 'PRI'
+           AND TABLE_NAME <> :main
+         ORDER BY TABLE_NAME LIMIT 3"
+    );
+    $stmt->execute(['col' => $column, 'main' => $mainTable]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $candidateTable) {
+        $candidateTable = tableApiNormalizeIdentifier((string) $candidateTable);
+        if ($candidateTable !== '') {
+            $matches[] = $candidateTable;
+        }
+    }
+
     return $cache[$key] = array_values(array_unique($matches));
+}
+
+function tableApiGetSinglePrimaryKey(PDO $pdo, string $table): string
+{
+    static $cache = [];
+    $key = strtolower($table);
+
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $stmt = $pdo->prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_KEY = 'PRI'");
+    $stmt->execute(['table' => $table]);
+    $pk = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    return $cache[$key] = (count($pk) === 1 ? (string) $pk[0] : '');
 }
 
 function tableApiGuessRelatedTables(string $column): array
@@ -465,15 +496,21 @@ function tableApiGetPreferredJoinColumns(PDO $pdo, string $joinTable, array $sel
     }
 
     $preferredColumns = [
-        'id', 'code', 'name', 'dep_nme', 'department_name', 'dept_name', 'fullname',
-        'title', 'comp_name', 'company_name', 'customer_name', 'country_name',
-        'bank_name', 'email', 'mobile', 'status'
+        'id', 'code', 'name', 'name_en', 'name_ar', 'dep_nme', 'dep_nme_ar', 'department_name', 'dept_name', 'fullname',
+        'title', 'comp_name', 'comp_name_ar', 'company_name', 'customer_name', 'country_name',
+        'bank_name', 'bank_name_ar', 'section_name', 'sponsor', 'sponsor_ar', 'email', 'mobile', 'status'
     ];
+
+    // Case-insensitive match (e.g. BANK_NAME) while keeping the real column name.
+    $allColumnsLower = [];
+    foreach ($allColumns as $realColumn) {
+        $allColumnsLower[strtolower($realColumn)] = $realColumn;
+    }
 
     $columns = [];
     foreach ($preferredColumns as $column) {
-        if (in_array($column, $allColumns, true) && !tableApiIsSensitiveColumn($column)) {
-            $columns[] = $column;
+        if (isset($allColumnsLower[$column]) && !tableApiIsSensitiveColumn($column)) {
+            $columns[] = $allColumnsLower[$column];
         }
     }
 
@@ -491,9 +528,26 @@ function tableApiGetPreferredJoinColumns(PDO $pdo, string $joinTable, array $sel
     return array_values(array_unique($columns));
 }
 
-function tableApiAddJoinIfValid(PDO $pdo, string $mainTable, array &$joins, array &$seen, string $joinTable, string $localColumn, string $foreignColumn, string $source, array $selectedColumns = []): void
+function tableApiKnownRelations(): array
 {
-    if ($joinTable === '' || $localColumn === '' || $foreignColumn === '' || $joinTable === $mainTable) {
+    // local column => [join table, foreign column, selected columns (optional), allow self join]
+    return [
+        'dept' => ['department', 'id'],
+        'city_id' => ['saudi_cities', 'id'],
+        'city' => ['saudi_cities', 'id'],
+        'country' => ['countries', 'id'],
+        'bank_name' => ['bank', 'id'],
+        'comp_no' => ['companies', 'comp_id'],
+        'location_id' => ['locations', 'id'],
+        'sub_dept_id' => ['sub_departments', 'id'],
+        'sectin_nme' => ['section', 'id'],
+        'supervisor_id' => ['employees', 'emp_id', ['emp_id', 'name', 'mobile'], true],
+    ];
+}
+
+function tableApiAddJoinIfValid(PDO $pdo, string $mainTable, array &$joins, array &$seen, string $joinTable, string $localColumn, string $foreignColumn, string $source, array $selectedColumns = [], bool $allowSelf = false): void
+{
+    if ($joinTable === '' || $localColumn === '' || $foreignColumn === '' || (!$allowSelf && $joinTable === $mainTable)) {
         return;
     }
 
@@ -518,6 +572,7 @@ function tableApiAddJoinIfValid(PDO $pdo, string $mainTable, array &$joins, arra
         'foreign_column' => $foreignColumn,
         'selected_columns' => $selectedColumns,
         'source' => $source,
+        'allow_self' => $allowSelf,
     ];
 }
 
@@ -526,7 +581,7 @@ function tableApiFindAutoJoins(PDO $pdo, string $mainTable): array
     $joins = [];
     $seen = [];
     $mainColumns = tableApiGetColumns($pdo, $mainTable);
-    $maxAutoJoins = 6;
+    $maxAutoJoins = 25;
 
     $fkStmt = $pdo->prepare(
         "SELECT COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
@@ -554,6 +609,25 @@ function tableApiFindAutoJoins(PDO $pdo, string $mainTable): array
         }
     }
 
+    foreach (tableApiKnownRelations() as $localColumn => $relation) {
+        if (!in_array($localColumn, $mainColumns, true)) {
+            continue;
+        }
+
+        tableApiAddJoinIfValid(
+            $pdo,
+            $mainTable,
+            $joins,
+            $seen,
+            $relation[0],
+            $localColumn,
+            $relation[1],
+            'auto',
+            $relation[2] ?? [],
+            (bool) ($relation[3] ?? false)
+        );
+    }
+
     foreach ($mainColumns as $column) {
         if (!tableApiLooksRelationalColumn($column)) {
             continue;
@@ -573,8 +647,12 @@ function tableApiFindAutoJoins(PDO $pdo, string $mainTable): array
             $foreignColumn = '';
             if (tableApiHasColumn($pdo, $candidateTable, $column)) {
                 $foreignColumn = $column;
+            } elseif (in_array(strtolower($column), ['comp_no', 'company_id'], true) && tableApiHasColumn($pdo, $candidateTable, 'comp_id')) {
+                $foreignColumn = 'comp_id';
             } elseif (tableApiHasColumn($pdo, $candidateTable, 'id')) {
                 $foreignColumn = 'id';
+            } else {
+                $foreignColumn = tableApiGetSinglePrimaryKey($pdo, $candidateTable);
             }
 
             if ($foreignColumn !== '') {
@@ -682,7 +760,9 @@ function tableApiBuildResponse(PDO $pdo, string $table, string $joinsRaw, int $l
                 $join['join_table'],
                 $join['local_column'],
                 $join['foreign_column'],
-                $join['source']
+                $join['source'],
+                $join['selected_columns'] ?? [],
+                (bool) ($join['allow_self'] ?? false)
             );
         }
     }
