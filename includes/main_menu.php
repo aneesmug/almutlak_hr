@@ -755,6 +755,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 ?>
 <link rel="stylesheet" href="assets/css/sidebar_v2.css?v=<?= @filemtime(__DIR__ . '/../assets/css/sidebar_v2.css') ?>">
 <script src="assets/js/sidebar_v2.js?v=<?= @filemtime(__DIR__ . '/../assets/js/sidebar_v2.js') ?>"></script>
+<?php if (get_setting($conDB, 'sidebar_theme') !== 'dark') { ?><script>document.body.classList.add('sbv2-light');</script><?php } ?>
 
 <div class="user-box">
     <div class="user-img">
@@ -770,54 +771,54 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <!-- Dashboard -->
         <?php if ($is_gm): ?>
-            <li><a href="<?= $dashboardGMLink ?>" class="<?= dashboard($current_page) ?>"><i class="fa fa-airplay"></i><span><?=__('dashboard') ?></span></a></li>
+            <li><a href="<?= $dashboardGMLink ?>" class="<?= dashboard($current_page) ?>"><i class="fa-duotone fa-airplay" style="--fa-primary-color:#38bdf8;--fa-secondary-color:#38bdf8;--fa-secondary-opacity:.4"></i><span><?=__('dashboard') ?></span></a></li>
         <?php else: ?>
-            <li><a href="<?= $dashboardLink ?>" class="<?= dashboard($current_page) ?>"><i class="fa fa-airplay"></i><span><?=__('dashboard') ?></span></a></li>
+            <li><a href="<?= $dashboardLink ?>" class="<?= dashboard($current_page) ?>"><i class="fa-duotone fa-airplay" style="--fa-primary-color:#38bdf8;--fa-secondary-color:#38bdf8;--fa-secondary-opacity:.4"></i><span><?=__('dashboard') ?></span></a></li>
         <?php endif; ?>
 
         <!-- Employee's Group -->
         <?php if ($show_employees_menu): ?>
         <li class="<?=(strpos($current_page_name, 'employee') !== false ? 'mm-active' : '')?>">
-            <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("employee's") ?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa-duotone fa-users-gear" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__("employee's") ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'employee') !== false ? 'true' : 'false') ?>">
                 <?php if (in_array($current_page_name, ['reg_employee.php', 'view_employee.php']) && (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page))): ?>
-                    <li><a href="<?= $addNewEmployeeLink ?>" id="newEmployeeMenuLink"><i class="fa fa-user-plus"></i><span><?=__('new_employee') ?></span></a></li>
+                    <li><a href="<?= $addNewEmployeeLink ?>" id="newEmployeeMenuLink"><i class="fa-duotone fa-user-plus" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('new_employee') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_all_employees_page) || in_array($user_type, $can_see_all_employees_page)): ?>
-                    <li><a href="<?= $allEmployeesLink ?>"><i class="fa fa-users"></i><span><?=__('all_employees') ?></span></a></li>
+                    <li><a href="<?= $allEmployeesLink ?>"><i class="fa-duotone fa-users" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('all_employees') ?></span></a></li>
                 <?php endif; /* ?>
                 <?php if (in_array($user_role, $can_see_employees_bank_page) || in_array($user_type, $can_see_employees_bank_page)): ?>
-                    <li><a href="<?= $yearlyEOSLink ?>"><i class="fa fa-calendar-time"></i><span><?=__('employees_bank') ?></span></a></li>
+                    <li><a href="<?= $yearlyEOSLink ?>"><i class="fa-duotone fa-calendar-time" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('employees_bank') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($isHR || $is_system_admin || $isDeptHr): ?>
-                    <li><a href="<?= $employeeSalaryReportLink ?>"><i class="fa fa-money-bill"></i><span>Salary Report</span></a></li>
+                    <li><a href="<?= $employeeSalaryReportLink ?>"><i class="fa-duotone fa-money-bill" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span>Salary Report</span></a></li>
                 <?php endif; */?>
                 <?php if (in_array($user_role, $can_see_employees_payroll_page) || in_array($user_type, $can_see_employees_payroll_page)): ?>
-                    <li><a href="<?= $payrollLink ?>"><i class="fa fa-money-bill-transfer"></i><span><?=__('payroll') ?></span></a></li>
+                    <li><a href="<?= $payrollLink ?>"><i class="fa-duotone fa-money-bill-transfer" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
                 <?php /* ?>
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-users-gear"></i><span><?=__("history") ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-clock-rotate-left" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__("history") ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-second-level" aria-expanded="false">
                         <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                            <li><a href="<?= $addManualLoanLink ?>"><i class="fa fa-solid fa-history"></i><span><?=__('add_loan_history') ?></span></a></li>
+                            <li><a href="<?= $addManualLoanLink ?>"><i class="fa-duotone fa-file-invoice" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('add_loan_history') ?></span></a></li>
                         <?php endif; ?>
                         <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                            <li><a href="<?= $manualVacationLink ?>"><i class="fa fa-solid fa-history"></i><span><?=__('add_vacation_history') ?></span></a></li>
+                            <li><a href="<?= $manualVacationLink ?>"><i class="fa-duotone fa-umbrella-beach" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('add_vacation_history') ?></span></a></li>
                         <?php endif; ?>
                     </ul>
                 </li>
                 <?php */ ?>
                 <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
-                    <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa fa-chart-line"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
+                    <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa-duotone fa-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ($is_system_admin): ?>
-                    <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
+                    <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa-duotone fa-user-tie" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ($is_system_admin || in_array($user_role, $page_roles['manage_holidays.php'] ?? []) || in_array($user_type, $page_roles['manage_holidays.php'] ?? [])): ?>
-                    <li><a href="<?= $manageHolidaysLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
+                    <li><a href="<?= $manageHolidaysLink ?>"><i class="fa-duotone fa-calendar-days" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php /* 
@@ -826,7 +827,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     in_array($user_type, $can_see_evaluations_report_strict) ||
                     $is_gm || $is_admin
                 ): ?>
-                    <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa fa-file-chart-line"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
+                    <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa-duotone fa-file-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
                 <?php endif; */ ?>
             </ul>
         </li>
@@ -835,37 +836,37 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <!-- Approvals Group -->
         <?php if ($show_approvals_menu): ?>
         <li class="<?=(strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'mm-active' : '')?>">
-            <a href="javascript:void(0);"><i class="fa fa-check-to-slot"></i><span><?=__('approvals')?></span><?= ($approvals_total_count > 0) ? "<span class='badgez badge-danger'>$approvals_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa-duotone fa-check-to-slot" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('approvals')?></span><?= ($approvals_total_count > 0) ? "<span class='badgez badge-danger'>$approvals_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'applied') !== false || strpos($current_page_name, 'approvals') !== false || strpos($current_page_name, 'resignations') !== false ? 'true' : 'false') ?>">
                 <?php if (!empty($is_system_admin) || (!$isAllVacationMenuBlocked && (in_array($user_role, $can_see_applied_vac_page) || in_array($user_type, $can_see_applied_vac_page)))): ?>
-                    <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa fa-calendar-circle-user"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
+                    <li><a href="<?= $appliedVacationsLink ?>" class="<?= all_applied_vac($current_page) ?>"><i class="fa-duotone fa-calendar-circle-user" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('vacations') ?> <?= ($vacation_pending_count > 0) ? "<span class='badgez badge-danger'>$vacation_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isBusinessTripMenuBlocked && (in_array($user_role, $can_see_business_trip_page) || in_array($user_type, $can_see_business_trip_page)))): ?>
-                    <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa fa-plane"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa-duotone fa-plane" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (in_array($user_role, $can_see_employee_transfers_page) || in_array($user_type, $can_see_employee_transfers_page)) || (function_exists('employee_transfer_user_has_stake') && employee_transfer_user_has_stake($conDB, $empid ?? ''))): ?>
-                    <li><a href="<?= $appliedEmployeeTransfersLink ?>"><i class="fa fa-people-arrows"></i><span><?=__('employee_transfer_requests', 'Employee Transfers') ?></span></a></li>
+                    <li><a href="<?= $appliedEmployeeTransfersLink ?>"><i class="fa-duotone fa-people-arrows" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('employee_transfer_requests', 'Employee Transfers') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isSalaryIncrementMenuBlocked && (in_array($user_role, $can_see_salary_increment_page) || in_array($user_type, $can_see_salary_increment_page)))): ?>
-                    <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa fa-arrow-trend-up"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa-duotone fa-arrow-trend-up" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isRejoinMenuBlocked && (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)))): ?>
-                    <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa fa-plane-arrival"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
+                    <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa-duotone fa-plane-arrival" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isLoanMenuBlocked && (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)))): ?>
-                    <li><a href="<?= $appliedLoanLink ?>"><i class="fa fa-money-bill-trend-up"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $appliedLoanLink ?>"><i class="fa-duotone fa-money-bill-trend-up" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('loans') ?></span><?= ($loan_pending_count > 0) ? "<span class='badgez badge-danger'>$loan_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_settlements_page) || in_array($user_type, $can_see_settlements_page)): ?>
-                    <li><a href="<?= $settlementsLink ?>"><i class="fa fa-file-invoice-dollar"></i><span><?=__('settlements', 'Settlements') ?></span><?= ($settlement_pending_count > 0) ? "<span class='badgez badge-danger'>$settlement_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $settlementsLink ?>"><i class="fa-duotone fa-file-invoice-dollar" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('settlements', 'Settlements') ?></span><?= ($settlement_pending_count > 0) ? "<span class='badgez badge-danger'>$settlement_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_payroll_approvals_page) || in_array($user_type, $can_see_payroll_approvals_page)): ?>
-                    <li><a href="<?= $payrollApprovalsLink ?>"><i class="fa fa-money-check-dollar"></i><span><?=__('payroll_approvals', 'Payroll Approvals') ?></span><?= ($payroll_pending_count > 0) ? "<span class='badgez badge-danger'>$payroll_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $payrollApprovalsLink ?>"><i class="fa-duotone fa-money-check-dollar" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('payroll_approvals', 'Payroll Approvals') ?></span><?= ($payroll_pending_count > 0) ? "<span class='badgez badge-danger'>$payroll_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isResignationMenuBlocked && (in_array($user_role, $can_see_resignations_page) || in_array($user_type, $can_see_resignations_page)))): ?>
-                    <li><a href="<?= $allResignationsLink ?>"><i class="fa fa-user-times"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
+                    <li><a href="<?= $allResignationsLink ?>"><i class="fa-duotone fa-user-times" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('resignations') ?></span><?= ($resignation_pending_count > 0) ? "<span class='badgez badge-danger'>$resignation_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                  <?php if (!empty($is_system_admin) || in_array($user_role, $can_see_content_approvals_page) || in_array($user_type, $can_see_content_approvals_page)): ?>
-                    <li><a href="<?= $tempContractsLink ?>"><i class="fa fa-arrows-spin"></i><span><?=__('content_updates') ?> <?= ($status_cont_contaprl > 0) ? "<span class='badgez badge-danger'>$status_cont_contaprl</span>" : "" ?></span></a></li>
+                    <li><a href="<?= $tempContractsLink ?>"><i class="fa-duotone fa-arrows-spin" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('content_updates') ?> <?= ($status_cont_contaprl > 0) ? "<span class='badgez badge-danger'>$status_cont_contaprl</span>" : "" ?></span></a></li>
                 <?php endif; ?>
             </ul>
         </li>
@@ -874,16 +875,16 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <!-- Requests Menu (Smart Request + General Request) -->
         <?php if ((!$isSmartRequestMenuBlocked && (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page))) || (!$isGeneralRequestMenuBlocked && (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))) || (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page))): ?>
         <li class="<?=((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'mm-active' : '')?>">
-            <a href="javascript:void(0);"><i class="fa fa-ticket"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa-duotone fa-ticket" style="--fa-primary-color:#fb923c;--fa-secondary-color:#fb923c;--fa-secondary-opacity:.4"></i><span><?=__('requests', 'Requests')?></span><?= ($requests_total_count > 0) ? "<span class='badgez badge-danger'>$requests_total_count</span>" : "" ?><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= ((strpos($current_page_name, 'request') !== false || $current_page_name === 'vouchers.php') ? 'true' : 'false') ?>">
                 <?php if (!$isSmartRequestMenuBlocked && (in_array($user_role, $can_see_smart_requests_page) || in_array($user_type, $can_see_smart_requests_page))): ?>
-                <li><a href="<?= $smartRequestsLink ?>"><i class="fa fa-layer-group"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
+                <li><a href="<?= $smartRequestsLink ?>"><i class="fa-duotone fa-layer-group" style="--fa-primary-color:#fb923c;--fa-secondary-color:#fb923c;--fa-secondary-opacity:.4"></i> <span> <?=__('smart_requests', 'Smart Request') ?> </span> <?= ($smart_request_count > 0) ? "<span class='badgez badge-danger'>$smart_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!$isGeneralRequestMenuBlocked && (in_array($user_role, $can_see_general_requests_page) || in_array($user_type, $can_see_general_requests_page))): ?>
-                <li><a href="<?= $generalRequestsLink ?>"><i class="fa fa-file-alt"></i> <span><?=__('general_request', 'General Request')?></span> <?= ($general_request_count > 0) ? "<span class='badgez badge-danger'>$general_request_count</span>" : "" ?></a></li>
+                <li><a href="<?= $generalRequestsLink ?>"><i class="fa-duotone fa-file-alt" style="--fa-primary-color:#fb923c;--fa-secondary-color:#fb923c;--fa-secondary-opacity:.4"></i> <span><?=__('general_request', 'General Request')?></span> <?= ($general_request_count > 0) ? "<span class='badgez badge-danger'>$general_request_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_vouchers_page) || in_array($user_type, $can_see_vouchers_page)): ?>
-                <li><a href="<?= $vouchersLink ?>"><i class="fa fa-box-archive"></i> <span> <?=__('vouchers') ?> </span></a></li>
+                <li><a href="<?= $vouchersLink ?>"><i class="fa-duotone fa-box-archive" style="--fa-primary-color:#fb923c;--fa-secondary-color:#fb923c;--fa-secondary-opacity:.4"></i> <span> <?=__('vouchers') ?> </span></a></li>
                 <?php endif; ?>
             </ul>
         </li>
@@ -891,14 +892,14 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <!-- Admin Section -->
         <?php if ($is_admin || $is_system_admin  || in_array($user_role, $can_see_cars_management_page) ): ?>
-            <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa fa-cars"></i><span><?=__('cars') ?></span></a></li>
-            <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa fa-sitemap"></i><span><?=__('locations') ?></span></a></li>
+            <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa-duotone fa-cars" style="--fa-primary-color:#f472b6;--fa-secondary-color:#f472b6;--fa-secondary-opacity:.4"></i><span><?=__('cars') ?></span></a></li>
+            <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa-duotone fa-sitemap" style="--fa-primary-color:#2dd4bf;--fa-secondary-color:#2dd4bf;--fa-secondary-opacity:.4"></i><span><?=__('locations') ?></span></a></li>
         <?php endif; ?>
         <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
-            <li><a href="<?= $assetInventoryLink ?>"><i class="fa fa-box"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
+            <li><a href="<?= $assetInventoryLink ?>"><i class="fa-duotone fa-box" style="--fa-primary-color:#fbbf24;--fa-secondary-color:#fbbf24;--fa-secondary-opacity:.4"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
         <?php endif; ?>
         <?php if ($is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
-            <li><a href="<?= $attendanceLink ?>"><i class="fa fa-calendar-check"></i><span><?=__('attendance_record', 'Attendance Record') ?></span></a></li>
+            <li><a href="<?= $attendanceLink ?>"><i class="fa-duotone fa-calendar-check" style="--fa-primary-color:#60a5fa;--fa-secondary-color:#60a5fa;--fa-secondary-opacity:.4"></i><span><?=__('attendance_record', 'Attendance Record') ?></span></a></li>
         <?php endif; ?>
 
         <?php
@@ -919,42 +920,42 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         ?>
         <?php if ($is_system_admin || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
-            <a href="javascript:void(0);"><i class="fa fa-calendar-check"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa-duotone fa-toolbox" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
                 <?php if ($is_system_admin): ?>
-                <li><a href="<?= $announcementLink ?>"><i class="fa fa-bullhorn"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
+                <li><a href="<?= $announcementLink ?>"><i class="fa-duotone fa-bullhorn" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('announcement', 'Announcement')?></span></a></li>
                 <?php endif; ?>
                 <?php if ($is_system_admin || $can_see_vacation_date_editor): ?>
-                <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa fa-calendar-days"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
+                <li><a href="<?= $vacationDatesEditorLink ?>"><i class="fa-duotone fa-calendar-pen" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('vacation_date_editor', 'Vacation Date Editor') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($is_system_admin || $can_see_manage_supervisors_tool): ?>
-                <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa fa-users-gear"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
+                <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa-duotone fa-user-tie" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_see_biometric_devices): ?>
-                <li><a href="<?= $zkDevicesLink ?>"><i class="fa fa-fingerprint"></i><span><?=__('zk_devices', 'Biometric Devices') ?></span></a></li>
+                <li><a href="<?= $zkDevicesLink ?>"><i class="fa-duotone fa-fingerprint" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('zk_devices', 'Biometric Devices') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_see_dynamic_import): ?>
-                <li><a href="import_excel_dynamic.php"><i class="fa fa-file-excel"></i><span><?=__('dynamic_excel_import', 'Dynamic Excel Import') ?></span></a></li>
+                <li><a href="import_excel_dynamic.php"><i class="fa-duotone fa-file-excel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('dynamic_excel_import', 'Dynamic Excel Import') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_view_vac_balance_history): ?>
-                <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa fa-clock-rotate-left"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
+                <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa-duotone fa-scale-balanced" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
                 <?php endif; ?>
                 <?php if ($can_access_app_settings && !$is_system_admin): ?>
-                <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
+                <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa-duotone fa-gear" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ((in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)) || $can_import_medical_insurance || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-file-import"></i><span><?=__('import', 'Import') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-file-import" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import', 'Import') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
                         <?php if (in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)): ?>
-                        <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa fa-solid fa-file-excel"></i><span><?=__('import_loan_balance', 'Import Loan Balance') ?></span></a></li>
+                        <li><a href="<?= $importLoanBalanceLink ?>"><i class="fa-duotone fa-hand-holding-dollar" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_loan_balance', 'Import Loan Balance') ?></span></a></li>
                         <?php endif; ?>
                         <?php if ($can_import_medical_insurance): ?>
-                        <li><a href="<?= $importMedicalInsuranceLink ?>"><i class="fa fa-solid fa-file-medical"></i><span><?=__('import_medical_insurance', 'Import Medical Insurance') ?></span></a></li>
+                        <li><a href="<?= $importMedicalInsuranceLink ?>"><i class="fa-duotone fa-file-medical" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_medical_insurance', 'Import Medical Insurance') ?></span></a></li>
                         <?php endif; ?>
                         <?php if (in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
-                        <li><a href="<?= $processIqamaImportLink ?>"><i class="fa fa-plus-circle"></i><span><?=__('import_iqama_exp', 'Import Iqama Expiry') ?></span></a></li>
+                        <li><a href="<?= $processIqamaImportLink ?>"><i class="fa-duotone fa-id-card" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_iqama_exp', 'Import Iqama Expiry') ?></span></a></li>
                         <?php endif; ?>
                     </ul>
                 </li>
@@ -962,19 +963,19 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
                 <?php if ($is_system_admin): ?>
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-plug"></i><span><?=__('api_data_sync', 'API & Data Sync') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-plug" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('api_data_sync', 'API & Data Sync') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa fa-database"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
-                        <li><a href="<?= $dbExportLink ?>" target="_blank"><i class="fa fa-file-export"></i><span><?=__('database_export_live', 'Database Export (Live)') ?></span></a></li>
-                        <li><a href="<?= $dbImportRemoteLink ?>" target="_blank"><i class="fa fa-cloud-arrow-down"></i><span><?=__('import_from_live_server', 'Import From Live Server') ?></span></a></li>
+                        <li><a href="<?= $tableJsonApiLink ?>" target="_blank"><i class="fa-duotone fa-database" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('table_json_api', 'Table JSON API') ?></span></a></li>
+                        <li><a href="<?= $dbExportLink ?>" target="_blank"><i class="fa-duotone fa-file-export" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('database_export_live', 'Database Export (Live)') ?></span></a></li>
+                        <li><a href="<?= $dbImportRemoteLink ?>" target="_blank"><i class="fa-duotone fa-cloud-arrow-down" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_from_live_server', 'Import From Live Server') ?></span></a></li>
                     </ul>
                 </li>
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-stethoscope"></i><span><?=__('diagnostics', 'Diagnostics') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-stethoscope" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnostics', 'Diagnostics') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa fa-solid fa-square-shekel"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
-                        <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa fa-stethoscope"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
-                        <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa fa-screwdriver-wrench"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                        <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa-duotone fa-square-shekel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
+                        <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-magnifying-glass-chart" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
+                        <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-hammer" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
                     </ul>
                 </li>
                 <?php endif; ?>
@@ -984,48 +985,48 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
         <?php if ($is_system_admin): ?>
         <li>
-            <a href="javascript:void(0);"><i class="fa fa-gear-complex"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+            <a href="javascript:void(0);"><i class="fa-duotone fa-gear-complex" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="false">
                 <!-- User Management -->
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-users"></i><span><?=__('user_management', 'Users') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-user-shield" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('user_management', 'Users') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $usersLink ?>"><i class="fa fa-users-gear"></i><span><?=__('users') ?></span></a></li>
-                        <li><a href="<?= $userActivityLink ?>"><i class="fa fa-history"></i><span><?=__('user_activity') ?></span></a></li>
+                        <li><a href="<?= $usersLink ?>"><i class="fa-duotone fa-user-gear" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('users') ?></span></a></li>
+                        <li><a href="<?= $userActivityLink ?>"><i class="fa-duotone fa-history" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('user_activity') ?></span></a></li>
                     </ul>
                 </li>
                 <!-- System Tools -->
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-screwdriver-wrench"></i><span><?=__('system_tools', 'System Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-screwdriver-wrench" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('system_tools', 'System Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa fa-gear"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
+                        <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa-duotone fa-gear" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
                         
                     </ul>
                 </li>
                 <!-- System Logs -->
                 <li>
-                    <a href="javascript:void(0);"><i class="fa fa-list-check"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
+                    <a href="javascript:void(0);"><i class="fa-duotone fa-list-check" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
-                        <li><a href="<?= $activityLoggerLink ?>"><i class="fa fa-list-check"></i><span><?=__('activity_logger') ?></span></a></li>
+                        <li><a href="<?= $activityLoggerLink ?>"><i class="fa-duotone fa-clipboard-list" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('activity_logger') ?></span></a></li>
                     </ul>
                 </li>
                 
                 <!-- Language Settings -->
-                <li><a href="<?= $languageLink ?>"><i class="fa fa-language"></i><span><?=__('language') ?></span></a></li>
+                <li><a href="<?= $languageLink ?>"><i class="fa-duotone fa-language" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('language') ?></span></a></li>
             </ul>
         </li>
         <?php endif; ?>
         <!-- Reports -->
         <?php if ($can_see_reports_menu): ?>
             <li>
-                <a href="javascript:void(0);"><i class="fa fa-chart-simple"></i><span> <?=__('reports') ?> </span><span class="float-right fa fa-arrow-right"></span></a>
+                <a href="javascript:void(0);"><i class="fa-duotone fa-chart-simple" style="--fa-primary-color:#c084fc;--fa-secondary-color:#c084fc;--fa-secondary-opacity:.4"></i><span> <?=__('reports') ?> </span><span class="float-right fa fa-arrow-right"></span></a>
                 <ul class="nav-second-level" aria-expanded="<?= ($current_page_name === 'graphical_reports.php' ? 'true' : 'false') ?>">
-                    <li><a href="reports.php"><i class="fa fa-table"></i><span><?=__('reports') ?></span></a></li>
-                    <li><a href="graphical_reports.php"><i class="fa fa-chart-pie"></i><span><?=__('graphical_reports', 'Graphical Reports') ?></span></a></li>
+                    <li><a href="reports.php"><i class="fa-duotone fa-table" style="--fa-primary-color:#c084fc;--fa-secondary-color:#c084fc;--fa-secondary-opacity:.4"></i><span><?=__('reports') ?></span></a></li>
+                    <li><a href="graphical_reports.php"><i class="fa-duotone fa-chart-pie" style="--fa-primary-color:#c084fc;--fa-secondary-color:#c084fc;--fa-secondary-opacity:.4"></i><span><?=__('graphical_reports', 'Graphical Reports') ?></span></a></li>
                 </ul>
             </li>
         <?php endif; ?>
-        <li><a href="./system_guide.php" target="_blank"><i class="fa fa-book-open-lines"></i><span><?=__('system_guide') ?></span></a></li>
+        <li><a href="./system_guide.php" target="_blank"><i class="fa-duotone fa-book-open-lines" style="--fa-primary-color:#facc15;--fa-secondary-color:#facc15;--fa-secondary-opacity:.4"></i><span><?=__('system_guide') ?></span></a></li>
     </ul>
 </div>
 

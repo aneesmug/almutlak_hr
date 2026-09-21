@@ -263,3 +263,22 @@ html[dir="rtl"] body.sbv2 #sidebar-menu li > a > span.fa { margin-left: 0; margi
     body.sbv2 #sidebar-menu li > a, body.sbv2 #sidebar-menu li > a > span.fa { transition: none; }
     body.sbv2 #sidebar-menu li.sbv2-open > ul { animation: none; }
 }
+
+
+/* ---------- Light theme (applied when body has .sbv2-light, set from App Settings > General > Main menu theme) ---------- */
+body.sbv2.sbv2-light {
+    --sb-bg: #ffffff;
+    --sb-text: #4b5563;
+    --sb-text-hover: #111827;
+    --sb-accent: #0e7c86;
+    --sb-hover-bg: rgba(15, 23, 42, .06);
+    --sb-current-bg: rgba(2, 192, 206, .14);
+    --sb-line: rgba(15, 23, 42, .10);
+}
+body.sbv2.sbv2-light #wrapper .left.side-menu,
+body.sbv2.sbv2-light #wrapper .left.side-menu .topbar-left,
+body.sbv2.sbv2-light #wrapper .left.side-menu .slimscroll-menu { background: var(--sb-bg) !important; }
+body.sbv2.sbv2-light #wrapper .left.side-menu { box-shadow: 1px 0 0 var(--sb-line), 2px 0 12px rgba(15, 23, 42, .06); }
+body.sbv2.sbv2-light #sidebar-menu { scrollbar-color: rgba(15, 23, 42, .25) transparent; }
+body.sbv2.sbv2-light #sidebar-menu::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, .25); }
+body.sbv2.sbv2-light #sidebar-menu .menu-title { color: rgba(75, 85, 99, .75); }

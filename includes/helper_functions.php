@@ -3224,12 +3224,11 @@ if (!function_exists('handle_approval_action')) {
                             if ($is_encashed && !$is_asset_clearance) {
                                 $final_status = 'completed';
                                 $review_status = 'C'; // Closed
-                            } elseif ($is_local_emergency && !$is_asset_clearance) {
-                                $final_status = 'completed';
-                                $review_status = 'A'; // Keep active until rejoin closes it
                             } elseif (!$is_annual_fly && !$is_fly_emergency && !$is_local_annual && !$is_asset_clearance) {
+                                // Rejoin is allowed only for Fly annual/emergency. Every other
+                                // type (incl. Local Emergency) can never be rejoined, so close now.
                                 $final_status = 'completed';
-                                $review_status = 'A'; // Active
+                                $review_status = 'C'; // Closed - no rejoin applicable
                             }
                         } elseif ($request_type === 'general_request') {
                             // General requests go to 'waiting_for_delivery' after approval
@@ -5450,8 +5449,18 @@ if (!function_exists('send_travel_company_email')) {
             $mail->addReplyTo($smtp_from_email, $smtp_from_name);
 
             // Add CC if provided (e.g., gr_officer)
-            if (!empty($cc_email) && filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
-                $mail->addCC($cc_email, 'HR');
+            // Accepts a single email, comma/semicolon separated list, or JSON array
+            $cc_list = [];
+            $cc_decoded = json_decode((string)$cc_email, true);
+            $cc_raw = is_array($cc_decoded) ? $cc_decoded : preg_split('/[,;\s]+/', (string)$cc_email);
+            foreach ($cc_raw as $cc_item) {
+                $cc_item = trim((string)$cc_item);
+                if ($cc_item !== '' && filter_var($cc_item, FILTER_VALIDATE_EMAIL)) {
+                    $cc_list[] = $cc_item;
+                }
+            }
+            foreach ($cc_list as $cc_item) {
+                $mail->addCC($cc_item, 'HR');
             }
 
             // Content

@@ -3496,9 +3496,9 @@ elseif ($ajaxType == 'updateVacationAdjustments') {
                     );
 
                     // Rule 1: Local | Annual vacation -> Booking button hidden; complete on adjustments update
-                    // CRITICAL: review stays 'A' until employee rejoins (review = 'C' only on rejoin)
+                    // Local vacations cannot be rejoined, so close fully (review = 'C') here
                     if (!$is_fly && $is_annual && $has_adjustment) {
-                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed', `review` = CASE WHEN LOWER(`vac_type`) = 'encashed' THEN 'C' ELSE `review` END WHERE `id` = ?";
+                        $complete_sql = "UPDATE `emp_vacation` SET `current_status` = 'completed', `review` = 'C' WHERE `id` = ?";
                         $complete_stmt = mysqli_prepare($conDB, $complete_sql);
                         if ($complete_stmt) {
                             mysqli_stmt_bind_param($complete_stmt, "i", $vacation_id);
@@ -5122,14 +5122,12 @@ elseif ($ajaxType == 'sendTravelEmail') {
 
         // Get GR Officer email for CC
         $gr_officer_email = get_setting($conDB, 'gr_officer_email');
-        if (empty($gr_officer_email)) {
-            // Try to get from admin_login table where user_type contains 'gr_officer'
-            // $gr_query = mysqli_query($conDB, "SELECT email FROM admin_login WHERE user_type LIKE '%gr_officer%' AND email IS NOT NULL AND email != '' LIMIT 1");
-            $gr_query = mysqli_query($conDB, "SELECT email FROM admin_login WHERE user_type LIKE '%hr_payroll%' AND email IS NOT NULL AND email != '' LIMIT 1");
-            if ($gr_query && $gr_row = mysqli_fetch_assoc($gr_query)) {
-                $gr_officer_email = $gr_row['email'];
-            }
-            if ($gr_query) mysqli_free_result($gr_query);
+        // Set in App Settings > General (ticket officer email); no fallback
+
+        // Only claim CC when the configured value holds at least one valid email
+        if (!empty($gr_officer_email) && !preg_match('/[^\s,;"\[\]]+@[^\s,;"\[\]]+\.[^\s,;"\[\]]+/', $gr_officer_email)) {
+            error_log("Travel email: invalid CC email configured: " . $gr_officer_email);
+            $gr_officer_email = '';
         }
 
         // Send email to traveling company with CC to GR Officer and passport attachment

@@ -156,7 +156,7 @@ function getSettlementChain($settlementManager) {
 }
 
 function checkFinalApproval($currentUserId) {
-    global $conDB;
+    global $conDB, $delegatedFromForApproval;
     
     $settlementId = $_POST['settlement_id'] ?? 0;
     
@@ -312,7 +312,7 @@ function getUploadErrorMessage($errorCode) {
 }
 
 function approveSettlement($settlementManager, $currentUserId) {
-    global $conDB, $pdo;
+    global $conDB, $pdo, $delegatedFromForApproval;
     
     $settlementInvNo = $_POST['settlement_inv_no'] ?? '';
     $settlementId = $_POST['settlement_id'] ?? 0;
@@ -1116,7 +1116,7 @@ function uploadSettlementAttachment($currentUserId) {
  * Handles approval workflow and stores multiple files in settlement_attachments table
  */
 function approveSettlementWithAttachments($settlementManager, $currentUserId) {
-    global $conDB, $pdo;
+    global $conDB, $pdo, $delegatedFromForApproval;
     
     $settlementInvNo = $_POST['settlement_inv_no'] ?? '';
     $settlementId = $_POST['settlement_id'] ?? 0;
@@ -1564,7 +1564,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
 }
 
 function rejectSettlement($settlementManager, $currentUserId) {
-    global $conDB;
+    global $conDB, $delegatedFromForApproval;
     
     $settlementInvNo = $_POST['settlement_inv_no'] ?? '';
     $settlementId = $_POST['settlement_id'] ?? 0;
