@@ -343,19 +343,28 @@ function build_announcement_email_html(array $data, string $logoUrl = ''): strin
  */
 function send_announcement_email(mysqli $conDB, string $toEmail, string $toName, string $subject, string $htmlBody, string $embeddedImage = ''): bool
 {
+    global $announcementLastMailError;
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
         error_log('ANNOUNCEMENT_EMAIL_ERROR: PHPMailer class not found');
+        $announcementLastMailError = 'PHPMailer class not found';
         return false;
     }
 
-    $smtp_host = "smtp.office365.com";
-    $smtp_port = "587";
-    $smtp_user = 'internal.Communication@almutlak.com';
-    $smtp_pass = '@DmiN56539306#';
-    $smtp_from_email = 'internal.Communication@almutlak.com';
-    $smtp_from_name = 'Internal Communication';
-    // Office 365 port 587 requires STARTTLS encryption - do not fetch from database
-    $smtp_secure = 'tls';
+    // Values come from App Settings -> Email -> Announcement Config.
+    $cfg = [];
+    $cfgRes = mysqli_query($conDB, "SELECT setting_name, setting_value FROM app_settings WHERE setting_name LIKE 'announcement_smtp_%'");
+    if ($cfgRes) {
+        while ($cfgRow = mysqli_fetch_assoc($cfgRes)) {
+            $cfg[$cfgRow['setting_name']] = trim((string)$cfgRow['setting_value']);
+        }
+    }
+    $smtp_host = $cfg['announcement_smtp_host'] ?? '';
+    $smtp_port = $cfg['announcement_smtp_port'] ?? '';
+    $smtp_user = $cfg['announcement_smtp_user'] ?? '';
+    $smtp_pass = $cfg['announcement_smtp_pass'] ?? '';
+    $smtp_from_email = $cfg['announcement_smtp_from_email'] ?? '';
+    $smtp_from_name = $cfg['announcement_smtp_from_name'] ?? '';
+    $smtp_secure = $cfg['announcement_smtp_encryption'] ?? 'tls';
 
     if (
         empty($smtp_host) || empty($smtp_port) || empty($smtp_user) ||
@@ -363,6 +372,7 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
     ) {
         error_log('ANNOUNCEMENT_EMAIL_ERROR: Missing SMTP configuration - host: ' . (empty($smtp_host) ? 'EMPTY' : 'OK') . 
                   ', port: ' . (empty($smtp_port) ? 'EMPTY' : 'OK') . ', user: ' . (empty($smtp_user) ? 'EMPTY' : 'OK'));
+        $announcementLastMailError = 'SMTP not configured. Fill App Settings > Email > Announcement Config.';
         return false;
     }
 
@@ -412,10 +422,12 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
             return true;
         } else {
             error_log('ANNOUNCEMENT_EMAIL_ERROR [' . $toEmail . ']: Send failed - ' . $mail->ErrorInfo);
+            $announcementLastMailError = $mail->ErrorInfo;
             return false;
         }
     } catch (Throwable $e) {
         error_log('ANNOUNCEMENT_EMAIL_ERROR [' . $toEmail . ']: Exception - ' . $e->getMessage() . ' (Code: ' . $e->getCode() . ')');
+        $announcementLastMailError = $e->getMessage();
         return false;
     }
 }
@@ -574,6 +586,21 @@ if ($recentAnnouncementsRes) {
     }
 }
 
+// All circulars (for the "View all" Swal picker), newest first. One row per circular_no.
+$allCirculars = [];
+$allCircularsRes = mysqli_query($conDB, "SELECT a.circular_no, a.subject_en, a.issue_date, a.recipient_mode, a.sent_success_count, a.is_draft FROM announcement_broadcasts a INNER JOIN (SELECT MAX(id) AS mid FROM announcement_broadcasts GROUP BY circular_no) m ON a.id = m.mid ORDER BY a.id DESC");
+if ($allCircularsRes) {
+    while ($allCircularsRow = mysqli_fetch_assoc($allCircularsRes)) {
+        $allCirculars[] = [
+            'no' => (string)$allCircularsRow['circular_no'],
+            'subject' => (string)($allCircularsRow['subject_en'] ?? ''),
+            'date' => !empty($allCircularsRow['issue_date']) && strtotime((string)$allCircularsRow['issue_date']) ? date('d-m-Y', strtotime((string)$allCircularsRow['issue_date'])) : '',
+            'to' => (string)($allCircularsRow['recipient_mode'] ?? ''),
+            'draft' => (int)($allCircularsRow['is_draft'] ?? 0) === 1,
+        ];
+    }
+}
+
 // Handle loading a previous announcement by Circular No.
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['load_circular_no'])) {
     $loadCircularNo = trim((string)$_GET['load_circular_no']);
@@ -642,7 +669,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
     );
 
     $selectedRecipientMode = (string)($_POST['recipient_mode'] ?? '');
-    if (!isset($announcementGroups[$selectedRecipientMode])) {
+    $otherRecipientEmail = trim((string)($_POST['other_email'] ?? ''));
+    if ($selectedRecipientMode === 'other') {
+        if (filter_var($otherRecipientEmail, FILTER_VALIDATE_EMAIL)) {
+            $announcementGroups['other'] = ['name' => 'Other', 'email' => $otherRecipientEmail];
+        } else {
+            $selectedRecipientMode = '';
+        }
+    } elseif (!isset($announcementGroups[$selectedRecipientMode])) {
         $selectedRecipientMode = '';
     }
 
@@ -754,6 +788,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
 
                 $sentSuccess = 0;
                 $emailAttemptCount = 0;
+                $announcementLastMailError = '';
                 foreach ($recipients as $rec) {
                     $toEmail = trim((string)($rec['email'] ?? ''));
                     $toName = trim((string)($rec['recipient_name'] ?? 'Colleague'));
@@ -810,6 +845,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                     $debugInfo = 'selectedRecipientMode="' . htmlspecialchars($selectedRecipientMode, ENT_QUOTES, 'UTF-8') . '", ';
                     $debugInfo .= 'recipients_count=' . count($recipients) . ', ';
                     $debugInfo .= 'emailAttemptCount=' . $emailAttemptCount . ', ';
+                    $debugInfo .= 'mail_error="' . htmlspecialchars((string)$announcementLastMailError, ENT_QUOTES, 'UTF-8') . '", ';
                     $debugInfo .= 'received_POST_recipient_mode="' . htmlspecialchars((string)($_POST['recipient_mode'] ?? 'NOT_SET'), ENT_QUOTES, 'UTF-8') . '"';
                     
                     $messageHtml .= '<br><small class="mt-2">DEBUG: ' . $debugInfo . '</small>';
@@ -1003,22 +1039,8 @@ if (!empty($formData['issue_date'])) {
                                             </datalist>
                                         </div>
                                         <button type="submit" class="btn btn-outline-info mb-2"><i class="fa fa-search"></i> Load &amp; Reuse</button>
+                                        <button type="button" id="btnViewAllCirculars" class="btn btn-outline-primary mb-2 ml-2"><i class="fa fa-list"></i> View All Circulars</button>
                                     </form>
-                                    <?php if (!empty($recentAnnouncements)): ?>
-                                    <div class="mt-2">
-                                        <small class="text-muted font-weight-bold">Recent circulars:</small>
-                                        <div class="d-flex flex-wrap mt-1">
-                                            <?php foreach (array_slice($recentAnnouncements, 0, 12) as $recentItem): ?>
-                                                <a href="?load_circular_no=<?= urlencode($recentItem['circular_no']) ?>" class="badge badge-light border mr-1 mb-1" style="font-size:12px;padding:5px 8px;cursor:pointer;" title="<?= htmlspecialchars((string)($recentItem['subject_en'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                                                    #<?= htmlspecialchars($recentItem['circular_no'], ENT_QUOTES, 'UTF-8') ?>
-                                                    <?php if (!empty($recentItem['issue_date'])): ?>
-                                                        <span class="text-muted">(<?= htmlspecialchars(date('d-m-Y', strtotime($recentItem['issue_date'])), ENT_QUOTES, 'UTF-8') ?>)</span>
-                                                    <?php endif; ?>
-                                                </a>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    </div>
-                                    <?php endif; ?>
                                 </div>
                             </div>
 
@@ -1119,6 +1141,11 @@ if (!empty($formData['issue_date'])) {
                                                     <input type="radio" id="recipient_anees" name="recipient_mode" value="anees" class="custom-control-input" <?= $selectedRecipientMode === 'anees' ? 'checked' : '' ?>>
                                                     <label class="custom-control-label" for="recipient_anees">Anees &lt;a.afzal@almutlak.com&gt;</label>
                                                 </div>
+                                                <div class="custom-control custom-radio mb-2">
+                                                    <input type="radio" id="recipient_other" name="recipient_mode" value="other" class="custom-control-input" <?= $selectedRecipientMode === 'other' ? 'checked' : '' ?>>
+                                                    <label class="custom-control-label" for="recipient_other">Other (enter email for testing)</label>
+                                                </div>
+                                                <input type="email" id="other_email" name="other_email" class="form-control" placeholder="name@example.com" value="<?= htmlspecialchars($_POST['other_email'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="display:<?= $selectedRecipientMode === 'other' ? 'block' : 'none' ?>;">
                                             </div>
                                         </div>
 
@@ -1248,8 +1275,57 @@ if (!empty($formData['issue_date'])) {
         });
     }
 
+    $(document).on('change', 'input[name="recipient_mode"]', function () {
+        var isOther = $('#recipient_other').is(':checked');
+        $('#other_email').toggle(isOther).prop('required', isOther);
+        if (isOther) { $('#other_email').focus(); }
+    });
+
+    var allCirculars = <?= json_encode($allCirculars, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    function escHtml(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+
+    $('#btnViewAllCirculars').on('click', function () {
+        if (typeof Swal !== 'function') { return; }
+        var rows = allCirculars.map(function (c) {
+            var badge = c.draft ? '<span class="badge badge-warning">Draft</span>' : '<span class="badge badge-success">Sent</span>';
+            return '<tr class="circ-row" data-no="' + escHtml(c.no) + '" style="cursor:pointer;">' +
+                '<td>#' + escHtml(c.no) + '</td><td>' + escHtml(c.date) + '</td>' +
+                '<td class="text-left">' + escHtml(c.subject) + '</td><td>' + escHtml(c.to) + '</td><td>' + badge + '</td></tr>';
+        }).join('');
+        if (!rows) { rows = '<tr><td colspan="5" class="text-muted">No circulars found.</td></tr>'; }
+        Swal.fire({
+            title: 'All Circulars',
+            width: "75%",
+            showConfirmButton: false,
+            showCloseButton: true,
+            allowOutsideClick: false,
+            html: '<input type="text" id="circSearch" class="form-control mb-2" placeholder="Search by number, subject or date">' +
+                '<div style="max-height:400px;overflow:auto;"><table class="table table-sm table-hover mb-0"><thead><tr><th>No</th><th>Date</th><th class="text-left">Subject</th><th>To</th><th>Status</th></tr></thead><tbody id="circBody">' + rows + '</tbody></table></div>' +
+                '<small class="text-muted d-block mt-2">Click a circular to open it here with a new Circular No.</small>',
+            didOpen: function () {
+                $('#circSearch').on('input', function () {
+                    var q = $(this).val().toLowerCase();
+                    $('#circBody .circ-row').each(function () {
+                        $(this).toggle($(this).text().toLowerCase().indexOf(q) !== -1);
+                    });
+                }).focus();
+                $('#circBody').on('click', '.circ-row', function () {
+                    window.location.href = '?load_circular_no=' + encodeURIComponent($(this).data('no'));
+                });
+            }
+        });
+    });
+
     function validateRecipientSelection() {
         var hasRecipient = $('input[name="recipient_mode"]:checked').length > 0;
+        if (hasRecipient && $('#recipient_other').is(':checked')) {
+            var em = ($('#other_email').val() || '').trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                alert('Please enter a valid email address for the Other recipient.');
+                $('#other_email').focus();
+                return false;
+            }
+        }
         if (hasRecipient) {
             return true;
         }

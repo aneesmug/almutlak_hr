@@ -9576,49 +9576,6 @@ function round(value, decimals) {
 
 })(jQuery)
 
-// --- Collapsed (icon-only) sidebar: scrollable, with fixed-position hover flyouts ---
-// The collapsed sidebar scrolls (overflow-y: auto in style.css) so no item is unreachable on
-// short screens. An overflow container clips absolutely-positioned children, so on hover the
-// widened label and the submenu flyout are switched to position: fixed (never clipped) and
-// placed from the item's on-screen rect, with the flyout kept inside the window.
-(function ($) {
-    'use strict';
-    var TOP = '.enlarged .left.side-menu #sidebar-menu > ul > li';
-
-    function setImp(el, props) {
-        Object.keys(props).forEach(function (k) { el.style.setProperty(k, props[k], 'important'); });
-    }
-    function clear(el, keys) {
-        keys.forEach(function (k) { el.style.removeProperty(k); });
-    }
-    var A_KEYS = ['position', 'top', 'left', 'width', 'z-index'];
-    var UL_KEYS = ['position', 'top', 'left', 'max-height', 'overflow-y', 'z-index'];
-
-    $(document).on('mouseenter', TOP, function () {
-        var li = this, a = li.querySelector(':scope > a'), ul = li.querySelector(':scope > ul');
-        var r = li.getBoundingClientRect();
-        if (a) setImp(a, { position: 'fixed', top: r.top + 'px', left: '0px', width: '260px', 'z-index': '10000' });
-        if (ul) {
-            setImp(ul, { position: 'fixed', left: '70px', top: r.bottom + 'px', 'z-index': '9999' });
-            var h = ul.offsetHeight, room = window.innerHeight - 16;
-            if (h > room) {
-                setImp(ul, { top: '8px', 'max-height': room + 'px', 'overflow-y': 'auto' });
-            } else if (r.bottom + h > window.innerHeight - 8) {
-                setImp(ul, { top: Math.max(8, window.innerHeight - 8 - h) + 'px' });
-            }
-        }
-    }).on('mouseleave', TOP, function () {
-        var a = this.querySelector(':scope > a'), ul = this.querySelector(':scope > ul');
-        if (a) clear(a, A_KEYS);
-        if (ul) clear(ul, UL_KEYS);
-    });
-
-    // Leaving collapsed mode (or resizing) - drop any leftover inline positioning.
-    $(document).on('click', '.button-menu-mobile', function () {
-        $('#sidebar-menu > ul > li > a, #sidebar-menu > ul > li > ul').each(function () { clear(this, A_KEYS.concat(UL_KEYS)); });
-    });
-})(jQuery);
-
 // The following error handling functions have been moved to assets/js/ajaxErrorHandling.js
 // to allow code reuse across multiple JavaScript files:
 // - handleAjaxFailure(jqXHR, textStatus, defaultTitle, defaultMsg)

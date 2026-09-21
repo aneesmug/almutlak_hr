@@ -753,6 +753,8 @@ $newinvnr = "SMT" . ($empid ?? '') . date('ymdis');
 $newinvgr = "GR" . ($empid ?? '') . date('ymdis');
 $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 ?>
+<link rel="stylesheet" href="assets/css/sidebar_v2.css?v=<?= @filemtime(__DIR__ . '/../assets/css/sidebar_v2.css') ?>">
+<script src="assets/js/sidebar_v2.js?v=<?= @filemtime(__DIR__ . '/../assets/js/sidebar_v2.js') ?>"></script>
 
 <div class="user-box">
     <div class="user-img">

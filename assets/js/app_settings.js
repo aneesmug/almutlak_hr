@@ -759,7 +759,7 @@ function __(key, def) {
                 formHtml += `</div></div>`;
             });
 
-            if (normalizedGroupName === 'email') {
+            if (normalizedGroupName === 'email' || normalizedGroupName === 'announcement_config') {
                 formHtml += `
                     <hr>
                     <div class="form-group row">
@@ -791,6 +791,8 @@ function __(key, def) {
 
             if (normalizedGroupName === 'email') {
                 attachTestEmailListener();
+            } else if (normalizedGroupName === 'announcement_config') {
+                attachTestEmailListener('announcement_');
             }
         }
 
@@ -2060,22 +2062,23 @@ function __(key, def) {
             });
         }
 
-        function attachTestEmailListener() {
+        function attachTestEmailListener(prefix = '') {
             const btn = document.getElementById('testEmailConfigBtn');
             if (!btn) return;
 
             btn.addEventListener('click', async function() {
                 const resultDiv = document.getElementById('testEmailResult');
-                const getVal = (name) => (document.getElementById(`setting-${name}`)?.value || '').trim();
+                const getVal = (name) => (document.getElementById(`setting-${prefix}${name}`)?.value || '').trim();
+                const fromKey = (name) => (prefix ? 'smtp_' + name : name);
 
                 const host = getVal('smtp_host');
                 const port = getVal('smtp_port');
                 const user = getVal('smtp_user');
                 const pass = getVal('smtp_pass');
                 const encryption = getVal('smtp_encryption') || 'tls';
-                const fromEmail = getVal('from_email');
-                const fromName = getVal('from_name');
-                const adminEmail = getVal('admin_email');
+                const fromEmail = getVal(fromKey('from_email'));
+                const fromName = getVal(fromKey('from_name'));
+                const adminEmail = prefix ? '' : getVal('admin_email');
 
                 if (!host || !port || !user || !pass || !fromEmail) {
                     resultDiv.innerHTML = '';

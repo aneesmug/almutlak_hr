@@ -1,0 +1,265 @@
+/* Sidebar v2 - accordion menu, own scrollbar, icon rail on desktop, off-canvas drawer on mobile.
+   Activated by assets/js/sidebar_v2.js (adds body.sbv2). No hover flyouts, so nothing shifts or gets clipped. */
+
+body.sbv2 {
+    --sb-w: 264px;
+    --sb-rail: 72px;
+    --sb-text: #9aa7b4;
+    --sb-text-hover: #ffffff;
+    --sb-accent: #02c0ce;
+    --sb-hover-bg: rgba(255, 255, 255, .06);
+    --sb-current-bg: rgba(2, 192, 206, .14);
+    --sb-line: rgba(255, 255, 255, .08);
+}
+
+/* ---------- Sidebar shell ---------- */
+body.sbv2 #wrapper .left.side-menu {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--sb-w);
+    margin: 0;
+    padding: 0;
+    z-index: 1040 !important; /* beats the legacy 480px rule that drops it to z-index 10 */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width .2s ease, transform .25s ease;
+}
+
+/* slimScroll is destroyed by the script, but neutralise it if it ever re-wraps */
+body.sbv2 .left.side-menu .slimScrollDiv {
+    height: 100% !important;
+    overflow: visible !important;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+body.sbv2 .left.side-menu .slimScrollBar,
+body.sbv2 .left.side-menu .slimScrollRail { display: none !important; }
+
+body.sbv2 .left.side-menu .slimscroll-menu {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.sbv2 .left.side-menu .topbar-left {
+    position: relative;
+    top: auto;
+    width: 100% !important;
+    height: 64px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--sb-line);
+    z-index: 1;
+}
+body.sbv2 .left.side-menu .topbar-left .logo { line-height: 1; display: flex; align-items: center; }
+body.sbv2 .left.side-menu .topbar-left .logo i { display: none !important; }
+body.sbv2 .left.side-menu .topbar-left .logo span { display: inline !important; }
+
+/* user card lives in the topbar dropdown already - keep the nav area for the menu */
+body.sbv2 .left.side-menu .user-box { display: none; }
+
+/* ---------- Scrolling nav area ---------- */
+body.sbv2 #sidebar-menu {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 10px 28px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, .22) transparent;
+}
+body.sbv2 #sidebar-menu::-webkit-scrollbar { width: 6px; }
+body.sbv2 #sidebar-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .22); border-radius: 6px; }
+body.sbv2 #sidebar-menu::-webkit-scrollbar-track { background: transparent; }
+
+body.sbv2 #sidebar-menu ul { list-style: none; margin: 0; padding: 0; }
+body.sbv2 #sidebar-menu li { position: relative; }
+
+body.sbv2 #sidebar-menu .menu-title {
+    padding: 10px 12px 6px;
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgba(154, 167, 180, .6);
+}
+
+/* ---------- Links ---------- */
+body.sbv2 #sidebar-menu li > a,
+body.sbv2 #sidebar-menu > ul > li > a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    margin: 2px 0;
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 14.5px;
+    line-height: 1.3;
+    color: var(--sb-text);
+    text-decoration: none;
+    background: transparent;
+    position: relative;
+    transition: background-color .15s ease, color .15s ease;
+}
+body.sbv2 #sidebar-menu li > a:hover,
+body.sbv2 #sidebar-menu li > a:focus,
+body.sbv2 #sidebar-menu > ul > li > a:hover,
+body.sbv2 #sidebar-menu > ul > li > a:focus {
+    background: var(--sb-hover-bg);
+    color: var(--sb-text-hover);
+    outline: none;
+}
+body.sbv2 #sidebar-menu li > a:focus-visible { box-shadow: 0 0 0 2px var(--sb-accent) inset; }
+
+body.sbv2 #sidebar-menu li > a > i {
+    flex: 0 0 22px;
+    width: 22px;
+    margin: 0 !important;
+    text-align: center;
+    font-size: 17px;
+    line-height: 1;
+}
+body.sbv2 #sidebar-menu li > a > span:not(.fa) {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+body.sbv2 #sidebar-menu li > a .badgez,
+body.sbv2 #sidebar-menu li > a .badge {
+    flex: 0 0 auto;
+    margin: 0 !important;
+}
+
+/* expand arrow */
+body.sbv2 #sidebar-menu li > a > span.fa {
+    flex: 0 0 auto;
+    float: none !important;
+    margin-left: auto;
+    font-size: 11px;
+    opacity: .7;
+    transition: transform .2s ease;
+}
+body.sbv2 #sidebar-menu li.sbv2-open > a > span.fa { transform: rotate(90deg); opacity: 1; }
+
+/* open / current states */
+body.sbv2 #sidebar-menu li.sbv2-open > a { color: var(--sb-text-hover); }
+body.sbv2 #sidebar-menu li.sbv2-current > a,
+body.sbv2 #sidebar-menu li > a.active {
+    background: var(--sb-current-bg);
+    color: var(--sb-accent);
+}
+
+/* ---------- Sub menus (inline accordion) ---------- */
+body.sbv2 #sidebar-menu ul ul {
+    display: none !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 0 4px 21px;
+    padding: 0 0 0 10px;
+    border-left: 1px solid var(--sb-line);
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+    left: auto !important;
+}
+body.sbv2 #sidebar-menu li.sbv2-open > ul { display: block !important; animation: sbv2-fade .18s ease; }
+body.sbv2 #sidebar-menu ul ul li > a,
+body.sbv2 #sidebar-menu ul ul li > a:hover {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 14px;
+    width: auto !important;
+    background-color: transparent;
+}
+body.sbv2 #sidebar-menu ul ul li > a:hover { background: var(--sb-hover-bg); }
+body.sbv2 #sidebar-menu ul ul li.sbv2-current > a,
+body.sbv2 #sidebar-menu ul ul li > a.active { background: var(--sb-current-bg); color: var(--sb-accent); }
+body.sbv2 #sidebar-menu ul ul ul { margin-left: 14px; }
+
+@keyframes sbv2-fade { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Top bar hamburger (was hidden by .disable-btn) ---------- */
+body.sbv2 .button-menu-mobile.disable-btn { display: inline-block !important; }
+body.sbv2 .button-menu-mobile { color: inherit; }
+
+/* ---------- Backdrop for the mobile drawer ---------- */
+.sbv2-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 20, 30, .55);
+    z-index: 1035;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .2s ease, visibility .2s ease;
+}
+body.sbv2-drawer .sbv2-backdrop { opacity: 1; visibility: visible; }
+
+/* ---------- Desktop ---------- */
+@media (min-width: 992px) {
+    body.sbv2 .content-page { margin-left: var(--sb-w) !important; transition: margin-left .2s ease; }
+    body.sbv2 .footer { left: var(--sb-w) !important; transition: left .2s ease; }
+
+    /* icon-only rail: no flyouts - clicking a group icon expands the sidebar */
+    body.sbv2.sbv2-rail { --sb-w: var(--sb-rail); }
+    body.sbv2.sbv2-rail.sbv2-peek #wrapper .left.side-menu { width: 264px; box-shadow: 6px 0 30px rgba(0,0,0,.35); }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left { justify-content: center; padding: 0; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left .logo span { display: none !important; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left .logo i { display: block !important; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu { padding: 8px 8px 28px; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu .menu-title { display: none; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a { justify-content: center; padding: 9px 0; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a > span:not(.fa):not(.badgez):not(.badge),
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a > span.fa { display: none !important; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a .badgez,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a .badge {
+        position: absolute; top: 3px; right: 6px; transform: scale(.8);
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul { display: none !important; }
+}
+
+/* ---------- Mobile / tablet: off-canvas drawer ---------- */
+@media (max-width: 991.98px) {
+    body.sbv2 #wrapper .left.side-menu {
+        width: min(300px, 86vw);
+        transform: translateX(-102%);
+        box-shadow: none;
+    }
+    body.sbv2.sbv2-drawer #wrapper .left.side-menu { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .35); }
+    body.sbv2 .content-page { margin-left: 0 !important; }
+    body.sbv2 .footer { left: 0 !important; }
+    body.sbv2.sbv2-drawer { overflow: hidden; }
+    body.sbv2 #sidebar-menu li > a { min-height: 48px; }   /* comfortable touch targets */
+}
+
+/* ---------- RTL ---------- */
+html[dir="rtl"] body.sbv2 #wrapper .left.side-menu { left: auto; right: 0; }
+html[dir="rtl"] body.sbv2 #sidebar-menu ul ul { margin: 0 21px 4px 0; padding: 0 10px 0 0; border-left: 0; border-right: 1px solid var(--sb-line); }
+html[dir="rtl"] body.sbv2 #sidebar-menu li > a > span.fa { margin-left: 0; margin-right: auto; }
+@media (min-width: 992px) {
+    html[dir="rtl"] body.sbv2 .content-page { margin-left: 0 !important; margin-right: var(--sb-w) !important; }
+    html[dir="rtl"] body.sbv2 .footer { left: 0 !important; right: var(--sb-w) !important; }
+}
+@media (max-width: 991.98px) {
+    html[dir="rtl"] body.sbv2 #wrapper .left.side-menu { transform: translateX(102%); }
+    html[dir="rtl"] body.sbv2.sbv2-drawer #wrapper .left.side-menu { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.sbv2 #wrapper .left.side-menu, body.sbv2 .content-page, body.sbv2 .footer,
+    body.sbv2 #sidebar-menu li > a, body.sbv2 #sidebar-menu li > a > span.fa { transition: none; }
+    body.sbv2 #sidebar-menu li.sbv2-open > ul { animation: none; }
+}
