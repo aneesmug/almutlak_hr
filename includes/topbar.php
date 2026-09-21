@@ -24,12 +24,12 @@ include(__DIR__ . '/session_config_js.php');
 ?>
 <div class="topbar">
     <nav class="navbar-custom">
-        <ul class="list-unstyled topbar-right-menu float-right mb-0">
+        <ul class="list-unstyled topbar-right-menu tbx float-right mb-0">
 
-            <li class="hide-phone app-search d-none d-sm-block">
-                <form action="search.php" method="get">
-                    <input type="text" name="search" placeholder="<?=__('search'); ?>" class="form-control" required>
-                    <button type="submit"><i class="fa fa-search"></i></button>
+            <li class="tbx-search hide-phone d-none d-sm-block">
+                <form action="search.php" method="get" id="tbxSearchForm">
+                    <input type="text" name="search" placeholder="<?=__('search'); ?>" class="tbx-search-input" required>
+                    <button type="submit" class="tbx-btn" id="tbxSearchBtn" aria-label="<?=__('search'); ?>"><i class="fa-duotone fa-magnifying-glass"></i></button>
                 </form>
             </li>
 
@@ -53,8 +53,8 @@ include(__DIR__ . '/session_config_js.php');
                     $new_query_string = http_build_query($query_params);
                     $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
                 ?>
-                <a href="<?= $switch_url ?>" class="nav-link waves-effect">
-                    <i class="fad fa-language mr-2 <?=($is_rtl ?? false ? 'duotone-success':'duotone-info')?>"></i><?= $button_text ?>
+                <a href="<?= $switch_url ?>" class="tbx-btn tbx-lang" title="<?= $button_text ?>">
+                    <i class="fa-duotone fa-language"></i><span><?= $button_text ?></span>
                 </a>
             </li>
 
@@ -72,9 +72,9 @@ include(__DIR__ . '/session_config_js.php');
                 $badge_style = ($unread_count > 0) ? '' : 'display: none;';
             ?>
             <li class="dropdown notification-list">
-                <a class="nav-link dropdown-toggle arrow-none" data-toggle="dropdown" href="#" role="button"
+                <a class="tbx-btn dropdown-toggle arrow-none" data-toggle="dropdown" href="#" role="button"
                    aria-haspopup="false" aria-expanded="false">
-                    <i class="fa fa-light fa-bell noti-icon"></i>
+                    <i class="fa-duotone fa-bell noti-icon"></i>
                     <!-- Notification Badge -->
                     <span class="badge badge-danger badge-pill noti-icon-badge" id="notification-badge" style="<?= $badge_style ?>"><?= (int)$unread_count ?></span>
                 </a>
@@ -120,9 +120,10 @@ include(__DIR__ . '/session_config_js.php');
 
 
             <li class="dropdown notification-list">
-                <a class="nav-link dropdown-toggle nav-user" data-toggle="dropdown" href="#" role="button"
+                <a class="tbx-user dropdown-toggle nav-user" data-toggle="dropdown" href="#" role="button"
                    aria-haspopup="false" aria-expanded="false">
-                    <img src="<?=$avatar ?>" alt="<?=$fname ?>" class="rounded-circle"> <span class="ml-1"><?=$userwel ?><i class="mdi mdi-chevron-down"></i> </span>
+                    <img src="<?=$avatar ?>" alt="<?=$fname ?>" class="rounded-circle">
+                    <span class="tbx-user-name"><?=$userwel ?></span><i class="fa-solid fa-chevron-down tbx-chev"></i>
                 </a>
                 <div class="dropdown-menu dropdown-menu-right dropdown-menu-animated profile-dropdown">
                     <!-- item-->
@@ -209,6 +210,7 @@ include(__DIR__ . '/session_config_js.php');
                         $tbRoleKey = (string)($user_type ?? '');
                         $tbRole = $tbRoleMap[$tbRoleKey] ?? ucwords(str_replace('_', ' ', $tbRoleKey));
                         if (!empty($is_temp_role_active)) { $tbRole .= ' (Temp)'; }
+                        $tbRole = getDisplayName($tbRole);
                         // [icon, names[], text colour, background]; more than 2 names collapse into a "+N" badge with a tooltip.
                         $tbGroups = [
                             ['fa-building', $tbCompanies, '#0e7490', '#cffafe'],
@@ -230,13 +232,50 @@ include(__DIR__ . '/session_config_js.php');
                         </li>
                     </ol>
                     <style>
-                        .tb-user-badges { display:flex; flex-wrap:wrap; gap:6px; }
-                        .tb-user-badge { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:20px; line-height:1.3; }
-                        .tb-user-badge i { margin-right:4px; }
+                        .tb-user-badges { min-width:0; max-width:100%; display:flex; flex-wrap:nowrap; align-items:center; gap:4px; white-space:nowrap; }
+                        .page-title-box .breadcrumb { flex-wrap:nowrap; }
+                        .tb-user-badge { flex:0 0 auto; white-space:nowrap; font-size:12px; font-weight:600; padding:3px 8px; border-radius:20px; line-height:1.3; }
+                        .tb-user-badge i { margin-inline-end:3px; }
+                        @media (max-width: 1400px) { .tb-user-badge i { display:none; } }
                         .breadcrumb-item.tb-user-badges::before { display:none; }
                     </style>
                 </div>
             </li>
         </ul>
+                        <style>
+                        /* ---- Top bar actions (search / language / notifications / user) ---- */
+                        .topbar-right-menu.tbx { display:flex; align-items:center; gap:8px; height:70px; }
+                        .topbar-right-menu.tbx > li { float:none; position:relative; }
+                        .tbx-btn { position:relative; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:40px; min-width:40px; padding:0 12px; border-radius:20px; background:#eef2f6; color:#475569 !important; font-size:13px; font-weight:600; line-height:1; text-decoration:none !important; border:0; cursor:pointer; transition:background .15s, color .15s, box-shadow .15s; }
+                        .tbx-btn:hover { background:#e2e8f0; color:#0f172a !important; }
+                        .tbx-btn i { font-size:17px; line-height:1; --fa-primary-color:#0e7490; --fa-secondary-color:#0e7490; --fa-secondary-opacity:.4; }
+                        .tbx-lang i { --fa-primary-color:#16a34a; --fa-secondary-color:#16a34a; }
+                        .tbx-btn .noti-icon { --fa-primary-color:#f59e0b; --fa-secondary-color:#f59e0b; }
+                        .tbx-btn .noti-icon-badge { position:absolute; top:-3px; inset-inline-end:-3px; }
+                        /* search: icon that expands into a field */
+                        .tbx-search form { display:flex; align-items:center; background:#eef2f6; border-radius:20px; }
+                        .tbx-search .tbx-btn { background:transparent; }
+                        .tbx-search-input { width:0; padding:0; border:0; outline:0; background:transparent; font-size:13px; color:#0f172a; transition:width .2s ease, padding .2s ease; }
+                        .tbx-search.open .tbx-search-input, .tbx-search:focus-within .tbx-search-input { width:190px; padding-inline-start:14px; }
+                        /* user chip */
+                        .tbx-user { display:inline-flex; align-items:center; gap:8px; height:44px; padding:0 12px 0 4px; border-radius:22px; background:#eef2f6; color:#1e293b !important; text-decoration:none !important; transition:background .15s; }
+                        .tbx-user:hover { background:#e2e8f0; }
+                        .tbx-user img { width:36px; height:36px; object-fit:cover; border:2px solid #fff; box-shadow:0 0 0 2px #22c55e; }
+                        .tbx-user-name { font-size:13px; font-weight:600; max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                        .tbx-chev { font-size:10px; opacity:.6; }
+                        [dir="rtl"] .tbx-user { padding:0 4px 0 12px; }
+                        @media (max-width: 991px) { .tbx-user-name, .tbx-lang span, .tbx-chev { display:none; } .tbx-user { padding:0 4px; } .tbx-lang { padding:0; } }
+                    </style>
+                    <script>
+                        (function () {
+                            var li = document.querySelector('.tbx-search'), btn = document.getElementById('tbxSearchBtn'), form = document.getElementById('tbxSearchForm');
+                            if (!li || !btn || !form) return;
+                            var input = form.querySelector('input');
+                            btn.addEventListener('click', function (e) {
+                                if (!li.classList.contains('open') && !input.value) { e.preventDefault(); li.classList.add('open'); input.focus(); }
+                            });
+                            input.addEventListener('blur', function () { if (!input.value) li.classList.remove('open'); });
+                        })();
+                    </script>
     </nav>
 </div>

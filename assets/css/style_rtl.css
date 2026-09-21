@@ -163,7 +163,8 @@ textarea {
 }
 
 .navbar-custom .menu-left {
-    float: right !important;
+    /* float: right !important; */
+    float: none !important;
 }
 
 .navbar-custom .menu-left .page-title-box {
