@@ -320,7 +320,13 @@ Class MainClass{
     
 
     function __destruct(){
-         $this->db->close();
+        if($this->db instanceof mysqli){
+            try{
+                $this->db->close();
+            } catch (\Throwable $e) {
+                // already closed elsewhere, ignore
+            }
+        }
     }
 }
 $class = new MainClass();
