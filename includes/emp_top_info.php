@@ -293,15 +293,31 @@ if ($isEmployee !== true) {
 			$status_icon = 'fa-times-circle';
 		}
 		?>
+		<?php
+		// Live login presence (same check as employee_card.php's avatar ring):
+		// any 'active' row in user_activity_log for this emp_id.
+		$emp_top_is_online = false;
+		$emp_top_emp_id = $emprow['empid'] ?? '';
+		if ($emp_top_emp_id !== '') {
+			$emp_top_online_stmt = mysqli_prepare($conDB, "SELECT 1 FROM `user_activity_log` WHERE `emp_id` = ? AND `status` = 'active' LIMIT 1");
+			if ($emp_top_online_stmt) {
+				mysqli_stmt_bind_param($emp_top_online_stmt, "s", $emp_top_emp_id);
+				mysqli_stmt_execute($emp_top_online_stmt);
+				$emp_top_is_online = (bool) mysqli_stmt_get_result($emp_top_online_stmt)->fetch_row();
+				mysqli_stmt_close($emp_top_online_stmt);
+			}
+		}
+		?>
 		<div class="<?= $header_class ?>">
 			<div class="container-custom">
 				<!-- Avatar -->
-				<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0; cursor: pointer;">
+				<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0; cursor: pointer; position: relative; display: inline-block; line-height: 0;" title="<?= $emp_top_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
 					<?php
 					// Get avatar display path using centralized helper function
 					$displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1);
 					?>
-					<img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
+					<img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar" style="<?= $emp_top_is_online ? 'box-shadow: 0 0 0 4px #28a745;' : '' ?>">
+					<?php if ($emp_top_is_online): ?><span style="position: absolute; bottom: 2px; <?= ($is_rtl ?? false) ? 'left' : 'right' ?>: 2px; width: 20px; height: 20px; border-radius: 50%; background: #28a745; border: 3px solid #fff; z-index: 5; box-shadow: 0 2px 6px rgba(0,0,0,0.25);"></span><?php endif; ?>
 					<input type="file" name="image" class="image" hidden id="img-crop" accept="image/*">
 				</label>
 

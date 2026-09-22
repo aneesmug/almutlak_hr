@@ -58,6 +58,30 @@ if ($card_comp_no > 0) {
 }
 
 // Actual job title (employees.actual_job -> ac_jobs.id), same join used by view_employee.php.
+// Online presence: any 'active' row in user_activity_log for this emp_id.
+// sweepStaleUserActivity() (run on every session_check.php load, across all
+// users) flips stale 'active' rows to 'timeout', so this stays accurate
+// without a dedicated cron/heartbeat.
+if (!isset($GLOBALS['__employee_card_online_cache'])) {
+    $GLOBALS['__employee_card_online_cache'] = [];
+}
+$card_emp_id_for_online = $emp_id ?? '';
+$card_is_online = false;
+if ($card_emp_id_for_online !== '') {
+    if (!array_key_exists($card_emp_id_for_online, $GLOBALS['__employee_card_online_cache'])) {
+        $online_resolved = false;
+        $online_stmt = mysqli_prepare($conDB, "SELECT 1 FROM `user_activity_log` WHERE `emp_id` = ? AND `status` = 'active' LIMIT 1");
+        if ($online_stmt) {
+            mysqli_stmt_bind_param($online_stmt, "s", $card_emp_id_for_online);
+            mysqli_stmt_execute($online_stmt);
+            $online_resolved = (bool) mysqli_stmt_get_result($online_stmt)->fetch_row();
+            mysqli_stmt_close($online_stmt);
+        }
+        $GLOBALS['__employee_card_online_cache'][$card_emp_id_for_online] = $online_resolved;
+    }
+    $card_is_online = $GLOBALS['__employee_card_online_cache'][$card_emp_id_for_online];
+}
+
 $card_job_title = '';
 if ($card_job_id > 0) {
     if (!array_key_exists($card_job_id, $GLOBALS['__employee_card_job_cache'])) {
@@ -88,9 +112,10 @@ if ($card_job_id > 0) {
             <div class="header-gradient"></div>
             
             <!-- Employee Avatar -->
-            <div class="employee-avatar-wrapper">
+            <div class="employee-avatar-wrapper<?= $card_is_online ? ' is-online' : '' ?>" title="<?= $card_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
                 <img src="<?= htmlspecialchars($emp_avatar) ?>" class="employee-avatar-modern" alt="<?= htmlspecialchars($name) ?>">
                 <div class="avatar-status-badge <?= str_replace('status-', '', $status_class) ?>"></div>
+                <?php if ($card_is_online): ?><span class="avatar-online-dot"></span><?php endif; ?>
             </div>
 
             <!-- Quick Actions -->

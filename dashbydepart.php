@@ -520,6 +520,13 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                         <div class="col-xl-12">
                             <div class="card-box">
                                 <h4 class="header-title m-t-0 m-b-30"><?= __('all_employees_grouping') ?></h4>
+                                <?php
+                                if ($is_system_admin) {
+                                    $online_count_res = mysqli_query($conDB, "SELECT COUNT(*) AS `total` FROM `user_activity_log` WHERE `status` = 'active'");
+                                    $online_count_row = $online_count_res ? mysqli_fetch_assoc($online_count_res) : null;
+                                    $online_count = $online_count_row ? (int)$online_count_row['total'] : 0;
+                                }
+                                ?>
                                 <ul class="nav nav-tabs tabs-bordered">
                                     <li class="nav-item">
                                         <a href="#bycompany-b1" data-toggle="tab" aria-expanded="false" class="nav-link active show">
@@ -536,6 +543,14 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             <i class="fi-head mr-2"></i> <?= __('employees_list') ?>
                                         </a>
                                     </li>
+                                    <?php if ($is_system_admin): ?>
+                                    <li class="nav-item">
+                                        <a href="#onlineusers-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
+                                            <i class="fa fa-circle text-success mr-2" style="font-size:10px;"></i> <?= __('online_users', 'Online Users') ?>
+                                            <span class="badge badge-success badge-pill ml-1"><?= $online_count ?></span>
+                                        </a>
+                                    </li>
+                                    <?php endif; ?>
                                 </ul>
                                 <div class="tab-content">
                                     <div class="tab-pane" id="bydepartment-b1">
@@ -853,6 +868,68 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             </tfoot>
                                         </table>
                                     </div>
+                                    <?php if ($is_system_admin): ?>
+                                    <div class="tab-pane" id="onlineusers-b1">
+                                        <?php
+                                        $online_res = mysqli_query($conDB, "SELECT `ua`.*, `e`.`name`, `e`.`avatar`, `e`.`sex`
+                                            FROM `user_activity_log` `ua`
+                                            LEFT JOIN `employees` `e` ON `e`.`emp_id` = `ua`.`emp_id`
+                                            WHERE `ua`.`status` = 'active'
+                                            ORDER BY `ua`.`last_activity` DESC");
+                                        ?>
+                                        <div class="d-flex align-items-center mb-3">
+                                            <span class="badge badge-success badge-pill" style="font-size:13px;"><?= $online_count ?> <?= __('online_now', 'Online Now') ?></span>
+                                        </div>
+                                        <?php if ($online_count > 0): ?>
+                                        <div class="table-responsive">
+                                            <table id="online_users_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+                                                <thead>
+                                                    <tr>
+                                                        <th><?= __('employee_name') ?></th>
+                                                        <th><?= __('emp_id') ?></th>
+                                                        <th><?= __('department') ?></th>
+                                                        <th><?= __('ip_address', 'IP Address') ?></th>
+                                                        <th><?= __('location', 'Location') ?></th>
+                                                        <th><?= __('device', 'Device') ?></th>
+                                                        <th><?= __('current_page', 'Current Page') ?></th>
+                                                        <th><?= __('login_time', 'Login Time') ?></th>
+                                                        <th><?= __('last_activity', 'Last Activity') ?></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <?php while ($orow = mysqli_fetch_assoc($online_res)):
+                                                        $o_sex = $orow['sex'] ?? 1;
+                                                        $o_avatar_default = ($o_sex == 2) ? './assets/emp_pics/defultFemale.jpg' : './assets/emp_pics/defult.png';
+                                                        $o_avatar = !empty($orow['avatar']) ? $orow['avatar'] : $o_avatar_default;
+                                                        $o_dept_row = null;
+                                                        if (!empty($orow['emp_id'])) {
+                                                            $dept_lookup = mysqli_query($conDB, "SELECT `department`.`dep_nme`, `department`.`dep_nme_ar` FROM `employees` LEFT JOIN `department` ON `department`.`id` = `employees`.`dept` WHERE `employees`.`emp_id` = '" . mysqli_real_escape_string($conDB, $orow['emp_id']) . "' LIMIT 1");
+                                                            $o_dept_row = $dept_lookup ? mysqli_fetch_assoc($dept_lookup) : null;
+                                                        }
+                                                    ?>
+                                                    <tr>
+                                                        <td>
+                                                            <img src="<?= htmlspecialchars($o_avatar) ?>" class="rounded-circle mr-2" width="32" height="32" style="object-fit:cover;">
+                                                            <?= htmlspecialchars($orow['name'] ?? $orow['username'] ?? '-') ?>
+                                                        </td>
+                                                        <td><?= htmlspecialchars($orow['emp_id'] ?? '-') ?></td>
+                                                        <td><?= $o_dept_row ? htmlspecialchars((($is_rtl ?? false) ? $o_dept_row['dep_nme_ar'] : $o_dept_row['dep_nme']) ?? '-') : '-' ?></td>
+                                                        <td><?= htmlspecialchars($orow['ip_address'] ?? '-') ?></td>
+                                                        <td><?= htmlspecialchars(trim(($orow['city'] ?? '') . ', ' . ($orow['country'] ?? ''), ', ') ?: '-') ?></td>
+                                                        <td><?= htmlspecialchars(trim(($orow['browser'] ?? '') . ' / ' . ($orow['os'] ?? ''), ' / ') ?: '-') ?> <span class="text-muted small">(<?= htmlspecialchars($orow['device_type'] ?? '-') ?>)</span></td>
+                                                        <td class="small text-muted"><?= htmlspecialchars($orow['current_page'] ?? '-') ?></td>
+                                                        <td><?= htmlspecialchars($orow['login_time'] ?? '-') ?></td>
+                                                        <td><?= htmlspecialchars($orow['last_activity'] ?? '-') ?></td>
+                                                    </tr>
+                                                    <?php endwhile; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <?php else: ?>
+                                        <div class="text-center text-muted py-5"><?= __('no_users_online', 'No users are currently online.') ?></div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -1037,6 +1114,36 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 // Moves the generated buttons container to the top-left of the table wrapper.
                 table.buttons().container()
                     .appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
+
+                // Online Users table (sys_admin tab) - paginated, searchable.
+                if ($('#online_users_table').length) {
+                    var onlineTable = $('#online_users_table').DataTable({
+                        order: [
+                            [8, 'desc']
+                        ],
+                        language: {
+                            search: `<span>${__('search')}:</span> _INPUT_`,
+                            searchPlaceholder: `${__('search')}...`,
+                            lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
+                            info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                            infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                            infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                            paginate: {
+                                first: __('first'),
+                                last: __('last'),
+                                next: __('next'),
+                                previous: __('previous')
+                            },
+                            emptyTable: __('no_data_available_in_table'),
+                            zeroRecords: __('no_matching_records_found')
+                        }
+                    });
+                    // DataTables mis-measures column widths when initialized inside a
+                    // hidden Bootstrap tab pane - re-adjust once the tab is actually shown.
+                    $('a[href="#onlineusers-b1"]').on('shown.bs.tab', function() {
+                        onlineTable.columns.adjust().draw();
+                    });
+                }
 
             });
 
