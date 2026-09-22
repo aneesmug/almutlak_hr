@@ -297,24 +297,33 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
 
         .profile-quick-stats {
             display: flex;
-            gap: 30px;
+            gap: 12px;
             justify-content: flex-end;
+            flex-wrap: wrap;
         }
 
         .stat-item {
             text-align: center;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 12px;
+            padding: 10px 18px;
+            backdrop-filter: blur(6px);
+            min-width: 84px;
         }
 
         .stat-number {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
+            line-height: 1.2;
         }
 
         .stat-label {
-            font-size: 12px;
+            font-size: 11px;
             opacity: 0.9;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            white-space: nowrap;
         }
 
         .qr-code {
@@ -503,18 +512,52 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             direction: rtl;
         }
 
+        .profile-actions-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 16px 40px 0;
+            position: relative;
+            z-index: 10;
+            flex-wrap: wrap;
+        }
+
         /* ===== MAIN CONTENT ===== */
         .profile-container {
             max-width: 1400px;
             margin: 0 auto;
         }
 
+        .profile-section {
+            margin-bottom: 36px;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        .status-pill-success {
+            background: rgba(40, 167, 69, 0.12);
+            color: var(--success);
+        }
+
+        .status-pill-danger {
+            background: rgba(220, 53, 69, 0.12);
+            color: var(--danger);
+        }
+
         /* ===== CARDS GRID ===== */
         .cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 24px;
-            margin-bottom: 40px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 36px;
             max-width: 1400px;
             margin-left: auto;
             margin-right: auto;
@@ -522,48 +565,65 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
 
         /* ===== INFO CARD ===== */
         .info-card {
+            --accent: var(--primary);
             background: var(--white);
-            border-radius: 12px;
-            padding: 24px;
+            border-radius: 14px;
+            padding: 0;
             box-shadow: var(--shadow-md);
-            transition: all 0.3s ease;
+            transition: box-shadow 0.25s ease, transform 0.25s ease;
+            overflow: hidden;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            border-top: 3px solid var(--accent);
+            display: flex;
+            flex-direction: column;
         }
 
         .info-card:hover {
             box-shadow: var(--shadow-lg);
-            transform: translateY(-4px);
+            transform: translateY(-3px);
         }
 
         .info-card-header {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid var(--light);
+            padding: 18px 20px;
+            background: var(--light);
+            background: color-mix(in srgb, var(--accent) 6%, white);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
         }
 
         .info-card-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 17px;
+            flex-shrink: 0;
+            background: var(--accent);
             color: white;
+            background: color-mix(in srgb, var(--accent) 16%, white);
+            color: var(--accent);
         }
 
         .info-card-title {
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 15px;
+            font-weight: 700;
             color: var(--dark);
+            letter-spacing: 0.2px;
+        }
+
+        .info-card-body {
+            padding: 6px 20px 8px;
         }
 
         .info-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
             padding: 12px 0;
             border-bottom: 1px solid var(--light);
         }
@@ -573,15 +633,19 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         }
 
         .info-label {
-            font-size: 13px;
+            font-size: 12.5px;
             color: var(--secondary);
-            font-weight: 500;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
         }
 
         .info-value {
-            font-size: 14px;
+            font-size: 13.5px;
             color: var(--dark);
-            font-weight: 500;
+            font-weight: 600;
             text-align: right;
         }
 
@@ -592,30 +656,34 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             }
 
             .profile-header .container-custom {
-                grid-template-columns: auto 1fr auto;
-                gap: 20px;
+                grid-template-columns: auto 1fr;
+                gap: 16px 20px;
+            }
+
+            .qr-code {
+                grid-column: 1 / -1;
+                justify-self: center;
             }
 
             .profile-quick-stats {
                 grid-column: 1 / -1;
                 justify-content: space-around;
-                gap: 15px;
+                gap: 12px;
             }
 
-            .header-buttons {
-                grid-column: 1 / -1;
-                grid-template-columns: 1fr;
-                gap: 10px;
+            .profile-actions-row {
+                padding-left: 16px !important;
+                padding-right: 16px !important;
+                padding-top: 14px !important;
+                flex-wrap: wrap;
             }
 
-            .buttons-left {
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .more-actions-btn {
-                width: 100%;
+            .profile-actions-row .more-actions-btn,
+            .profile-actions-row a.more-actions-btn {
+                flex: 1 1 calc(50% - 8px);
                 justify-content: center;
+                padding: 10px 12px;
+                font-size: 13px;
             }
 
             .qr-code {
@@ -669,6 +737,11 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
                 gap: 12px;
             }
 
+            .profile-actions-row .more-actions-btn,
+            .profile-actions-row a.more-actions-btn {
+                flex: 1 1 100%;
+            }
+
             .info-card {
                 padding: 16px;
             }
@@ -681,6 +754,29 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
 
             .info-value {
                 text-align: left;
+            }
+
+            [dir="rtl"] .info-row {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+            }
+
+            [dir="rtl"] .info-value {
+                text-align: right !important;
+            }
+
+            .section-title {
+                font-size: 17px;
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+
+            .section-title i {
+                font-size: 20px;
+            }
+
+            .info-card-title {
+                font-size: 15px;
             }
         }
 
@@ -865,14 +961,14 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         }
 
         /* RTL Support */
-        [dir="rtl"] .profile-header .container-custom {
-            grid-template-columns: auto auto 1fr auto;
+        @media (min-width: 769px) {
+            [dir="rtl"] .profile-header .container-custom {
+                grid-template-columns: auto auto 1fr auto;
+            }
         }
 
         [dir="rtl"] .profile-actions-row {
             flex-direction: row-reverse;
-            padding-left: 40px !important;
-            padding-right: 40px !important;
         }
 
         [dir="rtl"] .profile-quick-stats {
@@ -1254,45 +1350,61 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
    Documents List View with Viewer
    ========================================== */
 
+        .documents-card {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid rgba(15, 23, 42, 0.06);
+        }
+
         .documents-list-container {
             max-height: 600px;
             overflow-y: auto;
-            border: 1px solid #e3eaef;
-            border-radius: 8px;
-            background: #fff;
+            border: 1px solid #eef0f4;
+            border-radius: 10px;
+            background: #fbfbfd;
+            padding: 8px;
         }
 
         .doc-list-item {
             display: flex;
             align-items: center;
-            padding: 8px 12px;
-            border-bottom: 1px solid #f0f2f5;
+            padding: 10px;
+            border: 1px solid transparent;
+            border-radius: 10px;
             cursor: pointer;
             transition: all 0.2s ease;
-            gap: 8px;
+            gap: 10px;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            margin-bottom: 6px;
         }
 
         .doc-list-item:last-child {
-            border-bottom: none;
+            margin-bottom: 0;
         }
 
         .doc-list-item:hover {
-            background: #f8f9fa;
+            border-color: #dbe4ff;
+            transform: translateX(2px);
         }
 
         .doc-list-item.active {
-            background: #e3f2fd;
-            border-left: 3px solid #3f51b5;
+            background: #eef4ff;
+            border-color: #3f51b5;
         }
 
         .doc-item-icon {
-            font-size: 20px;
-            width: 28px;
-            height: 28px;
+            font-size: 17px;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            background: rgba(108, 117, 125, 0.1);
         }
 
         .doc-item-info {
@@ -1303,7 +1415,7 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         .doc-item-name {
             font-size: 13px;
             font-weight: 600;
-            margin: 0 0 2px 0;
+            margin: 0 0 3px 0;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1326,22 +1438,18 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         .doc-item-actions {
             display: flex;
             gap: 4px;
-            opacity: 0;
+            opacity: 1;
             transition: opacity 0.2s ease;
         }
 
-        .doc-list-item:hover .doc-item-actions {
-            opacity: 1;
-        }
-
         .btn-icon {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             padding: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: 8px;
             border: 1px solid #e3eaef;
             background: #fff;
             color: #74788d;
@@ -1368,12 +1476,13 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
 
         /* Document Viewer */
         .document-viewer-container {
-            border: 1px solid #e3eaef;
-            border-radius: 8px;
+            border: 1px solid #eef0f4;
+            border-radius: 10px;
             background: #fff;
             display: flex;
             flex-direction: column;
             height: 600px;
+            overflow: hidden;
         }
 
         .viewer-header {
@@ -1381,9 +1490,8 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             justify-content: space-between;
             align-items: center;
             padding: 12px 16px;
-            border-bottom: 1px solid #e3eaef;
-            background: #f8f9fa;
-            border-radius: 8px 8px 0 0;
+            border-bottom: 1px solid #eef0f4;
+            background: #fbfbfd;
         }
 
         .viewer-title {
@@ -1462,6 +1570,14 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
 
             .documents-list-container {
                 max-height: 300px;
+            }
+
+            .doc-item-actions {
+                opacity: 1;
+            }
+
+            .doc-item-name {
+                white-space: normal;
             }
         }
 
@@ -1900,7 +2016,7 @@ RTL Support
             $new_query_string = http_build_query($query_params);
             $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
             ?>
-            <div class="profile-actions-row" style="display: flex; gap: 8px; align-items: center; padding-left: 40px; padding-right: 40px; padding-top: 16px; position: relative; z-index: 10;">
+            <div class="profile-actions-row">
                 <a href="<?= $switch_url ?>" class="more-actions-btn" style="text-decoration: none;">
                     <i class="fa fa-language"></i> <?= $button_text ?>
                 </a>
@@ -1955,14 +2071,15 @@ RTL Support
         <?php endif; ?>
 
         <!-- PERSONAL INFORMATION -->
-        <div style="margin-bottom: 40px;">
+        <div class="profile-section">
             <h3 class="section-title"><i class="fa fa-user-circle"></i> <?= __('personal_information') ?></h3>
             <div class="cards-grid">
-                <div class="info-card">
+                <div class="info-card" style="--accent: var(--primary);">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--primary);"><i class="fa fa-id-card"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-id-card"></i></div>
                         <div class="info-card-title"><?= __('identity') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('iqama_id_label') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['iqama'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
@@ -2016,13 +2133,15 @@ RTL Support
                         <span class="info-label"><?= __('dob_label') ?></span>
                         <span class="info-value"><?= $emprow['dob'] ?> (<?= $years ?> <?= __('yrs') ?>)</span>
                     </div>
+                    </div>
                 </div>
 
-                <div class="info-card">
+                <div class="info-card" style="--accent: var(--success);">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--success);"><i class="fa fa-envelope"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-envelope"></i></div>
                         <div class="info-card-title"><?= __('contact') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('email') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['email'] ?? null) ?></span>
@@ -2047,13 +2166,15 @@ RTL Support
                         <span class="info-label"><?= __('emergency_mobile_no_label') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['emg_mobile'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
+                    </div>
                 </div>
 
-                <div class="info-card">
+                <div class="info-card" style="--accent: var(--info);">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--info);"><i class="fa fa-briefcase"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-briefcase"></i></div>
                         <div class="info-card-title"><?= __('employment') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('joining_date_label') ?></span>
                         <span class="info-value"><?= $emprow['joining_date'] ?></span>
@@ -2095,19 +2216,21 @@ RTL Support
                             ?>
                         </span>
                     </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- EMPLOYMENT DETAILS -->
-        <div style="margin-bottom: 40px;">
+        <div class="profile-section">
             <h3 class="section-title"><i class="fa fa-file-contract"></i> <?= __('employment_details') ?></h3>
             <div class="cards-grid">
-                <div class="info-card">
+                <div class="info-card" style="--accent: var(--warning);">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--warning);"><i class="fa fa-money-bill"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-money-bill"></i></div>
                         <div class="info-card-title"><?= __('salary') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('total_salary') ?></span>
                         <span class="info-value"><?= number_format($emprow['salary'], 2) ?> <i class="icon-saudi_riyal"></i></span>
@@ -2139,13 +2262,15 @@ RTL Support
                         }
                     }
                     ?>
+                    </div>
                 </div>
 
-                <div class="info-card">
+                <div class="info-card" style="--accent: var(--danger);">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: var(--danger);"><i class="fa fa-university"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-university"></i></div>
                         <div class="info-card-title"><?= __('banking_insurance', 'Banking & Insurance') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('status') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['gosi'] ?? null) ?></span>
@@ -2174,20 +2299,22 @@ RTL Support
                         <span class="info-label"><?= __('insurance_expiry', 'Insurance Expiry') ?></span>
                         <span class="info-value"><?= (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00') ? format_safe_date($current_medical_insurance['medical_expiry'], 'd M, Y') : __('not_available') ?></span>
                     </div>
+                    </div>
                 </div>
 
-                <div class="info-card">
+                <div class="info-card" style="--accent: #6f42c1;">
                     <div class="info-card-header">
-                        <div class="info-card-icon" style="background: #6f42c1;"><i class="fa fa-boxes"></i></div>
+                        <div class="info-card-icon"><i class="fa fa-boxes"></i></div>
                         <div class="info-card-title"><?= __('status_assets', 'Status & Assets') ?></div>
                     </div>
+                    <div class="info-card-body">
                     <div class="info-row">
                         <span class="info-label"><?= __('status') ?></span>
                         <span class="info-value">
                             <?php if ($emprow['status'] == 1): ?>
-                                <span style="color: var(--success); font-weight: 600;"><?= __('active') ?></span>
+                                <span class="status-pill status-pill-success"><?= __('active') ?></span>
                             <?php else: ?>
-                                <span style="color: var(--danger); font-weight: 600;"><?= __('inactive') ?></span>
+                                <span class="status-pill status-pill-danger"><?= __('inactive') ?></span>
                             <?php endif; ?>
                         </span>
                     </div>
@@ -2250,14 +2377,15 @@ RTL Support
                             <span class="info-value"><?= htmlspecialchars($emprow['end_date'] ?? '') ?></span>
                         </div>
                     <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- DOCUMENTS SECTION -->
-        <div>
+        <div class="profile-section">
             <h3 class="section-title"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h3>
-            <div class="card-box" style="background: var(--white); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md);">
+            <div class="documents-card">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="mb-0"><i class="fa fa-file-upload"></i> <?= __('employee_documents') ?></h5>
                     <span class="badge badge-primary badge-pill">
