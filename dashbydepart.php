@@ -547,7 +547,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                     <li class="nav-item">
                                         <a href="#onlineusers-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
                                             <i class="fa fa-circle text-success mr-2" style="font-size:10px;"></i> <?= __('online_users', 'Online Users') ?>
-                                            <span class="badge badge-success badge-pill ml-1"><?= $online_count ?></span>
+                                            <span class="badge badge-success badge-pill ml-1" id="onlineUsersTabBadge"><?= $online_count ?></span>
                                         </a>
                                     </li>
                                     <?php endif; ?>
@@ -878,9 +878,9 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             ORDER BY `ua`.`last_activity` DESC");
                                         ?>
                                         <div class="d-flex align-items-center mb-3">
-                                            <span class="badge badge-success badge-pill" style="font-size:13px;"><?= $online_count ?> <?= __('online_now', 'Online Now') ?></span>
+                                            <span class="badge badge-success badge-pill" style="font-size:13px;"><span id="onlineNowCount"><?= $online_count ?></span> <?= __('online_now', 'Online Now') ?></span>
+                                            <span class="text-muted small ml-2"><i class="fa fa-sync-alt"></i> <?= __('auto_refreshes', 'Auto-refreshes every 10s') ?></span>
                                         </div>
-                                        <?php if ($online_count > 0): ?>
                                         <div class="table-responsive">
                                             <table id="online_users_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
                                                 <thead>
@@ -925,9 +925,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <?php else: ?>
-                                        <div class="text-center text-muted py-5"><?= __('no_users_online', 'No users are currently online.') ?></div>
-                                        <?php endif; ?>
                                     </div>
                                     <?php endif; ?>
                                 </div>
@@ -1143,6 +1140,28 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                     $('a[href="#onlineusers-b1"]').on('shown.bs.tab', function() {
                         onlineTable.columns.adjust().draw();
                     });
+
+                    // Live refresh - poll the same active-sessions feed every 10s so a
+                    // login/logout shows up here without reloading the page. draw(false)
+                    // keeps the user's current page/sort/search instead of resetting it.
+                    function refreshOnlineUsers() {
+                        $.getJSON('./includes/ajaxFile/get_online_users.php')
+                            .done(function(response) {
+                                if (!response || response.status !== 200) {
+                                    return;
+                                }
+                                onlineTable.clear();
+                                onlineTable.rows.add(response.rows);
+                                onlineTable.draw(false);
+                                $('#onlineNowCount').text(response.count);
+                                $('#onlineUsersTabBadge').text(response.count);
+                            });
+                    }
+
+                    setInterval(refreshOnlineUsers, 10000);
+                    // Also refresh immediately the moment the tab is opened, instead of
+                    // waiting up to 10s for the next poll tick.
+                    $('a[href="#onlineusers-b1"]').on('shown.bs.tab', refreshOnlineUsers);
                 }
 
             });
