@@ -53,21 +53,24 @@ body.sbv2 .left.side-menu .topbar-left {
     position: relative;
     top: auto;
     width: 100% !important;
-    height: 64px;
+    height: 76px;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
+    justify-content: center;
     padding: 0 18px;
     border-bottom: 1px solid var(--sb-line);
     z-index: 1;
 }
 body.sbv2 .left.side-menu .topbar-left .logo { line-height: 1; display: flex; align-items: center; }
+/* expanded-sidebar logo image - HTML sets height="22", bump it up */
+body.sbv2 .left.side-menu .topbar-left .logo span img { height: 55px !important; width: auto !important; }
 body.sbv2 .left.side-menu .topbar-left .logo i { display: none !important; }
 body.sbv2 .left.side-menu .topbar-left .logo span { display: inline !important; }
 
 /* user card lives in the topbar dropdown already - keep the nav area for the menu */
 body.sbv2 .left.side-menu .user-box { display: none; }
-
+    
 /* ---------- Scrolling nav area ---------- */
 body.sbv2 #sidebar-menu {
     flex: 1 1 auto;
@@ -315,3 +318,19 @@ body.sbv2.sbv2-light #sidebar-menu .menu-title { color: rgba(75, 85, 99, .75); }
     html[dir="rtl"] body.sbv2 .content-page > .topbar { left: 0; right: var(--sb-w); transition: right .2s ease; }
 }
 html[dir="rtl"] body.sbv2 .navbar-custom .menu-left > li.float-left { float: right !important; }
+
+/* ---------- Icon color mode: colorful (default, per-section inline colors) vs white ----------
+   Set from App Settings > General > Main menu icon style. Overrides the per-icon
+   inline --fa-primary-color/--fa-secondary-color (needs !important to beat inline style).
+   White mode auto-flips to near-black when the menu theme is Light, so icons stay visible
+   on a white sidebar instead of vanishing. */
+body.sbv2.sbv2-icons-white:not(.sbv2-light) #sidebar-menu i.fa-duotone {
+    --fa-primary-color: #ffffff !important;
+    --fa-secondary-color: #ffffff !important;
+    --fa-secondary-opacity: .45 !important;
+}
+body.sbv2.sbv2-icons-white.sbv2-light #sidebar-menu i.fa-duotone {
+    --fa-primary-color: #1f2937 !important;
+    --fa-secondary-color: #1f2937 !important;
+    --fa-secondary-opacity: .45 !important;
+}

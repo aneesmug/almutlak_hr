@@ -364,7 +364,7 @@ function openCompanyStep2(data, w) {
             ${newEmpFieldset('joining_date', 'Joining date', `<input type="text" id="ceJoiningDate" class="form-control" value="${escapeHtml(w.joining_date || '')}" required>`, 'col-md-3', 'fa-calendar-alt', true)}
             ${newEmpFieldset('sponsorship', 'Sponsorship', `<select id="ceEmpSupType" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.sponsorships, 'id', 'sponsor', 'sponsor_ar', true, w.emp_sup_type)}</select>`, 'col-md-3', 'fa-handshake', true)}
             ${newEmpFieldset('company_label', 'Company', `<select id="ceCompNo" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.companies, 'comp_id', 'comp_name', 'comp_name_ar', true, w.comp_no)}</select>`, 'col-md-3', 'fa-building', true)}
-            ${newEmpFieldset('actual_job', 'Actual job', `<select id="ceActualJob" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.jobs, 'id', 'job', 'job_ar', true, w.actual_Job)}</select>`, 'col-md-3', 'fa-briefcase', true)}
+            ${newEmpFieldset('actual_job', 'Position', `<select id="ceActualJob" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.jobs, 'id', 'job', 'job_ar', true, w.actual_Job)}</select>`, 'col-md-3', 'fa-briefcase', true)}
             ${newEmpFieldset('contract_period', 'Contract period', `<select id="ceVacPeriod" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.contract_periods, 'id', 'period', 'period', true, w.vac_period)}</select>`, 'col-md-3', 'fa-file-contract', true)}
             ${newEmpFieldset('vacation_days', 'Vacation Days', `<input type="text" id="ceVacationDays" class="form-control" value="${escapeHtml(w.vacation_days || '')}" readonly required>`, 'col-md-3', 'fa-umbrella-beach', true)}
             ${newEmpFieldset('probation_period_label', 'Probation Period', `<select id="ceProbation" class="form-control new-emp-select2" required><option value="">${__('select_option', 'Select')}</option><option value="3 Months" ${w.probation === '3 Months' ? 'selected' : ''}>3 ${__('months', 'Months')}</option><option value="6 Months" ${w.probation === '6 Months' ? 'selected' : ''}>6 ${__('months', 'Months')}</option></select>`, 'col-md-3', 'fa-hourglass-half', true)}
@@ -413,7 +413,7 @@ function openCompanyStep2(data, w) {
                 ceJoiningDate: __('joining_date', 'Joining date'),
                 ceEmpSupType: __('sponsorship', 'Sponsorship'),
                 ceCompNo: __('company_label', 'Company'),
-                ceActualJob: __('actual_job', 'Actual job'),
+                ceActualJob: __('actual_job', 'Position'),
                 ceVacPeriod: __('contract_period', 'Contract period'),
                 ceVacationDays: __('vacation_days', 'Vacation Days'),
                 ceProbation: __('probation_period_label', 'Probation Period')

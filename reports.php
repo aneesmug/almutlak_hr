@@ -2617,7 +2617,7 @@ if (mysqli_num_rows($query) == 1) {
                         { id: 'gender', label: (typeof __ === 'function') ? __('gender') : 'Gender', default: true },
                         { id: 'join_date', label: (typeof __ === 'function') ? __('join_date') : 'Join Date', default: true },
                         { id: 'position', label: (typeof __ === 'function') ? __('position') : 'Position', default: true },
-                        { id: 'actual_job', label: (typeof __ === 'function') ? __('actual_job') : 'Actual Job', default: true },
+                        { id: 'actual_job', label: (typeof __ === 'function') ? __('actual_job') : 'Position', default: true },
                         { id: 'department', label: (typeof __ === 'function') ? __('department') : 'Department', default: true },
                         { id: 'birth_date', label: (typeof __ === 'function') ? __('birth_date') : 'Birth Date', default: true },
                         { id: 'age', label: (typeof __ === 'function') ? __('age') : 'Age', default: true },

@@ -756,6 +756,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 <link rel="stylesheet" href="assets/css/sidebar_v2.css?v=<?= @filemtime(__DIR__ . '/../assets/css/sidebar_v2.css') ?>">
 <script src="assets/js/sidebar_v2.js?v=<?= @filemtime(__DIR__ . '/../assets/js/sidebar_v2.js') ?>"></script>
 <?php if (get_setting($conDB, 'sidebar_theme') !== 'dark') { ?><script>document.body.classList.add('sbv2-light');</script><?php } ?>
+<?php if (get_setting($conDB, 'sidebar_icon_style') === 'white') { ?><script>document.body.classList.add('sbv2-icons-white');</script><?php } ?>
 
 <div class="user-box">
     <div class="user-img">
@@ -934,9 +935,6 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if ($can_see_biometric_devices): ?>
                 <li><a href="<?= $zkDevicesLink ?>"><i class="fa-duotone fa-fingerprint" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('zk_devices', 'Biometric Devices') ?></span></a></li>
                 <?php endif; ?>
-                <?php if ($can_see_dynamic_import): ?>
-                <li><a href="import_excel_dynamic.php"><i class="fa-duotone fa-file-excel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('dynamic_excel_import', 'Dynamic Excel Import') ?></span></a></li>
-                <?php endif; ?>
                 <?php if ($can_view_vac_balance_history): ?>
                 <li><a href="<?= $vacationBalanceHistoryLink ?>" target="_blank"><i class="fa-duotone fa-scale-balanced" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('vacation_balance_history', 'Vacation Balance History') ?></span></a></li>
                 <?php endif; ?>
@@ -944,7 +942,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <li><a href="<?= $appSettingsLink ?>" target="_blank"><i class="fa-duotone fa-gear" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('app_settings', 'App Settings') ?></span></a></li>
                 <?php endif; ?>
 
-                <?php if ((in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)) || $can_import_medical_insurance || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+                <?php if ((in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main)) || $can_import_medical_insurance || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page) || $can_see_dynamic_import): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-file-import" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import', 'Import') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
@@ -956,6 +954,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         <?php endif; ?>
                         <?php if (in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
                         <li><a href="<?= $processIqamaImportLink ?>"><i class="fa-duotone fa-id-card" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_iqama_exp', 'Import Iqama Expiry') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if ($can_see_dynamic_import): ?>
+                        <li><a href="import_excel_dynamic.php"><i class="fa-duotone fa-file-excel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('dynamic_excel_import', 'Dynamic Excel Import') ?></span></a></li>
                         <?php endif; ?>
                     </ul>
                 </li>

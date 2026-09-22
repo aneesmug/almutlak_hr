@@ -571,7 +571,7 @@ function __(key, def) {
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['org_structure', 'sub_departments', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'screen_settings', 'temp_role_transfer', 'vacation_blackout_dates'];
+            const SELF_SAVING_GROUPS = ['org_structure', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'temp_role_transfer', 'vacation_blackout_dates'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -595,16 +595,11 @@ function __(key, def) {
                 return;
             }
 
-            // Departments / Job Titles / Locations share one top-level tab (org_structure),
-            // each as its own canAccess()-gated sub-tab - see renderOrgStructureHub.
+            // Departments / Job Titles / Locations / Sub-Departments share one top-level
+            // tab (org_structure), each as its own canAccess()-gated sub-tab - see
+            // renderOrgStructureHub.
             if (normalizedGroupName === 'org_structure') {
                 renderOrgStructureHub();
-                return;
-            }
-
-            // Special handling for sub-departments configuration
-            if (normalizedGroupName === 'sub_departments') {
-                renderSubDepartmentsSettings();
                 return;
             }
 
@@ -614,10 +609,15 @@ function __(key, def) {
                 return;
             }
 
-            // Screen Settings: full table for admins, self-only form for a plain user
-            // granted 'manage_own_screen_settings'.
-            if (normalizedGroupName === 'screen_settings') {
-                renderScreenSettingsSettings();
+            // Theme Config: Menu Theme (sidebar_theme/sidebar_icon_style app_settings
+            // rows) and Screen Settings (own scale/resolution/fullscreen) as sub-tabs -
+            // see renderThemeConfigHub. Guarded to the outer nav call only (hostEl ===
+            // settingsContainer) - the hub's own Menu Theme sub-tab re-enters this same
+            // function with the same group name to render the generic fields into its
+            // sub-content div, which must fall through below instead of re-triggering the
+            // hub (that recursed forever - see renderEmailSettingsHub for the same guard).
+            if (normalizedGroupName === 'theme_config' && hostEl === settingsContainer) {
+                renderThemeConfigHub();
                 return;
             }
 
@@ -948,12 +948,14 @@ function __(key, def) {
         }
 
         // --- Org Structure Hub ---
-        // Departments / Job Titles / Locations each have their own special-access key
-        // (canAccessDepartmentsTab / canAccessJobTitlesTab / canAccessLocationsTab), so a
-        // restricted grantee may only have one or two of them - same canAccess()-gated
+        // Departments / Job Titles / Locations / Companies / Sub-Departments each have
+        // their own special-access key (canAccessDepartmentsTab / canAccessJobTitlesTab /
+        // canAccessLocationsTab / canAccessCompaniesTab / canAccessSubDepartmentsTab), so
+        // a restricted grantee may only have one or two of them - same canAccess()-gated
         // sub-tab pattern as PAYROLL_SETTINGS_SUB_TABS above.
         const ORG_STRUCTURE_SUB_TABS = [
             { key: 'departments', label: '' + __('departments', 'Departments') + '', canAccess: () => canAccessDepartmentsTab },
+            { key: 'sub_departments', label: '' + __('sub_departments', 'Sub Departments') + '', canAccess: () => canAccessSubDepartmentsTab },
             { key: 'job_titles', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
             { key: 'locations', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
             { key: 'companies', label: '' + __('companies', 'Companies') + '', canAccess: () => canAccessCompaniesTab },
@@ -986,6 +988,7 @@ function __(key, def) {
                     a.classList.toggle('active', a.dataset.subTab === key);
                 });
                 if (key === 'departments') renderDepartmentsSettings(subContent);
+                else if (key === 'sub_departments') renderSubDepartmentsSettings(subContent);
                 else if (key === 'job_titles') renderJobTitlesSettings(subContent);
                 else if (key === 'locations') renderLocationsSettings(subContent);
                 else if (key === 'companies') renderCompaniesSettings(subContent);
@@ -3246,14 +3249,80 @@ function __(key, def) {
             });
         }
 
+        // --- Theme Config hub: Menu Theme + Company Logo (both plain app_settings
+        // fields, saved via the outer Save Changes button) + Screen Settings (own
+        // scale/resolution/fullscreen, self-saving) as sub-tabs - same pattern as
+        // renderAttendanceConfigHub's Timetables/Device Monitor/Data Retention.
+        function renderThemeConfigHub() {
+            // sidebar_theme/sidebar_icon_style/logo/favicon rows only ever load into
+            // groupedSettings for a full settings admin.
+            const showMenuTheme = isFullSettingsAdmin;
+            const showCompanyLogo = isFullSettingsAdmin;
+            let firstTab = null;
+            let navHtml = '<ul class="nav nav-pills mb-3" id="theme-config-sub-nav">';
+            if (showMenuTheme) {
+                firstTab = firstTab || 'menu_theme';
+                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'menu_theme' ? 'active' : ''}" href="#" data-sub-tab="menu_theme">${__('menu_theme', 'Menu Theme')}</a></li>`;
+            }
+            if (showCompanyLogo) {
+                firstTab = firstTab || 'company_logo';
+                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'company_logo' ? 'active' : ''}" href="#" data-sub-tab="company_logo">${__('company_logo', 'Company Logo')}</a></li>`;
+            }
+            if (canAccessScreenSettingsTab) {
+                firstTab = firstTab || 'screen_settings';
+                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'screen_settings' ? 'active' : ''}" href="#" data-sub-tab="screen_settings">${__('screen_settings', 'Screen Settings')}</a></li>`;
+            }
+            navHtml += '</ul>';
+
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-theme_config" role="tabpanel">
+                    ${navHtml}
+                    <div id="theme-config-sub-content"></div>
+                </div>
+            `;
+
+            const subContent = document.getElementById('theme-config-sub-content');
+            const saveBtnWrapper = document.getElementById('saveBtnWrapper');
+
+            function renderSubTab(key) {
+                document.querySelectorAll('#theme-config-sub-nav a').forEach(a => {
+                    a.classList.toggle('active', a.dataset.subTab === key);
+                });
+                if (key === 'menu_theme') {
+                    // Menu Theme rows are plain app_settings fields - the generic renderer
+                    // wires them into the outer form, so the outer Save Changes button saves them.
+                    renderSettingsGroup('theme_config', subContent);
+                } else if (key === 'company_logo') {
+                    renderSettingsGroup('theme_config_logo', subContent);
+                } else {
+                    if (saveBtnWrapper) saveBtnWrapper.style.display = 'none'; // Screen Settings self-saves via its own button(s)
+                    renderScreenSettingsSettings(subContent);
+                }
+            }
+
+            document.querySelectorAll('#theme-config-sub-nav a').forEach(a => {
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    renderSubTab(this.dataset.subTab);
+                });
+            });
+
+            if (firstTab) {
+                renderSubTab(firstTab);
+            } else {
+                subContent.innerHTML = '<p class="text-center text-danger">' + __('access_denied', 'Access denied') + '</p>';
+            }
+        }
+
         // --- Screen Settings tab (per-user Scale % / reference Resolution / Fullscreen) ---
         // Mirrors the Special Access tab's UX: search-select a user, edit just that one
         // user's settings in a modal, see only users with a saved override listed below -
         // never a table pre-populated with every user.
-        async function renderScreenSettingsSettings() {
+        async function renderScreenSettingsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
             if (!isFullSettingsAdmin) {
                 const own = window.APP_SETTINGS_OWN_SCREEN_SETTINGS || screenSettingsDefaults;
-                settingsContainer.innerHTML = `
+                hostEl.innerHTML = `
                     <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
                         <h5 class="mb-3"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
                         <p class="text-muted">${__('own_screen_settings_desc', 'Adjust the display scale and fullscreen behavior for your own account. Display Resolution is stored for reference only.')}</p>
@@ -3285,7 +3354,7 @@ function __(key, def) {
                 return;
             }
 
-            settingsContainer.innerHTML = `
+            hostEl.innerHTML = `
                 <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h5 class="mb-0"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
@@ -4349,7 +4418,8 @@ function __(key, def) {
 
         let departmentsListCache = null;
 
-        function renderSubDepartmentsSettings() {
+        function renderSubDepartmentsSettings(hostEl) {
+            hostEl = hostEl || settingsContainer;
             let formHtml = `<div class="tab-pane active" id="group-sub_departments" role="tabpanel">`;
             formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
             formHtml += `<h5 class="mb-0">${__('sub_departments_management', 'Sub-Departments Management')}</h5>`;
@@ -4365,7 +4435,7 @@ function __(key, def) {
             formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2">${__('loading')}</span></div>`;
             formHtml += `</div>`;
             formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            hostEl.innerHTML = formHtml;
 
             loadSubDepartments();
 
@@ -6005,11 +6075,8 @@ function __(key, def) {
                 // reach a browser that only has partial access.
                 if (!isFullSettingsAdmin) {
                     groupedSettings = {};
-                    if (canAccessDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab || canAccessCompaniesTab) {
+                    if (canAccessDepartmentsTab || canAccessSubDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab || canAccessCompaniesTab) {
                         groupedSettings['org_structure'] = [];
-                    }
-                    if (canAccessSubDepartmentsTab) {
-                        groupedSettings['sub_departments'] = [];
                     }
                     if (canAccessRequestBlocksTab) {
                         groupedSettings['request type blocks'] = [];
@@ -6021,7 +6088,7 @@ function __(key, def) {
                         groupedSettings['attendance_config'] = [];
                     }
                     if (canAccessScreenSettingsTab) {
-                        groupedSettings['screen_settings'] = [];
+                        groupedSettings['theme_config'] = [];
                     }
                     if (canAccessTempRoleTransferTab) {
                         groupedSettings['temp_role_transfer'] = [];
@@ -6097,7 +6164,11 @@ function __(key, def) {
                 // untouched in case the feature comes back.
                 // 'office_hours_settings' is superseded by the default company Timetable
                 // under Attendance Config - hidden the same way, rows untouched.
-                const hiddenGroups = ['page_role_access', 'report_permissions', 'social', 'office_hours_settings'];
+                // 'screen_settings' (screen_settings_by_user, a raw JSON blob) now lives only
+                // as the Screen Settings sub-tab inside the Theme Config hub (renderThemeConfigHub),
+                // backed by its own AJAX handler (get_screen_settings_data/update_screen_settings_map)
+                // - not the generic field renderer. Drop the raw row the same way.
+                const hiddenGroups = ['page_role_access', 'report_permissions', 'social', 'office_hours_settings', 'screen_settings'];
                 appSettings = data.settings.filter(s => !payrollSubGroupKeys.includes(s.setting_group) && !hiddenGroups.includes(s.setting_group));
                 groupedSettings = appSettings.reduce((acc, setting) => {
                     const group = setting.setting_group;
@@ -6128,9 +6199,6 @@ function __(key, def) {
                 if (!groupedSettings['org_structure']) {
                     groupedSettings['org_structure'] = [];
                 }
-                if (!groupedSettings['sub_departments']) {
-                    groupedSettings['sub_departments'] = [];
-                }
                 if (!groupedSettings['approval']) {
                     groupedSettings['approval'] = [];
                 }
@@ -6143,8 +6211,8 @@ function __(key, def) {
                 if (!groupedSettings['attendance_config']) {
                     groupedSettings['attendance_config'] = [];
                 }
-                if (!groupedSettings['screen_settings']) {
-                    groupedSettings['screen_settings'] = [];
+                if (!groupedSettings['theme_config']) {
+                    groupedSettings['theme_config'] = [];
                 }
                 if (isFullSettingsAdmin) {
                 if (!groupedSettings['license']) {
@@ -6167,7 +6235,7 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention'];
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'theme_config_logo'];
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
