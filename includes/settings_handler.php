@@ -9,6 +9,7 @@ require_once(__DIR__ . "/helper_functions.php");
 require_once(__DIR__ . "/special_access_helper.php");
 require_once(__DIR__ . "/page_access_helper.php");
 require_once(__DIR__ . "/screen_settings_helper.php");
+require_once(__DIR__ . "/zk_helpers.php");
 require_once(__DIR__ . "/../vendor/autoload.php");
 
 if ($conDB->connect_error) {
@@ -120,6 +121,7 @@ function get_all_settings($conDB) {
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
     ensure_screen_settings_setting($conDB);
+    zk_ensure_sync_allowed_ip_setting($conDB);
 
     $settings = [];
     // db_export_secret_key is auto-generated/rotated from db_export.php's own
@@ -152,6 +154,7 @@ function update_all_settings($conDB) {
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
     ensure_screen_settings_setting($conDB);
+    zk_ensure_sync_allowed_ip_setting($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.

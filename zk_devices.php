@@ -202,7 +202,7 @@ if ($result) {
                 <hr>
                 <div class="form-group text-left">
                     <label>${__('pull_host', 'Socket Check Host')}</label>
-                    <input type="text" id="zkPullHost" class="form-control" value="${pullHost || '212.118.124.212'}">
+                    <input type="text" id="zkPullHost" class="form-control" value="${pullHost || '185.137.245.28'}">
                 </div>
                 <div class="form-group text-left">
                     <label>${__('pull_port', 'Socket Check Port')}</label>

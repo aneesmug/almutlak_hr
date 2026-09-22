@@ -44,7 +44,7 @@ $offlineCount = 0;
 $updateStmt = mysqli_prepare($conn, "UPDATE zk_devices SET state = ?, last_activity = IF(? = 'online', NOW(), last_activity) WHERE id = ?");
 
 foreach ($devices as $device) {
-    $host = $device['pull_host'] ?: '212.118.124.212';
+    $host = $device['pull_host'] ?: '185.137.245.28';
     $port = (int) $device['pull_port'];
 
     $client = new ZkSocketClient($host, $port, 5);

@@ -170,6 +170,32 @@ if (!function_exists('zk_ensure_offline_threshold_setting')) {
     }
 }
 
+if (!function_exists('zk_ensure_sync_allowed_ip_setting')) {
+    function zk_ensure_sync_allowed_ip_setting($conn) {
+        $stmt = mysqli_prepare(
+            $conn,
+            "INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_group, description, input_type) VALUES ('zk_sync_allowed_ip', '', 'sync_settings', 'Local BioTime-server IP address allowed to push attendance via zk_sync_import.php. Leave blank to allow any IP (the shared secret is still required either way).', 'text')"
+        );
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
+}
+
+if (!function_exists('zk_get_sync_allowed_ip')) {
+    /**
+     * Optional IP allowlist for zk_sync_import.php, set from App Settings ->
+     * Attendance Config -> Sync Settings. Blank (the default) means no IP
+     * restriction - only the shared secret (zk_get_sync_secret()) gates the
+     * endpoint, same as before this setting existed.
+     */
+    function zk_get_sync_allowed_ip($conn) {
+        zk_ensure_sync_allowed_ip_setting($conn);
+        $result = mysqli_query($conn, "SELECT setting_value FROM app_settings WHERE setting_name = 'zk_sync_allowed_ip' LIMIT 1");
+        $row = $result ? mysqli_fetch_assoc($result) : null;
+        return trim((string) ($row['setting_value'] ?? ''));
+    }
+}
+
 if (!function_exists('zk_sync_terminal_state')) {
     /**
      * Updates one zk_devices row from BioTime's own iclock_terminal snapshot

@@ -59,6 +59,17 @@ if ($providedSecret === '' || !hash_equals($expectedSecret, (string) $providedSe
     exit;
 }
 
+// Optional IP allowlist (App Settings -> Attendance Config -> Sync Settings).
+// Blank = no restriction, secret alone still gates the endpoint as before.
+$allowedIp = zk_get_sync_allowed_ip($conn);
+$remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+if ($allowedIp !== '' && $allowedIp !== $remoteIp) {
+    error_log('[ZK] zk_sync_import.php rejected request from disallowed IP ' . $remoteIp . ' (expected ' . $allowedIp . ')');
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'IP address not allowed.']);
+    exit;
+}
+
 $rawBody = file_get_contents('php://input');
 $payload = json_decode($rawBody, true);
 if (!is_array($payload)) {

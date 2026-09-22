@@ -32,7 +32,7 @@ function add_device($conDB) {
     $name = trim((string) ($_POST['device_name'] ?? ''));
     $area = trim((string) ($_POST['area'] ?? ''));
     $ip = trim((string) ($_POST['device_ip'] ?? ''));
-    $pullHost = trim((string) ($_POST['pull_host'] ?? '')) ?: '212.118.124.212';
+    $pullHost = trim((string) ($_POST['pull_host'] ?? '')) ?: '185.137.245.28';
     $pullPortRaw = trim((string) ($_POST['pull_port'] ?? ''));
     $pullPort = $pullPortRaw !== '' ? (int) $pullPortRaw : null;
 
@@ -58,7 +58,7 @@ function update_device($conDB) {
     $name = trim((string) ($_POST['device_name'] ?? ''));
     $area = trim((string) ($_POST['area'] ?? ''));
     $ip = trim((string) ($_POST['device_ip'] ?? ''));
-    $pullHost = trim((string) ($_POST['pull_host'] ?? '')) ?: '212.118.124.212';
+    $pullHost = trim((string) ($_POST['pull_host'] ?? '')) ?: '185.137.245.28';
     $pullPortRaw = trim((string) ($_POST['pull_port'] ?? ''));
     $pullPort = $pullPortRaw !== '' ? (int) $pullPortRaw : null;
 

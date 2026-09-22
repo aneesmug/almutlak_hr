@@ -1070,6 +1070,7 @@ function __(key, def) {
             if (showDeviceMonitor) {
                 navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="device_monitor">${__('device_monitor', 'Device Monitor')}</a></li>`;
                 navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="attendance_retention">${__('data_retention', 'Data Retention')}</a></li>`;
+                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="sync_settings">${__('sync_settings', 'Sync Settings')}</a></li>`;
             }
             navHtml += '</ul>';
 
@@ -1088,14 +1089,17 @@ function __(key, def) {
                     a.classList.toggle('active', a.dataset.subTab === key);
                 });
                 if (saveBtnWrapper) {
-                    // Timetables self-saves per-row via its own modal; Device Monitor uses
-                    // the generic outer Save button.
-                    saveBtnWrapper.style.display = (key === 'device_monitor' || key === 'attendance_retention') ? '' : 'none';
+                    // Timetables self-saves per-row via its own modal; Device Monitor / Data
+                    // Retention / Sync Settings use the generic outer Save button.
+                    saveBtnWrapper.style.display = (key === 'device_monitor' || key === 'attendance_retention' || key === 'sync_settings') ? '' : 'none';
                 }
-                if (key === 'device_monitor' || key === 'attendance_retention') {
+                if (key === 'device_monitor' || key === 'attendance_retention' || key === 'sync_settings') {
                     renderSettingsGroup(key, subContent);
                     if (key === 'attendance_retention') {
                         subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-3 mb-0 font-13"><i class="mdi mdi-alert-outline"></i> ${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div>`);
+                    }
+                    if (key === 'sync_settings') {
+                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-info mt-3 mb-0 font-13"><i class="mdi mdi-information-outline"></i> ${__('sync_settings_hint', 'Restricts which IP address may push attendance punches to zk_sync_import.php from the local BioTime server. Leave blank to allow any IP - the shared secret key still gates the endpoint either way.')}</div>`);
                     }
                 } else {
                     renderAttendanceConfigGroup(subContent);
@@ -6235,7 +6239,7 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'theme_config_logo'];
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'sync_settings', 'theme_config_logo'];
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
