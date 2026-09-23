@@ -72,7 +72,6 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/init.php';
 require_once __DIR__ . '/user_activity_logger.php';
 include_once __DIR__ . '/helper_functions.php';
-require_once __DIR__ . '/theme_dark.php';
 
 // --- 3. Session Timeout Handling ---
 $timeout_duration = get_setting($conDB, 'session_timeout');
@@ -347,6 +346,9 @@ $fname = $emprow['efullname'];
 $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
 $user_company = $emprow['comp_no'] ?? 1;
+
+// Dark/light theme - needs $empid for the per-user choice in Screen Settings.
+require_once __DIR__ . '/theme_dark.php';
 
 // --- Temporary role coverage (vacation replacement) ---
 // If this employee is currently covering someone's vacation (granted via the

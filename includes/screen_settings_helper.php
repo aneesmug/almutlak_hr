@@ -12,6 +12,9 @@ define('SCREEN_SETTINGS_HELPER_INCLUDED', true);
  * 'screen_settings_by_user'. Resolution is stored for reference/display only
  * and does not itself change rendering - only 'scale' (applied as CSS zoom
  * on <html>) and 'fullscreen' (auto-request Fullscreen API on load) do.
+ * 'theme' is the user's own color theme: 'light' / 'dark' override the global
+ * App Settings > Theme Config "App theme" for this user only, 'default' follows it
+ * (applied by includes/theme_dark.php).
  */
 
 if (!function_exists('default_screen_settings')) {
@@ -21,6 +24,7 @@ if (!function_exists('default_screen_settings')) {
             'width' => 1920,
             'height' => 1080,
             'fullscreen' => 0,
+            'theme' => 'default',
         ];
     }
 }
@@ -43,11 +47,17 @@ if (!function_exists('normalize_screen_setting')) {
 
         $fullscreen = !empty($entry['fullscreen']) && $entry['fullscreen'] !== '0' ? 1 : 0;
 
+        $theme = strtolower(trim((string) ($entry['theme'] ?? $defaults['theme'])));
+        if (!in_array($theme, ['default', 'light', 'dark'], true)) {
+            $theme = $defaults['theme'];
+        }
+
         return [
             'scale' => $scale,
             'width' => $width,
             'height' => $height,
             'fullscreen' => $fullscreen,
+            'theme' => $theme,
         ];
     }
 }

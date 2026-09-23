@@ -56,7 +56,7 @@ function __(key, def) {
         let specialAccessMap = {};
         let screenSettingsUsersRaw = null;
         let screenSettingsMap = {};
-        let screenSettingsDefaults = { scale: 100, width: 1920, height: 1080, fullscreen: 0 };
+        let screenSettingsDefaults = { scale: 100, width: 1920, height: 1080, fullscreen: 0, theme: 'default' };
         let companiesTimetablesCache = [];
         const settingsContainer = document.getElementById('settings-container');
         const settingsNav = document.getElementById('settings-nav');
@@ -3347,6 +3347,24 @@ function __(key, def) {
         // Mirrors the Special Access tab's UX: search-select a user, edit just that one
         // user's settings in a modal, see only users with a saved override listed below -
         // never a table pre-populated with every user.
+        // Per-user color theme (stored as 'theme' in screen_settings_by_user):
+        // 'default' follows the global Theme Config > App theme, 'light'/'dark' override it
+        // for that user only - see includes/theme_dark.php.
+        function screenThemeOptions(selected) {
+            const current = selected || 'default';
+            return [
+                ['default', __('theme_default_follow_app', 'Default (follow App theme)')],
+                ['light', __('theme_light', 'Light')],
+                ['dark', __('theme_dark', 'Dark')]
+            ].map(([value, label]) => `<option value="${value}" ${current === value ? 'selected' : ''}>${label}</option>`).join('');
+        }
+
+        function screenThemeLabel(theme) {
+            if (theme === 'dark') return __('theme_dark', 'Dark');
+            if (theme === 'light') return __('theme_light', 'Light');
+            return __('theme_default', 'Default');
+        }
+
         async function renderScreenSettingsSettings(hostEl) {
             hostEl = hostEl || settingsContainer;
             if (!isFullSettingsAdmin) {
@@ -3354,19 +3372,11 @@ function __(key, def) {
                 hostEl.innerHTML = `
                     <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
                         <h5 class="mb-3"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
-                        <p class="text-muted">${__('own_screen_settings_desc', 'Adjust the display scale and fullscreen behavior for your own account. Display Resolution is stored for reference only.')}</p>
+                        <p class="text-muted">${__('own_screen_settings_desc_scale', 'Adjust the display scale, fullscreen behavior and color theme for your own account.')}</p>
                         <div class="row">
                             <div class="col-md-3 form-group">
                                 <label>${__('screen_scale', 'Scale %')}</label>
                                 <input type="number" min="25" max="300" step="5" class="form-control" id="own-screen-scale" value="${own.scale}">
-                            </div>
-                            <div class="col-md-3 form-group">
-                                <label>${__('display_width', 'Width (px)')}</label>
-                                <input type="number" min="800" max="7680" class="form-control" id="own-screen-width" value="${own.width}">
-                            </div>
-                            <div class="col-md-3 form-group">
-                                <label>${__('display_height', 'Height (px)')}</label>
-                                <input type="number" min="600" max="4320" class="form-control" id="own-screen-height" value="${own.height}">
                             </div>
                             <div class="col-md-3 form-group">
                                 <label class="d-block">&nbsp;</label>
@@ -3374,6 +3384,10 @@ function __(key, def) {
                                     <input type="checkbox" class="custom-control-input" id="own-screen-fullscreen" ${own.fullscreen ? 'checked' : ''}>
                                     <label class="custom-control-label" for="own-screen-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
                                 </div>
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label for="own-screen-theme">${__('theme_color', 'Theme')}</label>
+                                <select class="form-control" id="own-screen-theme">${screenThemeOptions(own.theme)}</select>
                             </div>
                         </div>
                         <button type="button" class="btn btn-primary waves-effect waves-light" id="saveOwnScreenSettingsBtn">${__('save_changes', 'Save Changes')}</button>
@@ -3389,7 +3403,7 @@ function __(key, def) {
                         <h5 class="mb-0"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
                         <span class="badge badge-pill badge-light" id="screen-settings-total-badge"></span>
                     </div>
-                    <p class="text-muted mb-3">${__('screen_settings_admin_desc', 'Search a user and set their display scale and fullscreen behavior. Display Resolution is stored for reference only and does not itself change rendering.')}</p>
+                    <p class="text-muted mb-3">${__('screen_settings_admin_desc_scale', 'Search a user and set their display scale, fullscreen behavior and color theme (Light / Dark).')}</p>
 
                     <div class="card mb-3">
                         <div class="card-body">
@@ -3582,8 +3596,8 @@ function __(key, def) {
                 html += '</div>';
                 html += `<div class="mt-2">
                     <span class="badge badge-info mr-1 mb-1">${__('screen_scale', 'Scale')}: ${s.scale}%</span>
-                    <span class="badge badge-info mr-1 mb-1">${s.width}x${s.height}</span>
                     <span class="badge ${s.fullscreen ? 'badge-success' : 'badge-secondary'} mr-1 mb-1">${s.fullscreen ? __('fullscreen_on', 'Fullscreen: On') : __('fullscreen_off', 'Fullscreen: Off')}</span>
+                    <span class="badge ${s.theme === 'dark' ? 'badge-dark' : (s.theme === 'light' ? 'badge-warning' : 'badge-secondary')} mr-1 mb-1"><i class="fas ${s.theme === 'dark' ? 'fa-moon' : (s.theme === 'light' ? 'fa-sun' : 'fa-circle-half-stroke')} mr-1"></i>${__('theme_color', 'Theme')}: ${screenThemeLabel(s.theme)}</span>
                 </div>`;
                 html += '</div>';
             });
@@ -3655,19 +3669,13 @@ function __(key, def) {
                             <label>${__('screen_scale', 'Scale %')}</label>
                             <input type="number" min="25" max="300" step="5" id="swal-ss-scale" class="form-control" value="${s.scale}">
                         </div>
-                        <div class="form-row">
-                            <div class="form-group col-6">
-                                <label>${__('display_width', 'Width (px)')}</label>
-                                <input type="number" min="800" max="7680" id="swal-ss-width" class="form-control" value="${s.width}">
-                            </div>
-                            <div class="form-group col-6">
-                                <label>${__('display_height', 'Height (px)')}</label>
-                                <input type="number" min="600" max="4320" id="swal-ss-height" class="form-control" value="${s.height}">
-                            </div>
-                        </div>
-                        <div class="custom-control custom-checkbox">
+                        <div class="custom-control custom-checkbox mb-3">
                             <input type="checkbox" class="custom-control-input" id="swal-ss-fullscreen" ${s.fullscreen ? 'checked' : ''}>
                             <label class="custom-control-label" for="swal-ss-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="swal-ss-theme">${__('theme_color', 'Theme')}</label>
+                            <select id="swal-ss-theme" class="form-control">${screenThemeOptions(s.theme)}</select>
                         </div>
                     </div>
                 `,
@@ -3677,9 +3685,8 @@ function __(key, def) {
                 focusConfirm: false,
                 preConfirm: () => ({
                     scale: parseInt(document.getElementById('swal-ss-scale').value, 10) || 100,
-                    width: parseInt(document.getElementById('swal-ss-width').value, 10) || 1920,
-                    height: parseInt(document.getElementById('swal-ss-height').value, 10) || 1080,
-                    fullscreen: document.getElementById('swal-ss-fullscreen').checked ? 1 : 0
+                    fullscreen: document.getElementById('swal-ss-fullscreen').checked ? 1 : 0,
+                    theme: document.getElementById('swal-ss-theme').value || 'default'
                 })
             }).then(async (result) => {
                 if (!result.isConfirmed) return;
@@ -3707,6 +3714,12 @@ function __(key, def) {
                         confirmButtonText: __('ok', 'OK')
                     });
                     renderAssignedScreenSettingsSummary(users);
+                    // The theme's CSS/JS are injected server-side into <head>
+                    // (includes/theme_dark.php), so the admin's own theme change only
+                    // shows after a reload. Other users see it on their next page load.
+                    if (isEditingSelf) {
+                        window.location.reload();
+                    }
                 } catch (error) {
                     Swal.fire(__('error'), error.message, 'error');
                 }
@@ -3721,9 +3734,8 @@ function __(key, def) {
                     body: new URLSearchParams({
                         action: 'update_own_screen_settings',
                         scale: document.getElementById('own-screen-scale').value,
-                        width: document.getElementById('own-screen-width').value,
-                        height: document.getElementById('own-screen-height').value,
-                        fullscreen: document.getElementById('own-screen-fullscreen').checked ? 1 : 0
+                        fullscreen: document.getElementById('own-screen-fullscreen').checked ? 1 : 0,
+                        theme: document.getElementById('own-screen-theme').value || 'default'
                     })
                 });
                 const data = await response.json();
@@ -3731,7 +3743,9 @@ function __(key, def) {
                     // Self-service always edits the logged-in user's own row - apply it to
                     // this tab immediately, no reload (hard or otherwise) needed.
                     applyScreenSettingsLive(data.settings);
-                    Swal.fire(__('success', 'Success'), __('screen_settings_applied_now', 'Applied to this session immediately.'), 'success');
+                    await Swal.fire(__('success', 'Success'), __('screen_settings_applied_now', 'Applied to this session immediately.'), 'success');
+                    // Theme is injected server-side (includes/theme_dark.php) - reload to show it.
+                    window.location.reload();
                 } else {
                     Swal.fire(__('error', 'Error'), data.message || __('generic_error_message', 'An unexpected error occurred.'), 'error');
                 }

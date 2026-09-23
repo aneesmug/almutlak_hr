@@ -122,6 +122,7 @@ function get_all_settings($conDB) {
     ensure_announcement_smtp_settings($conDB);
     ensure_screen_settings_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
+    ensure_theme_config_settings($conDB);
 
     $settings = [];
     // db_export_secret_key is auto-generated/rotated from db_export.php's own
@@ -388,6 +389,50 @@ function ensure_page_role_access_setting($conDB) {
 }
 
 /**
+ * Theme Config rows that older databases may lack. sql/ is git-ignored, so the
+ * matching migrations (add_theme_config_group.sql, add_theme_config_logo_group.sql,
+ * add_app_theme_setting.sql) never reached the live server on deploy - which left
+ * Theme Config > Company Logo showing "Group not found." there. Idempotent: every
+ * statement is a no-op once the rows are already in place.
+ */
+function ensure_theme_config_settings($conDB) {
+    // Menu theme / icon style: Theme Config > Menu Theme.
+    $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
+                   SELECT 'sidebar_theme', 'light', 'theme_config', 'Main menu theme', 'select', '{\"light\":\"Light\",\"dark\":\"Dark\"}'
+                   FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'sidebar_theme')");
+    $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
+                   SELECT 'sidebar_icon_style', 'colorful', 'theme_config', 'Main menu icon style', 'select', '{\"colorful\":\"Colorful\",\"white\":\"White\"}'
+                   FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'sidebar_icon_style')");
+    $conDB->query("UPDATE app_settings SET setting_group = 'theme_config'
+                   WHERE setting_name IN ('sidebar_theme', 'sidebar_icon_style') AND setting_group <> 'theme_config'");
+
+    // Logo / favicon: Theme Config > Company Logo (hub-only group, see renderThemeConfigHub()).
+    $conDB->query("UPDATE app_settings SET setting_group = 'theme_config_logo'
+                   WHERE setting_name IN ('logo', 'white_logo', 'text_logo', 'favicon') AND setting_group <> 'theme_config_logo'");
+
+    // Global dark/light theme (per-user override lives in Screen Settings).
+    $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
+                   SELECT 'app_theme', 'light', 'theme_config', 'App theme (whole system)', 'select', '{\"light\":\"Light\",\"dark\":\"Dark\"}'
+                   FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'app_theme')");
+
+    $translations = [
+        ['theme_config', 'en', 'Theme Config'], ['theme_config', 'ar', 'إعدادات المظهر'],
+        ['menu_theme', 'en', 'Menu Theme'], ['menu_theme', 'ar', 'مظهر القائمة'],
+        ['company_logo', 'en', 'Company Logo'], ['company_logo', 'ar', 'شعار الشركة'],
+    ];
+    $stmt = $conDB->prepare("INSERT INTO translations (lang_key, lang_code, translation)
+                             SELECT ?, ?, ? FROM DUAL
+                             WHERE NOT EXISTS (SELECT 1 FROM translations WHERE lang_key = ? AND lang_code = ?)");
+    if ($stmt) {
+        foreach ($translations as [$key, $lang, $text]) {
+            $stmt->bind_param('sssss', $key, $lang, $text, $key, $lang);
+            $stmt->execute();
+        }
+        $stmt->close();
+    }
+}
+
+/**
  * Ensure the screen-settings map setting exists in app_settings.
  */
 function ensure_screen_settings_setting($conDB) {
@@ -521,6 +566,7 @@ function update_own_screen_settings($conDB, $empId, $userRole, $userType, $isSys
         'width' => $_POST['width'] ?? null,
         'height' => $_POST['height'] ?? null,
         'fullscreen' => $_POST['fullscreen'] ?? null,
+        'theme' => $_POST['theme'] ?? null,
     ]);
 
     $map = get_screen_settings_map($conDB);

@@ -1,5 +1,7 @@
 <?php
-// App-wide dark theme (App Settings > Theme Config > "App theme" = Dark).
+// Dark theme. Per user: App Settings > Theme Config > Screen Settings > "Theme"
+// (Light / Dark) wins; "Default" falls back to the global App Settings > Theme
+// Config > "App theme".
 // Required from session_check.php, so it reaches every logged-in page - including
 // the ones that never include main_menu.php (profile.php, *_history.php, reports,
 // print pages...). Instead of editing each page's <head>, an output buffer slips
@@ -9,10 +11,20 @@
 // has a </head> is touched.
 
 if (!function_exists('app_dark_theme_enabled')) {
-    function app_dark_theme_enabled($conDB) {
+    function app_dark_theme_enabled($conDB, $empId = null) {
         static $enabled = null;
         if ($enabled === null) {
-            $enabled = $conDB && get_setting($conDB, 'app_theme') === 'dark';
+            $enabled = false;
+            if ($conDB) {
+                if ($empId === null) {
+                    $empId = $GLOBALS['empid'] ?? '';
+                }
+                require_once __DIR__ . '/screen_settings_helper.php';
+                $userTheme = get_user_screen_settings($conDB, $empId)['theme'] ?? 'default';
+                $enabled = $userTheme === 'default'
+                    ? get_setting($conDB, 'app_theme') === 'dark'
+                    : $userTheme === 'dark';
+            }
         }
         return $enabled;
     }
