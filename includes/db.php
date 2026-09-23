@@ -178,9 +178,8 @@ if (!function_exists('app_bootstrap_error_handlers')) {
 app_bootstrap_error_handlers();
 
 // Caps concurrent DB-connecting requests, per client IP AND app-wide, so the
-// shared-hosting MySQL pool (fixed by the host, can't be raised - see
-// max_connections) never gets exhausted from our side. IP is the closest
-// reliable stand-in for "one device" - true device fingerprints are JS-based
+// shared MySQL pool (see max_connections) never gets exhausted from our side.
+// IP is the closest reliable stand-in for "one device" - true device fingerprints are JS-based
 // and spoofable. Uses flock'd files (no APCu/Redis dependency) so it works on
 // plain shared hosting.
 if (!defined('ALMUTLAK_CONNLIMIT_DIR')) {
@@ -288,13 +287,13 @@ app_acquire_concurrency_slot(
     'Too many concurrent requests from your connection. Please wait a moment and try again.'
 );
 
-// App-wide: host's max_connections is fixed at 151 and shared with other
-// processes on the account (other cron jobs, other DB clients). Stay well
-// under it so our own app never triggers the fatal "1040 Too many
-// connections" - reject gracefully instead once we're the bottleneck.
+// App-wide: MySQL max_connections is 500 and shared with other processes on
+// the account (ZK sync, other DB clients). Stay well under it (~66%) so our
+// own app never triggers the fatal "1040 Too many connections" - reject
+// gracefully instead once we're the bottleneck.
 app_acquire_concurrency_slot(
     'global',
-    100,
+    330,
     'The system is under heavy load right now. Please try again in a moment.'
 );
 
@@ -358,9 +357,8 @@ if (!$connected) {
 
 $conDB->set_charset("utf8mb4");
 
-// Host won't raise max_connections (fixed shared-hosting limit). Shrinking
-// this connection's own idle timeout means if a request dies weird (client
-// abort, hung script) and never explicitly closes, MySQL reclaims the slot
+// max_connections is a finite shared pool. Shrinking this connection's own
+// idle timeout means if a request dies weird (client abort, hung script) and never explicitly closes, MySQL reclaims the slot
 // in seconds instead of sitting on it until the server-wide wait_timeout
 // (often hours on shared hosts) finally kicks it out.
 mysqli_query($conDB, "SET SESSION wait_timeout = 15, SESSION interactive_timeout = 15");
