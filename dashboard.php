@@ -1384,22 +1384,25 @@ if(isset($_POST['submit'])){
 
 					var hasData = labels.length > 0 && data.reduce(function(a, b) { return a + b; }, 0) > 0;
 					var dim = DIM_BY_CONTAINER[containerId];
+					// App-wide dark theme (App Settings > Theme Config) - let the dark card show
+					// through instead of painting a white box inside it.
+					var isDarkUi = document.documentElement.classList.contains('app-dark');
 					var options = {
 						chart: {
 							type: 'donut',
 							height: 280,
-							background: '#ffffff',
-							foreColor: '#212529',
+							background: isDarkUi ? 'transparent' : '#ffffff',
+							foreColor: isDarkUi ? '#d8dee9' : '#212529',
 							events: dim ? {
 								dataPointSelection: function(event, chartCtx, config) {
 									onSliceClick(containerId, dim, config.dataPointIndex);
 								}
 							} : {}
 						},
-						theme: { mode: 'light' },
+						theme: { mode: isDarkUi ? 'dark' : 'light' },
 						series: hasData ? data : [1],
 						labels: hasData ? labels : [NO_DATA_LABEL],
-						colors: hasData ? colorsFor(labels) : ['#e5e7eb'],
+						colors: hasData ? colorsFor(labels) : [isDarkUi ? '#2a3348' : '#e5e7eb'],
 						plotOptions: {
 							pie: {
 								donut: {
@@ -1424,14 +1427,14 @@ if(isset($_POST['submit'])){
 								stops: [0, 100]
 							}
 						},
-						stroke: { show: true, width: 2, colors: ['#ffffff'] },
+						stroke: { show: true, width: 2, colors: [isDarkUi ? '#151b28' : '#ffffff'] },
 						states: {
 							hover: { filter: { type: 'none' } },
 							active: { filter: { type: 'none' } }
 						},
 						legend: { show: showSliceLabels, position: 'bottom', fontSize: '12px' },
 						dataLabels: { enabled: hasData, style: { fontSize: '11px' } },
-						tooltip: { enabled: hasData },
+						tooltip: { enabled: hasData, theme: isDarkUi ? 'dark' : 'light' },
 						noData: { text: NO_DATA_LABEL }
 					};
 

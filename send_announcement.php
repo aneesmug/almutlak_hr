@@ -1149,7 +1149,7 @@ if (!empty($formData['issue_date'])) {
                                             </div>
                                         </div>
 
-                                        <div class="preview-shell">
+                                        <div class="preview-shell ad-keep">
                                             <div class="announcement-sheet" id="announcementPreview" style="--watermark: url('<?= htmlspecialchars((string)get_setting($conDB, 'logo'), ENT_QUOTES, 'UTF-8') ?>');">
                                                 <div class="announcement-head">
                                                     <div class="en-title">Almutlak Trade &amp;<br>Industries Holding Co.</div>
@@ -1567,6 +1567,11 @@ if (!empty($formData['issue_date'])) {
             return Promise.resolve('');
         }
 
+        // The emailed image must always be the light design, even when the app's dark
+        // theme is on (App Settings > Theme Config) - switch it off for the capture.
+        var darkTheme = window.AppDark || null;
+        if (darkTheme) darkTheme.suspend();
+
         return html2canvas(document.getElementById('announcementPreview'), {
             backgroundColor: '#f4f4f4',
             scale: 2,
@@ -1576,6 +1581,9 @@ if (!empty($formData['issue_date'])) {
             return canvas.toDataURL('image/png');
         }).catch(function() {
             return '';
+        }).then(function(dataUrl) {
+            if (darkTheme) darkTheme.resume();
+            return dataUrl;
         });
     }
 

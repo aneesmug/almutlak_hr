@@ -1068,22 +1068,26 @@ if (mysqli_num_rows($query) == 1) {
 
                 let options;
                 const chartColors = graphColorsFor(labels.length);
+                // App-wide dark theme (App Settings > Theme Config) - no white box inside the dark card.
+                const isDarkUi = document.documentElement.classList.contains('app-dark');
+                const chartBg = isDarkUi ? 'transparent' : '#ffffff';
+                const chartFg = isDarkUi ? '#d8dee9' : '#212529';
                 if (chartType === 'bar') {
                     options = {
                         chart: {
-                            type: 'bar', height: 380, toolbar: { show: true }, background: '#ffffff', foreColor: '#212529',
+                            type: 'bar', height: 380, toolbar: { show: true }, background: chartBg, foreColor: chartFg,
                             events: {
                                 dataPointSelection: function(event, chartContext, config) {
                                     onChartLabelClick(config.dataPointIndex);
                                 }
                             }
                         },
-                        theme: { mode: 'light' },
+                        theme: { mode: isDarkUi ? 'dark' : 'light' },
                         series: [{ name: (typeof __ === 'function') ? __('count', 'Count') : 'Count', data: series }],
                         xaxis: { categories: labels },
                         colors: chartColors,
                         fill: GRAPH_GRADIENT_FILL,
-                        stroke: { show: true, width: 2, colors: ['#ffffff'] },
+                        stroke: { show: true, width: 2, colors: [isDarkUi ? '#151b28' : '#ffffff'] },
                         plotOptions: { bar: { borderRadius: 4, distributed: true } },
                         states: {
                             hover: { filter: { type: 'none' } },
@@ -1108,7 +1112,7 @@ if (mysqli_num_rows($query) == 1) {
                 } else {
                     options = {
                         chart: {
-                            type: chartType === 'donut' ? 'donut' : 'pie', height: 400, background: '#ffffff', foreColor: '#212529',
+                            type: chartType === 'donut' ? 'donut' : 'pie', height: 400, background: chartBg, foreColor: chartFg,
                             events: {
                                 dataPointSelection: function(event, chartContext, config) {
                                     onChartLabelClick(config.dataPointIndex);
@@ -1118,12 +1122,12 @@ if (mysqli_num_rows($query) == 1) {
                                 }
                             }
                         },
-                        theme: { mode: 'light' },
+                        theme: { mode: isDarkUi ? 'dark' : 'light' },
                         series: series,
                         labels: labels,
                         colors: chartColors,
                         fill: GRAPH_GRADIENT_FILL,
-                        stroke: { show: true, width: 2, colors: ['#ffffff'] },
+                        stroke: { show: true, width: 2, colors: [isDarkUi ? '#151b28' : '#ffffff'] },
                         states: {
                             hover: { filter: { type: 'none' } },
                             active: { filter: { type: 'none' } }

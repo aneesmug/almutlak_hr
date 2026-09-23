@@ -755,7 +755,13 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 ?>
 <link rel="stylesheet" href="assets/css/sidebar_v2.css?v=<?= @filemtime(__DIR__ . '/../assets/css/sidebar_v2.css') ?>">
 <script src="assets/js/sidebar_v2.js?v=<?= @filemtime(__DIR__ . '/../assets/js/sidebar_v2.js') ?>"></script>
-<?php if (get_setting($conDB, 'sidebar_theme') !== 'dark') { ?><script>document.body.classList.add('sbv2-light');</script><?php } ?>
+<?php $appDarkTheme = get_setting($conDB, 'app_theme') === 'dark'; ?>
+<?php if ($appDarkTheme && !defined('APP_DARK_THEME_BUFFERED')) { // normally injected into <head> by theme_dark.php ?>
+<link rel="stylesheet" media="screen" href="assets/css/app_dark.css?v=<?= @filemtime(__DIR__ . '/../assets/css/app_dark.css') ?>">
+<script>document.documentElement.classList.add('app-dark');document.body.classList.add('app-dark');</script>
+<script src="assets/js/app_dark.js?v=<?= @filemtime(__DIR__ . '/../assets/js/app_dark.js') ?>" defer></script>
+<?php } ?>
+<?php if (!$appDarkTheme && get_setting($conDB, 'sidebar_theme') !== 'dark') { ?><script>document.body.classList.add('sbv2-light');</script><?php } ?>
 <?php if (get_setting($conDB, 'sidebar_icon_style') === 'white') { ?><script>document.body.classList.add('sbv2-icons-white');</script><?php } ?>
 
 <div class="user-box">

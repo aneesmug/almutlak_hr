@@ -1,0 +1,439 @@
+/* App-wide dark theme. Loaded by includes/main_menu.php when App Settings >
+   Theme Config > "App theme" is Dark, which also adds .app-dark to <html> and
+   <body>. Everything is scoped under .app-dark so this file is inert otherwise.
+   Overrides use !important because page-level <style> blocks and the legacy
+   theme (style.css) hardcode light colors everywhere. */
+
+html.app-dark {
+    --ad-bg: #0f1420;
+    --ad-surface: #161c2a;
+    --ad-surface-2: #1d2436;
+    --ad-surface-3: #252e44;
+    --ad-border: #2a3348;
+    --ad-text: #d8dee9;
+    --ad-text-strong: #f1f5f9;
+    --ad-muted: #8b98ad;
+    --ad-link: #38bdf8;
+    --ad-input: #111827;
+    color-scheme: dark;
+    background: var(--ad-bg);
+}
+
+/* ---------- Base ---------- */
+html.app-dark body {
+    background-color: var(--ad-bg) !important;
+    color: var(--ad-text);
+}
+html.app-dark #wrapper,
+html.app-dark .content-page,
+html.app-dark .content,
+html.app-dark .container-fluid,
+html.app-dark .page-content,
+html.app-dark .main-content { background-color: transparent !important; }
+
+/* .ad-keep marks areas that must keep their light design (e.g. send_announcement.php's
+   emailed preview) - assets/js/app_dark.js skips them, and these text rules do too. */
+html.app-dark :is(h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6,
+    .page-title, .header-title, .card-title, strong, b, label, legend):not(.ad-keep *) { color: var(--ad-text-strong); }
+
+html.app-dark a:not(.btn):not(.badge):not(.nav-link):not(.dropdown-item):not(.page-link):not(.ad-keep *) { color: var(--ad-link); }
+html.app-dark hr:not(.ad-keep *) { border-color: var(--ad-border) !important; }
+html.app-dark :is(.text-muted, .text-secondary, small):not(.ad-keep *) { color: var(--ad-muted) !important; }
+html.app-dark :is(.text-dark, .text-body, .text-black):not(.ad-keep *) { color: var(--ad-text) !important; }
+/* Light areas inherit the light-theme body text color (Bootstrap 4 default) instead
+   of the dark theme's light body text, which is unreadable on their white sheet. */
+html.app-dark .ad-keep { color: #212529; }
+
+/* ---------- Topbar / footer ---------- */
+html.app-dark .navbar-custom,
+html.app-dark .topbar,
+html.app-dark .topbar .topbar-left {
+    background-color: var(--ad-surface) !important;
+    border-bottom: 1px solid var(--ad-border);
+    box-shadow: none !important;
+}
+html.app-dark .navbar-custom .nav-link,
+html.app-dark .button-menu-mobile { color: var(--ad-text) !important; }
+html.app-dark .footer {
+    background-color: transparent !important;
+    color: var(--ad-muted) !important;
+    border-top-color: var(--ad-border) !important;
+}
+/* topbar.php pill buttons / search / user chip */
+html.app-dark .tbx-btn,
+html.app-dark .tbx-search form,
+html.app-dark .tbx-user { background: var(--ad-surface-2) !important; color: var(--ad-text) !important; }
+html.app-dark .tbx-btn:hover,
+html.app-dark .tbx-user:hover { background: var(--ad-surface-3) !important; color: var(--ad-text-strong) !important; }
+html.app-dark .tbx-search-input { color: var(--ad-text) !important; }
+
+/* ---------- Sidebar (always dark in app-dark) ---------- */
+html.app-dark body.sbv2 #wrapper .left.side-menu,
+html.app-dark body.sbv2 #wrapper .left.side-menu .topbar-left,
+html.app-dark body.sbv2 #wrapper .left.side-menu .slimscroll-menu,
+html.app-dark .side-menu {
+    background: var(--ad-surface) !important;
+    border-right: 1px solid var(--ad-border);
+}
+html.app-dark .user-box h5 a, html.app-dark .user-box h5 { color: var(--ad-text-strong) !important; }
+
+/* ---------- Cards / panels / boxes ---------- */
+html.app-dark .card,
+html.app-dark .card-box,
+html.app-dark .panel,
+html.app-dark .box,
+html.app-dark .widget,
+html.app-dark .widget-box,
+html.app-dark .jumbotron,
+html.app-dark .well,
+html.app-dark .page-title-box,
+html.app-dark .tab-content,
+html.app-dark .accordion .card {
+    background-color: var(--ad-surface) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .35) !important;
+}
+html.app-dark .card-header,
+html.app-dark .card-footer,
+html.app-dark .panel-heading,
+html.app-dark .panel-footer,
+html.app-dark .modal-header,
+html.app-dark .modal-footer {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text-strong);
+}
+html.app-dark .card-body, html.app-dark .panel-body { color: var(--ad-text); }
+
+/* ---------- Bootstrap background / border utilities ---------- */
+html.app-dark .bg-white,
+html.app-dark .bg-light,
+html.app-dark .bg-body,
+html.app-dark .bg-transparent-light { background-color: var(--ad-surface) !important; }
+html.app-dark .bg-gray, html.app-dark .bg-secondary-subtle, html.app-dark .bg-light-subtle { background-color: var(--ad-surface-2) !important; }
+html.app-dark .border, html.app-dark .border-top, html.app-dark .border-bottom,
+html.app-dark .border-left, html.app-dark .border-right,
+html.app-dark .border-start, html.app-dark .border-end,
+html.app-dark .border-light { border-color: var(--ad-border) !important; }
+
+/* Inline light backgrounds written straight into page markup */
+html.app-dark [style*="background:#fff"],
+html.app-dark [style*="background: #fff"],
+html.app-dark [style*="background-color:#fff"],
+html.app-dark [style*="background-color: #fff"],
+html.app-dark [style*="background:white"],
+html.app-dark [style*="background: white"],
+html.app-dark [style*="background-color: white"],
+html.app-dark [style*="background:#f8f9fa"],
+html.app-dark [style*="background: #f8f9fa"],
+html.app-dark [style*="background-color: #f8f9fa"],
+html.app-dark [style*="background:#f3f6f8"],
+html.app-dark [style*="background: #f3f6f8"],
+html.app-dark [style*="background:#f1f5f9"],
+html.app-dark [style*="background: #f1f5f9"],
+html.app-dark [style*="background:#f5f5f5"],
+html.app-dark [style*="background: #f5f5f5"],
+html.app-dark [style*="background-color: #f5f5f5"],
+html.app-dark [style*="background:#eef2f6"],
+html.app-dark [style*="background: #eef2f6"] { background: var(--ad-surface-2) !important; }
+html.app-dark [style*="color:#000"],
+html.app-dark [style*="color: #000"],
+html.app-dark [style*="color:black"],
+html.app-dark [style*="color: black"],
+html.app-dark [style*="color:#333"],
+html.app-dark [style*="color: #333"],
+html.app-dark [style*="color:#212529"],
+html.app-dark [style*="color: #212529"],
+html.app-dark [style*="color:#0f172a"],
+html.app-dark [style*="color: #0f172a"],
+html.app-dark [style*="color:#1e293b"],
+html.app-dark [style*="color: #1e293b"],
+html.app-dark [style*="color:#313a46"],
+html.app-dark [style*="color: #313a46"] { color: var(--ad-text) !important; }
+html.app-dark [style*="border:1px solid #"],
+html.app-dark [style*="border: 1px solid #"] { border-color: var(--ad-border) !important; }
+
+/* ---------- Tables ---------- */
+html.app-dark .table,
+html.app-dark table.dataTable {
+    color: var(--ad-text) !important;
+    background-color: transparent !important;
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--ad-text);
+    --bs-table-striped-bg: rgba(255, 255, 255, .03);
+    --bs-table-striped-color: var(--ad-text);
+    --bs-table-hover-bg: rgba(255, 255, 255, .06);
+    --bs-table-hover-color: var(--ad-text-strong);
+    --bs-table-border-color: var(--ad-border);
+}
+html.app-dark .table > :not(caption) > * > *,
+html.app-dark .table td,
+html.app-dark .table th,
+html.app-dark table.dataTable td,
+html.app-dark table.dataTable th {
+    border-color: var(--ad-border) !important;
+    background-color: transparent;
+    color: inherit;
+}
+html.app-dark .table thead th,
+html.app-dark .thead-light th,
+html.app-dark .table-light,
+html.app-dark .table-light > * > *,
+html.app-dark table.dataTable thead th {
+    background-color: var(--ad-surface-2) !important;
+    color: var(--ad-text-strong) !important;
+}
+html.app-dark .table-striped tbody tr:nth-of-type(odd),
+html.app-dark table.dataTable.stripe tbody tr.odd,
+html.app-dark table.dataTable.display tbody tr.odd { background-color: rgba(255, 255, 255, .03) !important; }
+html.app-dark table.dataTable tbody tr,
+html.app-dark table.dataTable.display tbody tr.even { background-color: transparent !important; }
+html.app-dark .table-hover tbody tr:hover,
+html.app-dark table.dataTable tbody tr:hover { background-color: rgba(255, 255, 255, .06) !important; color: var(--ad-text-strong); }
+html.app-dark table.dataTable.display tbody tr > .sorting_1 { background-color: rgba(255, 255, 255, .02) !important; }
+html.app-dark .table-bordered, html.app-dark .table-bordered td, html.app-dark .table-bordered th { border-color: var(--ad-border) !important; }
+
+/* DataTables chrome */
+html.app-dark .dataTables_wrapper,
+html.app-dark .dataTables_wrapper .dataTables_info,
+html.app-dark .dataTables_wrapper .dataTables_length,
+html.app-dark .dataTables_wrapper .dataTables_filter,
+html.app-dark .dataTables_wrapper .dataTables_processing { color: var(--ad-muted) !important; }
+html.app-dark .dataTables_wrapper .dataTables_processing { background: var(--ad-surface-2) !important; border-color: var(--ad-border) !important; }
+html.app-dark .dataTables_wrapper .dataTables_paginate .paginate_button { color: var(--ad-text) !important; }
+html.app-dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { color: var(--ad-muted) !important; }
+html.app-dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current) {
+    background: var(--ad-surface-3) !important;
+    border-color: var(--ad-border) !important;
+}
+html.app-dark .dt-buttons .btn-secondary, html.app-dark .dt-button {
+    background: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark div.dt-button-collection { background: var(--ad-surface-2) !important; border-color: var(--ad-border) !important; }
+
+/* ---------- Forms ---------- */
+html.app-dark .form-control,
+html.app-dark .form-select,
+html.app-dark .custom-select,
+html.app-dark .input-group-text,
+html.app-dark input[type="text"], html.app-dark input[type="email"],
+html.app-dark input[type="number"], html.app-dark input[type="password"],
+html.app-dark input[type="search"], html.app-dark input[type="tel"],
+html.app-dark input[type="url"], html.app-dark input[type="date"],
+html.app-dark input[type="datetime-local"], html.app-dark input[type="month"],
+html.app-dark input[type="time"], html.app-dark select, html.app-dark textarea {
+    background-color: var(--ad-input) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .form-control:focus,
+html.app-dark .form-select:focus,
+html.app-dark select:focus, html.app-dark textarea:focus, html.app-dark input:focus {
+    border-color: #0ea5e9 !important;
+    box-shadow: 0 0 0 .15rem rgba(14, 165, 233, .25) !important;
+}
+html.app-dark .form-control::placeholder, html.app-dark input::placeholder, html.app-dark textarea::placeholder { color: #64748b !important; }
+html.app-dark .form-control:disabled,
+html.app-dark .form-control[readonly],
+html.app-dark .form-select:disabled,
+html.app-dark select:disabled, html.app-dark input:disabled, html.app-dark textarea:disabled {
+    background-color: var(--ad-surface-2) !important;
+    color: var(--ad-muted) !important;
+}
+html.app-dark .input-group-text { color: var(--ad-muted) !important; }
+html.app-dark .form-text { color: var(--ad-muted) !important; }
+html.app-dark .form-check-input { background-color: var(--ad-input); border-color: #475569; }
+html.app-dark .form-check-input:checked { background-color: #0ea5e9; border-color: #0ea5e9; }
+html.app-dark .custom-control-label::before { background-color: var(--ad-input); border-color: #475569; }
+html.app-dark .custom-file-label { background-color: var(--ad-input) !important; border-color: var(--ad-border) !important; color: var(--ad-text) !important; }
+html.app-dark .custom-file-label::after { background-color: var(--ad-surface-3) !important; color: var(--ad-text) !important; }
+html.app-dark select option { background-color: var(--ad-surface-2); color: var(--ad-text); }
+
+/* Select2 */
+html.app-dark .select2-container--default .select2-selection--single,
+html.app-dark .select2-container--default .select2-selection--multiple,
+html.app-dark .select2-container--bootstrap4 .select2-selection,
+html.app-dark .select2-container--bootstrap-5 .select2-selection {
+    background-color: var(--ad-input) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .select2-container .select2-selection__rendered { color: var(--ad-text) !important; }
+html.app-dark .select2-container .select2-selection__placeholder { color: #64748b !important; }
+html.app-dark .select2-container .select2-selection__choice {
+    background-color: var(--ad-surface-3) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .select2-dropdown {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .select2-search__field {
+    background-color: var(--ad-input) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .select2-results__option { color: var(--ad-text); }
+html.app-dark .select2-results__option[aria-selected="true"],
+html.app-dark .select2-results__option--selected { background-color: var(--ad-surface-3) !important; }
+html.app-dark .select2-results__option--highlighted[aria-selected],
+html.app-dark .select2-results__option--highlighted { background-color: #0369a1 !important; color: #fff !important; }
+
+/* Datepickers */
+html.app-dark .datepicker,
+html.app-dark .datepicker-dropdown,
+html.app-dark .flatpickr-calendar,
+html.app-dark .daterangepicker,
+html.app-dark .ui-datepicker {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .datepicker table tr td, html.app-dark .datepicker table tr th,
+html.app-dark .daterangepicker td, html.app-dark .daterangepicker th,
+html.app-dark .daterangepicker .calendar-table { background-color: transparent !important; color: var(--ad-text); border-color: var(--ad-border) !important; }
+html.app-dark .datepicker table tr td.day:hover,
+html.app-dark .datepicker table tr td.focused,
+html.app-dark .daterangepicker td.available:hover { background-color: var(--ad-surface-3) !important; }
+html.app-dark .datepicker table tr td.old, html.app-dark .datepicker table tr td.new,
+html.app-dark .daterangepicker td.off { color: #556176 !important; }
+html.app-dark .flatpickr-day { color: var(--ad-text); }
+html.app-dark .flatpickr-day:hover { background: var(--ad-surface-3); border-color: var(--ad-surface-3); }
+html.app-dark .flatpickr-months .flatpickr-month,
+html.app-dark .flatpickr-current-month .flatpickr-monthDropdown-months,
+html.app-dark span.flatpickr-weekday { background: transparent !important; color: var(--ad-text) !important; fill: var(--ad-text) !important; }
+
+/* ---------- Dropdowns / popovers / tooltips ---------- */
+html.app-dark .dropdown-menu {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .45) !important;
+}
+html.app-dark .dropdown-item, html.app-dark .notify-item { color: var(--ad-text) !important; }
+html.app-dark .dropdown-item:hover,
+html.app-dark .dropdown-item:focus,
+html.app-dark .notify-item:hover { background-color: var(--ad-surface-3) !important; color: var(--ad-text-strong) !important; }
+html.app-dark .dropdown-divider { border-color: var(--ad-border) !important; }
+html.app-dark .dropdown-header, html.app-dark .noti-title { background: transparent !important; color: var(--ad-muted) !important; }
+html.app-dark .popover { background-color: var(--ad-surface-2); border-color: var(--ad-border); }
+html.app-dark .popover-header { background-color: var(--ad-surface-3); border-color: var(--ad-border); color: var(--ad-text-strong); }
+html.app-dark .popover-body { color: var(--ad-text); }
+
+/* ---------- Modals ---------- */
+html.app-dark .modal-content {
+    background-color: var(--ad-surface) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text);
+}
+html.app-dark .modal-title { color: var(--ad-text-strong); }
+html.app-dark .close, html.app-dark .btn-close { color: var(--ad-text) !important; text-shadow: none; opacity: .8; }
+html.app-dark .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+
+/* SweetAlert2 */
+html.app-dark .swal2-popup {
+    background: var(--ad-surface) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .swal2-title, html.app-dark .swal2-html-container, html.app-dark .swal2-content { color: var(--ad-text) !important; }
+html.app-dark .swal2-input, html.app-dark .swal2-textarea, html.app-dark .swal2-select {
+    background: var(--ad-input) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .swal2-validation-message { background: var(--ad-surface-2) !important; color: var(--ad-text) !important; }
+html.app-dark .swal2-icon.swal2-success [class^="swal2-success-circular-line"],
+html.app-dark .swal2-icon.swal2-success .swal2-success-fix { background: transparent !important; }
+
+/* ---------- Tabs / pills / list groups / pagination ---------- */
+html.app-dark .nav-tabs { border-color: var(--ad-border) !important; }
+html.app-dark .nav-tabs .nav-link { color: var(--ad-muted); }
+html.app-dark .nav-tabs .nav-link:hover { border-color: var(--ad-border); color: var(--ad-text); }
+html.app-dark .nav-tabs .nav-link.active,
+html.app-dark .nav-tabs .nav-item.show .nav-link {
+    background-color: var(--ad-surface) !important;
+    border-color: var(--ad-border) var(--ad-border) var(--ad-surface) !important;
+    color: var(--ad-text-strong) !important;
+}
+html.app-dark .nav-pills .nav-link:not(.active) { color: var(--ad-text); }
+html.app-dark .nav-pills .nav-link:not(.active):hover { background-color: var(--ad-surface-2); }
+html.app-dark .list-group-item {
+    background-color: var(--ad-surface) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text);
+}
+html.app-dark .list-group-item-action:hover { background-color: var(--ad-surface-2) !important; }
+html.app-dark .page-link {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .page-item.disabled .page-link { color: var(--ad-muted) !important; }
+html.app-dark .page-item.active .page-link { background-color: #0284c7 !important; border-color: #0284c7 !important; color: #fff !important; }
+html.app-dark .breadcrumb { background-color: transparent !important; }
+html.app-dark .breadcrumb-item, html.app-dark .breadcrumb-item.active { color: var(--ad-muted) !important; }
+html.app-dark .progress { background-color: var(--ad-surface-3) !important; }
+
+/* ---------- Buttons ---------- */
+html.app-dark .btn-light,
+html.app-dark .btn-white,
+html.app-dark .btn-default,
+html.app-dark .btn-outline-light {
+    background-color: var(--ad-surface-2) !important;
+    border-color: var(--ad-border) !important;
+    color: var(--ad-text) !important;
+}
+html.app-dark .btn-light:hover,
+html.app-dark .btn-white:hover,
+html.app-dark .btn-default:hover { background-color: var(--ad-surface-3) !important; }
+html.app-dark .btn-outline-dark, html.app-dark .btn-outline-secondary { color: var(--ad-text) !important; border-color: #475569 !important; }
+html.app-dark .btn-outline-dark:hover, html.app-dark .btn-outline-secondary:hover { background-color: var(--ad-surface-3) !important; }
+html.app-dark .btn-dark { background-color: var(--ad-surface-3) !important; border-color: var(--ad-border) !important; }
+html.app-dark .badge-light, html.app-dark .bg-light.badge, html.app-dark .badge.bg-light { background-color: var(--ad-surface-3) !important; color: var(--ad-text) !important; }
+
+/* ---------- Alerts (tone down the light pastel fills) ---------- */
+html.app-dark .alert { border-color: var(--ad-border); }
+html.app-dark .alert-info { background-color: rgba(14, 165, 233, .12) !important; color: #7dd3fc !important; border-color: rgba(14, 165, 233, .3) !important; }
+html.app-dark .alert-success { background-color: rgba(34, 197, 94, .12) !important; color: #86efac !important; border-color: rgba(34, 197, 94, .3) !important; }
+html.app-dark .alert-warning { background-color: rgba(245, 158, 11, .12) !important; color: #fcd34d !important; border-color: rgba(245, 158, 11, .3) !important; }
+html.app-dark .alert-danger { background-color: rgba(239, 68, 68, .12) !important; color: #fca5a5 !important; border-color: rgba(239, 68, 68, .3) !important; }
+html.app-dark .alert-secondary, html.app-dark .alert-light, html.app-dark .alert-primary {
+    background-color: var(--ad-surface-2) !important;
+    color: var(--ad-text) !important;
+    border-color: var(--ad-border) !important;
+}
+
+/* ---------- Misc ---------- */
+html.app-dark pre, html.app-dark code, html.app-dark kbd { background-color: var(--ad-surface-2); color: #e2e8f0; }
+html.app-dark .shadow, html.app-dark .shadow-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, .5) !important; }
+html.app-dark .toast, html.app-dark .toast-header { background-color: var(--ad-surface-2) !important; color: var(--ad-text) !important; border-color: var(--ad-border) !important; }
+html.app-dark .dropzone { background: var(--ad-surface-2) !important; border-color: var(--ad-border) !important; color: var(--ad-text); }
+html.app-dark .apexcharts-text, html.app-dark .apexcharts-legend-text { fill: var(--ad-muted) !important; color: var(--ad-muted) !important; }
+html.app-dark .apexcharts-gridline { stroke: var(--ad-border) !important; }
+html.app-dark .apexcharts-tooltip { background: var(--ad-surface-2) !important; border-color: var(--ad-border) !important; color: var(--ad-text) !important; }
+
+html.app-dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.app-dark ::-webkit-scrollbar-track { background: var(--ad-bg); }
+html.app-dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 6px; }
+html.app-dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ---------- Approval pages (all_applied_*, all_settlements, all_resignations,
+   all_payroll_approvals) ----------
+   Their .request-card footer is a pastel gradient under a card that is dark here -
+   swap it for a dark tint of the same purple family so the card reads as one piece. */
+html.app-dark .request-card { box-shadow: 0 10px 30px rgba(0, 0, 0, .35) !important; }
+html.app-dark .request-card .card-footer {
+    background: linear-gradient(135deg, #1d2140 0%, #251f3a 100%) !important;
+    border-top-color: #3b4174 !important;
+    color: var(--ad-text) !important;
+}
+
+/* Set by assets/js/app_dark.js only while it re-reads/repaints colors - see process() there. */
+html.app-dark.ad-busy *,
+html.app-dark.ad-busy *::before,
+html.app-dark.ad-busy *::after { transition: none !important; }
