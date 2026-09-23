@@ -12,3 +12,4 @@
 2026-09-08 15:38:31 - Exported 2 new punch(es) recorded in ZKT server's MSSQL to D:\xampp\htdocs\almutlak\system\zk_local_agent\exports\new_punches_20260908_153831.json.
 2026-09-08 16:30:45 - Synced 23 new punch(es), 1477 duplicate(s) skipped, 17/18 device(s) state-synced.
 2026-09-08 16:30:45 - Exported 23 new punch(es) recorded in ZKT server's MSSQL to D:\xampp\htdocs\almutlak\system\zk_local_agent\exports\new_punches_20260908_163045.json.
+2026-09-22 22:23:47 - ERROR: could not connect to MSSQL - Exception calling "Open" with "0" argument(s): "A network-related or instance-specific error occurred while establishing a connection to SQL Server. The server was not found or was not accessible. Verify that the instance name is correct and that SQL Server is configured to allow remote connections. (provider: Named Pipes Provider, error: 40 - Could not open a connection to SQL Server)"

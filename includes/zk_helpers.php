@@ -196,6 +196,42 @@ if (!function_exists('zk_get_sync_allowed_ip')) {
     }
 }
 
+if (!function_exists('zk_sync_ip_is_allowed')) {
+    /**
+     * The allowlist may hold several IPs separated by commas, spaces or new
+     * lines (e.g. the office's old and new public IP while an ISP change or
+     * dynamic IP settles). Blank = any IP allowed.
+     */
+    function zk_sync_ip_is_allowed($allowedSetting, $remoteIp) {
+        $allowed = preg_split('/[\s,;]+/', trim((string) $allowedSetting), -1, PREG_SPLIT_NO_EMPTY);
+        if (empty($allowed)) {
+            return true;
+        }
+        return in_array((string) $remoteIp, $allowed, true);
+    }
+}
+
+if (!function_exists('zk_record_sync_rejected_ip')) {
+    /**
+     * Remembers the last IP zk_sync_import.php rejected (JSON {ip, at}) so the
+     * Sync Settings tab can show it with a one-click "add to allowed list" -
+     * no digging through server logs when the office's public IP changes.
+     */
+    function zk_record_sync_rejected_ip($conn, $remoteIp) {
+        $value = json_encode(['ip' => (string) $remoteIp, 'at' => date('Y-m-d H:i:s')]);
+        $stmt = mysqli_prepare(
+            $conn,
+            "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type) VALUES ('zk_sync_last_rejected_ip', ?, 'zk_sync_status', 'Last IP rejected by zk_sync_import.php (auto-updated, read-only)', 'text')
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+        );
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, 's', $value);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        }
+    }
+}
+
 if (!function_exists('zk_sync_terminal_state')) {
     /**
      * Updates one zk_devices row from BioTime's own iclock_terminal snapshot

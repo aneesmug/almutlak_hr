@@ -63,10 +63,11 @@ if ($providedSecret === '' || !hash_equals($expectedSecret, (string) $providedSe
 // Blank = no restriction, secret alone still gates the endpoint as before.
 $allowedIp = zk_get_sync_allowed_ip($conn);
 $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
-if ($allowedIp !== '' && $allowedIp !== $remoteIp) {
+if (!zk_sync_ip_is_allowed($allowedIp, $remoteIp)) {
     error_log('[ZK] zk_sync_import.php rejected request from disallowed IP ' . $remoteIp . ' (expected ' . $allowedIp . ')');
+    zk_record_sync_rejected_ip($conn, $remoteIp);
     http_response_code(403);
-    echo json_encode(['status' => 'error', 'message' => 'IP address not allowed.']);
+    echo json_encode(['status' => 'error', 'message' => 'IP address not allowed (request came from ' . $remoteIp . ').']);
     exit;
 }
 

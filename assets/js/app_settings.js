@@ -1084,6 +1084,30 @@ function __(key, def) {
             const subContent = document.getElementById('attendance-config-sub-content');
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
 
+            // Last IP zk_sync_import.php blocked (written server-side by
+            // zk_record_sync_rejected_ip) - shown with a one-click "add" so a
+            // changed office public IP can be allowed without reading logs.
+            function renderSyncRejectedIpNotice(hostEl) {
+                const row = (groupedSettings['zk_sync_status'] || []).find(s => s.setting_name === 'zk_sync_last_rejected_ip');
+                let info = null;
+                try { info = row ? JSON.parse(row.setting_value || 'null') : null; } catch (e) { info = null; }
+                if (!info || !info.ip) return;
+
+                const input = hostEl.querySelector('[name="zk_sync_allowed_ip"]');
+                const current = input ? input.value.split(/[\s,;]+/).filter(Boolean) : [];
+                if (!input || current.length === 0 || current.includes(info.ip)) return;
+
+                hostEl.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-2 mb-0 font-13 d-flex align-items-center justify-content-between flex-wrap">
+                    <span><i class="mdi mdi-alert-outline"></i> ${__('sync_last_rejected_ip', 'Last blocked sync request came from')} <strong>${escapeHtml(info.ip)}</strong> (${escapeHtml(info.at || '')})</span>
+                    <button type="button" class="btn btn-sm btn-warning mt-1 mt-sm-0" id="addRejectedSyncIpBtn"><i class="mdi mdi-plus"></i> ${__('sync_add_ip', 'Add to allowed IPs')}</button>
+                </div>`);
+                document.getElementById('addRejectedSyncIpBtn').addEventListener('click', function() {
+                    input.value = current.concat(info.ip).join(', ');
+                    this.disabled = true;
+                    this.innerHTML = `<i class="mdi mdi-check"></i> ${__('sync_ip_added_save', 'Added - press Save')}`;
+                });
+            }
+
             function renderSubTab(key) {
                 document.querySelectorAll('#attendance-config-sub-nav a').forEach(a => {
                     a.classList.toggle('active', a.dataset.subTab === key);
@@ -1099,7 +1123,8 @@ function __(key, def) {
                         subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-3 mb-0 font-13"><i class="mdi mdi-alert-outline"></i> ${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div>`);
                     }
                     if (key === 'sync_settings') {
-                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-info mt-3 mb-0 font-13"><i class="mdi mdi-information-outline"></i> ${__('sync_settings_hint', 'Restricts which IP address may push attendance punches to zk_sync_import.php from the local BioTime server. Leave blank to allow any IP - the shared secret key still gates the endpoint either way.')}</div>`);
+                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-info mt-3 mb-0 font-13"><i class="mdi mdi-information-outline"></i> ${__('sync_settings_hint_multi', 'Restricts which IP addresses may push attendance punches to zk_sync_import.php from the local BioTime server. Separate several IPs with commas. Leave blank to allow any IP - the shared secret key still gates the endpoint either way.')}</div>`);
+                        renderSyncRejectedIpNotice(subContent);
                     }
                 } else {
                     renderAttendanceConfigGroup(subContent);
@@ -6239,7 +6264,7 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'sync_settings', 'theme_config_logo'];
+                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
