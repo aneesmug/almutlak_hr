@@ -739,7 +739,8 @@ if (mysqli_num_rows($query) == 1) {
 													<input type="radio" id="allowVacSalaryBelowMinNo" name="allow_vacation_salary_below_min_days" value="0" <?= ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') !== '1') ? 'checked' : '' ?>>
 													<label for="allowVacSalaryBelowMinNo" class="atch"><?= __('no', 'No') ?></label>
 												</div>
-												<small class="form-text text-muted"><?= __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20))) ?></small>
+												<small class="form-text text-muted"><?php $vacSalaryMinDays = (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20); ?>
+												<?= str_replace('{days}', $vacSalaryMinDays, __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', $vacSalaryMinDays))) ?></small>
 											</div>
 
 											<div class="form-group col-md-4">

@@ -73,6 +73,7 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
     $is_emergency = ($fly_type === 'emergency');
     $allow_vacation_salary_below_min_days = ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+    $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vacation_salary_below_min_days);
     $is_settlement_payable_vacation = isSettlementPayableVacation(
         $vac_type,
         $fly_type,

@@ -1184,7 +1184,10 @@ elseif ($ajaxType == 'applyVacation') {
             $meets_minimum_days = ((float)$vacdays >= (float)$localAnnualRule['minimum_days_exclusive'])
                 || $allow_vac_salary_below_min;
 
-            if ($meets_minimum_days) {
+            if ($allow_vac_salary_below_min && (float)$vacdays < (float)$localAnnualRule['minimum_days_exclusive']) {
+                // Per-employee override: below the threshold the vacation salary is always paid.
+                $vacation_salary_type = 'payroll';
+            } elseif ($meets_minimum_days) {
                 if (empty($vacation_salary_type)) {
                     throw new Exception(__('vacation_salary_type_required') ?: 'Please select vacation salary payment option.');
                 }
@@ -1350,7 +1353,8 @@ elseif ($ajaxType == 'applyVacation') {
             $fly_type,
             $employee_country_id,
             $vacdays,
-            $vacation_salary_type
+            $vacation_salary_type,
+            !empty($allow_vac_salary_below_min)
         );
         if ($is_local_annual_saudi_long_leave) {
             $is_deductible = ($vacation_salary_type === 'payroll') ? 1 : 0;
@@ -4139,13 +4143,17 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
         $is_emergency = ($fly_type === 'emergency');
         $is_encashment = ($vac_type === 'Encashed');
+        // Per-employee override: below-min annual vacation is always paid the vacation salary.
+        $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $vacation_data['emp_id'] ?? '');
+        $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
         $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
             $vac_type,
             $fly_type,
             $vacation_data['country'] ?? 0,
             $approved_days,
             $vacation_data['is_deductible'] ?? 0,
-            $vacation_salary_type
+            $vacation_salary_type,
+            $allow_vac_salary_below_min
         );
         $is_settlement_payable_vacation = isSettlementPayableVacation(
             $vac_type,
@@ -4153,7 +4161,8 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
             $vacation_data['country'] ?? 0,
             $approved_days,
             $vacation_data['is_deductible'] ?? 0,
-            $vacation_salary_type
+            $vacation_salary_type,
+            $allow_vac_salary_below_min
         );
         
         $total_payable = 0;

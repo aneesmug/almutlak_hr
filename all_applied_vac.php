@@ -1127,6 +1127,7 @@ if ($can_see_all_depts) {
                                                                 $isLocalAnnual = ($req['vac_type'] === 'Local Vacation' && $req['fly_type'] === 'annual');
                                                                 $localVacationDays = (float)($req['vacdays'] ?? 0);
                                                                 $vacationSalaryType = strtolower(trim((string)($req['vacation_salary_type'] ?? 'payroll')));
+                                                                $vacationSalaryType = resolveVacationSalaryType($req['fly_type'] ?? '', $localVacationDays, $vacationSalaryType, employeeAllowsVacSalaryBelowMinDays($conDB, $req['emp_id'] ?? ''));
                                                                 $isLocalAnnualSettlementEligible = ($isLocalAnnual && $localVacationDays > 5 && $vacationSalaryType === 'payroll');
                                                                 $canCreateSettlement = ($isAnnualFlyOrEncashed || $isEmergencyFly || $isLocalAnnualSettlementEligible);
                                                                 ?>

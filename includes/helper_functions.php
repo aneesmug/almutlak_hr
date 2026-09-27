@@ -125,6 +125,50 @@ if (!function_exists('getLocalAnnualPayrollRemovalRuleConfig')) {
     }
 }
 
+if (!function_exists('resolveVacationSalaryType')) {
+    /**
+     * Effective vacation_salary_type for an annual vacation.
+     * Per-employee override (employees.allow_vacation_salary_below_min_days = 1): an annual
+     * vacation below minimum_days_exclusive is ALWAYS paid the vacation salary ('payroll'),
+     * regardless of the stored choice (covers requests saved before the override was set).
+     */
+    function resolveVacationSalaryType($flyType, $vacDays, $storedType, $allowBelowMinDays = false)
+    {
+        $rule = getLocalAnnualPayrollRemovalRuleConfig();
+        if (trim((string)$flyType) === 'annual'
+            && !empty($allowBelowMinDays)
+            && (float)$vacDays < (float)$rule['minimum_days_exclusive']) {
+            return 'payroll';
+        }
+        return $storedType;
+    }
+}
+
+if (!function_exists('employeeAllowsVacSalaryBelowMinDays')) {
+    /** Reads employees.allow_vacation_salary_below_min_days (cached per request). */
+    function employeeAllowsVacSalaryBelowMinDays($conDB, $empId)
+    {
+        static $cache = [];
+        $key = (string)$empId;
+        if ($key === '') {
+            return false;
+        }
+        if (!array_key_exists($key, $cache)) {
+            $cache[$key] = false;
+            $stmt = mysqli_prepare($conDB, "SELECT allow_vacation_salary_below_min_days FROM employees WHERE emp_id = ? LIMIT 1");
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, "s", $key);
+                mysqli_stmt_execute($stmt);
+                $res = mysqli_stmt_get_result($stmt);
+                $row = $res ? mysqli_fetch_assoc($res) : null;
+                mysqli_stmt_close($stmt);
+                $cache[$key] = $row && (string)($row['allow_vacation_salary_below_min_days'] ?? '0') === '1';
+            }
+        }
+        return $cache[$key];
+    }
+}
+
 if (!function_exists('matchesLocalAnnualPayrollRemovalRule')) {
     /**
      * @param bool $allowBelowMinDays Per-employee override (employees.allow_vacation_salary_below_min_days).
@@ -1291,7 +1335,6 @@ if (!function_exists('debugPDO')) {
             . "</pre>";
     }
 }
-
 // --- Name Parsing Utility ---
 if (!function_exists('parseName')) {
     function parseName($fullName, $format = 'FIRST_LAST')

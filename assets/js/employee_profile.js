@@ -422,7 +422,12 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 // the 'allow_vacation_salary_below_min_days' override always sees the choice.
                 const meetsMinimumDays = localVacationDays >= 20 || allowVacSalaryBelowMinOverride;
 
-                if (meetsMinimumDays) {
+                if (localVacationDays > 0 && localVacationDays < 20 && allowVacSalaryBelowMinOverride) {
+                    // Override: below-min vacation is always paid the vacation salary (server forces 'payroll').
+                    $('#salaryTypeSection').removeClass('d-none');
+                    $('#salary_with_payroll').prop('checked', true);
+                    $('#salary_with_eos').prop('checked', false).prop('disabled', true);
+                } else if (meetsMinimumDays) {
                     $('#salaryTypeSection').removeClass('d-none');
                     $('#salary_with_eos').prop('disabled', false);
                 } else {
@@ -829,7 +834,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 
                         const meetsMinimumDays = vacationDaysCount !== null && (vacationDaysCount >= 20 || allowVacSalaryBelowMinOverride);
 
-                        if (!meetsMinimumDays) {
+                        if (vacationDaysCount !== null && vacationDaysCount < 20 && allowVacSalaryBelowMinOverride) {
+                            // Override: server forces 'payroll' below the threshold - match it here.
+                            formData.set('vacation_salary_type', 'payroll');
+                        } else if (!meetsMinimumDays) {
                             // Server silently forces 'end_of_service' below the threshold regardless
                             // of what's sent (leaveHandler.php) - match it here for clarity.
                             formData.set('vacation_salary_type', 'end_of_service');

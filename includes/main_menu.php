@@ -54,6 +54,7 @@ $userActivityLink = 'user_activity.php';
 $activityLoggerLink = 'view_activity_logs.php';
 $manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
 $manageHolidaysLink = 'manage_holidays.php?status=1';
+$employeeMemosLink = 'employee_memos.php';
 $vacationBalanceHistoryLink = 'vacation_balance_history.php';
 $vacationDatesEditorLink = 'vacation_dates_by_inv.php';
 $diagnoseDoubleDeductionLink = 'diagnose_double_deduction.php';
@@ -822,6 +823,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
                 <?php if ($is_system_admin): ?>
                     <li><a href="<?= $manageEmployeeSupervisorsLink ?>"><i class="fa-duotone fa-user-tie" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('manage_supervisors', 'Manage Supervisors') ?></span></a></li>
+                <?php endif; ?>
+
+                <?php if ($is_system_admin || in_array($user_role, $page_roles['employee_memos.php'] ?? []) || in_array($user_type, $page_roles['employee_memos.php'] ?? [])): ?>
+                    <li><a href="<?= $employeeMemosLink ?>"><i class="fa-duotone fa-envelope-open-text" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('send_memo', 'Send Memo') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ($is_system_admin || in_array($user_role, $page_roles['manage_holidays.php'] ?? []) || in_array($user_type, $page_roles['manage_holidays.php'] ?? [])): ?>

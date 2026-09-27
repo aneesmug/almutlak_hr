@@ -104,6 +104,10 @@ if (mysqli_num_rows($query) == 1) {
 			($is_system_admin ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_attendance_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
+		// Memos tab (sent HR memos/letters) - same access as Employees > Send Memo
+		// (employee_memos.php in App Settings > Page Access).
+		require_once __DIR__ . '/includes/memo_helper.php';
+		$canViewMemosTab = memo_user_can($conDB, 'send', $empid ?? '', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		// Manually add/edit a day's punch (e.g. employee forgot to clock in/out) - same
 		// 'manage_attendance' key that already gates the standalone Attendance Record page.
 		$canManageAttendanceRecord = (
@@ -1383,6 +1387,13 @@ if (mysqli_num_rows($query) == 1) {
 												<i class="mdi mdi-book-open-page-variant"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "<span class='badge-count'>" . $emprow['empnote'] . "</span>" : "" ?>
 											</a>
 										</li>
+										<?php if ($canViewMemosTab): ?>
+										<li class="nav-item">
+											<a href="#memos" data-toggle="tab" aria-expanded="false" class="nav-link" id="memosTabLink">
+												<i class="mdi mdi-email-outline"></i> <?= __('memos', 'Memos') ?>
+											</a>
+										</li>
+										<?php endif; ?>
 										<?php  ?>
 										<li class="nav-item">
 											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
@@ -2740,6 +2751,30 @@ if (mysqli_num_rows($query) == 1) {
 												<table id="notes_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"></table>
 											</div>
 										</div>
+
+										<?php if ($canViewMemosTab): ?>
+										<div class="tab-pane" id="memos">
+											<div class="card-box">
+												<div class="d-flex justify-content-between align-items-center m-b-20">
+													<h4 class="header-title mb-0"><?= __('memos', 'Memos') ?></h4>
+													<a href="employee_memos.php?emp_id=<?= urlencode($emprow['emp_id']) ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-email-send-outline"></i> <?= __('send_memo', 'Send Memo') ?></a>
+												</div>
+												<table id="memos_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
+													<thead>
+														<tr>
+															<th><?= __('date') ?></th>
+															<th><?= __('memo_type', 'Memo Type') ?></th>
+															<th><?= __('subject', 'Subject') ?></th>
+															<th><?= __('reference_no', 'Reference No.') ?></th>
+															<th><?= __('status') ?></th>
+															<th><?= __('sent_by', 'Sent By') ?></th>
+															<th><?= __('action') ?></th>
+														</tr>
+													</thead>
+												</table>
+											</div>
+										</div>
+										<?php endif; ?>
 
 
 										<?php /*}*/ ?>
@@ -6156,6 +6191,16 @@ if (mysqli_num_rows($query) == 1) {
 				});
 			}
 		</script>
+
+		<?php if ($canViewMemosTab): ?>
+		<script src="assets/js/employee_memos.js?v=<?= @filemtime(__DIR__ . '/assets/js/employee_memos.js') ?>"></script>
+		<script>
+			// Memos tab: load the history only when the tab is first opened.
+			$('#memosTabLink').one('shown.bs.tab', function () {
+				EmployeeMemos.initHistoryTable('#memos_tbl', <?= json_encode((string) $emprow['emp_id']) ?>);
+			});
+		</script>
+		<?php endif; ?>
 
 	</body>
 

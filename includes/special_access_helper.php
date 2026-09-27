@@ -67,6 +67,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_temp_role_transfer' => 'Access App Settings - Temporary Role Transfer Tab',
             'manage_vacation_blackout_dates' => 'Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)',
             'access_import_excel_dynamic' => 'Tools: Dynamic Excel Import (Import Excel Into Any Table)',
+            'manage_memo_templates' => 'Employee Memos: Add / Edit / Delete Memo Templates',
         ] + get_special_access_page_labels();
     }
 }
@@ -166,6 +167,7 @@ if (!function_exists('get_special_access_categories')) {
                     'manage_employee_request_type_block',
                     'request_employee_transfer',
                     'manage_update_salary_button_visibility',
+                    'manage_memo_templates',
                 ],
             ],
             'Vacation Visibility' => [
@@ -259,6 +261,7 @@ if (!function_exists('get_page_access_subgroups')) {
                     'access_add_new_employee', 'access_reg_employee', 'access_edit_employee',
                     'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors',
                     'access_all_applied_employee_transfers', 'access_employee_evaluation', 'access_all_employee_evaluations',
+                    'access_employee_memos',
                 ],
             ],
             'Vacation & Leave' => [

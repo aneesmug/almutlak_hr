@@ -588,13 +588,17 @@ function approveSettlement($settlementManager, $currentUserId) {
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                // Per-employee override: below-min annual vacation is always paid the vacation salary.
+                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? '');
+                $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
                     $settlementData['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
@@ -602,7 +606,8 @@ function approveSettlement($settlementManager, $currentUserId) {
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
                     $settlementData['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -1298,13 +1303,17 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                // Per-employee override: below-min annual vacation is always paid the vacation salary.
+                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? '');
+                $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
                     $fly_type,
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
                     $settlementData['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
@@ -1312,7 +1321,8 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                     $settlementData['country_id'] ?? 0,
                     $approved_days,
                     $settlementData['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];
@@ -1853,13 +1863,17 @@ function getSettlementDetails($settlementManager) {
                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
+                // Per-employee override: below-min annual vacation is always paid the vacation salary.
+                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $vacation['emp_id'] ?? '');
+                $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
                     $fly_type,
                     $vacation['country_id'] ?? 0,
                     $approved_days,
                     $vacation['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 $is_settlement_payable_vacation = isSettlementPayableVacation(
                     $vac_type,
@@ -1867,7 +1881,8 @@ function getSettlementDetails($settlementManager) {
                     $vacation['country_id'] ?? 0,
                     $approved_days,
                     $vacation['is_deductible'] ?? 0,
-                    $vacation_salary_type
+                    $vacation_salary_type,
+                    $allow_vac_salary_below_min
                 );
                 
                 $non_payable_leave_types = ['Sick Leave', 'Casual Leave', 'Maternity Leave', 'Compassionate Leave', 'Business Trip', 'Compensatory Leave'];

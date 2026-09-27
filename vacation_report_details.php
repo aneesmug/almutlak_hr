@@ -206,6 +206,9 @@ if (mysqli_num_rows($query) == 1) {
     $is_encashment = ($vac_type === 'Encashed');
     $is_emergency = ($fly_type === 'emergency');
     $allow_vacation_salary_below_min_days = ((string)($request['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+    $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vacation_salary_below_min_days);
+    $vacation_salary_payment_yes = ($vacation_salary_type === 'payroll');
+    $vacation_salary_payment_no = ($vacation_salary_type === 'end_of_service');
     $is_local_annual_saudi_long_leave = matchesLocalAnnualPayrollRemovalRule(
         $vac_type,
         $fly_type,
