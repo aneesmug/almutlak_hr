@@ -144,6 +144,62 @@ if (!function_exists('resolveVacationSalaryType')) {
     }
 }
 
+if (!function_exists('ensureSettlementOverrideSnapshotColumn')) {
+    /**
+     * settlement_records.vac_salary_below_min_override = the employee's
+     * allow_vacation_salary_below_min_days value frozen at settlement creation.
+     * Existing settlements are backfilled once from the current employee value.
+     */
+    function ensureSettlementOverrideSnapshotColumn($conDB)
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        $col = mysqli_query($conDB, "SHOW COLUMNS FROM settlement_records LIKE 'vac_salary_below_min_override'");
+        if ($col && mysqli_num_rows($col) > 0) {
+            return;
+        }
+        if (mysqli_query($conDB, "ALTER TABLE settlement_records ADD COLUMN vac_salary_below_min_override TINYINT(1) NULL DEFAULT NULL")) {
+            mysqli_query($conDB, "UPDATE settlement_records s
+                JOIN employees e ON e.emp_id = s.emp_id
+                SET s.vac_salary_below_min_override = IF(e.allow_vacation_salary_below_min_days = 1, 1, 0)
+                WHERE s.vac_salary_below_min_override IS NULL");
+        }
+    }
+}
+
+if (!function_exists('resolveSettlementVacSalaryOverride')) {
+    /**
+     * Once a settlement exists for a vacation request, its calculation must never change,
+     * so the frozen override snapshot wins over the employee's current setting.
+     * @param string $requestInvNo Vacation request_inv_no or settlement 'SETL-...' inv_no.
+     */
+    function resolveSettlementVacSalaryOverride($conDB, $requestInvNo, $liveFlag)
+    {
+        $requestInvNo = trim((string)$requestInvNo);
+        if ($requestInvNo === '') {
+            return (bool)$liveFlag;
+        }
+        ensureSettlementOverrideSnapshotColumn($conDB);
+        $settlementInvNo = (strpos($requestInvNo, 'SETL-') === 0) ? $requestInvNo : 'SETL-' . $requestInvNo;
+        $stmt = mysqli_prepare($conDB, "SELECT vac_salary_below_min_override FROM settlement_records WHERE request_inv_no = ? ORDER BY id DESC LIMIT 1");
+        if (!$stmt) {
+            return (bool)$liveFlag;
+        }
+        mysqli_stmt_bind_param($stmt, "s", $settlementInvNo);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        if ($row && $row['vac_salary_below_min_override'] !== null) {
+            return (string)$row['vac_salary_below_min_override'] === '1';
+        }
+        return (bool)$liveFlag;
+    }
+}
+
 if (!function_exists('employeeAllowsVacSalaryBelowMinDays')) {
     /** Reads employees.allow_vacation_salary_below_min_days (cached per request). */
     function employeeAllowsVacSalaryBelowMinDays($conDB, $empId)

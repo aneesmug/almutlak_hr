@@ -28,7 +28,8 @@ if ($request_inv_no === '') {
 
 // Settlement details
 $settlement = null;
-$sql = "SELECT s.*, 
+ensureSettlementOverrideSnapshotColumn($conDB);
+$sql = "SELECT s.*,
                e.name AS employee_name, e.avatar, e.dept, e.passport_number, e.passport_exp, e.gosi, e.country as country_id, e.allow_vacation_salary_below_min_days,
                d.dep_nme AS department_name,
                d.dep_nme_ar AS department_name_ar,
@@ -72,7 +73,10 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     
     $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
     $is_emergency = ($fly_type === 'emergency');
-    $allow_vacation_salary_below_min_days = ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+    // Frozen at settlement creation; the employee's current setting no longer applies.
+    $allow_vacation_salary_below_min_days = isset($settlement['vac_salary_below_min_override'])
+        ? ((string)$settlement['vac_salary_below_min_override'] === '1')
+        : ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
     $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vacation_salary_below_min_days);
     $is_settlement_payable_vacation = isSettlementPayableVacation(
         $vac_type,
@@ -187,8 +191,8 @@ if (!empty($settlement['vac_type']) && !empty($settlement['salary_basic'])) {
     }
 }
 
-// Fallback to stored settlement_amount if calculated is 0
-if ($payableAmount <= 0) {
+// Amount stored at settlement creation is final; calculation is only a fallback when it is 0.
+if ((float)($settlement['settlement_amount'] ?? 0) > 0 || $payableAmount <= 0) {
     $payableAmount = (float)($settlement['settlement_amount'] ?? 0);
 }
 

@@ -589,7 +589,7 @@ function approveSettlement($settlementManager, $currentUserId) {
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
                 // Per-employee override: below-min annual vacation is always paid the vacation salary.
-                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? '');
+                $allow_vac_salary_below_min = resolveSettlementVacSalaryOverride($conDB, $settlementData['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? ''));
                 $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
@@ -711,7 +711,9 @@ function approveSettlement($settlementManager, $currentUserId) {
                 }
             }
             
-            if ($calculatedPayableAmount <= 0 && !empty($settlementData['settlement_amount'])) {
+            // Amount stored at settlement creation is final - never recalculate it afterwards
+            // (e.g. after the employee's vacation-salary override setting changes).
+            if ((float)($settlementData['settlement_amount'] ?? 0) > 0) {
                 $calculatedPayableAmount = round($settlementData['settlement_amount']);
             }
         }
@@ -1304,7 +1306,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
                 // Per-employee override: below-min annual vacation is always paid the vacation salary.
-                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? '');
+                $allow_vac_salary_below_min = resolveSettlementVacSalaryOverride($conDB, $settlementData['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $settlementData['emp_id'] ?? ''));
                 $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
@@ -1426,7 +1428,9 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                 }
             }
             
-            if ($calculatedPayableAmount <= 0 && !empty($settlementData['settlement_amount'])) {
+            // Amount stored at settlement creation is final - never recalculate it afterwards
+            // (e.g. after the employee's vacation-salary override setting changes).
+            if ((float)($settlementData['settlement_amount'] ?? 0) > 0) {
                 $calculatedPayableAmount = round($settlementData['settlement_amount']);
             }
         }
@@ -1864,7 +1868,7 @@ function getSettlementDetails($settlementManager) {
                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                 $is_emergency = ($fly_type === 'emergency');
                 // Per-employee override: below-min annual vacation is always paid the vacation salary.
-                $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $vacation['emp_id'] ?? '');
+                $allow_vac_salary_below_min = resolveSettlementVacSalaryOverride($conDB, $vacation['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $vacation['emp_id'] ?? ''));
                 $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                     $vac_type,
@@ -1989,8 +1993,8 @@ function getSettlementDetails($settlementManager) {
         }
         
         // Store calculated amount in settlement
-        // Fallback to stored settlement_amount if calculated is 0
-        if ($calculatedPayableAmount <= 0) {
+        // Amount stored at settlement creation is final; the calculation is only a fallback when it is 0.
+        if ((float)($settlement['settlement_amount'] ?? 0) > 0 || $calculatedPayableAmount <= 0) {
             $calculatedPayableAmount = (float)($settlement['settlement_amount'] ?? 0);
         }
         $settlement['calculated_payable_amount'] = $calculatedPayableAmount;

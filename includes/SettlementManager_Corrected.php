@@ -46,11 +46,15 @@ class SettlementManager {
             if ($checkQry) mysqli_free_result($checkQry);
             
             // 1. Insert into settlement_records
+            // Freeze the employee's "Allow Vacation Salary Payout Below Minimum Days" value so
+            // later changes to that setting never alter this settlement's calculation.
+            ensureSettlementOverrideSnapshotColumn($this->conDB);
+            $vacSalaryOverrideSnapshot = employeeAllowsVacSalaryBelowMinDays($this->conDB, $empId) ? 1 : 0;
             $insertSettlement = mysqli_query($this->conDB, "
-                INSERT INTO settlement_records 
-                (request_inv_no, request_type, emp_id, settlement_amount, settlement_status, created_by) 
-                VALUES 
-                ('{$settlementInvNo}', '{$requestType}', '{$empId}', {$amount}, 'pending_approval', '{$userId}')
+                INSERT INTO settlement_records
+                (request_inv_no, request_type, emp_id, settlement_amount, settlement_status, created_by, vac_salary_below_min_override)
+                VALUES
+                ('{$settlementInvNo}', '{$requestType}', '{$empId}', {$amount}, 'pending_approval', '{$userId}', {$vacSalaryOverrideSnapshot})
             ");
             
             if (!$insertSettlement) {

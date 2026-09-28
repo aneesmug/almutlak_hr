@@ -186,9 +186,10 @@ if ($totalItems > 0) {
         "LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = s.request_inv_no 
              AND ra_pending.request_type_id = $requestTypeId AND ra_pending.status = 'pending'
         LEFT JOIN employees approver_emp ON ra_pending.approver_id = approver_emp.emp_id";
-    
-    $sql = "SELECT 
-        s.*, 
+
+    ensureSettlementOverrideSnapshotColumn($conDB);
+    $sql = "SELECT
+        s.*,
         e.name as emp_name,
         e.dept,
         e.gosi,
@@ -590,7 +591,10 @@ if ($canSeeAllDepts) {
                                                 $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual');
                                                 $is_encashment = (trim(strtolower($vac_type)) === 'encashed');
                                                 $is_emergency = ($fly_type === 'emergency');
-                                                $allow_vacation_salary_below_min_days = ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+                                                // Frozen at settlement creation; the employee's current setting no longer applies.
+                                                $allow_vacation_salary_below_min_days = isset($settlement['vac_salary_below_min_override'])
+                                                    ? ((string)$settlement['vac_salary_below_min_override'] === '1')
+                                                    : ((string)($settlement['allow_vacation_salary_below_min_days'] ?? '0') === '1');
                                                 $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vacation_salary_below_min_days);
                                                 $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                                                     $vac_type,
@@ -719,8 +723,8 @@ if ($canSeeAllDepts) {
                                                 }
                                             }
                                             
-                                            // Fallback to stored settlement_amount if calculated amount is 0
-                                            if ($payableAmount <= 0 && !empty($settlement['settlement_amount'])) {
+                                            // Amount stored at settlement creation is final; calculation is only a fallback when it is 0.
+                                            if ((float)($settlement['settlement_amount'] ?? 0) > 0) {
                                                 $payableAmount = round($settlement['settlement_amount']);
                                             }
                                             ?>

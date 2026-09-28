@@ -4078,6 +4078,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
                     v.encashment_amount,
                     v.auto_gosi_deduction,
                     v.emp_id,
+                    v.request_inv_no,
                     e.country,
                     e.gosi,
                     s.basic,
@@ -4144,7 +4145,7 @@ elseif ($ajaxType == 'getVacationDetailsForSettlement') {
         $is_emergency = ($fly_type === 'emergency');
         $is_encashment = ($vac_type === 'Encashed');
         // Per-employee override: below-min annual vacation is always paid the vacation salary.
-        $allow_vac_salary_below_min = employeeAllowsVacSalaryBelowMinDays($conDB, $vacation_data['emp_id'] ?? '');
+        $allow_vac_salary_below_min = resolveSettlementVacSalaryOverride($conDB, $vacation_data['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $vacation_data['emp_id'] ?? ''));
         $vacation_salary_type = resolveVacationSalaryType($fly_type, $approved_days, $vacation_salary_type, $allow_vac_salary_below_min);
         $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
             $vac_type,

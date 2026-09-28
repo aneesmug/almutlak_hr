@@ -368,6 +368,8 @@ if ($vacation['fly_type'] === 'annual') {
                     $is_fly_annual = ($vacation['vac_type'] === 'Fly' && $vacation['fly_type'] === 'annual');
                     $vacation_salary_type = $vacation['vacation_salary_type'] ?? 'payroll';
                     $allow_vacation_salary_below_min_days = ((string)($vacation['allow_vacation_salary_below_min_days'] ?? '0') === '1');
+                    // Once a settlement exists, use the value frozen at settlement creation.
+                    $allow_vacation_salary_below_min_days = resolveSettlementVacSalaryOverride($conDB, $vacation['request_inv_no'] ?? '', $allow_vacation_salary_below_min_days);
                     $vacation_salary_type = resolveVacationSalaryType($vacation['fly_type'] ?? '', (float)($vacation['vacdays'] ?? 0), $vacation_salary_type, $allow_vacation_salary_below_min_days);
                     $is_local_annual_removed_from_payroll = isLocalAnnualRemovedFromPayroll(
                         $vacation['vac_type'] ?? '',
