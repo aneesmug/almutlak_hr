@@ -21,13 +21,80 @@ function ecm_rows(mysqli $conDB, string $sql): array
     return $rows;
 }
 
-if ($action === 'get_form_data') {
+// --- Draft employees ---------------------------------------------------------------------
+// Employees whose information isn't complete yet are kept in `employee_drafts` (shared by all
+// HR users) until registered. Each draft reserves its emp_id: new forms get the next number
+// after both the last employee and the last draft, and registering an employee with an ID
+// another draft holds is refused. Registering a draft deletes its row.
+function ecm_ensure_drafts_table(PDO $pdo): void
+{
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `employee_drafts` (
+        `id` INT(11) NOT NULL AUTO_INCREMENT,
+        `emp_id` VARCHAR(50) NOT NULL,
+        `emp_type` ENUM('company','man_power') NOT NULL DEFAULT 'company',
+        `name` VARCHAR(255) DEFAULT NULL,
+        `form_data` LONGTEXT NOT NULL,
+        `is_saved` TINYINT(1) NOT NULL DEFAULT 0,
+        `created_by` VARCHAR(255) DEFAULT NULL,
+        `created_by_name` VARCHAR(255) DEFAULT NULL,
+        `updated_by` VARCHAR(255) DEFAULT NULL,
+        `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uq_emp_id` (`emp_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function ecm_next_emp_id(PDO $pdo): int
+{
     $stmt = $pdo->query("SELECT `emp_id` FROM `employees` ORDER BY `emp_id` DESC LIMIT 1");
-    $lastEmpId = $stmt->fetch(PDO::FETCH_ASSOC)['emp_id'] ?? 0;
+    $lastEmpId = (int)($stmt->fetch(PDO::FETCH_ASSOC)['emp_id'] ?? 0);
+    $lastDraftId = (int)$pdo->query("SELECT MAX(CAST(`emp_id` AS UNSIGNED)) FROM `employee_drafts`")->fetchColumn();
+    return max($lastEmpId, $lastDraftId) + 1;
+}
+
+function ecm_emp_id_registered(PDO $pdo, string $empId): bool
+{
+    $stmt = $pdo->prepare("SELECT 1 FROM `employees` WHERE `emp_id` = ? LIMIT 1");
+    $stmt->execute([$empId]);
+    return (bool)$stmt->fetchColumn();
+}
+
+// Name of whoever holds $empId in another draft (not $ownDraftId), or null when it's free.
+function ecm_emp_id_reserved_by(PDO $pdo, string $empId, int $ownDraftId): ?string
+{
+    $stmt = $pdo->prepare("SELECT COALESCE(NULLIF(`name`, ''), `emp_id`) FROM `employee_drafts` WHERE `emp_id` = ? AND `id` <> ? LIMIT 1");
+    $stmt->execute([$empId, $ownDraftId]);
+    $holder = $stmt->fetchColumn();
+    return $holder === false ? null : (string)$holder;
+}
+
+function ecm_remove_draft(PDO $pdo, int $draftId): void
+{
+    if ($draftId > 0) {
+        $pdo->prepare("DELETE FROM `employee_drafts` WHERE `id` = ?")->execute([$draftId]);
+    }
+}
+
+$currentUserId = (string)($empid ?? ($_SESSION['auth_user']['user_id'] ?? ''));
+$currentUserName = (string)($fname ?? '');
+
+if ($action === 'get_form_data') {
+    ecm_ensure_drafts_table($pdo);
+    // `taken` = the draft's ID got registered meanwhile (e.g. from another page) - it gets a
+    // fresh ID when opened (see draft_get).
+    $drafts = $pdo->query("SELECT d.`id`, d.`emp_id`, d.`emp_type`, d.`name`, d.`is_saved`, d.`created_by_name`, d.`updated_at`,
+                                  EXISTS(SELECT 1 FROM `employees` e WHERE e.`emp_id` = d.`emp_id`) AS `taken`
+                           FROM `employee_drafts` d ORDER BY d.`updated_at` DESC")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($drafts as &$draftRow) {
+        $draftRow['created_by_name'] = $draftRow['created_by_name'] ? parseName($draftRow['created_by_name']) : '';
+    }
+    unset($draftRow);
 
     echo json_encode([
         'status' => 'success',
-        'next_emp_id' => (string)((int)$lastEmpId + 1),
+        'next_emp_id' => (string)ecm_next_emp_id($pdo),
+        'drafts' => $drafts,
         'countries' => ecm_rows($conDB, "SELECT `id`, `name` FROM `countries` ORDER BY `name` REGEXP '^[^A-Za-z]' ASC, `name`"),
         'departments' => ecm_rows($conDB, "SELECT `id`, `dep_nme`, `dep_nme_ar` FROM `department` ORDER BY `dep_nme` REGEXP '^[^A-Za-z]' ASC, `dep_nme`"),
         'companies' => ecm_rows($conDB, "SELECT `comp_id`, `comp_name`, `comp_name_ar` FROM `companies` ORDER BY `comp_name` REGEXP '^[^A-Za-z]' ASC, `comp_name`"),
@@ -43,6 +110,105 @@ if ($action === 'get_form_data') {
         'all_locations' => ecm_rows($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC"),
         'all_sub_departments' => ecm_rows($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC"),
     ]);
+    exit;
+}
+
+if ($action === 'draft_save') {
+    ecm_ensure_drafts_table($pdo);
+    $draftId = (int)($_POST['draft_id'] ?? 0);
+    $empType = ($_POST['emp_type'] ?? '') === 'man_power' ? 'man_power' : 'company';
+    $isSaved = !empty($_POST['is_saved']) ? 1 : 0;
+    $form = json_decode($_POST['form_data'] ?? '', true);
+    if (!is_array($form)) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid draft data.']);
+        exit;
+    }
+    $requestedEmpId = preg_replace('/[^0-9]/', '', (string)($form['emp_id'] ?? ''));
+    $name = mb_substr(trim((string)($form['name'] ?? '')), 0, 255);
+
+    // A few attempts in case another user grabs the same next ID between our check and insert
+    // (the UNIQUE key on emp_id rejects the second one).
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+        try {
+            $pdo->beginTransaction();
+            $currentEmpId = null;
+            if ($draftId > 0) {
+                $cur = $pdo->prepare("SELECT `emp_id` FROM `employee_drafts` WHERE `id` = ? FOR UPDATE");
+                $cur->execute([$draftId]);
+                $currentEmpId = $cur->fetchColumn();
+                if ($currentEmpId === false) {
+                    // Deleted meanwhile - keep the typed data as a new draft instead of losing it.
+                    $draftId = 0;
+                    $currentEmpId = null;
+                }
+            }
+
+            if ($requestedEmpId !== '' && !ecm_emp_id_registered($pdo, $requestedEmpId) && ecm_emp_id_reserved_by($pdo, $requestedEmpId, $draftId) === null) {
+                $empId = $requestedEmpId;
+            } elseif ($currentEmpId !== null && !ecm_emp_id_registered($pdo, (string)$currentEmpId)) {
+                $empId = (string)$currentEmpId;
+            } else {
+                $empId = (string)ecm_next_emp_id($pdo);
+            }
+            $form['emp_id'] = $empId;
+            $formJson = json_encode($form, JSON_UNESCAPED_UNICODE);
+
+            if ($draftId > 0) {
+                $pdo->prepare("UPDATE `employee_drafts` SET `emp_id` = ?, `emp_type` = ?, `name` = ?, `form_data` = ?,
+                               `is_saved` = GREATEST(`is_saved`, ?), `updated_by` = ? WHERE `id` = ?")
+                    ->execute([$empId, $empType, $name, $formJson, $isSaved, $currentUserId, $draftId]);
+            } else {
+                $pdo->prepare("INSERT INTO `employee_drafts` (`emp_id`, `emp_type`, `name`, `form_data`, `is_saved`, `created_by`, `created_by_name`, `updated_by`)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                    ->execute([$empId, $empType, $name, $formJson, $isSaved, $currentUserId, $currentUserName, $currentUserId]);
+                $draftId = (int)$pdo->lastInsertId();
+            }
+            $pdo->commit();
+            echo json_encode(['status' => 'success', 'draft_id' => $draftId, 'emp_id' => $empId]);
+            exit;
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            if ($e->getCode() !== '23000' || $attempt === 2) {
+                echo json_encode(['status' => 'error', 'message' => __('database_error') . ': ' . $e->getMessage()]);
+                exit;
+            }
+            $requestedEmpId = ''; // duplicate emp_id - retry with the next free one
+        }
+    }
+    exit;
+}
+
+if ($action === 'draft_get') {
+    ecm_ensure_drafts_table($pdo);
+    $draftId = (int)($_POST['draft_id'] ?? 0);
+    $stmt = $pdo->prepare("SELECT * FROM `employee_drafts` WHERE `id` = ?");
+    $stmt->execute([$draftId]);
+    $draft = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$draft) {
+        echo json_encode(['status' => 'error', 'message' => __('draft_not_found', 'This draft no longer exists.')]);
+        exit;
+    }
+    // Its ID got registered meanwhile - move the draft to the next free ID.
+    if (ecm_emp_id_registered($pdo, (string)$draft['emp_id'])) {
+        $draft['emp_id'] = (string)ecm_next_emp_id($pdo);
+        $pdo->prepare("UPDATE `employee_drafts` SET `emp_id` = ? WHERE `id` = ?")->execute([$draft['emp_id'], $draftId]);
+    }
+    $form = json_decode($draft['form_data'], true) ?: [];
+    $form['emp_id'] = $draft['emp_id'];
+    echo json_encode([
+        'status' => 'success',
+        'draft_id' => (int)$draft['id'],
+        'emp_type' => $draft['emp_type'],
+        'is_saved' => (int)$draft['is_saved'],
+        'form_data' => $form,
+    ]);
+    exit;
+}
+
+if ($action === 'draft_delete') {
+    ecm_ensure_drafts_table($pdo);
+    ecm_remove_draft($pdo, (int)($_POST['draft_id'] ?? 0));
+    echo json_encode(['status' => 'success']);
     exit;
 }
 
@@ -98,6 +264,17 @@ if ($action === 'create_company_employee') {
         if (!is_numeric($values[':salary'])) {
             throw new Exception(__('salary_must_be_numeric'));
         }
+        $dupStmt = $pdo->prepare("SELECT 1 FROM `employees` WHERE `emp_id` = ? LIMIT 1");
+        $dupStmt->execute([$values[':emp_id']]);
+        if ($dupStmt->fetchColumn()) {
+            throw new Exception("This employee no. (\"{$values[':emp_id']}\") is already registered!");
+        }
+        ecm_ensure_drafts_table($pdo);
+        $draftId = (int)($_POST['draft_id'] ?? 0);
+        $reservedBy = ecm_emp_id_reserved_by($pdo, (string)$values[':emp_id'], $draftId);
+        if ($reservedBy !== null) {
+            throw new Exception("This employee no. (\"{$values[':emp_id']}\") is reserved by the draft of $reservedBy!");
+        }
 
         $sql = "INSERT INTO `employees` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
         $stmt = $pdo->prepare($sql);
@@ -107,6 +284,8 @@ if ($action === 'create_company_employee') {
         $select_stmt->execute([$values[':emp_id']]);
         $inserted_employee = $select_stmt->fetch(PDO::FETCH_ASSOC);
         $inserted_emp_id = $inserted_employee['id'] ?? null;
+
+        ecm_remove_draft($pdo, $draftId);
 
         ActivityLogger::logCreate(
             'Employee',
@@ -261,6 +440,15 @@ if ($action === 'create_man_power_employee') {
         exit;
     }
 
+    ecm_ensure_drafts_table($pdo);
+    $draftId = (int)($_POST['draft_id'] ?? 0);
+    $reservedBy = ecm_emp_id_reserved_by($pdo, $emp_id, $draftId);
+    if ($reservedBy !== null) {
+        echo json_encode(['status' => 'error', 'message' => "This employee no. (\"$emp_id\") is reserved by the draft of $reservedBy!"]);
+        $stmt_check->close();
+        exit;
+    }
+
     // NOTE: new_mnpow_employee.php's original INSERT has two bugs (pre-existing, verified
     // against live schema - left untouched in that legacy page per plan scope, fixed here
     // since they'd otherwise make every employee created through this modal broken):
@@ -296,6 +484,7 @@ if ($action === 'create_man_power_employee') {
     );
 
     if ($stmt_insert->execute()) {
+        ecm_remove_draft($pdo, $draftId);
         ActivityLogger::logCreate(
             'Employee',
             'ajaxEmployeeCreateModal.php',

@@ -168,43 +168,185 @@ function newEmpFieldCard(labelHtml, colClass, icon, innerHtml) {
 }
 
 // ---------------------------------------------------------------------------
-// Draft persistence (localStorage) - every value typed into the wizard is saved per
-// employee type, so Next/Back, the date picker re-renders, Cancel and even a page reload
-// never lose entries. The draft is wiped only after a successful registration (or when the
-// user discards it from the type picker).
+// Draft employees (server table `employee_drafts`, shared by all HR users)
+//
+// Every employee form is its own draft row: as soon as something is typed into it, it's saved
+// (debounced) and keeps saving on every edit, so Next/Back, the date picker re-renders, Cancel
+// and a page reload never lose entries - and several employees can be kept as drafts side by
+// side. Each draft reserves its emp_id on the server (new forms get the following number), is
+// listed in the type picker, and its row is deleted by the server once registered.
+// "Save as Draft" just marks it as saved.
 // ---------------------------------------------------------------------------
-const NEW_EMP_DRAFT_PREFIX = 'newEmpDraft_';
-// Keys never restored from storage: emp_id must always be the fresh next_emp_id from the
-// server (another user may have registered someone meanwhile), avatarFile can't be serialized.
-const NEW_EMP_DRAFT_SKIP_KEYS = ['emp_id', 'avatarFile'];
+const NEW_EMP_AJAX_URL = './includes/ajaxFile/ajaxEmployeeCreateModal.php';
 
-function newEmpDraftLoad(type) {
-    try {
-        const raw = localStorage.getItem(NEW_EMP_DRAFT_PREFIX + type);
-        const draft = raw ? JSON.parse(raw) : null;
-        if (!draft || typeof draft !== 'object') return {};
-        NEW_EMP_DRAFT_SKIP_KEYS.forEach(k => delete draft[k]);
-        return draft;
-    } catch (e) {
-        return {};
+async function newEmpPost(params) {
+    const response = await fetch(NEW_EMP_AJAX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams(params).toString()
+    });
+    return response.json();
+}
+
+// 'register' or 'draft' - chosen with the Register / Save as Draft radio at the top of the form
+// (defaults to Register for every new form or opened draft). In draft mode only the name is
+// required and the last button saves the form as a draft instead of registering.
+let newEmpMode = 'register';
+
+function newEmpIsDraftMode() {
+    return newEmpMode === 'draft';
+}
+
+// Always rendered (hidden in register mode) so the mode radio can toggle it in place.
+function newEmpModeBadge() {
+    return ` <span class="badge badge-warning new-emp-mode-badge" style="font-size:14px;vertical-align:middle;${newEmpIsDraftMode() ? '' : 'display:none;'}">${__('draft', 'Draft')}</span>`;
+}
+
+function newEmpModeToggleHtml() {
+    return `<div class="mb-3 d-flex justify-content-center">
+        ${newEmpTabGroup('newEmpMode', [
+            { value: 'register', label: __('register', 'Register') },
+            { value: 'draft', label: __('save_as_draft', 'Save as Draft') }
+        ], newEmpMode)}
+    </div>`;
+}
+
+// Draft mode turns the footer into a single "Save as Draft" button (Next/Register, Back and
+// Cancel hidden); Register mode restores the step's own buttons. confirmText: the step's
+// confirm label in register mode ("Next" or "Register").
+function newEmpWireModeToggle(confirmText) {
+    const $deny = $(Swal.getDenyButton());
+    const $cancel = $(Swal.getCancelButton());
+    const hasDeny = $deny.is(':visible');
+    const hasCancel = $cancel.is(':visible');
+    const apply = () => {
+        const isDraft = newEmpIsDraftMode();
+        $(Swal.getTitle()).find('.new-emp-mode-badge').toggle(isDraft);
+        Swal.getConfirmButton().textContent = isDraft ? __('save_as_draft', 'Save as Draft') : confirmText;
+        if (hasDeny) $deny.toggle(!isDraft);
+        if (hasCancel) $cancel.toggle(!isDraft);
+    };
+    $(Swal.getPopup()).find('input[name=newEmpMode]').on('change', function() {
+        newEmpMode = this.value;
+        Swal.resetValidationMessage();
+        apply();
+    });
+    apply();
+}
+
+// Back from the first screen of a form to the type picker: saves what's typed so far first
+// (it stays in the Draft Employees list as auto-saved), so the picker's draft count is current.
+async function newEmpBackToPicker(type, w, collect) {
+    Object.assign(w, collect());
+    newEmpDraftSave(type, w);
+    await newEmpDraftFlush(type, w);
+    return true;
+}
+
+// "Save as Draft" from any step: keeps what's on screen, requires only the employee name (so
+// the draft is recognizable in the list) and saves the draft right away.
+async function newEmpConfirmDraft(type, w, collect) {
+    Object.assign(w, collect());
+    if (!String(w.name || '').trim()) {
+        Swal.showValidationMessage(`${__('employee_name', 'Employee Name')} ${__('is_required', 'is required')}`);
+        return false;
     }
+    try {
+        await newEmpDraftSaveNow(type, w, true);
+    } catch (e) {
+        Swal.showValidationMessage(e.message || 'Failed to save draft.');
+        return false;
+    }
+    return { draft: true };
+}
+
+function newEmpNextEmpId(data) {
+    return String(data.next_emp_id || '1');
+}
+
+// True once the form holds something worth keeping (the defaults alone don't create a draft).
+function newEmpDraftHasContent(w) {
+    return Object.keys(w).some(k => !['emp_id', 'sex', 'mar_status', 'avatarFile'].includes(k) && !k.startsWith('_')
+        && w[k] !== null && w[k] !== undefined && String(w[k]) !== '');
+}
+
+// Form values only - internal "_" flags and the avatar File stay out of the stored JSON.
+function newEmpDraftPayload(w) {
+    const out = {};
+    Object.keys(w).forEach(k => {
+        if (!k.startsWith('_') && k !== 'avatarFile') out[k] = w[k];
+    });
+    return out;
+}
+
+// The server may hand a draft a different emp_id (the typed one was taken meanwhile) - show it.
+function newEmpSyncEmpIdField(empId) {
+    const $ce = $('#ceEmpId');
+    if ($ce.length) {
+        if (window.jQuery && typeof jQuery.fn.autoNumeric === 'function' && $ce.data('autoNumeric')) $ce.autoNumeric('set', empId);
+        else $ce.val(empId);
+    }
+    const $mp = $('#mpEmpId');
+    if ($mp.length && !$mp.is(':focus')) $mp.val(empId);
+}
+
+// Per-form save state: a pending debounce timer, and a promise chain so saves run one at a
+// time (the first save creates the row - a second one must wait for its draft_id).
+const newEmpSaveStates = new WeakMap();
+
+function newEmpSaveState(w) {
+    if (!newEmpSaveStates.has(w)) newEmpSaveStates.set(w, { timer: null, chain: Promise.resolve() });
+    return newEmpSaveStates.get(w);
+}
+
+function newEmpDraftSaveNow(type, w, isSaved) {
+    const st = newEmpSaveState(w);
+    clearTimeout(st.timer);
+    st.timer = null;
+    const run = st.chain.then(async () => {
+        if (w._done) return;
+        if (!w._draft_id && !isSaved && !newEmpDraftHasContent(w)) return;
+        const res = await newEmpPost({
+            action: 'draft_save',
+            draft_id: w._draft_id || '',
+            emp_type: type,
+            is_saved: isSaved ? 1 : 0,
+            form_data: JSON.stringify(newEmpDraftPayload(w))
+        });
+        if (res.status !== 'success') throw new Error(res.message || 'Failed to save draft.');
+        w._draft_id = res.draft_id;
+        if (String(res.emp_id) !== String(w.emp_id)) {
+            w.emp_id = String(res.emp_id);
+            newEmpSyncEmpIdField(w.emp_id);
+        }
+    });
+    st.chain = run.catch(() => {});
+    return run;
 }
 
 function newEmpDraftSave(type, w) {
-    try {
-        const copy = Object.assign({}, w);
-        delete copy.avatarFile;
-        localStorage.setItem(NEW_EMP_DRAFT_PREFIX + type, JSON.stringify(copy));
-    } catch (e) { /* storage unavailable - in-memory wizard state still works */ }
+    if (w._done) return;
+    const st = newEmpSaveState(w);
+    clearTimeout(st.timer);
+    st.timer = setTimeout(() => {
+        newEmpDraftSaveNow(type, w, false).catch(e => console.error('Draft autosave failed:', e));
+    }, 800);
 }
 
-function newEmpDraftClear(type) {
-    try { localStorage.removeItem(NEW_EMP_DRAFT_PREFIX + type); } catch (e) { /* ignore */ }
+// Runs a pending debounced save now and waits for every save in flight.
+function newEmpDraftFlush(type, w) {
+    const st = newEmpSaveState(w);
+    if (st.timer) return newEmpDraftSaveNow(type, w, false).catch(() => {});
+    return st.chain;
 }
 
-function newEmpDraftHasData(type) {
-    const draft = newEmpDraftLoad(type);
-    return Object.keys(draft).some(k => !['sex', 'mar_status'].includes(k) && draft[k] !== null && draft[k] !== undefined && String(draft[k]) !== '');
+// Call right before sending the register request: waits for any save in flight (so the
+// draft_id is known and sent along - the server deletes that row on success), then stops
+// autosaving so a late blur/change can't recreate the draft after registration.
+async function newEmpDraftBeforeRegister(type, w) {
+    await newEmpDraftFlush(type, w);
+    w._done = true;
+    return w._draft_id || '';
 }
 
 // Saves `w` now (it may carry values from the previous step or the date picker) and again on
@@ -217,6 +359,91 @@ function newEmpWireDraft(formId, type, w, collect) {
         Object.assign(w, collect());
         newEmpDraftSave(type, w);
     });
+}
+
+// SweetAlert2 toast. It is still the single SweetAlert2 popup, so it replaces whatever is
+// open - await it before reopening another popup.
+function newEmpToast(icon, title) {
+    return Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon,
+        title,
+        showConfirmButton: false,
+        timer: 1800,
+        timerProgressBar: true
+    });
+}
+
+function newEmpDraftSavedToast(w) {
+    const who = `${w.emp_id || ''} ${w.name || ''}`.trim();
+    return newEmpToast('success', __('saved_as_draft', 'Saved as draft') + (who ? `: ${who}` : ''));
+}
+
+// Drafts kept in this browser's localStorage by the earlier version of this modal - uploaded
+// once to the server table, then removed locally.
+async function newEmpMigrateLocalDrafts() {
+    let items = [];
+    try {
+        const list = JSON.parse(localStorage.getItem('newEmpDrafts') || '[]');
+        if (Array.isArray(list)) list.forEach(d => { if (d && d.w) items.push({ type: d.type, w: d.w, saved: !!d.saved }); });
+        ['company', 'man_power'].forEach(type => {
+            const w = JSON.parse(localStorage.getItem('newEmpDraft_' + type) || 'null');
+            if (w && typeof w === 'object') items.push({ type, w, saved: false });
+        });
+    } catch (e) {
+        items = [];
+    }
+    if (!items.length) return;
+    for (const item of items) {
+        if (!newEmpDraftHasContent(item.w)) continue;
+        try {
+            await newEmpPost({
+                action: 'draft_save',
+                emp_type: item.type === 'man_power' ? 'man_power' : 'company',
+                is_saved: item.saved ? 1 : 0,
+                form_data: JSON.stringify(newEmpDraftPayload(item.w))
+            });
+        } catch (e) {
+            return; // server unreachable - keep them locally and retry next time
+        }
+    }
+    try {
+        ['newEmpDrafts', 'newEmpDraft_company', 'newEmpDraft_man_power'].forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* ignore */ }
+}
+
+function newEmpDraftsTableHtml(drafts) {
+    const typeLabel = t => t === 'company' ? __('almutlak_co_employee', 'Company Employee') : __('manpower_employee', 'Man Power');
+    const rows = drafts.map(d => {
+        const taken = String(d.taken) === '1';
+        return `<tr data-draft-id="${escapeHtml(d.id)}">
+            <td>${escapeHtml(d.emp_id)}${taken ? ` <span class="badge badge-danger" title="${escapeHtml(__('draft_emp_id_taken', 'This ID is already registered - a new ID will be assigned'))}">${__('taken', 'Taken')}</span>` : ''}</td>
+            <td>${escapeHtml(d.name || '-')}${String(d.is_saved) === '1' ? '' : ` <span class="badge badge-secondary" title="${escapeHtml(__('draft_auto_saved_hint', 'Closed without saving - kept automatically'))}">${__('auto_saved', 'Auto-saved')}</span>`}</td>
+            <td>${escapeHtml(typeLabel(d.emp_type))}</td>
+            <td class="small">${escapeHtml(d.created_by_name || '-')}</td>
+            <td class="small text-muted">${escapeHtml(d.updated_at || '')}</td>
+            <td class="text-right text-nowrap">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-primary new-emp-draft-open"><i class="fa fa-edit"></i> ${__('continue_draft', 'Continue')}</button>
+                    <button type="button" class="btn btn-danger new-emp-draft-delete" title="${escapeHtml(__('delete', 'Delete'))}"><i class="fa fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+    return `<div class="table-responsive text-left" style="max-height:60vh;overflow-y:auto;">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr>
+                <th>${__('employee_id', 'Employee ID')}</th>
+                <th>${__('employee_name', 'Employee Name')}</th>
+                <th>${__('type', 'Type')}</th>
+                <th>${__('created_by', 'Created By')}</th>
+                <th>${__('updated', 'Updated')}</th>
+                <th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,46 +459,46 @@ async function openNewEmployeeTypeModal() {
     });
 
     try {
-        const response = await fetch('./includes/ajaxFile/ajaxEmployeeCreateModal.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-            body: new URLSearchParams({ action: 'get_form_data' }).toString()
-        });
-        const data = await response.json();
+        await newEmpMigrateLocalDrafts();
+        const data = await newEmpPost({ action: 'get_form_data' });
         Swal.close();
 
-        if (!response.ok || data.status !== 'success') {
+        if (data.status !== 'success') {
             throw new Error(data.message || 'Failed to load form data.');
         }
         window.NEW_EMP_FORM_DATA = data;
 
         let selectedType = null;
-        const hasDraft = newEmpDraftHasData('company') || newEmpDraftHasData('man_power');
-        const draftNotice = hasDraft ? `
-                <div class="alert alert-info mt-3 mb-0 text-left" id="newEmpDraftNotice">
-                    <i class="fa fa-history"></i> ${__('new_emp_draft_restored', 'Previously entered values will be restored.')}
-                    <a href="#" id="newEmpDraftDiscard" class="ml-2">${__('discard_draft', 'Discard and start fresh')}</a>
-                </div>` : '';
+        newEmpMode = 'register';
+        const drafts = data.drafts || [];
+        const cardCol = drafts.length ? 'col-4' : 'col-6';
+        const cardStyle = 'cursor:pointer;color:#fff;padding:24px;text-align:center;border-radius:8px;height:100%;';
         await Swal.fire({
             title: __('add_new_employee_modal_title', 'Add New Employee'),
             html: `
                 <div class="row text-left">
-                    <div class="col-6">
-                        <div class="card-box new-emp-type-card" id="newEmpTypeCompany" style="cursor:pointer;background:#727cf5;color:#fff;padding:24px;text-align:center;border-radius:8px;">
+                    <div class="${cardCol}">
+                        <div class="card-box new-emp-type-card" id="newEmpTypeCompany" style="${cardStyle}background:#727cf5;">
                             <i class="fa fa-building" style="font-size:28px;"></i>
                             <h5 class="mt-2 mb-0" style="color:#fff;">${__('almutlak_co_employee', 'Company Employee')}</h5>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="card-box new-emp-type-card" id="newEmpTypeManPower" style="cursor:pointer;background:#7a6fbe;color:#fff;padding:24px;text-align:center;border-radius:8px;">
+                    <div class="${cardCol}">
+                        <div class="card-box new-emp-type-card" id="newEmpTypeManPower" style="${cardStyle}background:#7a6fbe;">
                             <i class="fa fa-people-carry" style="font-size:28px;"></i>
                             <h5 class="mt-2 mb-0" style="color:#fff;">${__('manpower_employee', 'Man Power')}</h5>
                         </div>
                     </div>
+                    ${drafts.length ? `
+                    <div class="${cardCol}">
+                        <div class="card-box new-emp-type-card" id="newEmpTypeDrafts" style="${cardStyle}background:#f7b84b;">
+                            <i class="fa fa-file-alt" style="font-size:28px;"></i>
+                            <h5 class="mt-2 mb-0" style="color:#fff;">${__('draft_employees', 'Draft Employees')} <span class="badge badge-light">${drafts.length}</span></h5>
+                        </div>
+                    </div>` : ''}
                 </div>
-                ${draftNotice}
             `,
-            width: '40%',
+            width: drafts.length ? '55%' : '40%',
             showConfirmButton: false,
             showCancelButton: true,
             cancelButtonText: __('cancel', 'Cancel'),
@@ -279,20 +506,17 @@ async function openNewEmployeeTypeModal() {
             didOpen: () => {
                 document.getElementById('newEmpTypeCompany').addEventListener('click', () => { selectedType = 'company'; Swal.close(); });
                 document.getElementById('newEmpTypeManPower').addEventListener('click', () => { selectedType = 'man_power'; Swal.close(); });
-                const discard = document.getElementById('newEmpDraftDiscard');
-                if (discard) discard.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    newEmpDraftClear('company');
-                    newEmpDraftClear('man_power');
-                    $('#newEmpDraftNotice').remove();
-                });
+                const draftsCard = document.getElementById('newEmpTypeDrafts');
+                if (draftsCard) draftsCard.addEventListener('click', () => { selectedType = 'drafts'; Swal.close(); });
             }
         });
 
         if (selectedType === 'company') {
             openCompanyEmployeeModal(data);
         } else if (selectedType === 'man_power') {
-            openManPowerEmployeeModal(data, newEmpDraftLoad('man_power'));
+            openManPowerEmployeeModal(data, { emp_id: newEmpNextEmpId(data) });
+        } else if (selectedType === 'drafts') {
+            await openNewEmpDraftsModal(data);
         }
     } catch (error) {
         Swal.close();
@@ -301,10 +525,104 @@ async function openNewEmployeeTypeModal() {
 }
 
 // ---------------------------------------------------------------------------
+// Draft Employees list (opened from the Draft card on the type picker)
+// ---------------------------------------------------------------------------
+async function openNewEmpDraftsModal(data) {
+    let selectedDraftId = null;
+    let deleteTarget = null;
+    const result = await Swal.fire({
+        title: __('draft_employees', 'Draft Employees'),
+        html: newEmpDraftsTableHtml(data.drafts || []),
+        width: '75%',
+        showConfirmButton: false,
+        showDenyButton: true,
+        showCancelButton: true,
+        denyButtonText: __('back', 'Back'),
+        cancelButtonText: __('cancel', 'Cancel'),
+        allowOutsideClick: false,
+        didOpen: () => {
+            const popup = Swal.getPopup();
+            $(popup).on('click', '.new-emp-draft-open', function() {
+                selectedDraftId = $(this).closest('tr').data('draft-id');
+                Swal.close();
+            });
+            // SweetAlert2 shows one popup at a time, so the delete confirmation replaces this
+            // list; the list is reopened afterwards (see below).
+            $(popup).on('click', '.new-emp-draft-delete', function() {
+                const $row = $(this).closest('tr');
+                deleteTarget = {
+                    id: $row.data('draft-id'),
+                    label: [$row.children().eq(0).text().trim(), $row.children().eq(1).text().trim()].filter(Boolean).join(' - ')
+                };
+                Swal.close();
+            });
+        }
+    });
+
+    if (deleteTarget) {
+        const confirm = await Swal.fire({
+            icon: 'warning',
+            title: __('confirm_delete_draft', 'Delete this draft?'),
+            text: deleteTarget.label,
+            showCancelButton: true,
+            confirmButtonColor: '#fa5c7c',
+            confirmButtonText: '<i class="fa fa-trash"></i> ' + __('delete', 'Delete'),
+            cancelButtonText: __('cancel', 'Cancel'),
+            reverseButtons: true,
+            allowOutsideClick: false,
+            showLoaderOnConfirm: true,
+            preConfirm: async () => {
+                try {
+                    const res = await newEmpPost({ action: 'draft_delete', draft_id: deleteTarget.id });
+                    if (res.status !== 'success') throw new Error(res.message || 'Failed to delete draft.');
+                    return true;
+                } catch (e) {
+                    Swal.showValidationMessage(e.message || 'Request failed.');
+                    return false;
+                }
+            }
+        });
+        if (confirm.isConfirmed) {
+            data.drafts = (data.drafts || []).filter(d => String(d.id) !== String(deleteTarget.id));
+            await newEmpToast('success', `${__('draft_deleted', 'Draft deleted')}: ${deleteTarget.label}`);
+        }
+        // Last one gone - nothing left to list, go back to the type picker.
+        if (!(data.drafts || []).length) {
+            openNewEmployeeTypeModal();
+            return;
+        }
+        return openNewEmpDraftsModal(data);
+    }
+
+    if (result.isDenied) {
+        openNewEmployeeTypeModal();
+        return;
+    }
+    if (!selectedDraftId) return;
+
+    Swal.fire({
+        title: __('loading', 'Loading'),
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+    const res = await newEmpPost({ action: 'draft_get', draft_id: selectedDraftId });
+    if (res.status !== 'success') throw new Error(res.message || 'Failed to load draft.');
+    const w = Object.assign({}, res.form_data, { _draft_id: res.draft_id });
+    if (res.emp_type === 'man_power') {
+        openManPowerEmployeeModal(data, w);
+    } else {
+        openCompanyStep1(data, w);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Company Employee - 3-step wizard (Basic / Employment / Other Information)
 // ---------------------------------------------------------------------------
 function openCompanyEmployeeModal(data) {
-    openCompanyStep1(data, newEmpDraftLoad('company'));
+    const w = { emp_id: newEmpNextEmpId(data) };
+    openCompanyStep1(data, w);
 }
 
 function newEmpCollectBasicInfo() {
@@ -331,6 +649,7 @@ function newEmpCollectBasicInfo() {
 
 function openCompanyStep1(data, w) {
     const html = `
+    ${newEmpModeToggleHtml()}
     <form id="newCompEmpFormStep1" class="text-left">
         <div class="card-box">
         <div class="form-row">
@@ -356,12 +675,14 @@ function openCompanyStep1(data, w) {
     </form>`;
 
     Swal.fire({
-        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('basic_information', 'Basic Information') + ' (1/3)',
+        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('basic_information', 'Basic Information') + ' (1/3)' + newEmpModeBadge(),
         html,
         width: '90%',
         showCancelButton: true,
+        showDenyButton: true,
         confirmButtonColor: '#28a745',
         confirmButtonText: __('next', 'Next'),
+        denyButtonText: __('back', 'Back'),
         cancelButtonText: __('cancel', 'Cancel'),
         allowOutsideClick: false,
         didOpen: () => {
@@ -374,9 +695,11 @@ function openCompanyStep1(data, w) {
             newEmpApplyAutoNumeric();
             newEmpFixMaskCaret('ceIqama');
             newEmpFixMaskCaret('ceMobile');
+            newEmpWireModeToggle(__('next', 'Next'));
             newEmpWireDraft('newCompEmpFormStep1', 'company', w, newEmpCollectBasicInfo);
         },
         preConfirm: () => {
+            if (newEmpIsDraftMode()) return newEmpConfirmDraft('company', w, newEmpCollectBasicInfo);
             if (!newEmpValidateRequired({
                 ceName: __('employee_name', 'Employee Name'),
                 ceEmpId: __('employee_id', 'Employee ID'),
@@ -389,9 +712,18 @@ function openCompanyStep1(data, w) {
                 ceDobH: __('date_of_birth', 'Date of birth')
             })) return false;
             return newEmpCollectBasicInfo();
-        }
+        },
+        preDeny: () => newEmpBackToPicker('company', w, newEmpCollectBasicInfo)
     }).then((result) => {
+        if (result.isDenied) {
+            openNewEmployeeTypeModal();
+            return;
+        }
         if (!result.isConfirmed) return;
+        if (result.value && result.value.draft) {
+            newEmpDraftSavedToast(w);
+            return;
+        }
         Object.assign(w, result.value);
         openCompanyStep2(data, w);
     });
@@ -419,6 +751,7 @@ function openCompanyStep2(data, w) {
     const emptypeOptions = ['Manager', 'Supervisor', 'Supporter'].map(v => `<option value="${v}" ${w.emptype === v ? 'selected' : ''}>${v}</option>`).join('');
 
     const html = `
+    ${newEmpModeToggleHtml()}
     <form id="newCompEmpFormStep2" class="text-left">
         <div class="card-box">
         <div class="form-row">
@@ -440,7 +773,7 @@ function openCompanyStep2(data, w) {
     </form>`;
 
     Swal.fire({
-        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('employment_information', 'Employment Information') + ' (2/3)',
+        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('employment_information', 'Employment Information') + ' (2/3)' + newEmpModeBadge(),
         html,
         width: '90%',
         showCancelButton: true,
@@ -473,9 +806,11 @@ function openCompanyStep2(data, w) {
                     }
                 });
             });
+            newEmpWireModeToggle(__('next', 'Next'));
             newEmpWireDraft('newCompEmpFormStep2', 'company', w, newEmpCollectEmploymentInfo);
         },
         preConfirm: () => {
+            if (newEmpIsDraftMode()) return newEmpConfirmDraft('company', w, newEmpCollectEmploymentInfo);
             if (!newEmpValidateRequired({
                 ceDept: __('department', 'Department'),
                 ceCityId: __('city_label', 'City'),
@@ -500,6 +835,10 @@ function openCompanyStep2(data, w) {
             return;
         }
         if (!result.isConfirmed) return;
+        if (result.value && result.value.draft) {
+            newEmpDraftSavedToast(w);
+            return;
+        }
         Object.assign(w, result.value);
         openCompanyStep3(data, w);
     });
@@ -518,6 +857,7 @@ function openCompanyStep3(data, w) {
     });
 
     const html = `
+    ${newEmpModeToggleHtml()}
     <form id="newCompEmpFormStep3" class="text-left">
         <div class="card-box">
         <div class="form-row">
@@ -541,13 +881,13 @@ function openCompanyStep3(data, w) {
     </form>`;
 
     Swal.fire({
-        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('other_information', 'Other Information') + ' (3/3)',
+        title: __('almutlak_co_employee', 'Company Employee') + ' - ' + __('other_information', 'Other Information') + ' (3/3)' + newEmpModeBadge(),
         html,
         width: '90%',
         showCancelButton: true,
         showDenyButton: true,
         confirmButtonColor: '#28a745',
-        confirmButtonText: __('yes_register', 'Register'),
+        confirmButtonText: newEmpIsDraftMode() ? __('save_as_draft', 'Save as Draft') : __('yes_register', 'Register'),
         denyButtonText: __('back', 'Back'),
         cancelButtonText: __('cancel', 'Cancel'),
         allowOutsideClick: false,
@@ -557,10 +897,12 @@ function openCompanyStep3(data, w) {
             newEmpApplyAutoNumeric();
             newEmpApplyIbanMask('ceIban');
             newEmpFixMaskCaret('ceIban');
+            newEmpWireModeToggle(__('yes_register', 'Register'));
             newEmpWireDraft('newCompEmpFormStep3', 'company', w, collectOther);
         },
         preDeny: () => collectOther(),
         preConfirm: async () => {
+            if (newEmpIsDraftMode()) return newEmpConfirmDraft('company', w, collectOther);
             if (!newEmpValidateRequired({
                 ceSalary: __('salary', 'Salary'),
                 ceBankName: __('bank_name', 'Bank name'),
@@ -573,21 +915,20 @@ function openCompanyStep3(data, w) {
                 return false;
             }
 
-            const payload = Object.assign({}, w, collectOther(), { action: 'create_company_employee' });
+            Object.assign(w, collectOther());
+            const draftId = await newEmpDraftBeforeRegister('company', w);
+            const payload = Object.assign({}, newEmpDraftPayload(w), { action: 'create_company_employee', draft_id: draftId });
 
             try {
-                const response = await fetch('./includes/ajaxFile/ajaxEmployeeCreateModal.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-                    body: new URLSearchParams(payload).toString()
-                });
-                const res = await response.json();
+                const res = await newEmpPost(payload);
                 if (res.status !== 'success') {
+                    w._done = false; // registration refused - keep autosaving the draft
                     Swal.showValidationMessage(res.message || 'Failed to register employee.');
                     return false;
                 }
                 return res;
             } catch (e) {
+                w._done = false;
                 Swal.showValidationMessage(e.message || 'Request failed.');
                 return false;
             }
@@ -598,8 +939,11 @@ function openCompanyStep3(data, w) {
             openCompanyStep2(data, w);
             return;
         }
+        if (result.isConfirmed && result.value && result.value.draft) {
+            newEmpDraftSavedToast(w);
+            return;
+        }
         if (result.isConfirmed && result.value && result.value.emp_id) {
-            newEmpDraftClear('company');
             window.location.href = 'view_employee.php?emp_id=' + encodeURIComponent(result.value.emp_id);
         }
     });
@@ -639,6 +983,7 @@ function openManPowerEmployeeModal(data, w) {
     w = w || {};
     window.NEW_EMP_MP_AVATAR_FILE = w.avatarFile || null;
     const html = `
+    ${newEmpModeToggleHtml()}
     <form id="newManPowerForm" class="text-left" enctype="multipart/form-data">
         <div class="card-box">
         <div class="form-row">
@@ -664,13 +1009,16 @@ function openManPowerEmployeeModal(data, w) {
     </form>`;
 
     Swal.fire({
-        title: __('manpower_employee', 'Man Power'),
+        title: __('manpower_employee', 'Man Power') + newEmpModeBadge(),
         html,
         width: '75%',
         showCancelButton: true,
+        showDenyButton: true,
         confirmButtonColor: '#28a745',
-        confirmButtonText: __('register', 'Register'),
+        confirmButtonText: newEmpIsDraftMode() ? __('save_as_draft', 'Save as Draft') : __('register', 'Register'),
+        denyButtonText: __('back', 'Back'),
         cancelButtonText: __('cancel', 'Cancel'),
+        preDeny: () => newEmpBackToPicker('man_power', w, newEmpCollectManPower),
         allowOutsideClick: false,
         showLoaderOnConfirm: true,
         didOpen: () => {
@@ -695,19 +1043,25 @@ function openManPowerEmployeeModal(data, w) {
                     document.getElementById('mpAvatar').files = dt.files;
                 } catch (e) { /* ignore: browser without DataTransfer file support */ }
             }
+            newEmpWireModeToggle(__('register', 'Register'));
             newEmpWireDraft('newManPowerForm', 'man_power', w, newEmpCollectManPower);
         },
         preConfirm: async () => {
-            const requiredMap = { mpName: 'Employee name', mpEmpId: 'Employee ID', mpIqama: 'Iqama', mpDepartment: 'Department', mpCompNo: 'Company', mpSalary: 'Salary' };
-            for (const id in requiredMap) {
-                if (!$('#' + id).val()) {
-                    Swal.showValidationMessage(`${requiredMap[id]} ${__('is_required', 'is required')}`);
-                    return false;
-                }
-            }
+            if (newEmpIsDraftMode()) return newEmpConfirmDraft('man_power', w, newEmpCollectManPower);
+            if (!newEmpValidateRequired({
+                mpName: __('employee_name', 'Employee Name'),
+                mpEmpId: __('employee_id', 'Employee ID'),
+                mpIqama: __('iqama_id', 'Iqama'),
+                mpDepartment: __('department', 'Department'),
+                mpCompNo: __('company_label', 'Company'),
+                mpSalary: __('salary', 'Salary')
+            })) return false;
+            Object.assign(w, newEmpCollectManPower());
+            const draftId = await newEmpDraftBeforeRegister('man_power', w);
 
             const formData = new FormData();
             formData.append('action', 'create_man_power_employee');
+            formData.append('draft_id', draftId);
             formData.append('name', $('#mpName').val());
             formData.append('emp_id', $('#mpEmpId').val());
             formData.append('iqama', $('#mpIqama').val());
@@ -727,24 +1081,33 @@ function openManPowerEmployeeModal(data, w) {
             if (avatarFile) formData.append('avatar', avatarFile);
 
             try {
-                const response = await fetch('./includes/ajaxFile/ajaxEmployeeCreateModal.php', {
+                const response = await fetch(NEW_EMP_AJAX_URL, {
                     method: 'POST',
                     body: formData
                 });
                 const res = await response.json();
                 if (res.status !== 'success') {
+                    w._done = false; // registration refused - keep autosaving the draft
                     Swal.showValidationMessage(res.message || 'Failed to register employee.');
                     return false;
                 }
                 return res;
             } catch (e) {
+                w._done = false;
                 Swal.showValidationMessage(e.message || 'Request failed.');
                 return false;
             }
         }
     }).then((result) => {
+        if (result.isDenied) {
+            openNewEmployeeTypeModal();
+            return;
+        }
+        if (result.isConfirmed && result.value && result.value.draft) {
+            newEmpDraftSavedToast(w);
+            return;
+        }
         if (result.isConfirmed && result.value && result.value.emp_id) {
-            newEmpDraftClear('man_power');
             window.location.href = 'view_employee.php?emp_id=' + encodeURIComponent(result.value.emp_id);
         }
     });
