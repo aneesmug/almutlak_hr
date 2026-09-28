@@ -168,6 +168,58 @@ function newEmpFieldCard(labelHtml, colClass, icon, innerHtml) {
 }
 
 // ---------------------------------------------------------------------------
+// Draft persistence (localStorage) - every value typed into the wizard is saved per
+// employee type, so Next/Back, the date picker re-renders, Cancel and even a page reload
+// never lose entries. The draft is wiped only after a successful registration (or when the
+// user discards it from the type picker).
+// ---------------------------------------------------------------------------
+const NEW_EMP_DRAFT_PREFIX = 'newEmpDraft_';
+// Keys never restored from storage: emp_id must always be the fresh next_emp_id from the
+// server (another user may have registered someone meanwhile), avatarFile can't be serialized.
+const NEW_EMP_DRAFT_SKIP_KEYS = ['emp_id', 'avatarFile'];
+
+function newEmpDraftLoad(type) {
+    try {
+        const raw = localStorage.getItem(NEW_EMP_DRAFT_PREFIX + type);
+        const draft = raw ? JSON.parse(raw) : null;
+        if (!draft || typeof draft !== 'object') return {};
+        NEW_EMP_DRAFT_SKIP_KEYS.forEach(k => delete draft[k]);
+        return draft;
+    } catch (e) {
+        return {};
+    }
+}
+
+function newEmpDraftSave(type, w) {
+    try {
+        const copy = Object.assign({}, w);
+        delete copy.avatarFile;
+        localStorage.setItem(NEW_EMP_DRAFT_PREFIX + type, JSON.stringify(copy));
+    } catch (e) { /* storage unavailable - in-memory wizard state still works */ }
+}
+
+function newEmpDraftClear(type) {
+    try { localStorage.removeItem(NEW_EMP_DRAFT_PREFIX + type); } catch (e) { /* ignore */ }
+}
+
+function newEmpDraftHasData(type) {
+    const draft = newEmpDraftLoad(type);
+    return Object.keys(draft).some(k => !['sex', 'mar_status'].includes(k) && draft[k] !== null && draft[k] !== undefined && String(draft[k]) !== '');
+}
+
+// Saves `w` now (it may carry values from the previous step or the date picker) and again on
+// every edit. Bound on the step's own <form> (replaced on each render) rather than the Swal
+// popup, which SweetAlert2 reuses across steps - a popup-level handler would run an old step's
+// collect() against the new step's DOM and overwrite `w` with undefined.
+function newEmpWireDraft(formId, type, w, collect) {
+    newEmpDraftSave(type, w);
+    $('#' + formId).on('input change keyup blur', 'input, select', function() {
+        Object.assign(w, collect());
+        newEmpDraftSave(type, w);
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Type picker
 // ---------------------------------------------------------------------------
 async function openNewEmployeeTypeModal() {
@@ -194,6 +246,12 @@ async function openNewEmployeeTypeModal() {
         window.NEW_EMP_FORM_DATA = data;
 
         let selectedType = null;
+        const hasDraft = newEmpDraftHasData('company') || newEmpDraftHasData('man_power');
+        const draftNotice = hasDraft ? `
+                <div class="alert alert-info mt-3 mb-0 text-left" id="newEmpDraftNotice">
+                    <i class="fa fa-history"></i> ${__('new_emp_draft_restored', 'Previously entered values will be restored.')}
+                    <a href="#" id="newEmpDraftDiscard" class="ml-2">${__('discard_draft', 'Discard and start fresh')}</a>
+                </div>` : '';
         await Swal.fire({
             title: __('add_new_employee_modal_title', 'Add New Employee'),
             html: `
@@ -211,6 +269,7 @@ async function openNewEmployeeTypeModal() {
                         </div>
                     </div>
                 </div>
+                ${draftNotice}
             `,
             width: '40%',
             showConfirmButton: false,
@@ -220,13 +279,20 @@ async function openNewEmployeeTypeModal() {
             didOpen: () => {
                 document.getElementById('newEmpTypeCompany').addEventListener('click', () => { selectedType = 'company'; Swal.close(); });
                 document.getElementById('newEmpTypeManPower').addEventListener('click', () => { selectedType = 'man_power'; Swal.close(); });
+                const discard = document.getElementById('newEmpDraftDiscard');
+                if (discard) discard.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    newEmpDraftClear('company');
+                    newEmpDraftClear('man_power');
+                    $('#newEmpDraftNotice').remove();
+                });
             }
         });
 
         if (selectedType === 'company') {
             openCompanyEmployeeModal(data);
         } else if (selectedType === 'man_power') {
-            openManPowerEmployeeModal(data);
+            openManPowerEmployeeModal(data, newEmpDraftLoad('man_power'));
         }
     } catch (error) {
         Swal.close();
@@ -238,7 +304,7 @@ async function openNewEmployeeTypeModal() {
 // Company Employee - 3-step wizard (Basic / Employment / Other Information)
 // ---------------------------------------------------------------------------
 function openCompanyEmployeeModal(data) {
-    openCompanyStep1(data, {});
+    openCompanyStep1(data, newEmpDraftLoad('company'));
 }
 
 function newEmpCollectBasicInfo() {
@@ -308,6 +374,7 @@ function openCompanyStep1(data, w) {
             newEmpApplyAutoNumeric();
             newEmpFixMaskCaret('ceIqama');
             newEmpFixMaskCaret('ceMobile');
+            newEmpWireDraft('newCompEmpFormStep1', 'company', w, newEmpCollectBasicInfo);
         },
         preConfirm: () => {
             if (!newEmpValidateRequired({
@@ -399,9 +466,14 @@ function openCompanyStep2(data, w) {
                     type: 'GET',
                     url: './includes/ContractPeriodSelect.php',
                     data: { vac_period: val },
-                    success: (res) => $('#ceVacationDays').val(res)
+                    success: (res) => {
+                        $('#ceVacationDays').val(res);
+                        w.vacation_days = res;
+                        newEmpDraftSave('company', w);
+                    }
                 });
             });
+            newEmpWireDraft('newCompEmpFormStep2', 'company', w, newEmpCollectEmploymentInfo);
         },
         preConfirm: () => {
             if (!newEmpValidateRequired({
@@ -435,6 +507,15 @@ function openCompanyStep2(data, w) {
 
 function openCompanyStep3(data, w) {
     const isSaudi = w.country == 191;
+    const collectOther = () => ({
+        salary: newEmpGetNumeric('ceSalary'),
+        bank_name: $('#ceBankName').val(),
+        iban: $('#ceIban').val(),
+        email: $('#ceEmail').val(),
+        payment_type: $('#cePaymentType').val(),
+        address: $('#ceAddress').val(),
+        gosi: isSaudi ? $('#ceGosi').val() : ''
+    });
 
     const html = `
     <form id="newCompEmpFormStep3" class="text-left">
@@ -476,18 +557,9 @@ function openCompanyStep3(data, w) {
             newEmpApplyAutoNumeric();
             newEmpApplyIbanMask('ceIban');
             newEmpFixMaskCaret('ceIban');
+            newEmpWireDraft('newCompEmpFormStep3', 'company', w, collectOther);
         },
-        preDeny: () => {
-            return {
-                salary: newEmpGetNumeric('ceSalary'),
-                bank_name: $('#ceBankName').val(),
-                iban: $('#ceIban').val(),
-                email: $('#ceEmail').val(),
-                payment_type: $('#cePaymentType').val(),
-                address: $('#ceAddress').val(),
-                gosi: isSaudi ? $('#ceGosi').val() : ''
-            };
-        },
+        preDeny: () => collectOther(),
         preConfirm: async () => {
             if (!newEmpValidateRequired({
                 ceSalary: __('salary', 'Salary'),
@@ -501,16 +573,7 @@ function openCompanyStep3(data, w) {
                 return false;
             }
 
-            const payload = Object.assign({}, w, {
-                action: 'create_company_employee',
-                salary: newEmpGetNumeric('ceSalary'),
-                bank_name: $('#ceBankName').val(),
-                iban: $('#ceIban').val(),
-                email: $('#ceEmail').val(),
-                payment_type: $('#cePaymentType').val(),
-                address: $('#ceAddress').val(),
-                gosi: isSaudi ? $('#ceGosi').val() : ''
-            });
+            const payload = Object.assign({}, w, collectOther(), { action: 'create_company_employee' });
 
             try {
                 const response = await fetch('./includes/ajaxFile/ajaxEmployeeCreateModal.php', {
@@ -536,6 +599,7 @@ function openCompanyStep3(data, w) {
             return;
         }
         if (result.isConfirmed && result.value && result.value.emp_id) {
+            newEmpDraftClear('company');
             window.location.href = 'view_employee.php?emp_id=' + encodeURIComponent(result.value.emp_id);
         }
     });
@@ -548,6 +612,7 @@ function newEmpCollectManPower() {
     const avatarFile = document.getElementById('mpAvatar').files[0];
     return {
         name: $('#mpName').val(),
+        emp_id: $('#mpEmpId').val(),
         iqama: $('#mpIqama').val(),
         iqama_exp_g: $('#mpIqamaExpG').val(),
         iqama_exp_hijri: $('#mpIqamaExpHijri').val(),
@@ -630,6 +695,7 @@ function openManPowerEmployeeModal(data, w) {
                     document.getElementById('mpAvatar').files = dt.files;
                 } catch (e) { /* ignore: browser without DataTransfer file support */ }
             }
+            newEmpWireDraft('newManPowerForm', 'man_power', w, newEmpCollectManPower);
         },
         preConfirm: async () => {
             const requiredMap = { mpName: 'Employee name', mpEmpId: 'Employee ID', mpIqama: 'Iqama', mpDepartment: 'Department', mpCompNo: 'Company', mpSalary: 'Salary' };
@@ -678,6 +744,7 @@ function openManPowerEmployeeModal(data, w) {
         }
     }).then((result) => {
         if (result.isConfirmed && result.value && result.value.emp_id) {
+            newEmpDraftClear('man_power');
             window.location.href = 'view_employee.php?emp_id=' + encodeURIComponent(result.value.emp_id);
         }
     });
