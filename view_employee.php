@@ -104,6 +104,10 @@ if (mysqli_num_rows($query) == 1) {
 			($is_system_admin ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_attendance_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
+		// Documents tab delete button - only with the 'delete_employee_documents' Special Access
+		// key (admins always). Checked here because emp_top_info.php later overwrites $empid with
+		// the viewed employee's ID. deleteAjax.php enforces the same key.
+		$canDeleteEmpDocs = user_has_special_access($conDB, $empid ?? '', 'delete_employee_documents', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		// Memos tab (sent HR memos/letters) - same access as Employees > Send Memo
 		// (employee_memos.php in App Settings > Page Access).
 		require_once __DIR__ . '/includes/memo_helper.php';
@@ -2638,13 +2642,19 @@ if (mysqli_num_rows($query) == 1) {
 											<div class="card-box">
 												<div class="d-flex justify-content-between align-items-center mb-3">
 													<h4 class="header-title m-t-0"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h4>
+													<div class="d-flex align-items-center">
+													<?php // Upload also here (not only in More Actions) so inactive / EOS employees can still get
+													// documents like the signed EOS report. Same roles as More Actions in emp_top_info.php.
+													if ($isDeptHr || $isHR || $is_system_admin || $user_type === 'archiving'): ?>
+														<button type="button" class="btn btn-sm btn-primary mr-2 addEmpDocuAtter doc-tab-upload" data-id="<?= htmlspecialchars($emprow['eid']) ?>" data-emp_id="<?= htmlspecialchars($emprow['empid']) ?>"><i class="fa fa-solid fa-upload"></i> <?= __('add_documents') ?></button>
+													<?php endif; ?>
 													<span class="badge badge-primary badge-pill"><?php echo mysqli_num_rows(mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'")); ?></span>
+													</div>
 												</div>
 
 												<?php
 												$queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
 												$doc_count = mysqli_num_rows($queryempdocu);
-
 												if ($doc_count > 0):
 												?>
 													<div class="row">
@@ -2697,9 +2707,11 @@ if (mysqli_num_rows($query) == 1) {
 																			<button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download', 'Download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
 																				<i class="fa fa-download"></i>
 																			</button>
+																			<?php if ($canDeleteEmpDocs): ?>
 																			<button class="btn btn-sm btn-icon btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
 																				<i class="fa fa-trash"></i>
 																			</button>
+																			<?php endif; ?>
 																		</div>
 																	</div>
 																<?php } ?>
@@ -3689,7 +3701,7 @@ if (mysqli_num_rows($query) == 1) {
 								Swal.close();
 								// Trigger on page element by finding it outside modal
 								setTimeout(function() {
-									$('.addEmpDocuAtter[data-id="' + eid + '"]').not('.swal2-html-container *').first().trigger('click');
+									$('.addEmpDocuAtter[data-id="' + eid + '"]').not('.swal2-html-container *, .doc-tab-upload').first().trigger('click');
 								}, 100);
 							});
 

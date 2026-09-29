@@ -22,6 +22,7 @@ const SPECIAL_ACCESS_DELETE_KEYS = [
     'section'     => 'locations_delete',
     'asset_items' => 'asset_inventory_delete',
     'attendance'  => 'manage_attendance',
+    'emp_docu'    => 'delete_employee_documents', // Employee Master > Documents tab
 ];
 // 2. File Path Mapping:
 // Maps a table name to its corresponding file directory for tables WITH attachments.

@@ -436,6 +436,34 @@
         }
     }
 
+    // Optional CC recipients (e.g. direct manager) notified after EOS is registered so they
+    // can print the report, get it signed by the employee and upload it to the master file.
+    // Form posts admin_login ids (several users can share one email); only active users with
+    // a valid email are accepted. $ccSelected: [id => info] for re-rendering the field,
+    // $ccRecipients: [email => ['name', 'emp_id']] one entry per unique email for sending.
+    $ccSelected = [];
+    $ccRecipients = [];
+    if (isset($_POST['submit']) && !empty($_POST['cc_users']) && is_array($_POST['cc_users'])) {
+        $ccIds = array_values(array_unique(array_filter(array_map('intval', $_POST['cc_users']))));
+        if (!empty($ccIds)) {
+            $ccPlaceholders = implode(',', array_fill(0, count($ccIds), '?'));
+            $ccStmt = $conDB->prepare("SELECT id, emp_id, fullname, email FROM admin_login WHERE status = 1 AND id IN ($ccPlaceholders)");
+            $ccStmt->bind_param(str_repeat('i', count($ccIds)), ...$ccIds);
+            $ccStmt->execute();
+            $ccRes = $ccStmt->get_result();
+            while ($ccRow = $ccRes->fetch_assoc()) {
+                if (!filter_var($ccRow['email'], FILTER_VALIDATE_EMAIL)) {
+                    continue;
+                }
+                $ccSelected[(int) $ccRow['id']] = ['name' => $ccRow['fullname'], 'emp_id' => $ccRow['emp_id'], 'email' => $ccRow['email']];
+                if (!isset($ccRecipients[$ccRow['email']])) {
+                    $ccRecipients[$ccRow['email']] = ['name' => $ccRow['fullname'], 'emp_id' => $ccRow['emp_id']];
+                }
+            }
+            $ccStmt->close();
+        }
+    }
+
     if(isset($_POST['submit'])){
         // Check if employee country is 121 (should not process EOS for this country)
         if ($emprow['country'] == 121) {
@@ -552,6 +580,21 @@
                         $stmt->bind_param("sisssdssiiiddddiddddsid", $emprow['empid'], $contractType, $selectedReasonCode, $leaving_reason_en, $leaving_reason_ar, $eos_amount, $emprow['joining_date'], $endDateStr, $t_years, $t_months, $t_days, $anul_vac_days, $vacation_salary, $overtime_hours, $overtime_days, $absent_days, $deduction_hours, $gosi_deduction, $deduct, $net_payment, $notes, $curt_month_days, $curt_month_salry);
                     }
                     $stmt->execute();
+                    $eosId = (int) $stmt->insert_id;
+
+                // Keep the CC list on the EOS record. Column is created on first use because
+                // sql/ is git-ignored and never reaches the live server.
+                if (!empty($ccRecipients) && $eosId > 0) {
+                    $ccColCheck = mysqli_query($conDB, "SHOW COLUMNS FROM `emp_eos` LIKE 'cc_emails'");
+                    if ($ccColCheck && mysqli_num_rows($ccColCheck) === 0) {
+                        mysqli_query($conDB, "ALTER TABLE `emp_eos` ADD COLUMN `cc_emails` TEXT NULL AFTER `notes`");
+                    }
+                    $ccList = implode(', ', array_keys($ccRecipients));
+                    $ccSave = $conDB->prepare("UPDATE `emp_eos` SET `cc_emails` = ? WHERE `id` = ?");
+                    $ccSave->bind_param("si", $ccList, $eosId);
+                    $ccSave->execute();
+                    $ccSave->close();
+                }
 
                 $stmt_update = $conDB->prepare("UPDATE `employees` SET `status`='0', `ter_note`=?, `fly`='0', `ter_date`=? WHERE `emp_id`=?");
                 $stmt_update->bind_param("sss", $notes, $endDateStr, $emprow['empid']);
@@ -614,7 +657,54 @@
                     $settlementMsg = "<br><br><div class='text-info'><i class='fa fa-info-circle'></i> <strong>Settlement {$requestInvNo}</strong> processing initiated - approval notifications will be sent.</div>";
                 }
                 
-                $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.').$settlementMsg."</div>";
+                // Notify CC recipients: print the EOS report, get it signed, upload to master file
+                $ccMsg = "";
+                if (!empty($ccRecipients)) {
+                    // Email template: includes/PHPMailerMaster/eos_notification_email_template.html
+                    $baseUrl = rtrim(get_base_url(), '/');
+                    $empIdUrl = urlencode($emprow['empid']);
+                    $registeredBy = $username;
+                    $byStmt = $conDB->prepare("SELECT fullname FROM admin_login WHERE id_iqama = ? LIMIT 1");
+                    $byStmt->bind_param("s", $username);
+                    $byStmt->execute();
+                    $byRow = $byStmt->get_result()->fetch_assoc();
+                    $byStmt->close();
+                    if (!empty($byRow['fullname'])) {
+                        $registeredBy = $byRow['fullname'];
+                    }
+                    $ccTemplateData = [
+                        'REQUEST_ID' => $requestInvNo,
+                        'EMPLOYEE_NAME' => $emprow['name'] ?? '',
+                        'EMPLOYEE_ID' => $emprow['empid'],
+                        'DEPARTMENT' => $emprow['deptnme'] ?? 'N/A',
+                        'JOB_TITLE' => $emprow['jobname'] ?? 'N/A',
+                        'JOINING_DATE' => $emprow['joining_date'] ?? 'N/A',
+                        'END_DATE' => $endDateStr,
+                        'EOS_REASON' => trim($leaving_reason_en . ' | ' . $leaving_reason_ar, ' |'),
+                        'SUBMITTED_BY' => $registeredBy,
+                        'REQUEST_URL' => $baseUrl . '/emp_end_of_service.php?emp_id=' . $empIdUrl . '&request_inv_no=' . urlencode($requestInvNo),
+                        'PRINT_URL' => $baseUrl . '/end_of_service_print.php?emp_id=' . $empIdUrl,
+                        'MASTER_FILE_URL' => $baseUrl . '/view_employee.php?emp_id=' . $empIdUrl,
+                    ];
+                    $ccSubject = "End of Service Registered - {$emprow['name']} ({$emprow['empid']})";
+                    $ccSent = [];
+                    foreach ($ccRecipients as $ccEmail => $ccInfo) {
+                        $ccTemplateData['APPROVER_NAME'] = $ccInfo['name'];
+                        if (send_approval_email($conDB, $ccEmail, $ccInfo['name'], $ccSubject, 'eos_notification', $ccTemplateData)) {
+                            $ccSent[] = $ccEmail;
+                        } else {
+                            error_log("EOS CC notification failed for {$ccEmail} (emp {$emprow['empid']})");
+                        }
+                    }
+                    if (!empty($ccSent)) {
+                        $ccMsg = "<br><div class='text-success'><i class='fa fa-envelope'></i> " . __('eos_cc_notified', 'Notification sent to') . ": " . htmlspecialchars(implode(', ', $ccSent)) . "</div>";
+                    }
+                    if (count($ccSent) < count($ccRecipients)) {
+                        $ccMsg .= "<br><div class='text-warning'><i class='fa fa-exclamation-triangle'></i> " . __('eos_cc_failed', 'Some CC notifications could not be sent. Check SMTP settings.') . "</div>";
+                    }
+                }
+
+                $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.').$settlementMsg.$ccMsg."</div>";
                 
                 // CRITICAL FIX: Do NOT redirect immediately - wait for settlement to complete
                 // Use JavaScript to delay redirect and show proper feedback
@@ -962,8 +1052,9 @@
 
                                                             <!-- Calculation Row 1 -->
                                                             <div class="form-group col-lg-2">
-                                                                <label for="vac_days_delta"><?=__('Accrued days (to LWD)');?></label>
+                                                                <label for="vac_days_delta" id="vac_days_delta_label"><?=__('Accrued days (to LWD)');?></label>
                                                                 <input type="number" class="form-control" value="0.00" id="vac_days_delta" name="vac_days_delta" step="any" placeholder="0.00" readonly>
+                                                                <small class="form-text text-danger d-none" id="vac_days_delta_hint"><?=__('eos_vac_after_lwd_hint', 'Accrued after LWD until today - removed from balance');?></small>
                                                             </div>
                                                             <div class="form-group col-lg-2">
                                                                 <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
@@ -1049,19 +1140,30 @@
                                                                 <label class="text-danger font-weight-bold"><?=__('Total Deductions');?></label>
                                                                 <input type="text" class="form-control text-danger font-weight-bold" id="total_deductions_display" value="0.00" readonly style="background-color: #f8d7da;">
                                                             </div>
-                                                            <div class="form-group col-lg-12">
+                                                            <div class="form-group col-lg-4">
                                                                 <label class="font-weight-bold"><?=__('Total Net Payment');?></label>
                                                                 <input type="text" class="form-control font-weight-bold" id="net_payment_display" value="0.00" readonly style="background-color: #dff0d8; font-size: 1.2em;">
                                                             </div>
                                                             
                                                             <div class="col-12"><hr/></div>
-                                                            
-                                                            <div class="form-group col-lg-8">
+
+                                                            <div class="form-group col-lg-5 align-self-start">
+                                                                <label for="cc_emails"><i class="mdi mdi-email-outline"></i> <?=__('eos_cc_label', 'CC to Notify (Direct Manager)');?>:</label>
+                                                                <select id="cc_emails" name="cc_users[]" class="form-control" multiple style="width: 100%;">
+                                                                    <?php foreach ($ccSelected as $ccId => $ccInfo): ?>
+                                                                        <option value="<?= (int) $ccId; ?>" selected><?= htmlspecialchars($ccInfo['name'] . ' (' . $ccInfo['emp_id'] . ') - ' . $ccInfo['email']); ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                                <small class="form-text text-muted"><?=__('eos_cc_hint', 'Optional - search by name or Emp ID. They will be emailed to print the EOS report, get it signed by the employee and upload it to the master file.');?></small>
+                                                            </div>
+
+                                                            <div class="form-group col-lg-5 align-self-start">
                                                                 <label for="notes"><?=__('Notes');?>:<span class="text-danger">*</span></label>
                                                                 <input type="text" class="form-control" id="notes" name="notes" value="<?= htmlspecialchars($notesPrefill); ?>" required />
                                                                 <?php if (!empty($errors['notes'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['notes']); ?></small></div><?php endif; ?>
                                                             </div>
-                                                            <div class="form-group col-lg-4">
+                                                            <div class="form-group col-lg-2 align-self-start">
+                                                                <label class="d-none d-lg-block">&nbsp;</label>
                                                                 <button type="submit" name="submit" class="btn btn-danger btn-block"><i class="mdi mdi-settings"></i> <?=__('Register EOS');?></button>
                                                             </div>
                                                         </div>
@@ -1326,7 +1428,14 @@
                     // Total vacation days = current (as of today) + delta (can be +/-)
                     const totalVacationDays = currentVacationBalance + accruedDays;
 
-                    $('#vac_days_delta').val(accruedDays.toFixed(2));
+                    // Past LWD: balance already accrued up to today, so the days after LWD are
+                    // removed. Show them as a positive deduction instead of a confusing negative.
+                    const isDeduction = accruedDays < 0;
+                    $('#vac_days_delta_label').text(isDeduction
+                        ? '<?= addslashes(__('eos_vac_days_deducted', 'Days deducted (after LWD)')); ?>'
+                        : '<?= addslashes(__('Accrued days (to LWD)')); ?>');
+                    $('#vac_days_delta').val(Math.abs(accruedDays).toFixed(2)).toggleClass('text-danger', isDeduction);
+                    $('#vac_days_delta_hint').toggleClass('d-none', !isDeduction);
                     $('#anul_vac_days').val(totalVacationDays.toFixed(2));
                     $('#vacation_days_summary').text(totalVacationDays.toFixed(2));
                 }
@@ -1534,6 +1643,29 @@
                 $('input[name="contract_type"]').on('change', performApiCalculation);
                 $('#eos_reason').on('change', performApiCalculation);
                 $('.calculation-trigger').on('change keyup', calculateFinalPayment);
+
+                // CC to notify: search active system users (admin_login) by name / Emp ID
+                $('#cc_emails').select2({
+                    placeholder: '<?= addslashes(__('eos_cc_placeholder', 'Type name or Emp ID...')); ?>',
+                    allowClear: true,
+                    minimumInputLength: 1,
+                    ajax: {
+                        url: './includes/ajaxFile/hrHandler.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        delay: 250,
+                        data: function (params) {
+                            return { ajaxType: 'cc_email_search', search: params.term || '' };
+                        },
+                        processResults: function (res) {
+                            return {
+                                results: (res.data || []).map(function (u) {
+                                    return { id: u.id, text: u.name + ' (' + u.emp_id + ') - ' + u.email };
+                                })
+                            };
+                        }
+                    }
+                });
 
                 if($('#end_date').val()){
                     masterCalculationTrigger();

@@ -125,6 +125,30 @@ if($ajaxType == 'emp_search') {
     ];
     echo json_encode($data);
     exit();
+} elseif($ajaxType == 'cc_email_search') {
+    // Select2 search for CC recipients (EOS page): active system users with an email,
+    // matched by name, emp_id or email. Returns [{id, emp_id, name, email}]; id (admin_login.id)
+    // is the option value because several users can share one email.
+    $search = trim($_POST['search'] ?? '');
+    $like = '%' . $search . '%';
+    $stmt = $conDB->prepare("SELECT id, emp_id, fullname, email FROM admin_login
+        WHERE status = 1 AND email IS NOT NULL AND email <> ''
+          AND (fullname LIKE ? OR emp_id LIKE ? OR email LIKE ?)
+        ORDER BY fullname
+        LIMIT 20");
+    $stmt->bind_param('sss', $like, $like, $like);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $users = [];
+    while ($row = $res->fetch_assoc()) {
+        if (!filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
+            continue;
+        }
+        $users[] = ['id' => (int) $row['id'], 'emp_id' => $row['emp_id'], 'name' => $row['fullname'], 'email' => $row['email']];
+    }
+    $stmt->close();
+    echo json_encode(['data' => $users, 'status' => 200]);
+    exit();
 } elseif($ajaxType == 'emp_data') {
     // Add company filter based on user's access
     $company_filter = getCompanyFilterSQL('e.comp_no', true);

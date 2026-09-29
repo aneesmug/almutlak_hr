@@ -2348,7 +2348,8 @@ if (!function_exists('load_email_template')) {
             'rejoin_request' => 'rejoin_request_email_template.html',
             'new_employee' => 'new_employee_email_template.html',
             'settlement_approval' => 'settlement_approval_email_template.html',
-            'settlement_rejection' => 'settlement_rejection_email_template.html'
+            'settlement_rejection' => 'settlement_rejection_email_template.html',
+            'eos_notification' => 'eos_notification_email_template.html'
         ];
 
         $template_file = $template_map[$request_type] ?? 'smart_request_email_template.html';
@@ -2421,6 +2422,10 @@ if (!function_exists('load_email_template')) {
             'REQUEST_SOURCE' => 'N/A',
             'REJECTED_BY' => 'N/A',
             'REJECTION_REASON' => '',
+            // EOS notification email template fields
+            'EOS_REASON' => 'N/A',
+            'PRINT_URL' => $base_url . '/dashboard.php',
+            'MASTER_FILE_URL' => $base_url . '/dashboard.php',
             // Payroll approval email template fields
             'PAYROLL_MONTH' => 'N/A',
             'EMPLOYEE_COUNT' => '0',
