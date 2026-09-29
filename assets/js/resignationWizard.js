@@ -37,6 +37,8 @@ function openResignationWizard(empId, empName, preselectedReason = '', preselect
         didOpen: () => {
             // Fetch resignation reasons from API
             loadResignationReasons(preselectedReason, preselectedReasonText);
+            // Earliest allowed Last Working Day (back-date window from App Settings)
+            loadResignationDateLimit();
         },
         preConfirm: () => {
             const lastWorkingDay = $('#last_working_day').val();
@@ -54,13 +56,19 @@ function openResignationWizard(empId, empName, preselectedReason = '', preselect
                 return false;
             }
             
-            // Check if date is in the future
-            const selectedDate = new Date(lastWorkingDay);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            if (selectedDate <= today) {
-                Swal.showValidationMessage(__('last_working_day_must_be_future') || 'Last working day must be in the future');
+            // Check date against the allowed window (future only, or N days back when
+            // configured) - same rule is enforced server-side in ajaxResignation.php
+            const limit = window.resignationDateLimit || { backdateDays: 0, minDate: null };
+            let minDate = limit.minDate;
+            if (!minDate) {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                minDate = formatResignationDate(tomorrow);
+            }
+            if (lastWorkingDay < minDate) {
+                Swal.showValidationMessage(limit.backdateDays > 0
+                    ? (__('last_working_day_backdate_limit') || 'Last working day cannot be earlier than') + ' ' + minDate
+                    : (__('last_working_day_must_be_future') || 'Last working day must be in the future'));
                 return false;
             }
             
@@ -82,15 +90,45 @@ function openResignationWizard(empId, empName, preselectedReason = '', preselect
         }
     });
     
-    // Initialize date picker for Step 1
+    // Initialize date picker for Step 1 (startDate tightened by loadResignationDateLimit)
     setTimeout(() => {
         $('#last_working_day').datepicker({
             format: "yyyy-mm-dd",
             todayHighlight: true,
             autoclose: true,
-            startDate: new Date()
+            startDate: (window.resignationDateLimit && window.resignationDateLimit.minDate) || new Date()
         });
     }, 300);
+}
+
+
+function formatResignationDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+/**
+ * Load the resignation back-date window (App Settings > Payroll & Compensation >
+ * Resignation Settings) and apply it to the Last Working Day date picker.
+ */
+function loadResignationDateLimit() {
+    window.resignationDateLimit = { backdateDays: 0, minDate: null };
+    $.ajax({
+        url: './includes/ajaxFile/ajaxResignation.php',
+        type: 'POST',
+        dataType: 'json',
+        data: { ajaxType: 'get_resignation_settings' },
+        success: function(response) {
+            if (!response || response.type !== 'success') return;
+            window.resignationDateLimit = {
+                backdateDays: parseInt(response.backdate_days, 10) || 0,
+                minDate: response.min_last_working_day || null
+            };
+            const $input = $('#last_working_day');
+            if (window.resignationDateLimit.minDate && $input.data('datepicker')) {
+                $input.datepicker('setStartDate', window.resignationDateLimit.minDate);
+            }
+        }
+    });
 }
 
 

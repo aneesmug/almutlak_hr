@@ -59,6 +59,32 @@ if (!function_exists('create_browser_notification')) {
 // validate_employee_supervisor is now defined in helper_functions.php
 // and is loaded via the include above
 
+// How many days in the past the Last Working Day may be (App Settings > Payroll &
+// Compensation > Resignation Settings, row created by payroll_settings_handler.php).
+// Missing/blank/invalid row = 0 = original future-dates-only rule.
+function get_resignation_backdate_days($conDB) {
+    $value = get_setting($conDB, 'resignation_backdate_days');
+    return ($value !== null && is_numeric($value) && (int)$value > 0) ? (int)$value : 0;
+}
+
+// Earliest allowed Last Working Day (Y-m-d): tomorrow when back-dating is off,
+// otherwise today minus the configured number of days.
+function get_resignation_min_last_working_day($backdateDays) {
+    return $backdateDays > 0
+        ? date('Y-m-d', strtotime("-{$backdateDays} days"))
+        : date('Y-m-d', strtotime('+1 day'));
+}
+
+if ($ajaxType == 'get_resignation_settings') {
+    $backdateDays = get_resignation_backdate_days($conDB);
+    echo json_encode([
+        'type' => 'success',
+        'backdate_days' => $backdateDays,
+        'min_last_working_day' => get_resignation_min_last_working_day($backdateDays)
+    ]);
+    exit;
+}
+
 if ($ajaxType == 'get_approval_level') {
     // ===== GET CURRENT APPROVAL LEVEL =====
     $resignationId = isset($_POST['resignation_id']) ? (int)$_POST['resignation_id'] : 0;
@@ -297,13 +323,26 @@ if ($ajaxType == 'apply_resignation') {
         $empData = mysqli_fetch_assoc($empCheck);
         mysqli_free_result($empCheck);
         
-        // Validate date is in the future
-        $today = date('Y-m-d');
-        if ($lastWorkingDay <= $today) {
+        // Validate date against the allowed back-date window (App Settings > Payroll &
+        // Compensation > Resignation Settings). 0 = future dates only (original rule).
+        $lwdDate = DateTime::createFromFormat('Y-m-d', $lastWorkingDay);
+        if (!$lwdDate || $lwdDate->format('Y-m-d') !== $lastWorkingDay) {
             echo json_encode([
                 'type' => 'error',
                 'title' => 'Invalid Date',
-                'message' => 'Last working day must be a future date.'
+                'message' => 'Last working day is not a valid date.'
+            ]);
+            exit;
+        }
+        $backdateDays = get_resignation_backdate_days($conDB);
+        $minLastWorkingDay = get_resignation_min_last_working_day($backdateDays);
+        if ($lastWorkingDay < $minLastWorkingDay) {
+            echo json_encode([
+                'type' => 'error',
+                'title' => 'Invalid Date',
+                'message' => $backdateDays > 0
+                    ? "Last working day cannot be earlier than {$minLastWorkingDay} ({$backdateDays} days back)."
+                    : 'Last working day must be a future date.'
             ]);
             exit;
         }

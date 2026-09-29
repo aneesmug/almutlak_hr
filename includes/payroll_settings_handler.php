@@ -22,6 +22,7 @@ const PAYROLL_SETTINGS_GROUP_KEYS = [
     'overtime_settings' => 'manage_overtime_settings',
     'deduction_settings' => 'manage_deduction_settings',
     'salary_increment_settings' => 'manage_salary_increment_settings',
+    'resignation_settings' => 'manage_resignation_settings',
 ];
 
 function payrollSettingsCanAccessGroup($conDB, $group) {
@@ -49,6 +50,7 @@ function ensurePayrollParamSettings($conDB) {
         ['deduction_base_components', '["basic_salary","housing_allowance"]', 'deduction_settings', 'Salary components summed as the base for percentage-based deductions (e.g. GOSI)'],
         ['deduction_auto_attendance_enabled', '0', 'deduction_settings', 'Automatically add Late / Early-Leave deductions to payroll from attendance, using the Overtime hourly-rate formula'],
         ['salary_increment_max_amount', '2000', 'salary_increment_settings', 'Maximum salary increment amount allowed per request'],
+        ['resignation_backdate_days', '0', 'resignation_settings', 'Days back allowed for Last Working Day when applying resignation'],
     ];
 
     foreach ($defaults as [$name, $value, $group, $description]) {
@@ -199,6 +201,11 @@ function updatePayrollSettings($conDB) {
                 $value = json_encode($clean);
             } elseif (!is_numeric($value)) {
                 throw new Exception("Invalid value for {$settingName}: must be numeric.");
+            } elseif ($settingName === 'resignation_backdate_days') {
+                if (filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false) {
+                    throw new Exception("Invalid value for {$settingName}: must be a whole number of 0 or more.");
+                }
+                $value = (string)(int)$value;
             }
 
             $updateStmt->bind_param("sss", $value, $settingName, $group);
