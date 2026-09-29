@@ -66,6 +66,17 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/user_activity_logger.php';
 require_once __DIR__ . '/includes/connection_monitor_helper.php';
 
+// db.php normally dies with its own error page when it can't connect; this only
+// guards the case where it was loaded without leaving a usable $conDB behind
+// (e.g. a half-uploaded db.php during deployment) so we show a clean 503
+// instead of a mysqli_query(null) fatal in connmon_snapshot().
+if (!isset($conDB) || !($conDB instanceof mysqli)) {
+    http_response_code(503);
+    error_log('[CONNMON] connection_monitor.php: $conDB not available after including db.php');
+    echo 'Database connection unavailable. Please refresh in a moment.';
+    exit;
+}
+
 $snap = connmon_snapshot($conDB);
 $tokenExpiryMs = connmon_token_expiry() * 1000;
 $connmonAlertSeconds = connmon_alert_thresholds(); // e.g. [300, 60] - tune in includes/connmon_gate.php

@@ -1386,18 +1386,13 @@ if (mysqli_num_rows($query) == 1) {
 												<i class="mdi mdi-book-open-page-variant"></i> <?= __('documents') ?> <?= ($emprow['docs_count'] > 0) ? "<span class='badge-count'>" . $emprow['docs_count'] . "</span>" : "" ?>
 											</a>
 										</li>
-										<li class="nav-item">
-											<a href="#noties" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-book-open-page-variant"></i> <?= __('notes') ?> <?= ($emprow['empnote'] > 0) ? "<span class='badge-count'>" . $emprow['empnote'] . "</span>" : "" ?>
-											</a>
-										</li>
-										<?php if ($canViewMemosTab): ?>
+										<!-- Memos tab also holds the employee Notes (below the memo table), so it is
+											 shown to everyone; only the memo table itself is gated by $canViewMemosTab. -->
 										<li class="nav-item">
 											<a href="#memos" data-toggle="tab" aria-expanded="false" class="nav-link" id="memosTabLink">
-												<i class="mdi mdi-email-outline"></i> <?= __('memos', 'Memos') ?>
+												<i class="mdi mdi-email-outline"></i> <?= __('memos', 'Memos') ?> <?= ($emprow['empnote'] > 0) ? "<span class='badge-count'>" . $emprow['empnote'] . "</span>" : "" ?>
 											</a>
 										</li>
-										<?php endif; ?>
 										<?php  ?>
 										<li class="nav-item">
 											<a href="#evaluations" data-toggle="tab" aria-expanded="false" class="nav-link">
@@ -2757,15 +2752,8 @@ if (mysqli_num_rows($query) == 1) {
 												<?php endif; ?>
 											</div>
 										</div>
-										<div class="tab-pane" id="noties">
-											<div class="card-box">
-												<h4 class="header-title m-b-30"><?= __('all_notes') ?></h4>
-												<table id="notes_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"></table>
-											</div>
-										</div>
-
-										<?php if ($canViewMemosTab): ?>
 										<div class="tab-pane" id="memos">
+											<?php if ($canViewMemosTab): ?>
 											<div class="card-box">
 												<div class="d-flex justify-content-between align-items-center m-b-20">
 													<h4 class="header-title mb-0"><?= __('memos', 'Memos') ?></h4>
@@ -2785,8 +2773,12 @@ if (mysqli_num_rows($query) == 1) {
 													</thead>
 												</table>
 											</div>
+											<?php endif; ?>
+											<div class="card-box">
+												<h4 class="header-title m-b-30"><?= __('all_notes') ?></h4>
+												<table id="notes_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"></table>
+											</div>
 										</div>
-										<?php endif; ?>
 
 
 										<?php /*}*/ ?>
