@@ -631,6 +631,8 @@ include(__DIR__ . "/menu_active_class.php");
  * 4. Auto-resets fly=0 once a Local-Vacation-only fly flag no longer qualifies
  *    (employees with real Fly-type history are left to the manual return workflow)
  * 5. Only affects regular vacation (VAC-*), NOT leave requests (LV-*)
+ * 6. A vacation whose salary was paid by a settlement is kept review='A' while the
+ *    employee is still away, so fly=1 and payroll exclusion apply to it too
  * 
  * @param mysqli $conDB Database connection
  * @return void
@@ -638,7 +640,69 @@ include(__DIR__ . "/menu_active_class.php");
 function update_employee_fly_status_on_session($conDB) {
     try {
         $today = date('Y-m-d');
-        
+
+        // STEP 0: A vacation whose salary was already PAID through a settlement is an
+        // active away period until the employee actually comes back, so it must stay
+        // review='A' - that is what keeps the employee fly=1 (STEP 1) and out of payroll
+        // (payroll dropout checks look for review='A'). Re-open any such vacation that
+        // got closed (review='C') early. Real returns are left closed: an approved rejoin
+        // request, a recorded arrived_date, or a Direct Rejoin (which moves return_date to
+        // the rejoin day, so `return_date > today` no longer matches).
+        $sql_reopen_settled = "
+            UPDATE emp_vacation v
+            SET v.review = 'A'
+            WHERE v.review = 'C'
+              AND v.current_status IN ('approved', 'completed')
+              AND v.request_inv_no LIKE 'VAC-%'
+              AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
+              AND (
+                  LOWER(v.vac_type) = 'fly'
+                  OR (LOWER(v.vac_type) = 'local vacation' AND v.vacdays > 5)
+              )
+              AND v.return_date > ?
+              AND COALESCE(v.arrived_date, '') IN ('', '0000-00-00')
+              AND EXISTS (
+                  SELECT 1 FROM settlement_records sr
+                  WHERE sr.request_inv_no = CONCAT('SETL-', v.request_inv_no)
+                    AND sr.request_type = 'annual_vacation'
+                    AND sr.settlement_status IN ('completed', 'processed')
+                    AND sr.payment_date IS NOT NULL
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM rejoin_requests rr
+                  WHERE rr.vacation_id = v.id AND rr.status = 'approved'
+              )
+        ";
+        if ($stmt_reopen = mysqli_prepare($conDB, $sql_reopen_settled)) {
+            mysqli_stmt_bind_param($stmt_reopen, 's', $today);
+            mysqli_stmt_execute($stmt_reopen);
+            mysqli_stmt_close($stmt_reopen);
+        }
+
+        // Local Vacation has no rejoin step, so a settled Local Vacation re-opened above
+        // must be closed again once it is over, otherwise it would block new requests.
+        $sql_close_settled_local = "
+            UPDATE emp_vacation v
+            SET v.review = 'C'
+            WHERE v.review = 'A'
+              AND v.current_status = 'completed'
+              AND v.request_inv_no LIKE 'VAC-%'
+              AND LOWER(v.vac_type) = 'local vacation'
+              AND v.return_date < ?
+              AND EXISTS (
+                  SELECT 1 FROM settlement_records sr
+                  WHERE sr.request_inv_no = CONCAT('SETL-', v.request_inv_no)
+                    AND sr.request_type = 'annual_vacation'
+                    AND sr.settlement_status IN ('completed', 'processed')
+                    AND sr.payment_date IS NOT NULL
+              )
+        ";
+        if ($stmt_close_local = mysqli_prepare($conDB, $sql_close_settled_local)) {
+            mysqli_stmt_bind_param($stmt_close_local, 's', $today);
+            mysqli_stmt_execute($stmt_close_local);
+            mysqli_stmt_close($stmt_close_local);
+        }
+
         // STEP 1: Set fly=1 for active Fly vacations (annual/emergency)
         // Also set fly=1 for Local Vacation (annual/emergency) ONLY when vacdays > 5
         // (Only for regular vacation VAC-*, not leave requests LV-*)
@@ -656,7 +720,7 @@ function update_employee_fly_status_on_session($conDB) {
                     OR (LOWER(v.vac_type) = 'local vacation' AND v.vacdays > 5)
                 )
         ";
-        
+
         $stmt_find = mysqli_prepare($conDB, $sql_find_employees);
         if ($stmt_find) {
             mysqli_stmt_bind_param($stmt_find, 'ss', $today, $today);
