@@ -2000,15 +2000,163 @@ if (!function_exists('save_cropped_image')) {
 }
 
 /**
+ * Upload compression settings. Override by defining the constants before this file loads.
+ *  - UPLOAD_IMAGE_MAX_DIMENSION: longest image edge in px (larger images are scaled down)
+ *  - UPLOAD_IMAGE_JPEG_QUALITY:  JPEG/WebP quality 1-100
+ *  - UPLOAD_PDF_SETTINGS:        Ghostscript preset (/screen = smallest, /ebook = 150dpi, /printer = 300dpi)
+ *  - UPLOAD_COMPRESS_MIN_BYTES:  files smaller than this are left untouched
+ *  - GHOSTSCRIPT_PATH:           full path to gs binary when it is not on PATH
+ */
+defined('UPLOAD_IMAGE_MAX_DIMENSION') || define('UPLOAD_IMAGE_MAX_DIMENSION', 2000);
+defined('UPLOAD_IMAGE_JPEG_QUALITY') || define('UPLOAD_IMAGE_JPEG_QUALITY', 75);
+defined('UPLOAD_PDF_SETTINGS') || define('UPLOAD_PDF_SETTINGS', '/ebook');
+defined('UPLOAD_COMPRESS_MIN_BYTES') || define('UPLOAD_COMPRESS_MIN_BYTES', 100 * 1024);
+
+/**
+ * Locates a usable Ghostscript binary (cached per request).
+ *
+ * @return string|null Binary path/name, or null when Ghostscript is unavailable
+ */
+if (!function_exists('find_ghostscript_binary')) {
+    function find_ghostscript_binary()
+    {
+        static $resolved = false;
+        static $binary = null;
+        if ($resolved) {
+            return $binary;
+        }
+        $resolved = true;
+
+        if (!function_exists('exec')) {
+            return null;
+        }
+
+        $candidates = defined('GHOSTSCRIPT_PATH') && GHOSTSCRIPT_PATH ? [GHOSTSCRIPT_PATH] : [];
+        $candidates = array_merge($candidates, DIRECTORY_SEPARATOR === '\\'
+            ? ['gswin64c', 'gswin32c', 'gs']
+            : ['gs', '/usr/bin/gs', '/usr/local/bin/gs']);
+
+        foreach ($candidates as $candidate) {
+            $output = [];
+            $code = 1;
+            @exec(escapeshellarg($candidate) . ' --version 2>&1', $output, $code);
+            if ($code === 0 && !empty($output) && preg_match('/^\d+\.\d+/', trim($output[0]))) {
+                $binary = $candidate;
+                break;
+            }
+        }
+        return $binary;
+    }
+}
+
+/**
+ * Compresses an already-stored image (JPEG/PNG/WebP) or PDF in place.
+ * Images: auto-rotated, scaled down to UPLOAD_IMAGE_MAX_DIMENSION, re-encoded (metadata stripped).
+ * PDFs:   rewritten through Ghostscript when the binary is available on the server.
+ * The original is kept whenever the result is not smaller or anything fails.
+ *
+ * @param string $path Stored file path
+ * @return array{compressed: bool, before: int, after: int, reason: string}
+ */
+if (!function_exists('compress_stored_file')) {
+    function compress_stored_file($path)
+    {
+        $before = is_file($path) ? (int) filesize($path) : 0;
+        $result = ['compressed' => false, 'before' => $before, 'after' => $before, 'reason' => ''];
+
+        if ($before === 0) {
+            $result['reason'] = 'missing';
+            return $result;
+        }
+        if ($before < UPLOAD_COMPRESS_MIN_BYTES) {
+            $result['reason'] = 'small';
+            return $result;
+        }
+
+        $mime = function_exists('mime_content_type') ? (string) @mime_content_type($path) : '';
+        $tmpOut = $path . '.cmp' . bin2hex(random_bytes(4));
+
+        try {
+            if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+                if (!class_exists(\Intervention\Image\ImageManager::class)) {
+                    $result['reason'] = 'no_image_library';
+                    return $result;
+                }
+                // Large photos need room for the decoded bitmap
+                @ini_set('memory_limit', '512M');
+                $driver = extension_loaded('imagick')
+                    ? new \Intervention\Image\Drivers\Imagick\Driver()
+                    : new \Intervention\Image\Drivers\Gd\Driver();
+                $manager = new \Intervention\Image\ImageManager($driver);
+                $image = $manager->read($path);
+                $image->scaleDown(UPLOAD_IMAGE_MAX_DIMENSION, UPLOAD_IMAGE_MAX_DIMENSION);
+
+                if ($mime === 'image/png') {
+                    $encoded = $image->toPng();
+                } elseif ($mime === 'image/webp') {
+                    $encoded = $image->toWebp(quality: UPLOAD_IMAGE_JPEG_QUALITY, strip: true);
+                } else {
+                    $encoded = $image->toJpeg(quality: UPLOAD_IMAGE_JPEG_QUALITY, progressive: true, strip: true);
+                }
+                $encoded->save($tmpOut);
+            } elseif ($mime === 'application/pdf') {
+                $gs = find_ghostscript_binary();
+                if ($gs === null) {
+                    $result['reason'] = 'no_ghostscript';
+                    return $result;
+                }
+                $cmd = escapeshellarg($gs)
+                    . ' -sDEVICE=pdfwrite -dCompatibilityLevel=1.5'
+                    . ' -dPDFSETTINGS=' . escapeshellarg(UPLOAD_PDF_SETTINGS)
+                    . ' -dNOPAUSE -dQUIET -dBATCH -dSAFER -dDetectDuplicateImages=true'
+                    . ' -sOutputFile=' . escapeshellarg($tmpOut)
+                    . ' ' . escapeshellarg($path) . ' 2>&1';
+                $output = [];
+                $code = 1;
+                @exec($cmd, $output, $code);
+                // Encrypted/broken PDFs make gs fail: keep the original
+                if ($code !== 0 || !is_file($tmpOut) || @file_get_contents($tmpOut, false, null, 0, 5) !== '%PDF-') {
+                    $result['reason'] = 'ghostscript_failed';
+                    return $result;
+                }
+            } else {
+                $result['reason'] = 'unsupported_type';
+                return $result;
+            }
+
+            clearstatcache(true, $tmpOut);
+            $after = is_file($tmpOut) ? (int) filesize($tmpOut) : 0;
+            if ($after > 0 && $after < $before && @rename($tmpOut, $path)) {
+                $result['compressed'] = true;
+                $result['after'] = $after;
+            } else {
+                $result['reason'] = 'not_smaller';
+            }
+        } catch (\Throwable $e) {
+            $result['reason'] = 'error: ' . $e->getMessage();
+            error_log('compress_stored_file(' . basename($path) . '): ' . $e->getMessage());
+        } finally {
+            if (is_file($tmpOut)) {
+                @unlink($tmpOut);
+            }
+        }
+
+        return $result;
+    }
+}
+
+/**
  * Safely stores an uploaded file to the target path.
  * Keeps upload handling centralized for validation and future hardening.
+ * Images and PDFs are compressed after storing (see compress_stored_file) unless $compress is false.
  *
  * @param string $tmpPath  Temporary uploaded file path
  * @param string $destPath Destination absolute/relative file path
+ * @param bool   $compress Compress images/PDFs after storing
  * @return bool            True when the file is stored, false otherwise
  */
 if (!function_exists('store_uploaded_file_securely')) {
-    function store_uploaded_file_securely($tmpPath, $destPath)
+    function store_uploaded_file_securely($tmpPath, $destPath, $compress = true)
     {
         if (!is_string($tmpPath) || $tmpPath === '' || !is_string($destPath) || $destPath === '') {
             return false;
@@ -2023,7 +2171,14 @@ if (!function_exists('store_uploaded_file_securely')) {
             return false;
         }
 
-        return @move_uploaded_file($tmpPath, $destPath);
+        if (!@move_uploaded_file($tmpPath, $destPath)) {
+            return false;
+        }
+
+        if ($compress) {
+            compress_stored_file($destPath);
+        }
+        return true;
     }
 }
 
