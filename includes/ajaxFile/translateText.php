@@ -14,25 +14,125 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 /**
+ * Helper function: GET a URL with cURL.
+ *
+ * @param string $url
+ * @return string|null Response body, or null when the request failed
+ */
+function translate_http_get(string $url): ?string {
+    if (!function_exists('curl_init')) {
+        error_log('Translation failed: cURL extension is not available');
+        return null;
+    }
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($httpCode !== 200 || !$response) {
+        error_log('Translation request failed (' . parse_url($url, PHP_URL_HOST) . '): HTTP ' . $httpCode . ' ' . $curlError);
+        return null;
+    }
+
+    return $response;
+}
+
+/**
+ * Helper function: Translate with MyMemory.
+ *
+ * @return string|null Translated text, or null when no translation was obtained
+ */
+function translate_via_mymemory(string $text, string $source, string $target): ?string {
+    $response = translate_http_get(
+        "https://api.mymemory.translated.net/get?q="
+        . urlencode($text)
+        . "&langpair=" . urlencode($source) . "|" . urlencode($target)
+    );
+
+    if ($response === null) {
+        return null;
+    }
+
+    $result = json_decode($response, true);
+
+    if (!$result || empty($result['responseData']['translatedText'])) {
+        return null;
+    }
+
+    $translatedText = $result['responseData']['translatedText'];
+
+    // Quota/limit errors come back as HTTP 200 with a warning in place of the translation
+    if ((int)($result['responseStatus'] ?? 200) !== 200 || stripos($translatedText, 'MYMEMORY WARNING') !== false) {
+        error_log('Translation request failed (MyMemory): ' . $translatedText);
+        return null;
+    }
+
+    return $translatedText;
+}
+
+/**
+ * Helper function: Translate with Google Translate (fallback).
+ *
+ * @return string|null Translated text, or null when no translation was obtained
+ */
+function translate_via_google(string $text, string $source, string $target): ?string {
+    $response = translate_http_get(
+        "https://clients5.google.com/translate_a/t?client=dict-chrome-ex"
+        . "&sl=" . urlencode($source)
+        . "&tl=" . urlencode($target)
+        . "&q=" . urlencode($text)
+    );
+
+    if ($response === null) {
+        return null;
+    }
+
+    $result = json_decode($response, true);
+
+    if (!is_array($result) || empty($result[0])) {
+        return null;
+    }
+
+    // Response is ["translated"] (or [["translated", "detected_lang"]] when source is auto)
+    $translatedText = is_array($result[0]) ? ($result[0][0] ?? '') : $result[0];
+
+    return is_string($translatedText) && $translatedText !== '' ? $translatedText : null;
+}
+
+/**
  * Helper function: Auto-translate text with session and database caching
  * Saves translations to translation_cache table for persistent reuse
  *
  * @param string $text Text to translate
  * @param string $source Source language code
  * @param string $target Target language code
+ * @param bool|null $translated_ok Set to true only when a real translation was obtained
  * @return string Translated text or original if fails
  */
-function auto_translate_text(string $text, string $source = 'en', string $target = 'ar'): string {
+function auto_translate_text(string $text, string $source = 'en', string $target = 'ar', ?bool &$translated_ok = null): string {
+    $translated_ok = false;
+
     if (empty($text)) {
         return $text;
     }
-    
+
     global $conDB;
     static $request_translation_cache = [];
     $cache_key = md5($text . '_' . $source . '_' . $target);
     
     // 1. Check request cache first (static variable - fastest, lasts for one page load)
     if (isset($request_translation_cache[$cache_key])) {
+        $translated_ok = true;
         return $request_translation_cache[$cache_key];
     }
     
@@ -51,46 +151,25 @@ function auto_translate_text(string $text, string $source = 'en', string $target
             $translated = $db_row['translated_text'];
             // Store in request cache
             $request_translation_cache[$cache_key] = $translated;
+            $translated_ok = true;
             return $translated;
         }
     }
     
-    // 3. API call only as last resort (MyMemory - free, no key required)
+    // 3. API call only as last resort (MyMemory first, Google as fallback - both free, no key required)
     try {
-        $url = "https://api.mymemory.translated.net/get?q="
-               . urlencode($text)
-               . "&langpair=" . urlencode($source) . "|" . urlencode($target);
+        $translatedText = translate_via_mymemory($text, $source, $target);
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        if ($translatedText === null) {
+            $translatedText = translate_via_google($text, $source, $target);
+        }
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode !== 200 || !$response) {
+        if ($translatedText === null) {
             return $text;
         }
 
-        // Parse the response
-        $result = json_decode($response, true);
+        $translated_ok = true;
 
-        if (!$result || empty($result['responseData']['translatedText'])) {
-            return $text;
-        }
-
-        $translatedText = $result['responseData']['translatedText'];
-
-        if (empty($translatedText)) {
-            return $text;
-        }
-        
         // Cache in request cache immediately
         $request_translation_cache[$cache_key] = $translatedText;
         
@@ -150,8 +229,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['text'])) {
     }
     
     // Use the auto_translate_text function
-    $translatedText = auto_translate_text($text, $source, $target);
-    
+    $translated_ok = false;
+    $translatedText = auto_translate_text($text, $source, $target, $translated_ok);
+
+    // Translation service unreachable / over quota: report failure instead of echoing the source text
+    if (!$translated_ok) {
+        echo json_encode([
+            'success' => false,
+            'error' => 'Translation service unavailable'
+        ]);
+        exit;
+    }
+
     echo json_encode([
         'success' => true,
         'translation' => $translatedText,

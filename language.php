@@ -382,8 +382,10 @@ $(document).ready(function(){
                 englishText = englishText.charAt(0).toUpperCase() + englishText.slice(1);
             }
             $('#en_translation_input').val(englishText);
+            // English was filled from the key: translate it right away, no focus/blur needed
+            scheduleArabicTranslation(englishText);
         }
-        
+
         // Real-time validation indicator
         if (langKey.trim().length > 0) {
             $(this).css('border-color', '#28a745').css('box-shadow', '0 0 0 0.2rem rgba(40, 167, 69, 0.25)');
@@ -505,6 +507,13 @@ $(document).ready(function(){
                     $('#ar_translation_input').val('').prop('disabled', true);
                     // Reset Arabic translation flag
                     arabicTranslationCompleted = false;
+                    // Nothing to translate for an existing key: cancel any queued/running translation
+                    if (enToArTimer) { clearTimeout(enToArTimer); enToArTimer = null; }
+                    if (currentTranslateXHR && currentTranslateXHR.readyState !== 4) {
+                        try { currentTranslateXHR.abort(); } catch (e) {}
+                    }
+                    setArabicLoading(false);
+                    setArabicStatus('');
                 } else {
                     setLangKeyStatus('available');
                     // Button will show only if arabicTranslationCompleted is true (via setLangKeyStatus)
@@ -512,8 +521,7 @@ $(document).ready(function(){
                     // Ensure fields are editable when key is new
                     $('#en_translation_input').prop('disabled', false);
                     $('#ar_translation_input').prop('disabled', false);
-                    // Reset Arabic translation flag when switching to a new/available key
-                    arabicTranslationCompleted = false;
+                    // Arabic flag is left as-is: the translation started from the key input may already be done
                 }
             } else {
                 setLangKeyStatus('idle', '');
@@ -538,6 +546,43 @@ $(document).ready(function(){
     let enToArTimer = null;
     let currentTranslateXHR = null;
     let lastRequestedEnglish = '';
+
+    function hasArabicText(text) {
+        return /\p{Script=Arabic}/u.test(text || '');
+    }
+
+    // Loader next to the Arabic label while the translation request is running
+    function setArabicLoading(isLoading) {
+        let $arLoader = $('#ar_translation_loader');
+        if ($arLoader.length === 0) {
+            $arLoader = $('<small id="ar_translation_loader" class="text-muted ml-2" style="display:none;"><i class="mdi mdi-loading mdi-spin"></i> <span></span></small>');
+            $arLoader.find('span').text(__('translating', 'Translating...'));
+            $('label[for="ar_translation"]').append($arLoader);
+        }
+        $arLoader.toggle(!!isLoading);
+        $('#ar_translation_input').css('opacity', isLoading ? 0.6 : '');
+    }
+
+    function setArabicStatus(text) {
+        let $arStatus = $('#ar_translation_status');
+        if ($arStatus.length === 0) {
+            $arStatus = $('<small id="ar_translation_status" class="form-text text-danger"></small>');
+            $arStatus.insertAfter($('#ar_translation_input'));
+        }
+        $arStatus.text(text || '');
+    }
+
+    // Translation did not happen: drop the mirrored English text and keep submit hidden
+    function markArabicTranslationFailed($arabicField, borderColor, shadowRgb) {
+        if (!hasArabicText($arabicField.val())) {
+            $arabicField.val('');
+        }
+        $arabicField.css('border-color', borderColor).css('box-shadow', '0 0 0 0.2rem rgba(' + shadowRgb + ', 0.25)');
+        setArabicStatus(__('auto_translation_failed', 'Auto translation failed. Please type the Arabic translation manually.'));
+        arabicTranslationCompleted = false;
+        $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
+    }
+
     function updateArabicTranslation(forceText) {
         const englishText = typeof forceText === 'string' ? forceText : $('#en_translation_input').val().trim();
         
@@ -550,6 +595,8 @@ $(document).ready(function(){
                 try { currentTranslateXHR.abort(); } catch (e) {}
             }
             lastRequestedEnglish = englishText;
+            setArabicStatus('');
+            setArabicLoading(true);
             currentTranslateXHR = $.ajax({
                 url: './includes/ajaxFile/translateText.php',
                 type: 'POST',
@@ -560,13 +607,18 @@ $(document).ready(function(){
                 },
                 dataType: 'json',
                 success: function(response) {
-                    // Only apply if English hasn't changed since request
+                    // English changed since this request: a newer request owns the field now
                     const currentEnglish = $('#en_translation_input').val().trim();
-                    if (response.success && response.translation && currentEnglish === englishText) {
+                    if (currentEnglish !== englishText) {
+                        return;
+                    }
+                    // Accept only a real Arabic result, never the English text echoed back
+                    if (response.success && response.translation && hasArabicText(response.translation)) {
                         $arabicField.val(response.translation);
                         $arabicField.css('border-color', '#28a745').css('box-shadow', '0 0 0 0.2rem rgba(40, 167, 69, 0.25)');
+                        setArabicStatus('');
                         arabicTranslationCompleted = true;
-                        
+
                         // Only show button if key is also available (not exists)
                         const keyStatus = $langKeyStatus.text();
                         if (keyStatus.includes(__('available', 'Available'))) {
@@ -574,15 +626,14 @@ $(document).ready(function(){
                         }
                     } else {
                         console.warn('Translation failed:', response.error || 'Unknown error');
-                        $arabicField.css('border-color', '#ffc107').css('box-shadow', '0 0 0 0.2rem rgba(255, 193, 7, 0.25)');
-                        arabicTranslationCompleted = false;
-                        $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
+                        markArabicTranslationFailed($arabicField, '#ffc107', '255, 193, 7');
                     }
                 },
                 error: function(xhr, status, error) {
                     if (status !== 'abort') {
                         console.error('Translation request failed:', error);
-                        $arabicField.css('border-color', '#dc3545').css('box-shadow', '0 0 0 0.2rem rgba(220, 53, 69, 0.25)');
+                        markArabicTranslationFailed($arabicField, '#dc3545', '220, 53, 69');
+                        return;
                     }
                     arabicTranslationCompleted = false;
                     $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
@@ -591,24 +642,34 @@ $(document).ready(function(){
                     currentTranslateXHR = null;
                     // Restore original state (placeholder only)
                     $arabicField.attr('placeholder', originalPlaceholder);
+                    // Keep the loader if a newer translation is already queued
+                    if (!enToArTimer) {
+                        setArabicLoading(false);
+                    }
                 }
             });
         } else {
+            setArabicLoading(false);
+            setArabicStatus('');
             arabicTranslationCompleted = false;
             $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
         }
     }
     
     // Live update Arabic as English changes: mirror immediately, refine after debounce
-    $('#en_translation_input').on('input', function() {
-        const englishText = $(this).val();
+    function scheduleArabicTranslation(englishText) {
         // Immediate mirror for instant feedback
         $('#ar_translation_input').val(englishText);
         arabicTranslationCompleted = false;
         $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
-        
+
         if (enToArTimer) { clearTimeout(enToArTimer); }
-        enToArTimer = setTimeout(function(){ updateArabicTranslation(englishText.trim()); }, 250);
+        setArabicLoading(englishText.trim().length > 0);
+        enToArTimer = setTimeout(function(){ enToArTimer = null; updateArabicTranslation(englishText.trim()); }, 400);
+    }
+
+    $('#en_translation_input').on('input', function() {
+        scheduleArabicTranslation($(this).val());
     });
     
     // Trigger Arabic translation when pressing Enter in English field
@@ -648,8 +709,10 @@ $(document).ready(function(){
     // Allow manual editing of Arabic field to enable submit
     $('#ar_translation_input').on('input', function() {
         const arText = $(this).val().trim();
-        if (arText.length > 0) {
+        // Submit needs real Arabic text and an available key
+        if (hasArabicText(arText) && $langKeyStatus.text().includes(__('available', 'Available'))) {
             arabicTranslationCompleted = true;
+            setArabicStatus('');
             $('#addTranslationForm button[type="submit"]').prop('disabled', false).show();
         } else {
             arabicTranslationCompleted = false;
@@ -843,8 +906,10 @@ $(document).ready(function(){
                     }
                     // Focus Language Key for quick next entry
                     $('#lang_key_input').focus();
-                    // Ensure submit is visible for the next new key
-                    $('#addTranslationForm button[type="submit"]').show().prop('disabled', false);
+                    // Keep submit hidden until the next key is translated
+                    arabicTranslationCompleted = false;
+                    setArabicStatus('');
+                    $('#addTranslationForm button[type="submit"]').prop('disabled', true).hide();
                 });
             } else {
                 // Handle other responses (e.g., validation errors) from the server
