@@ -54,7 +54,7 @@ if (!function_exists('memo_user_can')) {
 
 // Bump when memo_default_templates() changes, so untouched built-ins get refreshed.
 if (!defined('MEMO_BUILTIN_VERSION')) {
-    define('MEMO_BUILTIN_VERSION', 3);
+    define('MEMO_BUILTIN_VERSION', 4);
 }
 
 /**
@@ -293,7 +293,7 @@ if (!function_exists('memo_normalize_fields')) {
                 continue;
             }
             $seen[$key] = true;
-            $type = in_array($f['type'] ?? '', ['text', 'textarea', 'date', 'number', 'select'], true) ? $f['type'] : 'text';
+            $type = in_array($f['type'] ?? '', ['text', 'textarea', 'date', 'number', 'select', 'assets'], true) ? $f['type'] : 'text';
             $source = (string) ($f['source'] ?? '');
             if ($type === 'select' && !isset(memo_lookup_sources()[$source])) {
                 $type = 'text'; // unknown dropdown source - fall back to free text
@@ -306,8 +306,9 @@ if (!function_exists('memo_normalize_fields')) {
                 'type' => $type,
                 'source' => $type === 'select' ? $source : '',
                 // Text fields can take a separate Arabic value; dates/numbers are shared;
-                // a dropdown always carries both names from its table.
-                'bilingual' => $type === 'select' || (in_array($type, ['text', 'textarea'], true) && !empty($f['bilingual'])),
+                // a dropdown always carries both names from its table. 'assets' = long text
+                // with a picker that adds lines from the asset inventory (search_assets).
+                'bilingual' => $type === 'select' || $type === 'assets' || (in_array($type, ['text', 'textarea'], true) && !empty($f['bilingual'])),
                 'required' => !empty($f['required']),
             ];
         }
@@ -546,7 +547,7 @@ if (!function_exists('memo_default_templates')) {
         $t['asset_handover'] = [
             'label' => 'Asset Handover Memo', 'label_ar' => 'مذكرة تسليم عهدة', 'icon' => 'fa-laptop',
             'subject' => 'Asset Handover - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'تسليم عهدة - {{employee_name}}',
-            'fields' => [$f('assets', 'Asset(s) and serial / plate no.', 'العهدة والرقم التسلسلي / رقم اللوحة', 'textarea', true), $f('handover_date', 'Handover date', 'تاريخ التسليم', 'date')],
+            'fields' => [$f('assets', 'Asset(s) and serial / plate no.', 'العهدة والرقم التسلسلي / رقم اللوحة', 'assets', true), $f('handover_date', 'Handover date', 'تاريخ التسليم', 'date')],
             'body' => $head . $dear . '<p>The following company asset(s) have been handed over to you on <strong>{{f:handover_date}}</strong>:</p><p>{{f:assets}}</p><p>You are responsible for the proper use and safekeeping of these assets and must return them in good condition upon request or at the end of your employment.</p>' . $sign,
             'body_ar' => $headAr . $dearAr . '<p>تم تسليمكم عهدة الشركة التالية بتاريخ <strong>{{f:handover_date}}</strong>:</p><p>{{f:assets}}</p><p>وتتحملون مسؤولية الاستخدام السليم لهذه العهدة والمحافظة عليها، وإعادتها بحالة جيدة عند الطلب أو عند انتهاء الخدمة.</p>' . $signAr,
         ];

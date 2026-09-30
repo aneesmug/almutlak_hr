@@ -165,6 +165,71 @@ switch ($action) {
         $stmt->close();
         memo_json(['results' => $results]);
 
+    // select2 ajax for an 'assets' detail field: search the asset inventory by serial /
+    // tracking / plate no., description or asset name. The memo employee's own assets
+    // come first, then available stock. Each result carries the memo line (en + ar).
+    case 'search_assets':
+        $term = trim((string) ($_GET['q'] ?? ''));
+        $like = '%' . $term . '%';
+        $forEmp = trim((string) ($_GET['emp_id'] ?? ''));
+        $rows = [];
+        $stmt = $conDB->prepare("SELECT CONCAT('i', ai.id) AS id, a.name, ai.serial_number, ai.tracking_id, ai.description, ai.status,
+                                        e.emp_id AS holder_id, e.name AS holder_name
+                                 FROM asset_items ai
+                                 JOIN assets a ON a.id = ai.asset_id
+                                 LEFT JOIN employees e ON e.id = ai.assigned_emp_id AND ai.status = 'Assigned'
+                                 WHERE ai.status IN ('Available', 'Assigned')
+                                   AND (ai.serial_number LIKE ? OR ai.tracking_id LIKE ? OR ai.description LIKE ? OR a.name LIKE ?)
+                                 ORDER BY (e.emp_id = ?) DESC, (ai.status = 'Available') DESC, a.name, ai.serial_number LIMIT 30");
+        if ($stmt) {
+            $stmt->bind_param('sssss', $like, $like, $like, $like, $forEmp);
+            $stmt->execute();
+            $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+        }
+        // Assignments recorded only in employee_assets (no inventory item behind them).
+        $stmt = $conDB->prepare("SELECT CONCAT('e', ea.id) AS id, a.name, ea.serial_number, '' AS tracking_id, ea.description, ea.status,
+                                        ea.emp_id AS holder_id, e.name AS holder_name
+                                 FROM employee_assets ea
+                                 JOIN assets a ON a.id = ea.asset_id
+                                 LEFT JOIN employees e ON e.emp_id = ea.emp_id
+                                 WHERE ea.status = 'Assigned'
+                                   AND (ea.serial_number LIKE ? OR ea.description LIKE ? OR a.name LIKE ?)
+                                   AND NOT EXISTS (SELECT 1 FROM asset_items ai WHERE ai.asset_id = ea.asset_id
+                                                   AND (ai.tracking_id = ea.serial_number OR ai.serial_number = ea.serial_number))
+                                 ORDER BY (ea.emp_id = ?) DESC, a.name, ea.serial_number LIMIT 30");
+        if ($stmt) {
+            $stmt->bind_param('ssss', $like, $like, $like, $forEmp);
+            $stmt->execute();
+            $rows = array_merge($rows, $stmt->get_result()->fetch_all(MYSQLI_ASSOC));
+            $stmt->close();
+        }
+        $results = [];
+        foreach ($rows as $r) {
+            $name = trim((string) $r['name']);
+            $serial = trim((string) $r['serial_number']) ?: trim((string) $r['tracking_id']);
+            $desc = trim((string) $r['description']);
+            $isCar = (bool) preg_match('/\b(car|vehicle|truck)\b/i', $name);
+            $holderId = (string) ($r['holder_id'] ?? '');
+            $results[] = [
+                'id' => $r['id'],
+                'text' => implode(' - ', array_filter([$name, $desc, $serial])),
+                'name' => $name,
+                'serial' => $serial,
+                'desc' => $desc,
+                'status' => $r['status'],
+                'holder' => $holderId !== '' ? memo_short_name((string) $r['holder_name']) . ' (' . $holderId . ')' : '',
+                'own' => $forEmp !== '' && $holderId === $forEmp,
+                'en' => $name . ($desc !== '' ? ' - ' . $desc : '') . ($serial !== '' ? ' - ' . ($isCar ? 'Plate No.' : 'S/N') . ': ' . $serial : ''),
+                'ar' => $name . ($desc !== '' ? ' - ' . $desc : '') . ($serial !== '' ? ' - ' . ($isCar ? 'رقم اللوحة' : 'الرقم التسلسلي') . ': ' . $serial : ''),
+            ];
+        }
+        // The memo employee's assets first, across both lists.
+        usort($results, function ($a, $b) {
+            return (int) $b['own'] - (int) $a['own'];
+        });
+        memo_json(['results' => $results]);
+
     // Template + the employee's data in both languages. The page fills
     // {{placeholders}} / {{f:fields}} itself so the bilingual preview is live.
     case 'render_template':

@@ -111,6 +111,36 @@ if ($preselectEmpId !== '') {
         .memo-fields-grid .memo-field-wide { grid-column: 1 / -1; }
         .memo-fields-editor input, .memo-fields-editor select { font-size: 12px; }
         @media (max-width: 767px) { .memo-field-pair { flex-direction: column; } .memo-fields-grid { grid-template-columns: 1fr; } }
+
+        /* Compose form: titles and entry boxes must not look alike - titles are small
+           slate captions (a tinted header strip on the Details cards), entry boxes are
+           tinted with a stronger border and turn white with an indigo ring on focus. */
+        .memo-form label { font-size: 12px; font-weight: 600; color: #5b6b86; letter-spacing: .2px; margin-bottom: 5px; }
+        .memo-form .custom-control-label { font-size: 13px; color: #334155; letter-spacing: 0; }
+        .memo-form .memo-field-card { padding: 0 12px 12px; overflow: hidden; }
+        .memo-form .memo-field-card > label {
+            display: block; margin: 0 -12px 10px; padding: 7px 12px;
+            background: #eef1fb; border-bottom: 1px solid #dfe4f5; color: #3f4a8a; font-size: 13px;
+        }
+        .memo-form .memo-field-card > label .text-muted { color: #7b86b8 !important; font-weight: 500; }
+        .memo-form .memo-field-pair .lang-tag { font-weight: 600; color: #7c8aa5; text-transform: uppercase; letter-spacing: .4px; }
+        html:not(.app-dark) .memo-form .form-control,
+        html:not(.app-dark) .memo-form .select2-container .select2-selection--single {
+            background-color: #f5f8fd; border-color: #c3cede; color: #0f172a; font-weight: 500;
+        }
+        html:not(.app-dark) .memo-form .form-control::placeholder { color: #9aa7bb; font-weight: 400; }
+        html:not(.app-dark) .memo-form .select2-container .select2-selection__placeholder { color: #9aa7bb; font-weight: 400; }
+        html:not(.app-dark) .memo-form .form-control:hover,
+        html:not(.app-dark) .memo-form .select2-container .select2-selection--single:hover { border-color: #9fb0c9; }
+        html:not(.app-dark) .memo-form .form-control:focus,
+        html:not(.app-dark) .memo-form .select2-container--focus .select2-selection--single,
+        html:not(.app-dark) .memo-form .select2-container--open .select2-selection--single {
+            background-color: #fff; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); outline: 0;
+        }
+        html:not(.app-dark) .memo-form .form-control:disabled,
+        html:not(.app-dark) .memo-form .select2-container--disabled .select2-selection--single { background-color: #e9edf3; color: #94a3b8; }
+        html:not(.app-dark) .memo-form .input-group-text { background-color: #e6ebf5; border-color: #c3cede; color: #4f5bd5; }
+        html.app-dark .memo-form .memo-field-card > label { background: #222b40; border-bottom-color: #2f3a55; color: #c3cbff; }
     </style>
 </head>
 
@@ -136,7 +166,7 @@ if ($preselectEmpId !== '') {
             <div class="container-fluid">
                 <div class="row">
                     <div class="col-12">
-                        <div class="card-box">
+                        <div class="card-box memo-form">
                             <h4 class="m-t-0 header-title"><i class="fa-duotone fa-envelope-open-text mr-1"></i> <?= __('send_memo', 'Send Memo') ?></h4>
                             <p class="text-muted"><?= __('send_memo_desc', 'Choose an employee and a memo type. The email is prepared from a ready template with the employee\'s details - review or edit it, then send. Every memo is saved in the employee\'s master file.') ?></p>
 

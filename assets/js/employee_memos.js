@@ -435,7 +435,7 @@
             var id = 'mf_' + field.key + (lang ? '_' + lang : '');
             var attrs = ' id="' + id + '" class="form-control memo-field-input" data-key="' + esc(field.key) + '"' + (lang ? ' data-lang="' + lang + '"' : '')
                 + (lang === 'ar' ? ' dir="rtl"' : '');
-            if (field.type === 'textarea') {
+            if (field.type === 'textarea' || field.type === 'assets') {
                 return '<textarea rows="3"' + attrs + '>' + esc(value) + '</textarea>';
             }
             if (field.type === 'date') {
@@ -468,7 +468,10 @@
                     body = selectInput(f, v);
                 } else if (f.bilingual) {
                     v = v && typeof v === 'object' ? v : { en: v || '', ar: '' };
-                    body = '<div class="memo-field-pair">'
+                    // Asset list field: a search box that adds inventory lines to both text boxes below.
+                    body = (f.type === 'assets' ? '<select class="form-control memo-asset-pick" data-key="' + esc(f.key) + '"></select>'
+                        + '<small class="form-text text-muted mb-2">' + esc(t('memo_asset_pick_hint', 'Pick from the asset list to add a line below - you can still edit the text.')) + '</small>' : '')
+                        + '<div class="memo-field-pair">'
                         + '<div><span class="lang-tag">English</span>' + fieldInput(f, 'en', v.en) + '</div>'
                         + '<div dir="rtl"><span class="lang-tag">العربية</span>'
                         + ' <a href="#" class="memo-tr-btn small mr-2" data-key="' + esc(f.key) + '" title="' + esc(t('translate_from_english', 'Translate from English')) + '"><i class="fa fa-language"></i> ' + esc(t('translate', 'Translate')) + '</a>'
@@ -477,7 +480,7 @@
                 } else {
                     body = fieldInput(f, '', v && typeof v === 'object' ? v.en : (v || ''));
                 }
-                return '<div class="memo-field-card' + (f.type === 'textarea' || (f.type === 'select' && f.source === 'locations') ? ' memo-field-wide' : '') + '"><label>' + label + '</label>' + body + '</div>';
+                return '<div class="memo-field-card' + (f.type === 'textarea' || f.type === 'assets' || (f.type === 'select' && f.source === 'locations') ? ' memo-field-wide' : '') + '"><label>' + label + '</label>' + body + '</div>';
             }).join('') + '</div>';
             $('#memoFields').html(html);
             $('#memoFields .memo-select').each(function () {
@@ -499,6 +502,7 @@
                 });
             });
             initLocationCascades();
+            initAssetPickers();
             if ($.fn.datepicker) {
                 $('#memoFields .memo-date').datepicker({
                     format: 'yyyy-mm-dd',
@@ -508,6 +512,55 @@
                 });
             }
         }
+
+        // ----- Asset list fields: search the inventory by serial no. or asset name -----
+        function initAssetPickers() {
+            $('#memoFields .memo-asset-pick').select2({
+                width: '100%',
+                placeholder: t('memo_asset_search', 'Search asset by serial / plate no. or name...'),
+                ajax: {
+                    url: HANDLER,
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) { return { action: 'search_assets', q: params.term || '', emp_id: $('#memoEmployee').val() || '' }; },
+                    processResults: function (data) { return { results: (data && data.results) || [] }; }
+                },
+                templateResult: function (item) {
+                    if (item.loading || !item.name) return item.text;
+                    var badge = item.status === 'Available'
+                        ? $('<span class="badge badge-success ml-2">').text(t('available', 'Available'))
+                        : $('<span class="badge ml-2">').addClass(item.own ? 'badge-info' : 'badge-warning').text(item.holder || item.status);
+                    return $('<span>').append(
+                        $('<strong>').text(item.name),
+                        item.serial ? $('<span class="ml-2">').text(item.serial) : '',
+                        item.desc ? $('<span class="text-muted ml-2">').text(item.desc) : '',
+                        badge
+                    );
+                }
+            });
+        }
+
+        $('#memoFields').on('select2:select', '.memo-asset-pick', function (e) {
+            var key = $(this).data('key');
+            var item = e.params.data;
+            $(this).val(null).trigger('change');
+            if (!item || !item.en) return;
+            var cur = state.values[key] && typeof state.values[key] === 'object' ? state.values[key] : { en: '', ar: '' };
+            var en = String(cur.en || '').replace(/\s+$/, '');
+            if (en.split('\n').indexOf(item.en) !== -1) return; // already listed
+            // Empty Arabic box = same as English so far; keep those lines.
+            var ar = (String(cur.ar || '').replace(/\s+$/, '')) || en;
+            cur.en = (en ? en + '\n' : '') + item.en;
+            cur.ar = (ar ? ar + '\n' : '') + (item.ar || item.en);
+            state.values[key] = cur;
+            // Both sides are set here: drop any pending auto-translation of the English box.
+            clearTimeout(trTimers[key]);
+            trSeq[key] = (trSeq[key] || 0) + 1;
+            $('.memo-tr-status[data-key="' + key + '"]').text('');
+            $('#mf_' + key + '_en').val(cur.en);
+            $('#mf_' + key + '_ar').val(cur.ar);
+            refresh();
+        });
 
         // Clicking the calendar icon opens the picker too.
         $('#memoFields').on('click', '.input-group-text', function () {
@@ -864,7 +917,7 @@
 
         function fieldRow(f) {
             f = f || { key: '', label: '', label_ar: '', type: 'text', source: '', bilingual: true, required: true };
-            var typeLabels = { text: 'Text', textarea: 'Long text', date: 'Date', number: 'Number', select: 'Dropdown (from database)' };
+            var typeLabels = { text: 'Text', textarea: 'Long text', date: 'Date', number: 'Number', select: 'Dropdown (from database)', assets: 'Asset list (from inventory)' };
             var types = Object.keys(typeLabels).map(function (tp) {
                 return '<option value="' + tp + '"' + (f.type === tp ? ' selected' : '') + '>' + typeLabels[tp] + '</option>';
             }).join('');
@@ -895,7 +948,7 @@
                     label_ar: $.trim($r.find('.fr-label-ar').val()),
                     type: type,
                     source: type === 'select' ? $r.find('.fr-source').val() : '',
-                    bilingual: type === 'select' || ((type === 'text' || type === 'textarea') && $r.find('.fr-bi').is(':checked')),
+                    bilingual: type === 'select' || type === 'assets' || ((type === 'text' || type === 'textarea') && $r.find('.fr-bi').is(':checked')),
                     required: $r.find('.fr-req').is(':checked')
                 };
             }).get();
