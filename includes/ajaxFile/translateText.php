@@ -17,9 +17,12 @@ if (session_status() === PHP_SESSION_NONE) {
  * Helper function: GET a URL with cURL.
  *
  * @param string $url
+ * @param int|null $httpCode Set to the HTTP status code of the response
  * @return string|null Response body, or null when the request failed
  */
-function translate_http_get(string $url): ?string {
+function translate_http_get(string $url, ?int &$httpCode = null): ?string {
+    $httpCode = 0;
+
     if (!function_exists('curl_init')) {
         error_log('Translation failed: cURL extension is not available');
         return null;
@@ -35,7 +38,7 @@ function translate_http_get(string $url): ?string {
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
     $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlError = curl_error($ch);
     curl_close($ch);
 
@@ -48,18 +51,53 @@ function translate_http_get(string $url): ?string {
 }
 
 /**
+ * Helper function: Check (or set) the MyMemory "quota exhausted" flag.
+ * The flag is kept in a temp file so it is shared by all requests, and expires after one hour.
+ *
+ * @param bool $block Pass true to raise the flag
+ * @return bool True while MyMemory should be skipped
+ */
+function mymemory_quota_blocked(bool $block = false): bool {
+    static $blocked = null;
+    $flagFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mymemory_quota_' . md5(__DIR__) . '.flag';
+
+    if ($block) {
+        $blocked = true;
+        @touch($flagFile);
+        return true;
+    }
+
+    if ($blocked === null) {
+        $flagTime = @filemtime($flagFile);
+        $blocked = $flagTime !== false && (time() - $flagTime) < 3600;
+    }
+
+    return $blocked;
+}
+
+/**
  * Helper function: Translate with MyMemory.
  *
  * @return string|null Translated text, or null when no translation was obtained
  */
 function translate_via_mymemory(string $text, string $source, string $target): ?string {
+    // Quota used up recently: skip the call instead of waiting for another HTTP 429
+    if (mymemory_quota_blocked()) {
+        return null;
+    }
+
+    $httpCode = 0;
     $response = translate_http_get(
         "https://api.mymemory.translated.net/get?q="
         . urlencode($text)
-        . "&langpair=" . urlencode($source) . "|" . urlencode($target)
+        . "&langpair=" . urlencode($source) . "|" . urlencode($target),
+        $httpCode
     );
 
     if ($response === null) {
+        if ($httpCode === 429) {
+            mymemory_quota_blocked(true);
+        }
         return null;
     }
 
@@ -74,6 +112,7 @@ function translate_via_mymemory(string $text, string $source, string $target): ?
     // Quota/limit errors come back as HTTP 200 with a warning in place of the translation
     if ((int)($result['responseStatus'] ?? 200) !== 200 || stripos($translatedText, 'MYMEMORY WARNING') !== false) {
         error_log('Translation request failed (MyMemory): ' . $translatedText);
+        mymemory_quota_blocked(true);
         return null;
     }
 

@@ -195,6 +195,7 @@ if ($totalItems > 0) {
         e.gosi,
         e.country as country_id,
         e.allow_vacation_salary_below_min_days,
+        (SELECT eos.net_payment FROM emp_eos eos WHERE eos.emp_id = s.emp_id ORDER BY eos.id DESC LIMIT 1) as eos_net_payment,
         ra_pending.approver_id as current_approver_id,
         approver_emp.name as current_approver_name,
         ra_pending.approval_level as current_approval_level,
@@ -724,8 +725,12 @@ if ($canSeeAllDepts) {
                                             }
                                             
                                             // Amount stored at settlement creation is final; calculation is only a fallback when it is 0.
-                                            if ((float)($settlement['settlement_amount'] ?? 0) > 0) {
+                                            // Negative amounts are valid too (EOS where deductions exceed earnings).
+                                            if ((float)($settlement['settlement_amount'] ?? 0) != 0) {
                                                 $payableAmount = round($settlement['settlement_amount']);
+                                            } elseif (($settlement['request_type'] ?? '') === 'resignation' && (float)($settlement['eos_net_payment'] ?? 0) != 0) {
+                                                // EOS settlement stored as 0: show the Net Payment of the EOS record (same as EOS page/print).
+                                                $payableAmount = round((float)$settlement['eos_net_payment']);
                                             }
                                             ?>
                                             <div class="col-lg-4 col-md-6 mb-4">
@@ -738,7 +743,7 @@ if ($canSeeAllDepts) {
                                                     </div>
                                                     <div class="card-body">
                                                         <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge badge-success" style="font-size: 0.95em; padding: 0.5rem 0.75rem;"><i class="icon-saudi_riyal"></i> <?= number_format(round($payableAmount), 2); ?></span></div>
+                                                        <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge <?= $payableAmount < 0 ? 'badge-danger' : 'badge-success' ?>" style="font-size: 0.95em; padding: 0.5rem 0.75rem;"><i class="icon-saudi_riyal"></i> <?= number_format(round($payableAmount), 2); ?></span></div>
                                                         <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(format_safe_date($settlement['created_at'] ?? null, 'd M Y'), ENT_QUOTES); ?></div>
                                                         <?php
                                                             $settlementAttachments = getSettlementAttachments(

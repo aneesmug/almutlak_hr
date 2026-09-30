@@ -141,6 +141,15 @@ if ($preselectEmpId !== '') {
         html:not(.app-dark) .memo-form .select2-container--disabled .select2-selection--single { background-color: #e9edf3; color: #94a3b8; }
         html:not(.app-dark) .memo-form .input-group-text { background-color: #e6ebf5; border-color: #c3cede; color: #4f5bd5; }
         html.app-dark .memo-form .memo-field-card > label { background: #222b40; border-bottom-color: #2f3a55; color: #c3cbff; }
+        /* Salary box (job offer): one row per added salary element. */
+        .memo-sal-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .memo-sal-name { flex: 1 1 0; min-width: 0; font-size: 13px; font-weight: 600; }
+        .memo-sal-amount { flex: 0 0 220px; }
+        .memo-sal-del { flex: 0 0 34px; }
+        .memo-sal-add { display: flex; gap: 10px; max-width: 520px; margin-top: 4px; }
+        .memo-sal-add .btn { white-space: nowrap; }
+        .memo-sal-total { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cfd6e4; text-align: right; font-size: 14px; }
+        @media (max-width: 575px) { .memo-sal-amount { flex-basis: 120px; } }
     </style>
 </head>
 
@@ -179,6 +188,9 @@ if ($preselectEmpId !== '') {
                                         <?php endif; ?>
                                     </select>
                                     <small class="form-text text-muted"><?= __('search_by_emp_id_or_name', 'Search by Employee ID, name or Iqama.') ?></small>
+                                    <div class="alert alert-info py-2 px-3 mt-2 mb-0 small" id="memoCandidateNote" style="display:none">
+                                        <i class="fa fa-user-plus mr-1"></i><?= __('memo_candidate_note', 'Job offer for a new employee: no employee is selected. Enter the candidate and the offer terms in Details. The candidate gets an email with a link to open, print and sign the letter.') ?>
+                                    </div>
                                 </div>
                                 <div class="col-lg-7 mb-3">
                                     <div class="d-flex justify-content-between align-items-center">

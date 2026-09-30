@@ -54,7 +54,67 @@ if (!function_exists('memo_user_can')) {
 
 // Bump when memo_default_templates() changes, so untouched built-ins get refreshed.
 if (!defined('MEMO_BUILTIN_VERSION')) {
-    define('MEMO_BUILTIN_VERSION', 4);
+    define('MEMO_BUILTIN_VERSION', 5);
+}
+
+/**
+ * Templates written to someone who is not an employee yet (job offer): no employee is
+ * picked, everything comes from the template's own fields, and the sent letter also
+ * gets a public link (offer_view.php?t=...) the candidate can open, print and sign.
+ */
+if (!function_exists('memo_is_candidate_template')) {
+    function memo_is_candidate_template($key) {
+        return $key === 'job_offer';
+    }
+}
+
+/** Placeholder values for a candidate letter (same shape as memo_employee_placeholders()). */
+if (!function_exists('memo_candidate_placeholders')) {
+    function memo_candidate_placeholders($senderName = '', $referenceNo = '') {
+        $h = function ($v) {
+            return htmlspecialchars(trim((string) $v), ENT_QUOTES, 'UTF-8');
+        };
+        $common = ['today' => date('d/m/Y'), 'reference_no' => $h($referenceNo)];
+        return [
+            'en' => $common + ['sender_name' => $h($senderName)],
+            'ar' => $common + ['sender_name' => $h(($senderName !== '' && function_exists('getDisplayName') ? getDisplayName($senderName, 'ar') : '') ?: $senderName)],
+        ];
+    }
+}
+
+/**
+ * A user's own login email (admin_login), or ''. Candidate letters use the sending HR
+ * user's address as Reply-To, so the signed copy comes back to a real mailbox - the
+ * system "from" address is usually a no-reply one.
+ */
+if (!function_exists('memo_user_email')) {
+    function memo_user_email($conDB, $empId) {
+        $empId = trim((string) $empId);
+        if ($empId === '') {
+            return '';
+        }
+        $stmt = $conDB->prepare("SELECT email FROM admin_login WHERE emp_id = ? AND email IS NOT NULL AND email <> '' ORDER BY status DESC, id DESC LIMIT 1");
+        if (!$stmt) {
+            return '';
+        }
+        $stmt->bind_param('s', $empId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $email = trim((string) ($row['email'] ?? ''));
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+}
+
+/** Public link of a sent candidate letter. */
+if (!function_exists('memo_public_url')) {
+    function memo_public_url($token) {
+        $token = (string) $token;
+        if ($token === '') {
+            return '';
+        }
+        return (function_exists('get_base_url') ? get_base_url() : '') . '/offer_view.php?t=' . $token;
+    }
 }
 
 /**
@@ -196,6 +256,16 @@ if (!function_exists('memo_ensure_table')) {
         }
         if (!memo_column_exists($conDB, 'employee_memos', 'field_values')) {
             $conDB->query("ALTER TABLE `employee_memos` ADD `field_values` TEXT DEFAULT NULL AFTER `body_html`, ADD `is_manual` TINYINT(1) NOT NULL DEFAULT 0 AFTER `field_values`");
+        }
+
+        // Candidate letters (job offer): recipient is not an employee (emp_id = ''), and
+        // the sent letter is reachable by its public token (offer_view.php).
+        if (!memo_column_exists($conDB, 'employee_memos', 'public_token')) {
+            $conDB->query("ALTER TABLE `employee_memos`
+                ADD `recipient_name` VARCHAR(255) DEFAULT NULL AFTER `emp_id`,
+                ADD `public_token` VARCHAR(64) DEFAULT NULL,
+                ADD `viewed_at` DATETIME DEFAULT NULL,
+                ADD KEY `idx_public_token` (`public_token`)");
         }
 
         $conDB->query("CREATE TABLE IF NOT EXISTS `memo_templates` (
@@ -343,6 +413,7 @@ if (!function_exists('memo_templates')) {
                 'fields' => memo_normalize_fields($r['fields_json']),
                 'is_active' => (int) $r['is_active'],
                 'is_builtin' => isset($defaults[$r['template_key']]),
+                'candidate' => memo_is_candidate_template($r['template_key']),
                 'sort_order' => (int) $r['sort_order'],
                 'updated_by' => $r['updated_by'],
                 'updated_at' => $r['updated_at'],
@@ -378,6 +449,8 @@ if (!function_exists('memo_placeholder_list')) {
             'nationality' => 'Nationality', 'location' => 'Location', 'joining_date' => 'Joining date',
             'basic_salary' => 'Basic salary', 'total_salary' => 'Total salary', 'salary_table' => 'Salary breakdown table',
             'today' => 'Today\'s date', 'reference_no' => 'Reference No.', 'sender_name' => 'Sender (you)',
+            // Built from the template's own number fields whose key starts with sal_ (job offer).
+            'salary_fields_table' => 'Salary table from the sal_... number fields', 'salary_fields_total' => 'Total of the sal_... number fields',
         ];
     }
 }
@@ -565,6 +638,74 @@ if (!function_exists('memo_default_templates')) {
             'body' => $head . $dear . '<p>With reference to your request regarding <strong>{{f:request_details}}</strong>, we would like to inform you that it has been <strong>{{f:decision}}</strong>.</p><p>{{f:remarks}}</p>' . $sign,
             'body_ar' => $headAr . $dearAr . '<p>بالإشارة إلى طلبكم بخصوص <strong>{{f:request_details}}</strong>، نفيدكم بأنه قد تم <strong>{{f:decision}}</strong>.</p><p>{{f:remarks}}</p>' . $signAr,
         ];
+        // Candidate letter - see memo_is_candidate_template(). Uses only {{f:...}} fields,
+        // {{today}}, {{reference_no}}, {{sender_name}} and the sal_ number fields.
+        $num = function ($key, $label, $labelAr, $required = false) {
+            return ['key' => $key, 'label' => $label, 'label_ar' => $labelAr, 'type' => 'number', 'bilingual' => false, 'required' => $required];
+        };
+        $td = 'padding:6px 10px;border:1px solid #ddd';
+        $row = function ($label, $value) use ($td) {
+            return '<tr><td style="' . $td . ';background:#f7f8fb;width:42%"><strong>' . $label . '</strong></td><td style="' . $td . '">' . $value . '</td></tr>';
+        };
+        $t['job_offer'] = [
+            'label' => 'Job Offer Letter', 'label_ar' => 'عرض وظيفي', 'icon' => 'fa-file-signature',
+            'subject' => 'Job Offer - {{f:candidate_name}} - {{f:job_title}}', 'subject_ar' => 'عرض وظيفي - {{f:candidate_name}}',
+            'fields' => [
+                $f('candidate_name', 'Candidate name', 'اسم المرشح', 'text', true),
+                $sel('company', 'Company', 'الشركة', 'companies'),
+                $sel('job_title', 'Job title', 'المسمى الوظيفي', 'jobs'),
+                $sel('department', 'Department', 'القسم', 'departments'),
+                $sel('work_location', 'Work location', 'مكان العمل', 'locations'),
+                $f('joining_date', 'Expected joining date', 'تاريخ المباشرة المتوقع', 'date'),
+                $f('contract_period', 'Contract period (e.g. 2 years, renewable)', 'مدة العقد', 'text', true),
+                $f('probation', 'Probation period (e.g. 90 days)', 'فترة التجربة', 'text', true),
+                $f('vacation_days', 'Annual vacation (days per year)', 'الإجازة السنوية (يوم في السنة)', 'text'),
+                // The project's salary elements (emp_salary columns). The compose page shows
+                // them as one Salary box: only Basic at first, the rest are added one by one.
+                $num('sal_basic', 'Basic Salary', 'الراتب الأساسي', true),
+                $num('sal_housing', 'Housing Allowance', 'بدل سكن'),
+                $num('sal_transport', 'Transportation Allowance', 'بدل مواصلات'),
+                $num('sal_food', 'Food Allowance', 'بدل طعام'),
+                $num('sal_misc', 'Misc Allowance', 'بدل متنوع'),
+                $num('sal_cashier', 'Cashier Allowance', 'بدل صراف'),
+                $num('sal_fuel', 'Fuel Allowance', 'بدل وقود'),
+                $num('sal_tel', 'Telephone Allowance', 'بدل هاتف'),
+                $num('sal_guard', 'Guard Allowance', 'بدل حراسة'),
+                $num('sal_other', 'Other Allowances', 'بدلات أخرى'),
+                $f('other_benefits', 'Other benefits (medical insurance, tickets...)', 'مزايا أخرى (تأمين طبي، تذاكر...)', 'textarea', true, false),
+                $f('offer_valid_until', 'Offer valid until', 'العرض ساري حتى', 'date'),
+            ],
+            'body' => '<p><strong>Date:</strong> {{today}}<br><strong>Ref:</strong> {{reference_no}}</p><h3 style="text-align:center">Job Offer Letter</h3>'
+                . '<p>Dear <strong>{{f:candidate_name}}</strong>,</p>'
+                . '<p>We are pleased to offer you employment with <strong>{{f:company}}</strong> on the following terms:</p>'
+                . '<table style="border-collapse:collapse;width:100%;margin:8px 0 14px">'
+                . $row('Job title', '{{f:job_title}}') . $row('Department', '{{f:department}}') . $row('Work location', '{{f:work_location}}')
+                . $row('Expected joining date', '{{f:joining_date}}') . $row('Contract period', '{{f:contract_period}}')
+                . $row('Probation period', '{{f:probation}}') . $row('Annual vacation', '{{f:vacation_days}} days per year')
+                . '</table>'
+                . '<p><strong>Monthly salary</strong></p>{{salary_fields_table}}'
+                . '<p>{{f:other_benefits}}</p>'
+                . '<p>This offer is valid until <strong>{{f:offer_valid_until}}</strong>. It is subject to the Saudi Labor Law, the company policies, and the completion of the required documents and medical check.</p>'
+                . '<p>To accept this offer, please print this letter, sign below and send the signed copy back to us by email.</p>'
+                . '<p>Regards,<br><strong>{{sender_name}}</strong><br>Human Resources Department<br>{{f:company}}</p>'
+                . '<p style="margin-top:22px"><strong>Acceptance</strong><br>I accept this offer on the terms stated above.</p>'
+                . '<p>Name: ______________________________<br><br>Signature: __________________________<br><br>Date: ______________________________</p>',
+            'body_ar' => '<p><strong>التاريخ:</strong> {{today}}<br><strong>المرجع:</strong> {{reference_no}}</p><h3 style="text-align:center">عرض وظيفي</h3>'
+                . '<p>السيد/ <strong>{{f:candidate_name}}</strong> المحترم،</p><p>السلام عليكم ورحمة الله وبركاته،</p>'
+                . '<p>يسرنا أن نعرض عليكم العمل لدى <strong>{{f:company}}</strong> وفق الشروط التالية:</p>'
+                . '<table style="border-collapse:collapse;width:100%;margin:8px 0 14px" dir="rtl">'
+                . $row('المسمى الوظيفي', '{{f:job_title}}') . $row('القسم', '{{f:department}}') . $row('مكان العمل', '{{f:work_location}}')
+                . $row('تاريخ المباشرة المتوقع', '{{f:joining_date}}') . $row('مدة العقد', '{{f:contract_period}}')
+                . $row('فترة التجربة', '{{f:probation}}') . $row('الإجازة السنوية', '{{f:vacation_days}} يوماً في السنة')
+                . '</table>'
+                . '<p><strong>الراتب الشهري</strong></p>{{salary_fields_table}}'
+                . '<p>{{f:other_benefits}}</p>'
+                . '<p>هذا العرض ساري حتى <strong>{{f:offer_valid_until}}</strong>، ويخضع لنظام العمل السعودي وأنظمة الشركة واستكمال المستندات المطلوبة والفحص الطبي.</p>'
+                . '<p>لقبول العرض يرجى طباعة هذا الخطاب والتوقيع أدناه وإرسال النسخة الموقعة إلينا عبر البريد الإلكتروني.</p>'
+                . '<p>وتفضلوا بقبول فائق الاحترام،<br><strong>{{sender_name}}</strong><br>إدارة الموارد البشرية<br>{{f:company}}</p>'
+                . '<p style="margin-top:22px"><strong>القبول</strong><br>أوافق على هذا العرض وفق الشروط المذكورة أعلاه.</p>'
+                . '<p>الاسم: ______________________________<br><br>التوقيع: ____________________________<br><br>التاريخ: ____________________________</p>',
+        ];
         $t['other_custom'] = [
             'label' => 'Other / Custom Memo', 'label_ar' => 'مذكرة أخرى', 'icon' => 'fa-pen-to-square',
             'subject' => '{{f:topic}}', 'subject_ar' => '{{f:topic}}',
@@ -750,10 +891,10 @@ if (!function_exists('memo_email_html')) {
 
 /**
  * Sends one memo email. Returns [bool ok, string error].
- * $cc: array of addresses.
+ * $cc: array of addresses. $replyTo: where replies go (default: the system from address).
  */
 if (!function_exists('memo_send_email')) {
-    function memo_send_email($conDB, $toEmail, $toName, $subject, $html, array $cc = []) {
+    function memo_send_email($conDB, $toEmail, $toName, $subject, $html, array $cc = [], $replyTo = '') {
         if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
             $autoload = __DIR__ . '/../vendor/autoload.php';
             if (is_file($autoload)) {
@@ -792,7 +933,7 @@ if (!function_exists('memo_send_email')) {
             $mail->CharSet = 'UTF-8';
             $mail->Timeout = 15;
             $mail->setFrom($from, $fromName);
-            $mail->addReplyTo($from, $fromName);
+            $mail->addReplyTo($replyTo !== '' ? $replyTo : $from, $fromName);
             $mail->addAddress($toEmail, $toName);
             foreach ($cc as $ccAddr) {
                 $mail->addCC($ccAddr);

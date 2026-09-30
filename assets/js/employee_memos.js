@@ -91,6 +91,37 @@
         return formatValue(field, v && typeof v === 'object' ? v.en : v);
     }
 
+    // {{salary_fields_table}} / {{salary_fields_total}}: built from the template's own
+    // number fields whose key starts with sal_ (job offer - no employee salary record yet).
+    function salaryFields(tpl, values, lang) {
+        var total = 0;
+        var rows = (tpl.fields || []).filter(function (f) {
+            return f.type === 'number' && f.key.indexOf('sal_') === 0;
+        }).map(function (f) {
+            var raw = values[f.key];
+            var n = parseFloat(raw && typeof raw === 'object' ? raw.en : raw);
+            return { label: (lang === 'ar' && f.label_ar) ? f.label_ar : f.label, amount: isNaN(n) ? 0 : n };
+        }).filter(function (r) { return r.amount > 0; });
+        rows.forEach(function (r) { total += r.amount; });
+        return { rows: rows, total: total };
+    }
+
+    function money(n, lang) {
+        var v = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return lang === 'ar' ? v + ' ريال' : 'SAR ' + v;
+    }
+
+    function salaryFieldsTable(tpl, values, lang) {
+        var s = salaryFields(tpl, values, lang);
+        var cell = 'padding:5px 9px;border:1px solid #ddd';
+        var amt = cell + ';text-align:' + (lang === 'ar' ? 'left' : 'right');
+        var html = s.rows.map(function (r) {
+            return '<tr><td style="' + cell + '">' + esc(r.label) + '</td><td style="' + amt + '">' + money(r.amount, lang) + '</td></tr>';
+        }).join('');
+        html += '<tr><td style="' + cell + '"><strong>' + (lang === 'ar' ? 'الإجمالي' : 'Total') + '</strong></td><td style="' + amt + '"><strong>' + money(s.total, lang) + '</strong></td></tr>';
+        return '<table style="border-collapse:collapse;margin:8px 0 14px"' + (lang === 'ar' ? ' dir="rtl"' : '') + '>' + html + '</table>';
+    }
+
     // mode: 'preview' (missing fields highlighted), 'final' (missing -> empty), 'subject' (plain text)
     function fillText(text, lang, tpl, data, values, mode) {
         var fields = {};
@@ -108,6 +139,8 @@
                 return mode === 'subject' ? val : esc(val).replace(/\n/g, '<br>');
             })
             .replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (all, key) {
+                if (key === 'salary_fields_table') return mode === 'subject' ? '' : salaryFieldsTable(tpl, values, lang);
+                if (key === 'salary_fields_total') return money(salaryFields(tpl, values, lang).total, lang);
                 var d = data[lang] || {};
                 if (!(key in d)) return all;
                 return mode === 'subject' ? decode(d[key]) : d[key];
@@ -140,6 +173,8 @@
                 + '<div><strong>' + esc(t('to', 'To')) + ':</strong> ' + esc(m.sent_to || '-') + (m.cc ? ' &nbsp; <strong>CC:</strong> ' + esc(m.cc) : '') + '</div>'
                 + '<div><strong>' + esc(t('reference_no', 'Reference No.')) + ':</strong> ' + esc(m.reference_no || '-') + ' &nbsp; <strong>' + esc(t('date', 'Date')) + ':</strong> ' + esc(m.updated_at || m.created_at) + '</div>'
                 + '<div><strong>' + esc(m.status === 'draft' ? t('saved_by', 'Saved By') : t('sent_by', 'Sent By')) + ':</strong> ' + esc(m.sent_by_name || '-') + '</div>'
+                + (m.public_url ? '<div><strong>' + esc(t('public_link', 'Public link')) + ':</strong> <a href="' + esc(m.public_url) + '" target="_blank" rel="noopener">' + esc(m.public_url) + '</a></div>'
+                    + '<div><strong>' + esc(t('opened_by_candidate', 'Opened by candidate')) + ':</strong> ' + (m.viewed_at ? esc(m.viewed_at) : '<span class="text-muted">' + esc(t('not_opened_yet', 'Not opened yet')) + '</span>') + '</div>' : '')
                 + (m.error_message ? '<div class="text-danger"><strong>' + esc(t('error', 'Error')) + ':</strong> ' + esc(m.error_message) + '</div>' : '')
                 + '</div>';
             Swal.fire({
@@ -192,7 +227,12 @@
             { data: null, render: function (r) { return esc(r.updated_at || r.created_at); } }
         ];
         if (showEmployee) {
-            columns.push({ data: null, render: function (r) { return esc(r.employee_name) + ' <small class="text-muted">(' + esc(r.emp_id) + ')</small>'; } });
+            columns.push({ data: null, render: function (r) {
+                if (r.emp_id) return esc(r.employee_name) + ' <small class="text-muted">(' + esc(r.emp_id) + ')</small>';
+                // Candidate letter (job offer): no employee record; eye = the candidate opened the link.
+                return esc(r.employee_name || '-') + ' <span class="badge badge-info">' + esc(t('candidate', 'Candidate')) + '</span>'
+                    + (r.viewed_at ? ' <i class="fa fa-eye text-success" title="' + esc(t('opened_by_candidate', 'Opened by candidate')) + ': ' + esc(r.viewed_at) + '"></i>' : '');
+            } });
         }
         columns.push(
             { data: 'memo_type_label', render: esc },
@@ -279,8 +319,17 @@
             $('#memoDraftFlag').toggleClass('show', draftId > 0).find('span').text(draftId || '');
         }
 
+        // Candidate letter (job offer): written to someone who is not an employee yet, so
+        // no employee is picked - the name and terms come from the Details fields.
+        function isCandidateType(key) {
+            return templates.some(function (tpl) { return tpl.key === key && tpl.candidate; });
+        }
+
         function selectType(key) {
             selectedType = key || '';
+            var cand = isCandidateType(selectedType);
+            $('#memoEmployee').prop('disabled', cand);
+            $('#memoCandidateNote').toggle(cand);
             $('#memoTypeGrid .memo-type-btn').removeClass('active')
                 .filter(function () { return $(this).data('type') === selectedType; }).addClass('active');
         }
@@ -459,7 +508,15 @@
                 $('#memoFields').html('<div class="text-muted small">' + esc(t('memo_no_fields', 'This memo has no detail fields - it is filled from the employee record.')) + '</div>');
                 return;
             }
+            salShown = {};
+            var salaryDone = false;
             var html = '<div class="memo-fields-grid">' + tpl.fields.map(function (f) {
+                if (isSalaryField(f)) {
+                    // All salary elements share one box, drawn where the first one is.
+                    if (salaryDone) return '';
+                    salaryDone = true;
+                    return salaryCard();
+                }
                 var req = f.required ? ' <span class="text-danger">*</span>' : '';
                 var label = esc(f.label) + (f.label_ar ? ' <span class="text-muted">| ' + esc(f.label_ar) + '</span>' : '') + req;
                 var v = state.values[f.key];
@@ -503,6 +560,7 @@
             });
             initLocationCascades();
             initAssetPickers();
+            updateSalaryTotal();
             if ($.fn.datepicker) {
                 $('#memoFields .memo-date').datepicker({
                     format: 'yyyy-mm-dd',
@@ -559,6 +617,72 @@
             $('.memo-tr-status[data-key="' + key + '"]').text('');
             $('#mf_' + key + '_en').val(cur.en);
             $('#mf_' + key + '_ar').val(cur.ar);
+            refresh();
+        });
+
+        // ----- Salary box: the template's sal_ number fields (salary elements) -----
+        // Required elements are always listed; the others are added one at a time with
+        // the Add button, so HR only sees the elements this offer actually has.
+        var salShown = {}; // key -> true for an element added but not filled yet
+
+        function isSalaryField(f) {
+            return f.type === 'number' && f.key.indexOf('sal_') === 0;
+        }
+
+        function salaryValue(key) {
+            var v = state.values[key];
+            return $.trim(v && typeof v === 'object' ? v.en : (v == null ? '' : v));
+        }
+
+        function salaryCard() {
+            var fields = (state.tpl.fields || []).filter(isSalaryField);
+            var name = function (f) { return esc(f.label) + (f.label_ar ? ' <span class="text-muted">| ' + esc(f.label_ar) + '</span>' : ''); };
+            var visible = fields.filter(function (f) { return f.required || salShown[f.key] || salaryValue(f.key) !== ''; });
+            var hidden = fields.filter(function (f) { return visible.indexOf(f) === -1; });
+            var rows = visible.map(function (f) {
+                return '<div class="memo-sal-row">'
+                    + '<div class="memo-sal-name">' + name(f) + (f.required ? ' <span class="text-danger">*</span>' : '') + '</div>'
+                    + '<div class="memo-sal-amount">' + fieldInput(f, '', salaryValue(f.key)) + '</div>'
+                    + (f.required ? '<span class="memo-sal-del"></span>'
+                        : '<button type="button" class="btn btn-sm btn-outline-danger memo-sal-del memo-sal-del-btn" data-key="' + esc(f.key) + '" title="' + esc(t('remove', 'Remove')) + '"><i class="fa fa-xmark"></i></button>')
+                    + '</div>';
+            }).join('');
+            var add = hidden.length
+                ? '<div class="memo-sal-add"><select class="form-control memo-sal-pick"><option value="">' + esc(t('select_salary_element', 'Select salary element...')) + '</option>'
+                    + hidden.map(function (f) { return '<option value="' + esc(f.key) + '">' + esc(f.label) + (f.label_ar ? ' | ' + esc(f.label_ar) : '') + '</option>'; }).join('')
+                    + '</select><button type="button" class="btn btn-primary memo-sal-add-btn"><i class="fa fa-plus mr-1"></i>' + esc(t('add', 'Add')) + '</button></div>'
+                : '';
+            return '<div class="memo-field-card memo-field-wide" id="memoSalaryCard"><label>' + esc(t('salary', 'Salary')) + ' <span class="text-muted">| الراتب</span></label>'
+                + rows + add
+                + '<div class="memo-sal-total">' + esc(t('total_salary', 'Total Salary')) + ' | الإجمالي: <strong id="memoSalTotal"></strong></div></div>';
+        }
+
+        function updateSalaryTotal() {
+            if (!state.tpl || !$('#memoSalTotal').length) return;
+            $('#memoSalTotal').text(money(salaryFields(state.tpl, state.values, 'en').total, 'en'));
+        }
+
+        function redrawSalary() {
+            $('#memoSalaryCard').replaceWith(salaryCard());
+            updateSalaryTotal();
+        }
+
+        $('#memoFields').on('click', '.memo-sal-add-btn', function () {
+            var key = $('#memoSalaryCard .memo-sal-pick').val();
+            if (!key) {
+                $('#memoSalaryCard .memo-sal-pick').focus();
+                return;
+            }
+            salShown[key] = true;
+            redrawSalary();
+            $('#mf_' + key).focus();
+        });
+
+        $('#memoFields').on('click', '.memo-sal-del-btn', function () {
+            var key = $(this).data('key');
+            delete salShown[key];
+            state.values[key] = '';
+            redrawSalary();
             refresh();
         });
 
@@ -653,6 +777,7 @@
             if (!manual) {
                 $('#memoPreview').html(buildBody(state.tpl, state.data, state.values, 'preview'));
             }
+            updateSalaryTotal();
         }
 
         $('#memoSubject').on('input', function () { subjectTouched = true; });
@@ -694,8 +819,9 @@
 
         // Fetch template + employee data. keepValues: switching employee keeps what was typed.
         function loadTemplate(keepValues) {
-            var empId = $('#memoEmployee').val();
-            if (!empId || !selectedType) {
+            var candidate = isCandidateType(selectedType);
+            var empId = candidate ? '' : $('#memoEmployee').val();
+            if (!selectedType || (!empId && !candidate)) {
                 $compose.addClass('memo-compose-disabled');
                 return $.Deferred().reject().promise();
             }
@@ -712,7 +838,9 @@
                     state.data.en.reference_no = state.data.ar.reference_no = esc(res.reference_no);
                     $('#memoTo').val(res.email || '');
                     var hint = '';
-                    if (!res.email) {
+                    if (res.candidate) {
+                        hint = esc(t('candidate_email_hint', 'Enter the candidate\'s email address - the offer and its print link are sent there.'));
+                    } else if (!res.email) {
                         hint = '<span class="text-danger">' + esc(t('employee_has_no_email', 'This employee has no email on file - enter one.')) + '</span>';
                     } else if (res.personal_email && res.personal_email !== res.email) {
                         hint = esc(t('personal_email', 'Personal email')) + ': ' + esc(res.personal_email);
@@ -753,7 +881,7 @@
                 if (!ok) return;
                 setDraft(0);
                 selectType(key);
-                if (!$('#memoEmployee').val()) {
+                if (!isCandidateType(key) && !$('#memoEmployee').val()) {
                     $('#memoEmployee').select2('open');
                     return;
                 }
@@ -794,7 +922,7 @@
             return {
                 action: action,
                 draft_id: draftId,
-                emp_id: $('#memoEmployee').val(),
+                emp_id: isCandidateType(selectedType) ? '' : $('#memoEmployee').val(),
                 memo_type: selectedType,
                 to_email: $.trim($('#memoTo').val()),
                 cc: $.trim($('#memoCc').val()),
@@ -846,7 +974,12 @@
                 Swal.fire({ title: t('sending', 'Sending...'), allowOutsideClick: false, didOpen: function () { Swal.showLoading(); } });
                 $.post(HANDLER, data, null, 'json')
                     .done(function (res) {
-                        Swal.fire(t('success', 'Success'), res.message, 'success');
+                        Swal.fire({
+                            icon: 'success', title: t('success', 'Success'),
+                            html: esc(res.message) + (res.public_url
+                                ? '<div class="mt-2 small">' + esc(t('offer_link_note', 'The candidate can open and print the letter here:')) + '<br><a href="' + esc(res.public_url) + '" target="_blank" rel="noopener" style="word-break:break-all">' + esc(res.public_url) + '</a></div>'
+                                : '')
+                        });
                         historyTable.ajax.reload(null, false);
                         setDraft(0);
                         loadTemplate(false); // fresh form + reference number for the next memo
@@ -867,14 +1000,16 @@
                     Swal.fire(t('error', 'Error'), t('not_a_draft', 'This memo was already sent.'), 'info');
                     return;
                 }
-                suppressEmpChange = true;
-                var $sel = $('#memoEmployee');
-                if (!$sel.find('option[value="' + m.emp_id + '"]').length) {
-                    $sel.append(new Option(m.employee_display, m.emp_id, true, true));
+                if (m.emp_id) { // a candidate letter has no employee
+                    suppressEmpChange = true;
+                    var $sel = $('#memoEmployee');
+                    if (!$sel.find('option[value="' + m.emp_id + '"]').length) {
+                        $sel.append(new Option(m.employee_display, m.emp_id, true, true));
+                    }
+                    $sel.val(m.emp_id).trigger('change');
+                    lastEmp = m.emp_id;
+                    suppressEmpChange = false;
                 }
-                $sel.val(m.emp_id).trigger('change');
-                lastEmp = m.emp_id;
-                suppressEmpChange = false;
 
                 selectType(m.memo_type);
                 state.tpl = null;

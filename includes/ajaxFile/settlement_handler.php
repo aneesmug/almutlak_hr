@@ -713,7 +713,7 @@ function approveSettlement($settlementManager, $currentUserId) {
             
             // Amount stored at settlement creation is final - never recalculate it afterwards
             // (e.g. after the employee's vacation-salary override setting changes).
-            if ((float)($settlementData['settlement_amount'] ?? 0) > 0) {
+            if ((float)($settlementData['settlement_amount'] ?? 0) != 0) { // != 0: keep a negative EOS net payment, do not overwrite it with 0
                 $calculatedPayableAmount = round($settlementData['settlement_amount']);
             }
         }
@@ -1430,7 +1430,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
             
             // Amount stored at settlement creation is final - never recalculate it afterwards
             // (e.g. after the employee's vacation-salary override setting changes).
-            if ((float)($settlementData['settlement_amount'] ?? 0) > 0) {
+            if ((float)($settlementData['settlement_amount'] ?? 0) != 0) { // != 0: keep a negative EOS net payment, do not overwrite it with 0
                 $calculatedPayableAmount = round($settlementData['settlement_amount']);
             }
         }

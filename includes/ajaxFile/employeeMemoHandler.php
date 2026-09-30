@@ -40,7 +40,13 @@ function memo_posted_fields($conDB, $requireEmail) {
         'cc' => [],
         'is_manual' => !empty($_POST['is_manual']) ? 1 : 0,
         'field_values' => null,
+        'recipient_name' => null,
     ];
+    // Candidate letter (job offer): no employee - the name comes from its own field.
+    $isCandidate = memo_is_candidate_template($f['memo_type']);
+    if ($isCandidate) {
+        $f['emp_id'] = '';
+    }
     // {key: value} or {key: {en, ar}} - kept so a draft reopens with its fields filled.
     $values = json_decode((string) ($_POST['field_values'] ?? ''), true);
     if (is_array($values)) {
@@ -64,8 +70,12 @@ function memo_posted_fields($conDB, $requireEmail) {
             }
         }
         $f['field_values'] = json_encode($clean, JSON_UNESCAPED_UNICODE);
+        if ($isCandidate) {
+            $name = $clean['candidate_name'] ?? '';
+            $f['recipient_name'] = mb_substr(trim((string) (is_array($name) ? $name['en'] : $name)), 0, 255);
+        }
     }
-    if ($f['emp_id'] === '' || !isset(memo_templates($conDB, true)[$f['memo_type']])) {
+    if (($f['emp_id'] === '' && !$isCandidate) || !isset(memo_templates($conDB, true)[$f['memo_type']])) {
         memo_json(['status' => 'error', 'message' => 'Select an employee and a memo type.'], 400);
     }
     if ($f['subject'] === '' || trim(strip_tags($f['body'])) === '') {
@@ -73,7 +83,7 @@ function memo_posted_fields($conDB, $requireEmail) {
     }
     if ($f['to_email'] !== '' || $requireEmail) {
         if (!filter_var($f['to_email'], FILTER_VALIDATE_EMAIL)) {
-            memo_json(['status' => 'error', 'message' => 'Enter a valid employee email address.'], 400);
+            memo_json(['status' => 'error', 'message' => $isCandidate ? 'Enter a valid email address for the candidate.' : 'Enter a valid employee email address.'], 400);
         }
     }
     foreach (preg_split('/[,;\s]+/', (string) ($_POST['cc'] ?? ''), -1, PREG_SPLIT_NO_EMPTY) as $addr) {
@@ -82,7 +92,10 @@ function memo_posted_fields($conDB, $requireEmail) {
         }
         $f['cc'][] = $addr;
     }
-    if (!memo_employee_placeholders($conDB, $f['emp_id'])) {
+    if ($isCandidate && $requireEmail && (string) $f['recipient_name'] === '') {
+        memo_json(['status' => 'error', 'message' => 'Enter the candidate name.'], 400);
+    }
+    if (!$isCandidate && !memo_employee_placeholders($conDB, $f['emp_id'])) {
         memo_json(['status' => 'error', 'message' => 'Employee not found.'], 404);
     }
     if ($f['reference_no'] === '') {
@@ -112,16 +125,16 @@ function memo_posted_draft_id($conDB) {
 function memo_store($conDB, $draftId, array $f, $status, $error, $actorId, $actorName) {
     $cc = implode(', ', $f['cc']);
     if ($draftId > 0) {
-        $stmt = $conDB->prepare("UPDATE employee_memos SET emp_id = ?, memo_type = ?, reference_no = ?, subject = ?, body_html = ?, field_values = ?, is_manual = ?, sent_to = ?, cc = ?, status = ?, error_message = ?, sent_by = ?, sent_by_name = ?
+        $stmt = $conDB->prepare("UPDATE employee_memos SET emp_id = ?, recipient_name = ?, memo_type = ?, reference_no = ?, subject = ?, body_html = ?, field_values = ?, is_manual = ?, sent_to = ?, cc = ?, status = ?, error_message = ?, sent_by = ?, sent_by_name = ?
                                  WHERE id = ? AND status = 'draft'");
-        $stmt->bind_param('ssssssissssssi', $f['emp_id'], $f['memo_type'], $f['reference_no'], $f['subject'], $f['body'], $f['field_values'], $f['is_manual'], $f['to_email'], $cc, $status, $error, $actorId, $actorName, $draftId);
+        $stmt->bind_param('sssssssissssssi', $f['emp_id'], $f['recipient_name'], $f['memo_type'], $f['reference_no'], $f['subject'], $f['body'], $f['field_values'], $f['is_manual'], $f['to_email'], $cc, $status, $error, $actorId, $actorName, $draftId);
         $stmt->execute();
         $stmt->close();
         return $draftId;
     }
-    $stmt = $conDB->prepare("INSERT INTO employee_memos (emp_id, memo_type, reference_no, subject, body_html, field_values, is_manual, sent_to, cc, status, error_message, sent_by, sent_by_name)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param('ssssssissssss', $f['emp_id'], $f['memo_type'], $f['reference_no'], $f['subject'], $f['body'], $f['field_values'], $f['is_manual'], $f['to_email'], $cc, $status, $error, $actorId, $actorName);
+    $stmt = $conDB->prepare("INSERT INTO employee_memos (emp_id, recipient_name, memo_type, reference_no, subject, body_html, field_values, is_manual, sent_to, cc, status, error_message, sent_by, sent_by_name)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param('sssssssissssss', $f['emp_id'], $f['recipient_name'], $f['memo_type'], $f['reference_no'], $f['subject'], $f['body'], $f['field_values'], $f['is_manual'], $f['to_email'], $cc, $status, $error, $actorId, $actorName);
     $stmt->execute();
     $id = $stmt->insert_id;
     $stmt->close();
@@ -236,11 +249,14 @@ switch ($action) {
         $empId = trim((string) ($_POST['emp_id'] ?? ''));
         $type = (string) ($_POST['memo_type'] ?? '');
         $templates = memo_templates($conDB, true); // inactive too: an old draft may use one
-        if ($empId === '' || !isset($templates[$type])) {
+        $isCandidate = memo_is_candidate_template($type);
+        if (($empId === '' && !$isCandidate) || !isset($templates[$type])) {
             memo_json(['status' => 'error', 'message' => 'Select an employee and a memo type.'], 400);
         }
         $ref = memo_next_reference($conDB);
-        $data = memo_employee_placeholders($conDB, $empId, $actorName, $ref);
+        $data = $isCandidate
+            ? memo_candidate_placeholders($actorName, $ref) + ['_email' => '', '_personal_email' => '']
+            : memo_employee_placeholders($conDB, $empId, $actorName, $ref);
         if (!$data) {
             memo_json(['status' => 'error', 'message' => 'Employee not found.'], 404);
         }
@@ -261,6 +277,7 @@ switch ($action) {
                 'body' => $tpl['body'], 'body_ar' => $tpl['body_ar'], 'fields' => $tpl['fields'],
             ],
             'data' => ['en' => $data['en'], 'ar' => $data['ar']],
+            'candidate' => $isCandidate,
             'options' => $options ?: new stdClass(),
             'reference_no' => $ref,
             'email' => $data['_email'],
@@ -282,22 +299,42 @@ switch ($action) {
         }
         $draftId = memo_posted_draft_id($conDB);
         $f = memo_posted_fields($conDB, true);
-        $emp = memo_employee_placeholders($conDB, $f['emp_id']);
+        $isCandidate = memo_is_candidate_template($f['memo_type']);
+        $toName = $isCandidate ? (string) $f['recipient_name'] : memo_employee_placeholders($conDB, $f['emp_id'])['_name'];
+        // Candidate letter: a private link to open, print and sign the letter. Only the
+        // email carries the link block - the stored letter is the clean text.
+        $token = $isCandidate ? bin2hex(random_bytes(24)) : '';
+        $publicUrl = memo_public_url($token);
+        $emailBody = $f['body'];
+        if ($publicUrl !== '') {
+            $link = htmlspecialchars($publicUrl, ENT_QUOTES, 'UTF-8');
+            $emailBody .= '<div style="margin-top:22px;padding:14px 16px;border:1px solid #c7d2fe;background:#eef2ff;border-radius:8px;text-align:center">'
+                . '<p style="margin:0 0 10px">To accept, open the letter, print it, sign it and send the signed copy back by replying to this email.'
+                . '<br><span dir="rtl">لقبول العرض: افتح الخطاب واطبعه ووقّعه ثم أرسل النسخة الموقعة بالرد على هذا البريد.</span></p>'
+                . '<a href="' . $link . '" style="display:inline-block;padding:10px 22px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold">View &amp; print the offer | عرض وطباعة الخطاب</a>'
+                . '<p style="margin:10px 0 0;font-size:12px;color:#6b7280;word-break:break-all">' . $link . '</p></div>';
+        }
 
-        [$ok, $error] = memo_send_email($conDB, $f['to_email'], $emp['_name'], $f['subject'], memo_email_html($conDB, $f['subject'], $f['body']), $f['cc']);
+        [$ok, $error] = memo_send_email($conDB, $f['to_email'], $toName, $f['subject'], memo_email_html($conDB, $f['subject'], $emailBody), $f['cc'], $isCandidate ? memo_user_email($conDB, $actorId) : '');
 
         // Kept either way - a failed send is still visible on the master file. Sending
         // an opened draft turns that same row into the sent/failed record.
         $memoId = memo_store($conDB, $draftId, $f, $ok ? 'sent' : 'failed', $ok ? null : mb_substr($error, 0, 500), $actorId, $actorName);
 
         // In-portal notification so the employee also sees it without checking email.
-        if ($ok && function_exists('create_browser_notification')) {
+        if ($token !== '') {
+            $stmt = $conDB->prepare("UPDATE employee_memos SET public_token = ? WHERE id = ?");
+            $stmt->bind_param('si', $token, $memoId);
+            $stmt->execute();
+            $stmt->close();
+        }
+        if ($ok && !$isCandidate && function_exists('create_browser_notification')) {
             @create_browser_notification($conDB, $f['emp_id'], memo_type_label($conDB, $f['memo_type']), $f['subject'], 'profile.php');
         }
         if (!$ok) {
             memo_json(['status' => 'error', 'message' => 'Email could not be sent: ' . $error . ' (saved in history as failed).', 'memo_id' => $memoId], 500);
         }
-        memo_json(['status' => 'success', 'message' => 'Memo sent to ' . $f['to_email'] . '.', 'memo_id' => $memoId]);
+        memo_json(['status' => 'success', 'message' => 'Memo sent to ' . $f['to_email'] . '.', 'memo_id' => $memoId, 'public_url' => $publicUrl]);
 
     case 'delete_draft':
         $id = (int) ($_POST['id'] ?? 0);
@@ -311,7 +348,7 @@ switch ($action) {
     // History: all memos, or one employee's (view_employee.php Memos tab)
     case 'list_memos':
         $empId = trim((string) ($_POST['emp_id'] ?? ''));
-        $sql = "SELECT m.id, m.emp_id, e.name AS employee_name, m.memo_type, m.reference_no, m.subject, m.sent_to, m.status, m.sent_by_name, m.created_at, m.updated_at
+        $sql = "SELECT m.id, m.emp_id, COALESCE(e.name, m.recipient_name) AS employee_name, m.viewed_at, m.memo_type, m.reference_no, m.subject, m.sent_to, m.status, m.sent_by_name, m.created_at, m.updated_at
                 FROM employee_memos m LEFT JOIN employees e ON e.emp_id = m.emp_id";
         if ($empId !== '') {
             $stmt = $conDB->prepare($sql . " WHERE m.emp_id = ? ORDER BY m.id DESC");
@@ -332,7 +369,7 @@ switch ($action) {
 
     case 'get_memo':
         $id = (int) ($_POST['id'] ?? 0);
-        $stmt = $conDB->prepare("SELECT m.*, e.name AS employee_name FROM employee_memos m LEFT JOIN employees e ON e.emp_id = m.emp_id WHERE m.id = ?");
+        $stmt = $conDB->prepare("SELECT m.*, COALESCE(e.name, m.recipient_name) AS employee_name FROM employee_memos m LEFT JOIN employees e ON e.emp_id = m.emp_id WHERE m.id = ?");
         $stmt->bind_param('i', $id);
         $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc();
@@ -342,7 +379,13 @@ switch ($action) {
         }
         $row['memo_type_label'] = memo_type_label($conDB, $row['memo_type']);
         $row['field_values'] = json_decode((string) $row['field_values'], true) ?: new stdClass();
-        $row['employee_display'] = memo_short_name($row['employee_name']) . ' (' . $row['emp_id'] . ')';
+        $row['candidate'] = memo_is_candidate_template($row['memo_type']);
+        $row['employee_display'] = $row['candidate']
+            ? trim((string) $row['employee_name']) . ' (Candidate)'
+            : memo_short_name($row['employee_name']) . ' (' . $row['emp_id'] . ')';
+        // The link only works for a letter that was actually sent (see offer_view.php).
+        $row['public_url'] = $row['status'] === 'sent' ? memo_public_url($row['public_token'] ?? '') : '';
+        unset($row['public_token']);
         memo_json(['status' => 'success', 'data' => $row]);
 
     // English -> Arabic for a detail field's Arabic box (HR can still correct it).
