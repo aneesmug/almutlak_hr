@@ -619,8 +619,8 @@ if(isset($_POST['submit'])){
 												</label>
 												<select class="form-control select2" name="probation" required>
 													<option value=""><?=__('select_option')?></option>
-													<option value="3 Months">3 <?=__('months') ?></option>
-													<option value="6 Months">6 <?=__('months') ?></option>
+													<option value="3">3 <?=__('months') ?></option>
+													<option value="6">6 <?=__('months') ?></option>
 												</select>
                                             </div>
 											

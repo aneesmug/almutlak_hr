@@ -334,7 +334,7 @@ if (mysqli_num_rows($query) == 1) {
 	$probationStatus = ($emprow['probation'] !== NULL && $emprow['probation'] !== "")
 		? (($joindiff->days > ((int)$emprow['probation'] * 30))
 			? __('no_probation')
-			: $emprow['probation'] . " Months")
+			: (int)$emprow['probation'] . " Months")
 		: (($joindiff->days < 90)
 			? __('under_probation')
 			: __('no_probation'));

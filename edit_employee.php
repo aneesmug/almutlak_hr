@@ -685,8 +685,8 @@ if (mysqli_num_rows($query) == 1) {
 												<select class="form-control" name="probation">
 													<option value=""><?= __("select_option") ?></option>
 													<option value="" <?= ($emprow['probation'] == '' ? 'selected' : '') ?>><?= __("no_probation_period_option") ?></option>
-													<option value="3" <?= ($emprow['probation'] == '3' ? 'selected' : '') ?>><?= __("3_months_option") ?></option>
-													<option value="6" <?= ($emprow['probation'] == '6' ? 'selected' : '') ?>><?= __("6_months_option") ?></option>
+													<option value="3" <?= ((int)$emprow['probation'] === 3 ? 'selected' : '') ?>><?= __("3_months_option") ?></option>
+													<option value="6" <?= ((int)$emprow['probation'] === 6 ? 'selected' : '') ?>><?= __("6_months_option") ?></option>
 												</select>
 											</div>
 

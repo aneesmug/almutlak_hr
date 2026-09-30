@@ -229,6 +229,10 @@ if ($action === 'create_company_employee') {
         'iban' => fn($v) => str_replace(' ', '', $v),
         'mobile' => fn($v) => preg_replace('/[^0-9]/', '', explode(' ', $v)[0]),
         'email' => fn($v) => filter_var(trim($v), FILTER_SANITIZE_EMAIL),
+        // Stored as the number of months only ("3" / "6") - edit_employee.php's select and
+        // view_employee.php's probation check both work on that. Also normalizes the old
+        // "3 Months" value still held by drafts / cached copies of the modal script.
+        'probation' => fn($v) => preg_replace('/[^0-9]/', '', (string)$v),
         'created_at' => fn($v) => date('Y-m-d H:i:s')
     ];
 
