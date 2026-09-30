@@ -74,25 +74,97 @@ function decode_posted_announcement_image(string $imageDataUrl): string
     return $binary !== false ? $binary : '';
 }
 
+
 /**
- * Fixed announcement group recipients.
+ * Decode the page images of a scanned (attachment) announcement. The browser converts
+ * the chosen PDF or image into one JPEG data URL per page before posting, so only real
+ * JPEG data is accepted here.
  */
-function get_announcement_group_recipients(): array
+function decode_posted_scan_pages(array $dataUrls, int $maxPages = 10): array
 {
-    return [
-        'company' => [
-            'name' => 'Almutlak Email List',
-            'email' => 'almutlak.emails@almutlak.com'
-        ],
-        'head_office' => [
-            'name' => 'H.O',
-            'email' => 'head.office@almutlak.com'
-        ],
-        'anees' => [
-            'name' => 'Anees',
-            'email' => 'a.afzal@almutlak.com'
-        ]
-    ];
+    $prefix = 'data:image/jpeg;base64,';
+    $pages = [];
+
+    foreach ($dataUrls as $dataUrl) {
+        if (count($pages) >= $maxPages) {
+            break;
+        }
+        if (!is_string($dataUrl) || strpos($dataUrl, $prefix) !== 0) {
+            continue;
+        }
+
+        $binary = base64_decode(substr($dataUrl, strlen($prefix)), true);
+        if ($binary === false || $binary === '') {
+            continue;
+        }
+
+        $info = @getimagesizefromstring($binary);
+        if ($info === false || ($info['mime'] ?? '') !== 'image/jpeg') {
+            continue;
+        }
+
+        $pages[] = $binary;
+    }
+
+    return $pages;
+}
+
+/**
+ * Keep a copy of the scanned pages that were emailed, under uploads/announcements/.
+ * Returns the stored relative paths.
+ */
+function store_announcement_scan_pages(string $circularNo, array $pages): array
+{
+    $relativeDir = 'uploads/announcements/';
+    $dir = __DIR__ . '/' . $relativeDir;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        return [];
+    }
+
+    $safeNo = preg_replace('/[^A-Za-z0-9_-]/', '', $circularNo);
+    $stamp = date('Ymd_His');
+    $files = [];
+
+    foreach (array_values($pages) as $index => $binary) {
+        $name = 'circular_' . ($safeNo !== '' ? $safeNo : 'x') . '_' . $stamp . '_p' . ($index + 1) . '.jpg';
+        if (file_put_contents($dir . $name, $binary) !== false) {
+            $files[] = $relativeDir . $name;
+        }
+    }
+
+    return $files;
+}
+
+/**
+ * Read the stored pages of a sent scanned announcement (announcement_broadcasts.scan_files)
+ * back as JPEG data URLs, so a loaded circular shows its pages and can be sent again
+ * without re-selecting the file.
+ */
+function load_announcement_scan_pages(string $scanFilesJson): array
+{
+    $files = json_decode($scanFilesJson, true);
+    if (!is_array($files)) {
+        return [];
+    }
+
+    $pages = [];
+    foreach ($files as $file) {
+        // Only ever read from the announcements folder, whatever path the row holds.
+        $path = __DIR__ . '/uploads/announcements/' . basename((string)$file);
+        if (!is_file($path)) {
+            continue;
+        }
+
+        $binary = file_get_contents($path);
+        $info = $binary !== false ? @getimagesizefromstring($binary) : false;
+        if ($info === false || ($info['mime'] ?? '') !== 'image/jpeg') {
+            continue;
+        }
+
+        $pages[] = 'data:image/jpeg;base64,' . base64_encode($binary);
+    }
+
+    return $pages;
 }
 
 /**
@@ -103,9 +175,20 @@ function normalize_announcement_blocks(array $enBlocks, array $arBlocks): array
     $rows = [];
     $maxCount = max(count($enBlocks), count($arBlocks));
 
+    // The rich editor posts markup like "<p><br></p>" for an empty row - treat tag-only content as empty.
+    $isBlank = static function (string $html): bool {
+        return trim(str_replace("\xC2\xA0", ' ', html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8'))) === '';
+    };
+
     for ($i = 0; $i < $maxCount; $i++) {
         $en = trim((string)($enBlocks[$i] ?? ''));
         $ar = trim((string)($arBlocks[$i] ?? ''));
+        if ($isBlank($en)) {
+            $en = '';
+        }
+        if ($isBlank($ar)) {
+            $ar = '';
+        }
 
         if ($en === '' && $ar === '') {
             continue;
@@ -121,7 +204,39 @@ function normalize_announcement_blocks(array $enBlocks, array $arBlocks): array
 }
 
 /**
- * Allow a safe subset of inline HTML for announcement content rows.
+ * Collapse several content rows into the single English/Arabic pair the form now edits.
+ * Circulars saved before the rich editor had one row per paragraph - each becomes a
+ * paragraph of the merged content.
+ */
+function merge_announcement_blocks(array $blocks): array
+{
+    if (count($blocks) <= 1) {
+        $only = reset($blocks);
+        return [
+            'en' => (string)($only['en'] ?? ''),
+            'ar' => (string)($only['ar'] ?? '')
+        ];
+    }
+
+    $merged = ['en' => '', 'ar' => ''];
+    foreach ($blocks as $block) {
+        foreach (['en', 'ar'] as $lang) {
+            $part = trim((string)($block[$lang] ?? ''));
+            if ($part === '') {
+                continue;
+            }
+            if (!preg_match('#<(p|div|ul|ol|li|table|h[1-6]|blockquote|pre)\b#i', $part)) {
+                $part = '<p>' . nl2br($part, false) . '</p>';
+            }
+            $merged[$lang] .= $part;
+        }
+    }
+
+    return $merged;
+}
+
+/**
+ * Allow a safe subset of inline HTML for announcement content.
  */
 function sanitize_announcement_html_fragment(string $html): string
 {
@@ -131,14 +246,17 @@ function sanitize_announcement_html_fragment(string $html): string
     }
 
     $html = str_replace(["\r\n", "\r"], "\n", $html);
-    $html = nl2br($html, false);
+    // Plain-text rows keep their line breaks; editor HTML already carries its own block tags.
+    if (!preg_match('#<(p|div|ul|ol|li|table|h[1-6]|blockquote|pre)\b#i', $html)) {
+        $html = nl2br($html, false);
+    }
 
     // Remove dangerous container tags completely.
     $html = preg_replace('#<(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta)[^>]*>.*?</\1>#is', '', $html) ?? '';
     $html = preg_replace('#</?(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta)[^>]*>#is', '', $html) ?? '';
 
     // Keep only formatting-oriented tags.
-    $allowedTags = '<b><strong><i><em><u><br><p><ul><ol><li><span><div><h1><h2><h3><h4><a>';
+    $allowedTags = '<b><strong><i><em><u><br><p><ul><ol><li><span><div><h1><h2><h3><h4><h5><h6><blockquote><pre><table><thead><tbody><tr><th><td><a>';
     $html = strip_tags($html, $allowedTags);
 
     // Remove event-handler attributes like onclick.
@@ -287,6 +405,10 @@ function build_announcement_email_html(array $data, string $logoUrl = ''): strin
         .date { font-weight: 700; margin-bottom: 16px; }
         .subject { font-size: 29px; font-weight: 700; margin: 10px 0 18px; }
         .paragraph { margin-bottom: 16px; }
+        .paragraph p { margin: 0 0 10px; }
+        .paragraph p:last-child { margin-bottom: 0; }
+        .paragraph table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .paragraph th, .paragraph td { border: 1px solid #8a8a8a; padding: 5px 8px; }
         .footer { border-top: 3px solid #5c5c5c; text-align: center; color: #25256e; font-weight: 700; padding: 16px; }
         @media only screen and (max-width: 820px) {
             .head { grid-template-columns: 1fr; gap: 10px; text-align: center; }
@@ -340,8 +462,12 @@ function build_announcement_email_html(array $data, string $logoUrl = ''): strin
 
 /**
  * Send a single announcement email using dedicated announcement SMTP credentials.
+ *
+ * $embeddedImage is either the PNG binary of the rendered text announcement (shown in
+ * the body as cid:announcement_preview), or a list of inline images for a scanned
+ * announcement: [['cid' => ..., 'data' => ..., 'filename' => ..., 'mime' => ...], ...].
  */
-function send_announcement_email(mysqli $conDB, string $toEmail, string $toName, string $subject, string $htmlBody, string $embeddedImage = ''): bool
+function send_announcement_email(mysqli $conDB, string $toEmail, string $toName, string $subject, string $htmlBody, $embeddedImage = ''): bool
 {
     global $announcementLastMailError;
     if (!class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
@@ -411,7 +537,11 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
         $mail->isHTML(true);
         $mail->Subject = $subject;
 
-        if ($embeddedImage !== '') {
+        if (is_array($embeddedImage)) {
+            foreach ($embeddedImage as $inlineImage) {
+                $mail->addStringEmbeddedImage($inlineImage['data'], $inlineImage['cid'], $inlineImage['filename'], 'base64', $inlineImage['mime']);
+            }
+        } elseif ($embeddedImage !== '') {
             $mail->addStringEmbeddedImage($embeddedImage, 'announcement_preview', 'announcement.png', 'base64', 'image/png');
         }
 
@@ -432,20 +562,28 @@ function send_announcement_email(mysqli $conDB, string $toEmail, string $toName,
     }
 }
 
-$announcementGroups = get_announcement_group_recipients();
+// Recipient list and the "Other" option come from App Settings > Email > Announcement Recipients.
+$announcementRecipientSettings = get_announcement_recipient_settings($conDB);
+$announcementGroups = $announcementRecipientSettings['recipients'];
+$allowOtherRecipient = $announcementRecipientSettings['allow_other'];
 $selectedRecipientMode = '';
+// 'text' = announcement written in the editors; 'attachment' = signed scan (PDF/image) sent as the body.
+$announcementType = 'text';
+// Scan pages (JPEG data URLs) to put back in the form: from a loaded circular, or the ones just posted.
+$initialScanPages = [];
+$initialScanLabel = '';
 $messageHtml = '';
 $messageType = '';
 
 // On initial GET request, default to first recipient group
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && empty($_GET['load_circular_no'])) {
-    $selectedRecipientMode = 'company';
+    $selectedRecipientMode = (string)(array_key_first($announcementGroups) ?? ($allowOtherRecipient ? 'other' : ''));
 }
 
 /**
  * Save announcement to database.
  */
-function save_announcement_to_db(mysqli $conDB, array $formData, string $selectedRecipientMode, int $sentCount = 0): bool
+function save_announcement_to_db(mysqli $conDB, array $formData, string $selectedRecipientMode, int $sentCount = 0, string $announcementType = 'text', array $scanFiles = []): bool
 {
     $createTableSql = "CREATE TABLE IF NOT EXISTS announcement_broadcasts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -478,6 +616,11 @@ function save_announcement_to_db(mysqli $conDB, array $formData, string $selecte
     $checkDraftCol = mysqli_query($conDB, "SHOW COLUMNS FROM announcement_broadcasts LIKE 'is_draft'");
     if ($checkDraftCol && mysqli_num_rows($checkDraftCol) === 0) {
         mysqli_query($conDB, "ALTER TABLE announcement_broadcasts ADD COLUMN is_draft TINYINT NOT NULL DEFAULT 0");
+    }
+
+    $checkTypeCol = mysqli_query($conDB, "SHOW COLUMNS FROM announcement_broadcasts LIKE 'announcement_type'");
+    if ($checkTypeCol && mysqli_num_rows($checkTypeCol) === 0) {
+        mysqli_query($conDB, "ALTER TABLE announcement_broadcasts ADD COLUMN announcement_type VARCHAR(20) NOT NULL DEFAULT 'text', ADD COLUMN scan_files TEXT NULL");
     }
 
     // Backward-compatible migration: allow empty subjects at DB schema level.
@@ -516,8 +659,9 @@ function save_announcement_to_db(mysqli $conDB, array $formData, string $selecte
     $insertSql = "INSERT INTO announcement_broadcasts
         (circular_no, issue_date, to_en, to_ar, subject_en, subject_ar, body_en, body_ar,
          footer_en, footer_ar, content_blocks_json, recipient_mode,
-         recipients_count, sent_success_count, created_by_emp_id, created_by_name, is_draft)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+         recipients_count, sent_success_count, created_by_emp_id, created_by_name, is_draft,
+         announcement_type, scan_files)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     $stmt = mysqli_prepare($conDB, $insertSql);
     if ($stmt) {
@@ -525,10 +669,11 @@ function save_announcement_to_db(mysqli $conDB, array $formData, string $selecte
         $creatorName = (string)($GLOBALS['fname'] ?? '');
         $isDraft = $sentCount === 0 ? 1 : 0;
         $recipientsCount = 0;
+        $scanFilesJson = !empty($scanFiles) ? json_encode(array_values($scanFiles), JSON_UNESCAPED_SLASHES) : null;
 
         mysqli_stmt_bind_param(
             $stmt,
-            'ssssssssssssiissi',
+            'ssssssssssssiississ',
             $formData['circular_no'],
             $issueDateSql,
             $formData['to_en'],
@@ -545,7 +690,9 @@ function save_announcement_to_db(mysqli $conDB, array $formData, string $selecte
             $sentCount,
             $creatorEmpId,
             $creatorName,
-            $isDraft
+            $isDraft,
+            $announcementType,
+            $scanFilesJson
         );
         return mysqli_stmt_execute($stmt);
     }
@@ -565,12 +712,10 @@ $defaults = [
     'footer_ar' => 'الخدمات المشتركة - قسم الموارد البشرية',
     'content_blocks' => [
         [
-            'en' => 'In light of expected weather fluctuations and rainfall, all employees are requested to complete their tasks remotely from home.',
-            'ar' => 'إشارة إلى التقلبات الجوية المتوقعة وما يصاحبها من هطول الأمطار، نأمل من جميع الموظفين إنجاز أعمالهم عن بعد من المنزل.'
-        ],
-        [
-            'en' => 'We hope everyone will adhere to this announcement and follow upcoming updates.',
-            'ar' => 'نأمل من الجميع التقيد بهذا التعميم ومتابعة أي تحديثات لاحقة.'
+            'en' => '<p>In light of expected weather fluctuations and rainfall, all employees are requested to complete their tasks remotely from home.</p>'
+                . '<p>We hope everyone will adhere to this announcement and follow upcoming updates.</p>',
+            'ar' => '<p>إشارة إلى التقلبات الجوية المتوقعة وما يصاحبها من هطول الأمطار، نأمل من جميع الموظفين إنجاز أعمالهم عن بعد من المنزل.</p>'
+                . '<p>نأمل من الجميع التقيد بهذا التعميم ومتابعة أي تحديثات لاحقة.</p>'
         ]
     ]
 ];
@@ -642,6 +787,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['load_circular_no'])) {
                 'content_blocks'         => !empty($loadedBlocks) ? $loadedBlocks : $defaults['content_blocks'],
             ];
             $selectedRecipientMode = (string)($loadedRow['recipient_mode'] ?? '');
+            $announcementType = (string)($loadedRow['announcement_type'] ?? 'text') === 'attachment' ? 'attachment' : 'text';
+            if ($announcementType === 'attachment') {
+                $initialScanPages = load_announcement_scan_pages((string)($loadedRow['scan_files'] ?? ''));
+                $initialScanLabel = 'Circular #' . $loadCircularNo;
+            }
             $messageType = 'info';
             $messageHtml = 'Loaded circular #' . htmlspecialchars($loadCircularNo, ENT_QUOTES, 'UTF-8') . '. New Circular No set to <strong>' . htmlspecialchars($newCircularNo, ENT_QUOTES, 'UTF-8') . '</strong>. Modify the content and send.';
         } else {
@@ -651,6 +801,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !empty($_GET['load_circular_no'])) {
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'GET' && $formData['circular_no'] === '') {
+    $formData['circular_no'] = get_next_circular_number($conDB);
+}
+
+// A post bigger than PHP's post_max_size arrives with an empty $_POST - say so instead of silently reloading.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    $messageType = 'danger';
+    $messageHtml = 'The announcement was too large for the server to accept (limit ' . htmlspecialchars((string)ini_get('post_max_size'), ENT_QUOTES, 'UTF-8') . '). Use a smaller file or fewer pages.';
     $formData['circular_no'] = get_next_circular_number($conDB);
 }
 
@@ -668,10 +825,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
         (array)($_POST['block_ar'] ?? [])
     );
 
+    $announcementType = (string)($_POST['announcement_type'] ?? 'text') === 'attachment' ? 'attachment' : 'text';
+    $scanPages = $announcementType === 'attachment'
+        ? decode_posted_scan_pages((array)($_POST['scan_pages'] ?? []))
+        : [];
+    // Keep the selected pages in the form after the page reloads (the file input itself cannot be refilled).
+    foreach ($scanPages as $scanPageBinary) {
+        $initialScanPages[] = 'data:image/jpeg;base64,' . base64_encode($scanPageBinary);
+    }
+    $initialScanLabel = 'Selected file';
+
     $selectedRecipientMode = (string)($_POST['recipient_mode'] ?? '');
     $otherRecipientEmail = trim((string)($_POST['other_email'] ?? ''));
     if ($selectedRecipientMode === 'other') {
-        if (filter_var($otherRecipientEmail, FILTER_VALIDATE_EMAIL)) {
+        if ($allowOtherRecipient && filter_var($otherRecipientEmail, FILTER_VALIDATE_EMAIL)) {
             $announcementGroups['other'] = ['name' => 'Other', 'email' => $otherRecipientEmail];
         } else {
             $selectedRecipientMode = '';
@@ -692,7 +859,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
         }
     }
 
-    if (empty($formData['content_blocks'])) {
+    if ($announcementType === 'attachment') {
+        if (empty($scanPages)) {
+            $missing[] = 'attachment file';
+        }
+    } elseif (empty($formData['content_blocks'])) {
         $missing[] = 'content_blocks';
     }
 
@@ -702,9 +873,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
 
     if (!empty($missing)) {
         $messageType = 'danger';
-        $messageHtml = 'Please fill all required fields and add at least one content row before ' . ($isSending ? 'sending' : 'saving') . '. Missing: ' . htmlspecialchars(implode(', ', $missing), ENT_QUOTES, 'UTF-8');
+        $messageHtml = 'Please fill all required fields and ' . ($announcementType === 'attachment' ? 'select the announcement file' : 'write the announcement content') . ' before ' . ($isSending ? 'sending' : 'saving') . '. Missing: ' . htmlspecialchars(implode(', ', $missing), ENT_QUOTES, 'UTF-8');
     } else {
-        if ($isSavingDraft) {
+        if ($isSavingDraft && $announcementType === 'attachment') {
+            // The scanned pages only exist in the browser until they are sent - there is nothing to reload later.
+            $messageType = 'danger';
+            $messageHtml = 'Drafts are only available for text announcements. Select the file and send it directly.';
+        } elseif ($isSavingDraft) {
             if (save_announcement_to_db($conDB, $formData, $selectedRecipientMode, 0)) {
                 if (class_exists('ActivityLogger')) {
                     ActivityLogger::logCreate(
@@ -721,7 +896,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                     );
                 }
                 $messageType = 'success';
-                $messageHtml = 'Announcement saved as draft with ' . count($formData['content_blocks']) . ' content block(s). (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
+                $messageHtml = 'Announcement saved as draft. (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
             } else {
                 $messageType = 'danger';
                 $messageHtml = 'Failed to save announcement draft.';
@@ -754,9 +929,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 $messageType = 'danger';
                 $messageHtml = 'No recipients found with valid email addresses.';
             } else {
-                $mailSubject = $formData['subject_en'] . ' | ' . $formData['subject_ar'];
+                $mailSubject = implode(' | ', array_filter([$formData['subject_en'], $formData['subject_ar']], 'strlen'));
+                if ($mailSubject === '') {
+                    $mailSubject = 'Circular No ' . $formData['circular_no'];
+                }
                 $logo = get_setting($conDB, 'logo');
-                $imageBinary = decode_posted_announcement_image((string)($_POST['announcement_image_data'] ?? ''));
+                $imageBinary = $announcementType === 'attachment'
+                    ? ''
+                    : decode_posted_announcement_image((string)($_POST['announcement_image_data'] ?? ''));
                 $linkUrl = sanitize_announcement_link_url((string)($formData['announcement_link_url'] ?? ''));
                 $linkTextRaw = trim((string)($formData['announcement_link_text'] ?? ''));
                 $linkText = $linkTextRaw !== '' ? $linkTextRaw : 'Open Announcement Link';
@@ -770,18 +950,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                         . '</a></div>';
                 }
 
-                if ($imageBinary === '') {
-                    error_log('ANNOUNCEMENT_DEBUG: No embedded image provided, rendering from announcement HTML');
-                    $imageBinary = render_announcement_to_image($formData, (string)$logo);
-                }
-
-                // Fallback: if image generation failed, send text-based HTML email instead
-                if ($imageBinary === '') {
-                    error_log('ANNOUNCEMENT_WARNING: Image rendering failed, using text fallback for circular ' . ($formData['circular_no'] ?? 'unknown'));
-                    $emailBody = build_announcement_email_html($formData, (string)$logo) . $linkHtml;
+                if ($announcementType === 'attachment') {
+                    // Signed scan: every page is shown inline in the body, in order - never as an attachment.
+                    $embeddedImages = [];
+                    $pagesHtml = '';
+                    foreach ($scanPages as $pageIndex => $pageBinary) {
+                        $pageCid = 'announcement_page_' . ($pageIndex + 1);
+                        $embeddedImages[] = [
+                            'cid' => $pageCid,
+                            'data' => $pageBinary,
+                            'filename' => 'announcement-page-' . ($pageIndex + 1) . '.jpg',
+                            'mime' => 'image/jpeg'
+                        ];
+                        $pagesHtml .= '<img src="cid:' . $pageCid . '" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;margin:0 0 8px;" />';
+                    }
+                    error_log('ANNOUNCEMENT_DEBUG: Scanned announcement, ' . count($scanPages) . ' page(s)');
+                    $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;">' . $pagesHtml . $linkHtml . '</body></html>';
                 } else {
-                    error_log('ANNOUNCEMENT_DEBUG: Image rendered successfully, size: ' . strlen($imageBinary) . ' bytes');
-                    $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;"><img src="cid:announcement_preview" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />' . $linkHtml . '</body></html>';
+                    if ($imageBinary === '') {
+                        error_log('ANNOUNCEMENT_DEBUG: No embedded image provided, rendering from announcement HTML');
+                        $imageBinary = render_announcement_to_image($formData, (string)$logo);
+                    }
+
+                    // Fallback: if image generation failed, send text-based HTML email instead
+                    if ($imageBinary === '') {
+                        error_log('ANNOUNCEMENT_WARNING: Image rendering failed, using text fallback for circular ' . ($formData['circular_no'] ?? 'unknown'));
+                        $emailBody = build_announcement_email_html($formData, (string)$logo) . $linkHtml;
+                    } else {
+                        error_log('ANNOUNCEMENT_DEBUG: Image rendered successfully, size: ' . strlen($imageBinary) . ' bytes');
+                        $emailBody = '<html><body style="margin:0;padding:0;background:#f2f2f2;"><img src="cid:announcement_preview" alt="Announcement" style="display:block;max-width:100%;width:100%;height:auto;border:0;" />' . $linkHtml . '</body></html>';
+                    }
+                    $embeddedImages = $imageBinary;
                 }
 
                 error_log('ANNOUNCEMENT_DEBUG: Email body prepared, length: ' . strlen($emailBody) . ' bytes');
@@ -803,7 +1002,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                     error_log('ANNOUNCEMENT_DEBUG: Email validation PASSED for: ' . $toEmail . ', attempting to send...');
                     $emailAttemptCount++;
                     
-                    if (send_announcement_email($conDB, $toEmail, $toName, $mailSubject, $emailBody, $imageBinary)) {
+                    if (send_announcement_email($conDB, $toEmail, $toName, $mailSubject, $emailBody, $embeddedImages)) {
                         error_log('ANNOUNCEMENT_DEBUG: Email send SUCCESS for: ' . $toEmail);
                         $sentSuccess++;
                     } else {
@@ -815,7 +1014,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
 
                 // Only save to database if at least one email was sent successfully
                 if ($sentSuccess > 0) {
-                    if (save_announcement_to_db($conDB, $formData, $selectedRecipientMode, $sentSuccess)) {
+                    $scanFiles = $announcementType === 'attachment'
+                        ? store_announcement_scan_pages((string)$formData['circular_no'], $scanPages)
+                        : [];
+                    if (save_announcement_to_db($conDB, $formData, $selectedRecipientMode, $sentSuccess, $announcementType, $scanFiles)) {
                         if (class_exists('ActivityLogger')) {
                             ActivityLogger::logCreate(
                                 'Announcement',
@@ -827,6 +1029,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                                     'recipient_mode' => $selectedRecipientMode,
                                     'recipients_count' => count($recipients),
                                     'sent_success_count' => $sentSuccess,
+                                    'announcement_type' => $announcementType,
                                     'dynamic_blocks_count' => count($formData['content_blocks'])
                                 ],
                                 'Sent bilingual announcement circular ' . $formData['circular_no']
@@ -838,7 +1041,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
                 }
 
                 $messageType = $sentSuccess > 0 ? 'success' : 'warning';
-                $messageHtml = 'Announcement sent to ' . (int)$sentSuccess . ' recipient(s) with ' . count($formData['content_blocks']) . ' content block(s). (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
+                $messageHtml = 'Announcement sent to ' . (int)$sentSuccess . ' recipient(s). (ID: ' . htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') . ')';
                 
                 // Debug: append info if no recipients were processed
                 if ($sentSuccess === 0) {
@@ -863,6 +1066,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (
     }
 }
 
+// The form edits one English + one Arabic content editor; older multi-row circulars are merged into it.
+$contentBlock = merge_announcement_blocks((array)($formData['content_blocks'] ?? []));
+$formData['content_blocks'] = [$contentBlock];
+
 $previewYear = date('Y');
 if (!empty($formData['issue_date'])) {
     $previewDateObj = DateTime::createFromFormat('d-m-Y', (string)$formData['issue_date']);
@@ -886,12 +1093,19 @@ if (!empty($formData['issue_date'])) {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/summernote/0.8.20/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
 
     <style>
         .announcement-editor .card-box { border-radius: 14px; }
-        .dynamic-block-row { border: 1px solid #e2e2e2; border-radius: 10px; padding: 10px; margin-bottom: 10px; background: #fafafa; }
+        /* Summernote - same look as the Memo page (employee_memos.php) */
+        .note-editor.note-frame { border-color: #e3e6f0; }
+        .note-editor .note-btn-group .btn-light { background-image: none !important; }
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light { background-color: #fff !important; color: #334155 !important; border: 1px solid #e3e6f0 !important; }
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light:hover,
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light.active { background-color: #eef2ff !important; color: #4338ca !important; }
+        .note-editor .note-editing-area .note-editable { overflow: auto; word-wrap: break-word; }
+        .note-editor:not(.codeview) .note-editing-area .note-codable { display: none; }
         .preview-shell {
             background: #f4f4f4;
             border: 1px solid #cfcfcf;
@@ -899,6 +1113,10 @@ if (!empty($formData['issue_date'])) {
             padding: 12px;
             overflow-x: auto;
         }
+        .scan-preview { background: #fff; border: 1px solid #d4d4d4; min-height: 300px; }
+        .scan-preview img { display: block; width: 100%; height: auto; border-bottom: 8px solid #f4f4f4; }
+        .scan-preview img:last-child { border-bottom: 0; }
+        .scan-preview .scan-empty { padding: 110px 20px; text-align: center; color: #8a8a8a; }
         .announcement-sheet {
             min-width: 880px;
             background: #fff;
@@ -986,6 +1204,10 @@ if (!empty($formData['issue_date'])) {
         .announcement-date { font-weight: 700; margin-bottom: 14px; }
         .announcement-subject { font-size: 26px; line-height: 1.25; font-weight: 700; margin-bottom: 18px; }
         .announcement-block-item { margin-bottom: 14px; }
+        .announcement-block-item p { margin: 0 0 10px; }
+        .announcement-block-item p:last-child { margin-bottom: 0; }
+        .announcement-block-item table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .announcement-block-item th, .announcement-block-item td { border: 1px solid #8a8a8a; padding: 5px 8px; }
         .announcement-footer { border-top: 3px solid #5b5b5b; color: #25256e; text-align: center; font-weight: 700; padding: 14px; }
         @media (max-width: 991px) {
             .announcement-head { grid-template-columns: 1fr; text-align: center; }
@@ -1017,7 +1239,7 @@ if (!empty($formData['issue_date'])) {
                     <div class="col-12">
                         <div class="card-box">
                             <h4 class="m-0 header-title">Bilingual Announcement Sender (English / العربية)</h4>
-                            <p class="text-muted mt-2 mb-4">Create and send mirrored circular announcements side by side using dynamic content rows.</p>
+                            <p class="text-muted mt-2 mb-4">Create and send mirrored circular announcements side by side.</p>
 
                             <!-- Load Previous Announcement -->
                             <div class="card border mb-4">
@@ -1038,8 +1260,10 @@ if (!empty($formData['issue_date'])) {
                                                 <?php endforeach; ?>
                                             </datalist>
                                         </div>
-                                        <button type="submit" class="btn btn-outline-info mb-2"><i class="fa fa-search"></i> Load &amp; Reuse</button>
-                                        <button type="button" id="btnViewAllCirculars" class="btn btn-outline-primary mb-2 ml-2"><i class="fa fa-list"></i> View All Circulars</button>
+                                        <div class="btn-group mb-2" role="group">
+                                            <button type="submit" class="btn btn-outline-info"><i class="fa fa-search"></i> Load &amp; Reuse</button>
+                                            <button type="button" id="btnViewAllCirculars" class="btn btn-outline-primary"><i class="fa fa-list"></i> View All Circulars</button>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -1055,6 +1279,18 @@ if (!empty($formData['issue_date'])) {
                                 <input type="hidden" name="form_action" id="formAction" value="">
                                 <div class="row">
                                     <div class="col-lg-5">
+                                        <div class="form-group">
+                                            <label class="d-block">Announcement Type</label>
+                                            <div class="custom-control custom-radio custom-control-inline">
+                                                <input type="radio" id="announcement_type_text" name="announcement_type" value="text" class="custom-control-input" <?= $announcementType === 'text' ? 'checked' : '' ?>>
+                                                <label class="custom-control-label" for="announcement_type_text">Text body</label>
+                                            </div>
+                                            <div class="custom-control custom-radio custom-control-inline">
+                                                <input type="radio" id="announcement_type_attachment" name="announcement_type" value="attachment" class="custom-control-input" <?= $announcementType === 'attachment' ? 'checked' : '' ?>>
+                                                <label class="custom-control-label" for="announcement_type_attachment">Attachment (signed scan - PDF or image)</label>
+                                            </div>
+                                        </div>
+
                                         <div class="form-row">
                                             <div class="form-group col-md-6">
                                                 <label>Circular No *</label>
@@ -1066,13 +1302,15 @@ if (!empty($formData['issue_date'])) {
                                             </div>
                                         </div>
 
-                                        <div class="form-group">
-                                            <label>To (English)</label>
-                                            <input type="text" name="to_en" class="form-control js-bind" data-bind="to_en" value="<?= htmlspecialchars($formData['to_en'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>إلى (Arabic)</label>
-                                            <input type="text" name="to_ar" class="form-control js-bind" data-bind="to_ar" value="<?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                        <div class="js-text-only">
+                                            <div class="form-group">
+                                                <label>To (English)</label>
+                                                <input type="text" name="to_en" class="form-control js-bind" data-bind="to_en" value="<?= htmlspecialchars($formData['to_en'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>إلى (Arabic)</label>
+                                                <input type="text" name="to_ar" class="form-control js-bind" data-bind="to_ar" value="<?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
                                         </div>
 
                                         <div class="form-group">
@@ -1093,26 +1331,31 @@ if (!empty($formData['issue_date'])) {
                                             <input type="text" name="announcement_link_text" class="form-control js-bind" data-bind="announcement_link_text" value="<?= htmlspecialchars($formData['announcement_link_text'], ENT_QUOTES, 'UTF-8') ?>">
                                         </div>
 
-                                        <hr>
-                                        <div class="d-flex align-items-center justify-content-between mb-2">
-                                            <h5 class="mb-0">Dynamic Content Rows *</h5>
-                                            <button type="button" id="addBlockBtn" class="btn btn-sm btn-outline-primary"><i class="fa fa-plus"></i> Add Row</button>
+                                        <div class="js-attachment-only" style="display:none;">
+                                            <hr>
+                                            <h5 class="mb-2">Announcement File *</h5>
+                                            <small class="text-muted d-block mb-2">Select the scanned, signed announcement (PDF or image). It is shown in the email body as a picture, not as an attachment - a PDF is converted to one picture per page (up to 10 pages). The subject above is used as the email subject.</small>
+                                            <input type="file" id="scanFile" class="form-control-file" accept="application/pdf,.pdf,image/*">
+                                            <div class="mt-2">
+                                                <span id="scanStatus" class="text-muted"></span>
+                                                <button type="button" id="scanClearBtn" class="btn btn-sm btn-outline-danger ml-2" style="display:none;"><i class="fa fa-trash"></i> Remove file</button>
+                                            </div>
+                                            <div id="scanPagesInputs"></div>
                                         </div>
-                                        <small class="text-muted d-block mb-2">HTML formatting is supported in rows (example: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;br&gt;, &lt;ul&gt;&lt;li&gt;...&lt;/li&gt;&lt;/ul&gt;).</small>
-                                        <div id="dynamicBlocksContainer">
-                                            <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
-                                                <div class="dynamic-block-row">
-                                                    <div class="form-group mb-2">
-                                                        <label>English Row</label>
-                                                        <textarea name="block_en[]" rows="4" class="form-control js-block-en js-rich-editor"><?= htmlspecialchars((string)($block['en'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
-                                                    </div>
-                                                    <div class="form-group mb-2">
-                                                        <label>Arabic Row</label>
-                                                        <textarea name="block_ar[]" rows="4" class="form-control js-block-ar js-rich-editor"><?= htmlspecialchars((string)($block['ar'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
-                                                    </div>
-                                                    <button type="button" class="btn btn-sm btn-outline-danger js-remove-block"><i class="fa fa-trash"></i> Remove</button>
-                                                </div>
-                                            <?php endforeach; ?>
+
+                                        <div class="js-text-only">
+                                        <hr>
+                                        <h5 class="mb-2">Content *</h5>
+                                        <small class="text-muted d-block mb-2">Write the whole announcement in each editor - press Enter for a new paragraph and use the toolbar for headings, bold, lists, alignment, tables and links.</small>
+                                        <div id="contentBlock">
+                                            <div class="form-group mb-3">
+                                                <label>English Content</label>
+                                                <textarea name="block_en[]" rows="8" class="form-control js-block-en js-rich-editor"><?= htmlspecialchars($contentBlock['en'], ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            </div>
+                                            <div class="form-group mb-2">
+                                                <label>Arabic Content</label>
+                                                <textarea name="block_ar[]" rows="8" class="form-control js-block-ar js-rich-editor"><?= htmlspecialchars($contentBlock['ar'], ENT_QUOTES, 'UTF-8') ?></textarea>
+                                            </div>
                                         </div>
 
                                         <div class="form-group mt-3">
@@ -1123,29 +1366,31 @@ if (!empty($formData['issue_date'])) {
                                             <label>التذييل (Arabic)</label>
                                             <input type="text" name="footer_ar" class="form-control js-bind" data-bind="footer_ar" value="<?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?>">
                                         </div>
+                                        </div><!-- /.js-text-only -->
                                     </div>
 
                                     <div class="col-lg-7">
                                         <div class="card border mb-3">
                                             <div class="card-body">
                                                 <h5 class="mb-3">Recipients</h5>
-                                                <div class="custom-control custom-radio mb-2">
-                                                    <input type="radio" id="recipient_company" name="recipient_mode" value="company" class="custom-control-input" <?= $selectedRecipientMode === 'company' ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="recipient_company">Almutlak Email List &lt;almutlak.emails@almutlak.com&gt;</label>
-                                                </div>
-                                                <div class="custom-control custom-radio mb-3">
-                                                    <input type="radio" id="recipient_head_office" name="recipient_mode" value="head_office" class="custom-control-input" <?= $selectedRecipientMode === 'head_office' ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="recipient_head_office">H.O &lt;head.office@almutlak.com&gt;</label>
-                                                </div>
-                                                <div class="custom-control custom-radio mb-3">
-                                                    <input type="radio" id="recipient_anees" name="recipient_mode" value="anees" class="custom-control-input" <?= $selectedRecipientMode === 'anees' ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="recipient_anees">Anees &lt;a.afzal@almutlak.com&gt;</label>
-                                                </div>
-                                                <div class="custom-control custom-radio mb-2">
-                                                    <input type="radio" id="recipient_other" name="recipient_mode" value="other" class="custom-control-input" <?= $selectedRecipientMode === 'other' ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="recipient_other">Other (enter email for testing)</label>
-                                                </div>
-                                                <input type="email" id="other_email" name="other_email" class="form-control" placeholder="name@example.com" value="<?= htmlspecialchars($_POST['other_email'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="display:<?= $selectedRecipientMode === 'other' ? 'block' : 'none' ?>;">
+                                                <?php foreach ($announcementGroups as $recipientKey => $recipientGroup): ?>
+                                                    <?php if ($recipientKey === 'other') { continue; } ?>
+                                                    <div class="custom-control custom-radio mb-3">
+                                                        <input type="radio" id="recipient_<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" name="recipient_mode" value="<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" class="custom-control-input" <?= $selectedRecipientMode === (string)$recipientKey ? 'checked' : '' ?>>
+                                                        <label class="custom-control-label" for="recipient_<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($recipientGroup['name'] . ' <' . $recipientGroup['email'] . '>', ENT_QUOTES, 'UTF-8') ?></label>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                                <?php if ($allowOtherRecipient): ?>
+                                                    <div class="custom-control custom-radio mb-2">
+                                                        <input type="radio" id="recipient_other" name="recipient_mode" value="other" class="custom-control-input" <?= $selectedRecipientMode === 'other' ? 'checked' : '' ?>>
+                                                        <label class="custom-control-label" for="recipient_other">Other (enter email for testing)</label>
+                                                    </div>
+                                                    <input type="email" id="other_email" name="other_email" class="form-control" placeholder="name@example.com" value="<?= htmlspecialchars($_POST['other_email'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="display:<?= $selectedRecipientMode === 'other' ? 'block' : 'none' ?>;">
+                                                <?php endif; ?>
+                                                <?php if (count(array_diff_key($announcementGroups, ['other' => true])) === 0 && !$allowOtherRecipient): ?>
+                                                    <p class="text-danger mb-2">No recipients are set up yet.</p>
+                                                <?php endif; ?>
+                                                <small class="text-muted d-block mt-2">This list is managed in App Settings &gt; Email &gt; Announcement Recipients.</small>
                                             </div>
                                         </div>
 
@@ -1200,14 +1445,19 @@ if (!empty($formData['issue_date'])) {
                                                     <div id="pvAnnouncementLink" class="mt-2"></div>
                                                 </div>
                                             </div>
+                                            <div class="scan-preview" id="scanPreview" style="display:none;">
+                                                <div class="scan-empty">Select a PDF or image to see how it will look in the email.</div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="mt-3 d-flex align-items-center gap-2">
-                                    <a href="dashboard.php" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
-                                    <button type="submit" name="save_draft" class="btn btn-outline-secondary"><i class="fa fa-save"></i> Save as Draft</button>
-                                    <button type="submit" name="send_announcement" class="btn btn-primary"><i class="fa fa-paper-plane"></i> Send Announcement</button>
+                                <div class="mt-3">
+                                    <div class="btn-group" role="group">
+                                        <a href="dashboard.php" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
+                                        <button type="submit" name="save_draft" class="btn btn-outline-secondary js-text-only"><i class="fa fa-save"></i> Save as Draft</button>
+                                        <button type="submit" name="send_announcement" class="btn btn-primary"><i class="fa fa-paper-plane"></i> Send Announcement</button>
+                                    </div>
                                 </div>
                             </form>
                         </div>
@@ -1227,7 +1477,9 @@ if (!empty($formData['issue_date'])) {
 <script src="assets/js/jquery.slimscroll.js"></script>
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+<script src="./plugins/summernote/0.8.20/summernote-bs4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
@@ -1350,6 +1602,83 @@ if (!empty($formData['issue_date'])) {
         return false;
     }
 
+    // Same Summernote setup as the Memo page (editorOptions in assets/js/employee_memos.js):
+    // Summernote's own icon font doesn't load here, so the toolbar uses the app's Font Awesome.
+    function editorOptions(height) {
+        var fa = function (name) { return 'fa-solid fa-' + name; };
+        return {
+            height: height,
+            dialogsInBody: true,
+            icons: {
+                magic: fa('heading'), bold: fa('bold'), italic: fa('italic'), underline: fa('underline'),
+                eraser: fa('eraser'), unorderedlist: fa('list-ul'), orderedlist: fa('list-ol'),
+                align: fa('align-left'), alignLeft: fa('align-left'), alignCenter: fa('align-center'),
+                alignRight: fa('align-right'), alignJustify: fa('align-justify'),
+                indent: fa('indent'), outdent: fa('outdent'), table: fa('table'), link: fa('link'),
+                unlink: fa('link-slash'), code: fa('code'), caret: fa('caret-down'),
+                rowAbove: fa('arrow-up'), rowBelow: fa('arrow-down'), colBefore: fa('arrow-left'),
+                colAfter: fa('arrow-right'), rowRemove: fa('minus'), colRemove: fa('minus'), trash: fa('trash'),
+                menuCheck: fa('check'), close: fa('xmark'), arrowsAlt: fa('expand')
+            },
+            toolbar: [
+                ['style', ['style']],
+                ['font', ['bold', 'italic', 'underline', 'clear']],
+                ['para', ['ul', 'ol', 'paragraph']],
+                ['table', ['table']],
+                ['insert', ['link']],
+                ['view', ['codeview']]
+            ],
+            callbacks: {
+                onChange: function () { refreshPreview(); }
+            }
+        };
+    }
+
+    function rtlEditor($textarea) {
+        $textarea.next('.note-editor').find('.note-editable').attr('dir', 'rtl').css('text-align', 'right');
+    }
+
+    function hasBlockTags(html) {
+        return /<(p|div|ul|ol|li|table|h[1-6]|blockquote|pre)\b/i.test(html);
+    }
+
+    // Turn the English and Arabic textareas into Summernote editors (Arabic one right-to-left).
+    function initContentEditors() {
+        if (!$.fn.summernote) {
+            return;
+        }
+        $('#contentBlock').find('.js-block-en, .js-block-ar').each(function () {
+            var $textarea = $(this);
+            if ($textarea.data('summernote')) {
+                return;
+            }
+            // Older circulars were typed as plain text - keep their line breaks in the editor.
+            var value = $textarea.val() || '';
+            if (value.indexOf('\n') !== -1 && !hasBlockTags(value)) {
+                $textarea.val(value.replace(/\r\n?|\n/g, '<br>'));
+            }
+            $textarea.summernote(editorOptions(260));
+            if ($textarea.hasClass('js-block-ar')) {
+                rtlEditor($textarea);
+            }
+        });
+    }
+
+    // Editor HTML as it should be previewed and posted ('' when the editor is empty).
+    function getBlockHtml($textarea) {
+        if (!$textarea.data('summernote')) {
+            return $textarea.val() || '';
+        }
+        return $textarea.summernote('isEmpty') ? '' : $textarea.summernote('code');
+    }
+
+    // Write every editor's content back into its textarea before the form posts.
+    function syncEditorsToTextareas() {
+        $('#contentBlock').find('.js-block-en, .js-block-ar').each(function () {
+            $(this).val(getBlockHtml($(this)));
+        });
+    }
+
     function sanitizeHtmlForPreview(rawHtml) {
         var allowedTags = {
             b: true,
@@ -1368,6 +1697,16 @@ if (!empty($formData['issue_date'])) {
             h2: true,
             h3: true,
             h4: true,
+            h5: true,
+            h6: true,
+            blockquote: true,
+            pre: true,
+            table: true,
+            thead: true,
+            tbody: true,
+            tr: true,
+            th: true,
+            td: true,
             a: true
         };
         var blockedTags = {
@@ -1385,7 +1724,9 @@ if (!empty($formData['issue_date'])) {
             meta: true
         };
 
-        var html = String(rawHtml || '').replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+        var html = String(rawHtml || '').replace(/\r\n?/g, '\n');
+        // Plain-text rows keep their line breaks; editor HTML already carries its own block tags.
+        html = hasBlockTags(html) ? html.replace(/>\s*\n\s*</g, '><').replace(/\n/g, ' ') : html.replace(/\n/g, '<br>');
         var template = document.createElement('template');
         template.innerHTML = html;
 
@@ -1417,6 +1758,21 @@ if (!empty($formData['issue_date'])) {
 
                         if (attrName.indexOf('on') === 0) {
                             child.removeAttribute(attr.name);
+                            return;
+                        }
+
+                        if (attrName === 'style') {
+                            // Keep only the alignment set by the editor's paragraph button.
+                            var align = /text-align\s*:\s*(left|right|center|justify)/i.exec(attrValue);
+                            if (align) {
+                                child.setAttribute('style', 'text-align: ' + align[1].toLowerCase() + ';');
+                            } else {
+                                child.removeAttribute(attr.name);
+                            }
+                            return;
+                        }
+
+                        if ((tagName === 'td' || tagName === 'th') && (attrName === 'colspan' || attrName === 'rowspan') && /^\d{1,2}$/.test(attrValue)) {
                             return;
                         }
 
@@ -1479,27 +1835,15 @@ if (!empty($formData['issue_date'])) {
     }
 
     function renderBlocksPreview() {
-        var enHtml = '';
-        var arHtml = '';
+        var enText = getBlockHtml($('#contentBlock .js-block-en'));
+        var arText = getBlockHtml($('#contentBlock .js-block-ar'));
 
-        $('#dynamicBlocksContainer .dynamic-block-row').each(function() {
-            var enText = $(this).find('.js-block-en').val() || '';
-            var arText = $(this).find('.js-block-ar').val() || '';
-
-            if ($.trim(enText) !== '') {
-                enHtml += '<div class="announcement-block-item">' + sanitizeHtmlForPreview(enText) + '</div>';
-            }
-            if ($.trim(arText) !== '') {
-                arHtml += '<div class="announcement-block-item">' + sanitizeHtmlForPreview(arText) + '</div>';
-            }
-        });
-
-        if (enHtml === '') {
-            enHtml = '<div class="announcement-block-item text-muted">Add dynamic English rows...</div>';
-        }
-        if (arHtml === '') {
-            arHtml = '<div class="announcement-block-item text-muted">اضف اسطر عربية ديناميكية...</div>';
-        }
+        var enHtml = $.trim(enText) !== ''
+            ? '<div class="announcement-block-item">' + sanitizeHtmlForPreview(enText) + '</div>'
+            : '<div class="announcement-block-item text-muted">Add English content...</div>';
+        var arHtml = $.trim(arText) !== ''
+            ? '<div class="announcement-block-item">' + sanitizeHtmlForPreview(arText) + '</div>'
+            : '<div class="announcement-block-item text-muted">اضف المحتوى العربي...</div>';
 
         $('#pvBlocksEn').html(enHtml);
         $('#pvBlocksAr').html(arHtml);
@@ -1536,31 +1880,6 @@ if (!empty($formData['issue_date'])) {
         renderBlocksPreview();
     }
 
-    function addDynamicBlock(enValue, arValue) {
-        var rowHtml = '' +
-            '<div class="dynamic-block-row">' +
-                '<div class="form-group mb-2">' +
-                    '<label>English Row</label>' +
-                    '<textarea name="block_en[]" rows="2" class="form-control js-block-en"></textarea>' +
-                '</div>' +
-                '<div class="form-group mb-2">' +
-                    '<label>Arabic Row</label>' +
-                    '<textarea name="block_ar[]" rows="2" class="form-control js-block-ar"></textarea>' +
-                '</div>' +
-                '<button type="button" class="btn btn-sm btn-outline-danger js-remove-block"><i class="fa fa-trash"></i> Remove</button>' +
-            '</div>';
-
-        var $row = $(rowHtml);
-        if (typeof enValue === 'string') {
-            $row.find('.js-block-en').val(enValue);
-        }
-        if (typeof arValue === 'string') {
-            $row.find('.js-block-ar').val(arValue);
-        }
-
-        $('#dynamicBlocksContainer').append($row);
-        refreshPreview();
-    }
 
     function captureAnnouncementPreview() {
         if (typeof html2canvas !== 'function') {
@@ -1587,19 +1906,155 @@ if (!empty($formData['issue_date'])) {
         });
     }
 
-    $('#addBlockBtn').on('click', function() {
-        addDynamicBlock('', '');
-    });
+    // ---- Attachment type: a signed scan (PDF or image) sent as the email body ----
+    // The browser turns the chosen file into one JPEG per page (pdf.js renders PDFs),
+    // previews them and posts them as scan_pages[] - the server never receives the raw file.
+    var SCAN_MAX_PAGES = 10;
+    var SCAN_MAX_WIDTH = 1600;
+    var SCAN_JPEG_QUALITY = 0.85;
+    var SCAN_MAX_POST_CHARS = 28 * 1024 * 1024;
+    var scanPages = [];
+    var initialScanPages = <?= json_encode($initialScanPages, JSON_UNESCAPED_SLASHES) ?>;
+    var initialScanLabel = <?= json_encode($initialScanLabel) ?>;
 
-    $('#dynamicBlocksContainer').on('click', '.js-remove-block', function() {
-        $(this).closest('.dynamic-block-row').remove();
-        if ($('#dynamicBlocksContainer .dynamic-block-row').length === 0) {
-            addDynamicBlock('', '');
+    function getAnnouncementType() {
+        return $('input[name="announcement_type"]:checked').val() === 'attachment' ? 'attachment' : 'text';
+    }
+
+    function applyAnnouncementType() {
+        var isAttachment = getAnnouncementType() === 'attachment';
+        $('.js-text-only').toggle(!isAttachment);
+        $('.js-attachment-only').toggle(isAttachment);
+        $('#announcementPreview').toggle(!isAttachment);
+        $('#scanPreview').toggle(isAttachment);
+    }
+
+    function showScanError(message) {
+        if (typeof Swal === 'function') {
+            Swal.fire({ icon: 'error', title: 'File not accepted', text: message, confirmButtonText: 'OK' });
+        } else {
+            alert(message);
         }
-        refreshPreview();
+    }
+
+    // White canvas of the page size (JPEG has no transparency).
+    function newPageCanvas(width, height) {
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(width);
+        canvas.height = Math.round(height);
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas;
+    }
+
+    function imageFileToPages(file) {
+        return new Promise(function(resolve, reject) {
+            var url = URL.createObjectURL(file);
+            var img = new Image();
+            img.onload = function() {
+                var scale = Math.min(1, SCAN_MAX_WIDTH / img.naturalWidth);
+                var canvas = newPageCanvas(img.naturalWidth * scale, img.naturalHeight * scale);
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                resolve([canvas.toDataURL('image/jpeg', SCAN_JPEG_QUALITY)]);
+            };
+            img.onerror = function() {
+                URL.revokeObjectURL(url);
+                reject(new Error('This image could not be read. Use a JPG or PNG file, or a PDF.'));
+            };
+            img.src = url;
+        });
+    }
+
+    function pdfFileToPages(file) {
+        if (typeof pdfjsLib === 'undefined') {
+            return Promise.reject(new Error('The PDF converter could not be loaded. Check the internet connection and reload the page.'));
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        return file.arrayBuffer().then(function(buffer) {
+            return pdfjsLib.getDocument({ data: buffer }).promise;
+        }).then(function(pdf) {
+            if (pdf.numPages > SCAN_MAX_PAGES) {
+                throw new Error('This PDF has ' + pdf.numPages + ' pages. The limit is ' + SCAN_MAX_PAGES + ' pages.');
+            }
+
+            var pages = [];
+            var chain = Promise.resolve();
+            for (var pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+                (function(no) {
+                    chain = chain.then(function() {
+                        return pdf.getPage(no);
+                    }).then(function(page) {
+                        var viewport = page.getViewport({ scale: SCAN_MAX_WIDTH / page.getViewport({ scale: 1 }).width });
+                        var canvas = newPageCanvas(viewport.width, viewport.height);
+                        return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise.then(function() {
+                            pages.push(canvas.toDataURL('image/jpeg', SCAN_JPEG_QUALITY));
+                        });
+                    });
+                })(pageNo);
+            }
+            return chain.then(function() { return pages; });
+        });
+    }
+
+    function setScanPages(pages, fileName) {
+        scanPages = pages;
+        var $inputs = $('#scanPagesInputs').empty();
+        var $preview = $('#scanPreview').empty();
+
+        if (pages.length === 0) {
+            $preview.append('<div class="scan-empty">Select a PDF or image to see how it will look in the email.</div>');
+            $('#scanStatus').text('');
+            $('#scanClearBtn').hide();
+            return;
+        }
+
+        pages.forEach(function(dataUrl) {
+            $inputs.append($('<input type="hidden" name="scan_pages[]">').val(dataUrl));
+            $preview.append($('<img alt="Announcement page">').attr('src', dataUrl));
+        });
+        $('#scanStatus').text(fileName + ' - ' + pages.length + (pages.length === 1 ? ' page ready' : ' pages ready'));
+        $('#scanClearBtn').show();
+    }
+
+    $('#scanFile').on('change', function() {
+        var input = this;
+        var file = input.files && input.files[0];
+        if (!file) {
+            return;
+        }
+
+        var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (!isPdf && !/^image\//.test(file.type)) {
+            input.value = '';
+            showScanError('Select a PDF or an image file.');
+            return;
+        }
+
+        $('#scanStatus').text('Converting ' + file.name + '...');
+        (isPdf ? pdfFileToPages(file) : imageFileToPages(file)).then(function(pages) {
+            var totalChars = pages.reduce(function(sum, page) { return sum + page.length; }, 0);
+            if (totalChars > SCAN_MAX_POST_CHARS) {
+                throw new Error('This file is too large to send by email. Scan it at a lower resolution or with fewer pages.');
+            }
+            setScanPages(pages, file.name);
+        }).catch(function(error) {
+            input.value = '';
+            setScanPages([], '');
+            showScanError((error && error.message) || 'This file could not be converted.');
+        });
     });
 
-    $('#dynamicBlocksContainer').on('keyup change', '.js-block-en, .js-block-ar', refreshPreview);
+    $('#scanClearBtn').on('click', function() {
+        $('#scanFile').val('');
+        setScanPages([], '');
+    });
+
+    $('input[name="announcement_type"]').on('change', applyAnnouncementType);
+
+    $('#contentBlock').on('keyup change', '.js-block-en, .js-block-ar', refreshPreview);
     $('.js-bind').on('keyup change', refreshPreview);
 
     $('#announcementForm button[type="submit"]').on('click', function(event) {
@@ -1609,6 +2064,14 @@ if (!empty($formData['issue_date'])) {
             return;
         }
 
+        if (getAnnouncementType() === 'attachment' && scanPages.length === 0) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            showScanError('Select the announcement PDF or image before sending.');
+            return;
+        }
+
+        syncEditorsToTextareas();
         submitAction = $(this).attr('name') || '';
         $('#formAction').val(submitAction);
     });
@@ -1624,6 +2087,12 @@ if (!empty($formData['issue_date'])) {
             return;
         }
 
+        // Attachment type posts its page images as they are - no preview capture needed.
+        if (getAnnouncementType() === 'attachment') {
+            showSubmitLoader(submitAction);
+            return;
+        }
+
         event.preventDefault();
         isCapturingPreview = true;
         showSubmitLoader(submitAction);
@@ -1635,10 +2104,11 @@ if (!empty($formData['issue_date'])) {
         });
     });
 
-    if ($('#dynamicBlocksContainer .dynamic-block-row').length === 0) {
-        addDynamicBlock('', '');
+    initContentEditors();
+    applyAnnouncementType();
+    if (initialScanPages.length > 0) {
+        setScanPages(initialScanPages, initialScanLabel);
     }
-
     refreshPreview();
     showResultMessage();
 })();

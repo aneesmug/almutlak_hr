@@ -734,6 +734,15 @@ function __(key, def) {
                     formHtml += `<small class="text-success"><strong>${__('evaluated_as')}:</strong> <span class="timeout-seconds"></span> ${__('seconds')}</small>`;
                     formHtml += `</div>`;
                     formHtml += `</div>`;
+                } else if (setting.setting_name === 'announcement_recipients') {
+                    formHtml += renderAnnouncementRecipientsField(setting, id);
+                } else if (setting.setting_name === 'announcement_allow_other_recipient') {
+                    const allowOther = setting.setting_value !== '0';
+                    formHtml += `<div class="custom-control custom-switch mt-2">
+                        <input type="checkbox" class="custom-control-input" id="announcement-allow-other-toggle" ${allowOther ? 'checked' : ''}>
+                        <label class="custom-control-label" for="announcement-allow-other-toggle">${__('announcement_allow_other_label', 'Show the "Other (enter email for testing)" option on the Send Announcement page')}</label>
+                    </div>`;
+                    formHtml += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="${allowOther ? '1' : '0'}">`;
                 } else if (setting.setting_name === 'full_access_emp_ids') {
                     const selectedList = parseEmpIdList(setting.setting_value || '');
                     formHtml += `<select id="${id}" name="${setting.setting_name}" class="form-control select2" multiple data-selected='${JSON.stringify(selectedList)}'></select>`;
@@ -788,6 +797,7 @@ function __(key, def) {
 
             attachPreviewListeners();
             attachEmailListListeners();
+            attachAnnouncementRecipientListeners();
             attachSessionTimeoutListeners();
 
             if (normalizedGroupName === 'email') {
@@ -1021,6 +1031,7 @@ function __(key, def) {
         const EMAIL_SETTINGS_SUB_TABS = [
             { key: 'email', label: '' + __('email', 'Email') + '' },
             { key: 'announcement_config', label: '' + __('announcement_config', 'Announcement Config') + '' },
+            { key: 'announcement_recipients', label: '' + __('announcement_recipients', 'Announcement Recipients') + '' },
         ];
 
         function renderEmailSettingsHub() {
@@ -6050,6 +6061,101 @@ function __(key, def) {
             });
         }
 
+        // --- Announcement Recipients (Email hub sub-tab) ---
+        // The "Recipients" choices on send_announcement.php: a JSON array of {key, name, email}
+        // kept in the hidden #setting-announcement_recipients input, which the outer
+        // "Save Changes" form posts like any other setting. `key` is what a sent circular
+        // stores as its recipient, so it stays fixed once a row exists.
+        function announcementRecipientRowHtml(recipient) {
+            const key = recipient.key || ('r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+            return `
+                <div class="form-row announcement-recipient-row mb-2" data-key="${escapeHtml(key)}">
+                    <div class="col-md-5 mb-1">
+                        <input type="text" class="form-control announcement-recipient-name" placeholder="${escapeHtml(__('name', 'Name'))}" value="${escapeHtml(recipient.name)}">
+                    </div>
+                    <div class="col-md-6 mb-1">
+                        <input type="email" class="form-control announcement-recipient-email" placeholder="email@example.com" value="${escapeHtml(recipient.email)}">
+                    </div>
+                    <div class="col-md-1 mb-1">
+                        <button type="button" class="btn btn-outline-danger announcement-recipient-remove"><i class="mdi mdi-delete"></i></button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAnnouncementRecipientsField(setting, id) {
+            let recipients = [];
+            try {
+                const parsed = JSON.parse(setting.setting_value || '[]');
+                if (Array.isArray(parsed)) {
+                    recipients = parsed.filter(item => item && typeof item === 'object');
+                }
+            } catch (e) {
+                recipients = [];
+            }
+
+            let html = `<div id="announcement-recipient-list">${recipients.map(announcementRecipientRowHtml).join('')}</div>`;
+            html += `<button type="button" class="btn btn-sm btn-outline-primary mt-1" id="add-announcement-recipient-btn"><i class="mdi mdi-plus"></i> ${__('add_recipient', 'Add Recipient')}</button>`;
+            html += `<small class="form-text text-muted">${__('announcement_recipients_hint', 'These appear as the Recipients choices on the Send Announcement page. Use a mailing-list address to reach a whole group.')}</small>`;
+            html += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
+            return html;
+        }
+
+        function updateAnnouncementRecipientsHiddenField() {
+            const hidden = document.getElementById('setting-announcement_recipients');
+            if (!hidden) return;
+            const recipients = [];
+            document.querySelectorAll('#announcement-recipient-list .announcement-recipient-row').forEach(row => {
+                const email = row.querySelector('.announcement-recipient-email').value.trim();
+                if (email === '') return;
+                recipients.push({
+                    key: row.dataset.key,
+                    name: row.querySelector('.announcement-recipient-name').value.trim() || email,
+                    email: email
+                });
+            });
+            hidden.value = JSON.stringify(recipients);
+        }
+
+        // False when a row has a name but no/invalid email - flags the bad inputs.
+        function validateAnnouncementRecipients() {
+            let valid = true;
+            document.querySelectorAll('#announcement-recipient-list .announcement-recipient-row').forEach(row => {
+                const nameInput = row.querySelector('.announcement-recipient-name');
+                const emailInput = row.querySelector('.announcement-recipient-email');
+                const email = emailInput.value.trim();
+                const bad = (email === '' && nameInput.value.trim() !== '') || (email !== '' && !emailInput.checkValidity());
+                emailInput.classList.toggle('is-invalid', bad);
+                if (bad) valid = false;
+            });
+            return valid;
+        }
+
+        function attachAnnouncementRecipientListeners() {
+            const list = document.getElementById('announcement-recipient-list');
+            if (list) {
+                list.addEventListener('input', updateAnnouncementRecipientsHiddenField);
+                list.addEventListener('click', function(e) {
+                    const removeBtn = e.target.closest('.announcement-recipient-remove');
+                    if (!removeBtn) return;
+                    removeBtn.closest('.announcement-recipient-row').remove();
+                    updateAnnouncementRecipientsHiddenField();
+                });
+                document.getElementById('add-announcement-recipient-btn').addEventListener('click', function() {
+                    list.insertAdjacentHTML('beforeend', announcementRecipientRowHtml({}));
+                    list.lastElementChild.querySelector('.announcement-recipient-name').focus();
+                });
+                updateAnnouncementRecipientsHiddenField();
+            }
+
+            const allowOtherToggle = document.getElementById('announcement-allow-other-toggle');
+            if (allowOtherToggle) {
+                allowOtherToggle.addEventListener('change', function() {
+                    document.getElementById('setting-announcement_allow_other_recipient').value = this.checked ? '1' : '0';
+                });
+            }
+        }
+
         function attachEmailListListeners() {
             const addEmailBtn = document.getElementById('add-email-btn');
             if (addEmailBtn) {
@@ -6280,7 +6386,7 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
+                const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
@@ -6345,8 +6451,14 @@ function __(key, def) {
                 return;
             }
             
+            if (!validateAnnouncementRecipients()) {
+                Swal.fire('' + __('Validation Error') + '', '' + __('announcement_recipient_email_required', 'Each announcement recipient needs a valid email address') + '', 'error');
+                return;
+            }
+
             // Update hidden field one more time before submission
             updateEmailListHiddenField();
+            updateAnnouncementRecipientsHiddenField();
             
             const formData = new FormData();
             formData.append('action', 'update_settings');

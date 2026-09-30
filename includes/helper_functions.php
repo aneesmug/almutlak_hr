@@ -8355,3 +8355,72 @@ if (!function_exists('format_safe_date')) {
         return date($format, $timestamp);
     }
 }
+
+/*=============================================
+=      Announcement Recipients               =
+=============================================*/
+
+if (!function_exists('announcement_default_recipients')) {
+    /**
+     * The recipient groups send_announcement.php offered while the list was still
+     * hard-coded. Seeds App Settings > Email > Announcement Recipients.
+     */
+    function announcement_default_recipients(): array
+    {
+        return [
+            ['key' => 'company', 'name' => 'Almutlak Email List', 'email' => 'almutlak.emails@almutlak.com'],
+            ['key' => 'head_office', 'name' => 'H.O', 'email' => 'head.office@almutlak.com'],
+            ['key' => 'anees', 'name' => 'Anees', 'email' => 'a.afzal@almutlak.com'],
+        ];
+    }
+}
+
+if (!function_exists('get_announcement_recipient_settings')) {
+    /**
+     * Recipients shown on send_announcement.php, as managed in App Settings > Email >
+     * Announcement Recipients.
+     *
+     * @return array ['recipients' => [key => ['name' => ..., 'email' => ...]], 'allow_other' => bool]
+     */
+    function get_announcement_recipient_settings($conDB): array
+    {
+        $rows = [];
+        $res = mysqli_query($conDB, "SELECT setting_name, setting_value FROM app_settings WHERE setting_name IN ('announcement_recipients', 'announcement_allow_other_recipient')");
+        if ($res) {
+            while ($row = mysqli_fetch_assoc($res)) {
+                $rows[$row['setting_name']] = (string)$row['setting_value'];
+            }
+        }
+
+        // The setting row is created the first time App Settings is opened - until then keep the original list.
+        $list = array_key_exists('announcement_recipients', $rows)
+            ? json_decode($rows['announcement_recipients'], true)
+            : announcement_default_recipients();
+        if (!is_array($list)) {
+            $list = [];
+        }
+
+        $recipients = [];
+        foreach ($list as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $email = trim((string)($item['email'] ?? ''));
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            // The key is what announcement_broadcasts.recipient_mode (VARCHAR 20) stores.
+            $key = substr(preg_replace('/[^a-z0-9_]/', '', strtolower((string)($item['key'] ?? ''))), 0, 20);
+            if ($key === '' || $key === 'other' || isset($recipients[$key])) {
+                $key = 'r' . substr(md5($email), 0, 12);
+            }
+            $name = trim((string)($item['name'] ?? ''));
+            $recipients[$key] = ['name' => $name !== '' ? $name : $email, 'email' => $email];
+        }
+
+        return [
+            'recipients' => $recipients,
+            'allow_other' => ($rows['announcement_allow_other_recipient'] ?? '1') !== '0',
+        ];
+    }
+}

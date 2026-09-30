@@ -120,6 +120,7 @@ function get_all_settings($conDB) {
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
+    ensure_announcement_recipient_settings($conDB);
     ensure_screen_settings_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
     ensure_theme_config_settings($conDB);
@@ -132,7 +133,10 @@ function get_all_settings($conDB) {
     // different: it's meant to be a stable value for cron, and editing it here
     // is a legitimate way to rotate it (just also update the cron URL), so it
     // stays visible.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name != 'db_export_secret_key' ORDER BY setting_group, id";
+    // memo_templates_version is an internal counter the memo page maintains itself
+    // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
+    // nobody should type into.
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -154,6 +158,7 @@ function update_all_settings($conDB) {
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
     ensure_announcement_smtp_settings($conDB);
+    ensure_announcement_recipient_settings($conDB);
     ensure_screen_settings_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
 
@@ -711,6 +716,49 @@ function ensure_announcement_smtp_settings($conDB) {
         }
 
         $insertStmt->bind_param('sssss', $settingName, $defaultValue, $description, $inputType, $options);
+        $insertStmt->execute();
+    }
+
+    $checkStmt->close();
+    $insertStmt->close();
+}
+
+/**
+ * Ensure the Announcement Recipients settings exist in app_settings (App Settings >
+ * Email > Announcement Recipients). The list is a JSON array of {key, name, email}
+ * shown as the "Recipients" choices on send_announcement.php, seeded with the groups
+ * that page used to hard-code; the second row toggles its "Other (enter email for
+ * testing)" option. Both are read by get_announcement_recipient_settings().
+ */
+function ensure_announcement_recipient_settings($conDB) {
+    $defaults = [
+        'announcement_recipients' => [json_encode(announcement_default_recipients(), JSON_UNESCAPED_UNICODE), 'Announcement Recipients'],
+        'announcement_allow_other_recipient' => ['1', 'Other Recipient'],
+    ];
+
+    $checkStmt = $conDB->prepare("SELECT id FROM app_settings WHERE setting_name = ? LIMIT 1");
+    $insertStmt = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'announcement_recipients', ?, 'text', NULL)");
+    if (!$checkStmt || !$insertStmt) {
+        return;
+    }
+
+    foreach ($defaults as $settingName => $meta) {
+        [$defaultValue, $description] = $meta;
+
+        $checkStmt->bind_param('s', $settingName);
+        if (!$checkStmt->execute()) {
+            continue;
+        }
+        $result = $checkStmt->get_result();
+        $exists = ($result && $result->num_rows > 0);
+        if ($result) {
+            $result->free();
+        }
+        if ($exists) {
+            continue;
+        }
+
+        $insertStmt->bind_param('sss', $settingName, $defaultValue, $description);
         $insertStmt->execute();
     }
 
