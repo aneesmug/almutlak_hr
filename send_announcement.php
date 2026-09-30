@@ -2,8 +2,14 @@
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/page_access_helper.php';
 
-if (!(($is_system_admin ?? false) || ($isHR ?? false))) {
+// Same rule the sidebar (includes/main_menu.php) applies: system admin, a role allowed in
+// App Settings > Page Access, or the 'access_send_announcement' Special Access grant.
+// Checked here as well because the form is processed before the sidebar guard runs.
+$canSendAnnouncement = page_role_allowed($conDB, 'send_announcement.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'access_send_announcement', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if (!$canSendAnnouncement) {
     header('Location: ./dashboard.php');
     exit();
 }

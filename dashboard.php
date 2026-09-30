@@ -336,13 +336,12 @@ if(isset($_POST['submit'])){
         <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
 
         <!-- App css -->
+        <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <!-- <link href="assets/css/icons.css" rel="stylesheet" type="text/css" /> -->
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-		<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-		<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 
         <script src="assets/js/modernizr.min.js"></script>
 
@@ -602,51 +601,6 @@ if(isset($_POST['submit'])){
 				margin-top: 4px;
 			}
 
-			/* Demographic chart filters - select2 multi-select, colors only.
-			   Deliberately does NOT touch display/float/position - overriding the
-			   theme's own box model previously caused the selection box to grow an
-			   empty row above/below the pills. */
-			.dash-pie-filter-row .select2-container {
-				width: 100% !important;
-			}
-			.dash-pie-filter-row .select2-selection--multiple .select2-selection__choice {
-				background: linear-gradient(135deg, #2a78d6 0%, #1baf7a 100%) !important;
-				color: #ffffff !important;
-				border: none !important;
-				border-radius: 14px !important;
-				padding: 3px 10px !important;
-				margin: 3px 6px 3px 0 !important;
-				font-weight: 500;
-			}
-			.dash-pie-filter-row .select2-selection--multiple .select2-selection__choice__remove {
-				all: unset;
-				cursor: pointer;
-				color: #ffffff !important;
-				font-weight: bold;
-				font-size: 13px;
-				margin-right: 6px;
-			}
-			/* select2 keeps aria-selected in sync live as items are picked/unpicked -
-			   unlike option.disabled, this reflects immediately with no reopen needed. */
-			.select2-results__option:not([aria-selected=true]) {
-				cursor: pointer;
-			}
-			.select2-results__option[aria-selected=true] {
-				color: #adb5bd !important;
-				background-color: #f8f9fa !important;
-				cursor: not-allowed;
-				text-decoration: line-through;
-			}
-			.select2-results__option[aria-selected=true]::after {
-				content: " (<?= addslashes(__('selected') ?: 'selected') ?>)";
-				font-size: 11px;
-				font-style: italic;
-				text-decoration: none;
-			}
-			.select2-results__option--highlighted[aria-selected=true] {
-				background-color: #f8f9fa !important;
-				color: #adb5bd !important;
-			}
 			.dash-slice-filter-badge {
 				cursor: pointer;
 				font-size: 12px;
@@ -746,9 +700,11 @@ if(isset($_POST['submit'])){
 										<?php endforeach; ?>
 									</select>
 								</div>
-								<div class="col-sm-4 col-md-3 d-flex align-items-end" style="gap:8px;">
-									<button type="button" class="btn btn-primary" id="dashChartApplyFilterBtn"><?= __('apply') ?: 'Apply' ?></button>
-									<button type="button" class="btn btn-secondary" id="dashChartResetFilterBtn"><?= __('reset') ?></button>
+								<div class="col-sm-4 col-md-3 d-flex align-items-end">
+									<div class="btn-group" role="group">
+										<button type="button" class="btn btn-primary" id="dashChartApplyFilterBtn"><?= __('apply') ?: 'Apply' ?></button>
+										<button type="button" class="btn btn-secondary" id="dashChartResetFilterBtn"><?= __('reset') ?></button>
+									</div>
 								</div>
 								<div class="col-sm-4 col-md-3 d-flex align-items-end">
 									<div class="custom-control custom-checkbox">
@@ -1330,7 +1286,7 @@ if(isset($_POST['submit'])){
 
 		<!-- Demographic Pie Charts (ApexCharts, always-light theme, filterable) -->
 		<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-		<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+		<script src="./plugins/select2/js/select2.min.js"></script>
 		<script type="text/javascript">
 			(function() {
 				if (typeof ApexCharts === 'undefined') { return; }
@@ -1462,11 +1418,10 @@ if(isset($_POST['submit'])){
 				renderAll(<?= json_encode($dashboard_chart_data, JSON_UNESCAPED_UNICODE) ?>);
 
 				if ($.fn.select2) {
-					// Selected items are marked via select2's own live aria-selected state
-					// (styled in CSS above) rather than a custom disabled/re-render hack -
-					// that state updates immediately as picks happen, dropdown open or not.
-					$('#dashChartDeptFilter').select2({ theme: 'bootstrap4', placeholder: '<?= addslashes(__('all_departments')) ?>', allowClear: true, closeOnSelect: false, width: '100%' });
-					$('#dashChartCompFilter').select2({ theme: 'bootstrap4', placeholder: '<?= addslashes(__('all_companies') ?: 'All Companies') ?>', allowClear: true, closeOnSelect: false, width: '100%' });
+					$('#dashChartDeptFilter').select2({ placeholder: '<?= addslashes(__('all_departments')) ?>', allowClear: true, closeOnSelect: false, width: '100%' });
+					$('#dashChartCompFilter').select2({ placeholder: '<?= addslashes(__('all_companies') ?: 'All Companies') ?>', allowClear: true, closeOnSelect: false, width: '100%' });
+
+					lockSelectedSelect2Options('#dashChartDeptFilter, #dashChartCompFilter');
 				}
 
 				function applyDashboardChartFilter() {

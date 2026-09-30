@@ -272,6 +272,7 @@ if (mysqli_num_rows($query) == 1) {
 
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -280,9 +281,6 @@ if (mysqli_num_rows($query) == 1) {
 
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 
     <script src="assets/js/modernizr.min.js"></script>
 
@@ -359,76 +357,6 @@ if (mysqli_num_rows($query) == 1) {
         }
         #graphChartContainer .apexcharts-pie-series:hover .apexcharts-pie-area:not(:hover) {
             opacity: .85;
-        }
-
-        /* Select2 vertical alignment fix - the plain bootstrap4 theme CSS alone leaves
-           the single-select's chosen text floating above the box (wrong padding) and its
-           height not matching the other .form-control fields on the same row. */
-        .select2-container {
-            width: 100% !important;
-        }
-        .select2-container .select2-selection--single {
-            height: calc(1.5em + 0.75rem + 2px) !important;
-            padding: 0.375rem 0.75rem;
-            border: 1px solid #ced4da;
-            border-radius: 0.25rem;
-        }
-        .select2-container--bootstrap4 .select2-selection--single {
-            padding: 0 !important;
-        }
-        .select2-container .select2-selection--single .select2-selection__rendered {
-            line-height: calc(1.5em + 0.75rem);
-            padding-left: 0;
-            padding-right: 0;
-        }
-        .select2-container .select2-selection--single .select2-selection__arrow {
-            height: calc(1.5em + 0.75rem + 2px);
-            top: 0;
-            right: 6px;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple {
-            min-height: calc(1.5em + 0.75rem + 2px);
-            border: 1px solid #ced4da;
-            border-radius: 0.25rem;
-            padding: 3px 6px;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-            padding: 0;
-            margin: 0;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
-            display: flex;
-            align-items: center;
-            background-color: #e9ecef;
-            border: 1px solid #ced4da;
-            border-radius: 0.2rem;
-            padding: 1px 6px;
-            margin: 0;
-            font-size: 0.875rem;
-            line-height: 1.5;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
-            order: 2;
-            margin-left: 6px;
-            margin-right: 0;
-            border: none;
-            color: #6c757d;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__display {
-            padding-left: 0;
-        }
-        .select2-container--bootstrap4 .select2-selection--multiple .select2-search--inline .select2-search__field {
-            margin-top: 0;
-            height: 1.7rem;
-        }
-        .select2-container--bootstrap4.select2-container--focus .select2-selection--single,
-        .select2-container--bootstrap4.select2-container--focus .select2-selection--multiple {
-            border-color: #80bdff;
-            outline: 0;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
         }
 
         <?php if ($is_rtl): ?>
@@ -629,7 +557,7 @@ if (mysqli_num_rows($query) == 1) {
     <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
@@ -676,30 +604,28 @@ if (mysqli_num_rows($query) == 1) {
             });
 
             $('#graphCustomTables').select2({
-                theme: 'bootstrap4',
                 placeholder: (typeof __ === 'function') ? __('select_one_or_more_tables') : 'Select one or more tables',
                 width: '100%'
             });
 
             $('#graphReportType, #graphGroupBy, #graphChartType, #graphDeptFilter, #graphStatusFilter').select2({
-                theme: 'bootstrap4',
                 width: '100%',
                 minimumResultsForSearch: 0
             });
 
             $('#graphCompanyFilter').select2({
-                theme: 'bootstrap4',
                 width: '100%',
                 placeholder: (typeof __ === 'function') ? __('all_companies') : 'All Companies',
                 allowClear: true
             });
 
             $('#graphCountryFilter').select2({
-                theme: 'bootstrap4',
                 width: '100%',
                 placeholder: (typeof __ === 'function') ? __('all_countries', 'All Countries') : 'All Countries',
                 allowClear: true
             });
+
+            lockSelectedSelect2Options('#graphCustomTables, #graphCompanyFilter, #graphCountryFilter');
 
             $(document).on('click', '#graphDataTableFilterBadge', function() {
                 if (clearChartFilterFn) { clearChartFilterFn(); }

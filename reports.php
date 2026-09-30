@@ -94,6 +94,9 @@ if (mysqli_num_rows($query) == 1) {
         <!-- App favicon -->
         <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
+        <!-- Select2 -->
+        <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
@@ -108,10 +111,6 @@ if (mysqli_num_rows($query) == 1) {
 
         <!-- Date Picker -->
         <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
-
-        <!-- Select2 (CDN) -->
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-        <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
 
         <!-- <link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css"> -->
         <!-- <link rel="stylesheet" href="./plugins/select2/css/select2.min.css"> -->
@@ -147,122 +146,6 @@ if (mysqli_num_rows($query) == 1) {
 
             #reportTableContainer {
                 margin-top: 30px;
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple {
-                min-height: 42px;
-            }
-
-            .select2-container {
-                width: 100% !important;
-            }
-            .select2-container--bootstrap4 .select2-selection--single{
-                padding: 0 1.125rem .75rem .375rem !important;
-            }
-            /* Select2 Multi-select polish */
-            .select2-container {
-                width: 100% !important;
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple {
-                min-height: 38px;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                padding: 3px 6px;
-                background-color: #fff;
-                transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-            }
-
-            .select2-container--bootstrap4.select2-container--focus .select2-selection--multiple {
-                border-color: #80bdff;
-                outline: 0;
-                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 4px;
-                padding: 0;
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
-                background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-                color: #ffffff;
-                border: none;
-                border-radius: 14px;
-                padding: 2px 10px 2px 24px;
-                font-size: 12px;
-                font-weight: 500;
-                line-height: 18px;
-                margin: 0;
-                box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
-                transition: all 0.2s ease;
-                position: relative;
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 3px 6px rgba(40, 167, 69, 0.4);
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
-                color: #fff;
-                background: rgba(255, 255, 255, 0.25);
-                border-radius: 50%;
-                width: 16px;
-                height: 16px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                margin-right: 0;
-                position: absolute;
-                left: 4px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 14px;
-                font-weight: bold;
-                transition: background 0.2s ease;
-            }
-
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove:hover {
-                background: rgba(255, 255, 255, 0.4);
-                color: #fff;
-            }
-
-            .select2-dropdown {
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            }
-
-            .select2-container--bootstrap4 .select2-dropdown .select2-search__field {
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 14px;
-            }
-
-            .select2-container--bootstrap4 .select2-dropdown .select2-search__field:focus {
-                border-color: #80bdff;
-                outline: 0;
-                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-            }
-
-            .select2-results__option {
-                font-size: 14px;
-                padding: 8px 12px;
-                transition: background-color 0.15s ease;
-            }
-
-            .select2-results__option--highlighted {
-                background-color: #007bff !important;
-                color: white !important;
-            }
-
-            .select2-results__option[aria-selected=true] {
-                background-color: #f8f9fa;
-                font-weight: 500;
             }
 
             /* Draggable Column Styles */
@@ -366,10 +249,6 @@ if (mysqli_num_rows($query) == 1) {
                 border-color: #007bff;
                 outline: none;
                 box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-            }
-
-            .select2-search__field {
-                font-size: 14px;
             }
 
             /* Badge styling for selected count */
@@ -523,8 +402,6 @@ if (mysqli_num_rows($query) == 1) {
             .column-item .drag-handle { margin-right: 0; margin-left: 6px; }
             .column-item input[type="checkbox"] { margin: 0 0 0 8px; }
             #reportTable th, #reportTable td { text-align: right; }
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice { padding: 2px 24px 2px 10px; }
-            .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove { left: auto; right: 4px; }
             <?php endif; ?>
         </style>
         <?php if ($is_rtl): ?>
@@ -840,15 +717,17 @@ if (mysqli_num_rows($query) == 1) {
 
                                     <!-- Report Actions -->
                                     <div class="report-actions">
-                                        <button type="button" class="btn btn-primary" id="generateReportBtn">
-                                            <i class="mdi mdi-file-chart mr-1"></i><?= __('generate_report') ?>
-                                        </button>
-                                        <button type="button" class="btn btn-success" id="exportExcelBtn" style="display:none;">
-                                            <i class="mdi mdi-file-excel mr-1"></i><?= __('export_to_excel') ?>
-                                        </button>
-                                        <button type="button" class="btn btn-secondary" id="resetBtn">
-                                            <i class="mdi mdi-refresh mr-1"></i><?= __('reset') ?>
-                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-primary" id="generateReportBtn">
+                                                <i class="mdi mdi-file-chart mr-1"></i><?= __('generate_report') ?>
+                                            </button>
+                                            <button type="button" class="btn btn-success" id="exportExcelBtn" style="display:none;">
+                                                <i class="mdi mdi-file-excel mr-1"></i><?= __('export_to_excel') ?>
+                                            </button>
+                                            <button type="button" class="btn btn-secondary" id="resetBtn">
+                                                <i class="mdi mdi-refresh mr-1"></i><?= __('reset') ?>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -917,8 +796,8 @@ if (mysqli_num_rows($query) == 1) {
         <!-- SweetAlert2 -->
         <!-- <script src="./assets/plugins/sweet-alert2/sweetalert2.min.js"></script> -->
 
-        <!-- Select2 (CDN) -->
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+        <!-- Select2 -->
+        <script src="./plugins/select2/js/select2.min.js"></script>
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
@@ -948,34 +827,6 @@ if (mysqli_num_rows($query) == 1) {
 
                 const currentMonthValue = new Date().toISOString().slice(0, 7);
 
-                // Format function for dropdown options with checkmarks
-                function formatDeptOption(data) {
-                    if (!data.id) {
-                        return data.text;
-                    }
-
-                    // Special formatting for "All Departments"
-                    if (data.id === 'all') {
-                        var $result = $('<span><i class="mdi mdi-select-all text-primary mr-2" style="font-size: 16px;"></i><strong>' + data.text + '</strong></span>');
-                        return $result;
-                    }
-                    // Special formatting for "Deselect All"
-                    if (data.id === 'none') {
-                        var $result = $('<span><i class="mdi mdi-close-circle text-danger mr-2" style="font-size: 16px;"></i><strong>' + data.text + '</strong></span>');
-                        return $result;
-                    }
-                    var $select = $('#deptMultiFilter');
-                    var selectedValues = $select.val() || [];
-                    var isSelected = selectedValues.indexOf(data.id) !== -1;
-
-                    var checkmark = isSelected ?
-                        '<i class="mdi mdi-check-circle text-success mr-2" style="font-size: 16px;"></i>' :
-                        '<i class="mdi mdi-checkbox-blank-circle-outline text-muted mr-2" style="font-size: 16px;"></i>';
-
-                    var $result = $('<span>' + checkmark + data.text + '</span>');
-                    return $result;
-                }
-
                 // Initialize Select2 for multi-department filter (only if plugin loaded)
                 function initDeptSelect2() {
                     if ($.fn.select2) {
@@ -997,12 +848,10 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         }
                         $('#deptMultiFilter').select2({
-                            theme: 'bootstrap4',
                             placeholder: __('select_departments'),
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%',
-                            templateResult: formatDeptOption,
                             templateSelection: function(data) {
                                 if (data.id === 'all') {
                                     return __('all_departments')
@@ -1013,6 +862,7 @@ if (mysqli_num_rows($query) == 1) {
                                 return data.text;
                             }
                         });
+                        lockSelectedSelect2Options('#deptMultiFilter');
                         // Handle All Departments selection
                         $('#deptMultiFilter').on('select2:select', function(e) {
                             var data = e.params.data;
@@ -1080,7 +930,6 @@ if (mysqli_num_rows($query) == 1) {
                             return; // already initialized
                         }
                         $('#companyMultiFilter').select2({
-                            theme: 'bootstrap4',
                             placeholder: (typeof __ === 'function') ? __('select_companies') : 'Select companies',
                             allowClear: true,
                             closeOnSelect: false,
@@ -1095,6 +944,7 @@ if (mysqli_num_rows($query) == 1) {
                                 return data.text;
                             }
                         });
+                        lockSelectedSelect2Options('#companyMultiFilter');
                         $('#companyMultiFilter').on('select2:select', function(e) {
                             var data = e.params.data;
                             if (data.id === 'all') {
@@ -1124,12 +974,12 @@ if (mysqli_num_rows($query) == 1) {
                 function initCustomTablesSelect2() {
                     if ($.fn.select2) {
                         $('#customTables').select2({
-                            theme: 'bootstrap4',
                             placeholder: (typeof __ === 'function') ? __('select_tables_to_generate_report') : 'Select tables to generate report',
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%'
                         });
+                        lockSelectedSelect2Options('#customTables');
                     }
                 }
 
@@ -1153,12 +1003,10 @@ if (mysqli_num_rows($query) == 1) {
                             }
                         }
                         $('#customDeptMultiFilter').select2({
-                            theme: 'bootstrap4',
                             placeholder: (typeof __ === 'function') ? __('select_departments') : 'Select departments',
                             allowClear: true,
                             closeOnSelect: false,
                             width: '100%',
-                            templateResult: formatDeptOption,
                             templateSelection: function(data) {
                                 if (data.id === 'all') {
                                     return (typeof __ === 'function') ? __('all_departments') : 'All Departments';
@@ -1169,6 +1017,7 @@ if (mysqli_num_rows($query) == 1) {
                                 return data.text;
                             }
                         });
+                        lockSelectedSelect2Options('#customDeptMultiFilter');
                         // Handle All Departments selection
                         $('#customDeptMultiFilter').on('select2:select', function(e) {
                             var data = e.params.data;
@@ -1424,7 +1273,6 @@ if (mysqli_num_rows($query) == 1) {
                     
                     // Initialize Select2 with AJAX loading
                     $select.select2({
-                        theme: 'bootstrap4',
                         ajax: {
                             url: './includes/ajaxFile/hrHandler.php',
                             type: 'POST',
@@ -2798,7 +2646,6 @@ if (mysqli_num_rows($query) == 1) {
                             $('#assetItemFilter').select2('destroy');
                         }
                         $('#assetItemFilter').select2({
-                            theme: 'bootstrap4',
                             placeholder: (typeof __ === 'function') ? __('select_asset') : 'Select Asset',
                             allowClear: true,
                             width: '100%',
@@ -3224,12 +3071,12 @@ if (mysqli_num_rows($query) == 1) {
                     }
 
                     $select.select2({
-                        theme: 'bootstrap4',
                         placeholder: (typeof __ === 'function') ? __('select_columns_to_display') : 'Select columns to display',
                         allowClear: true,
                         closeOnSelect: false,
                         width: '100%'
                     });
+                    lockSelectedSelect2Options($select);
 
                     // console.log('defaultColumns to set:', defaultColumns);
 

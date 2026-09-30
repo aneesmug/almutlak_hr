@@ -574,6 +574,51 @@ function initializeDatepickerRTL() {
     setupGlobalRTLDatepicker();
 }
 
+// Shows the already-selected items of a multi-select select2 as disabled in its
+// dropdown, the same way select2 renders a natively disabled option (aria-disabled,
+// no aria-selected), so its stock styling applies and they can't be clicked or
+// reached by keyboard. They are removed from the selection box instead.
+function lockSelectedSelect2Options(selector) {
+    $(selector).each(function() {
+        var $select = $(this);
+        var resultsObserver = null;
+
+        function markSelectedDisabled() {
+            var instance = $select.data('select2');
+            if (!instance) { return; }
+            var selectedIds = $select.val() || [];
+
+            instance.$results.find('.select2-results__option').each(function() {
+                var $option = $(this);
+                var item = $option.data('data');
+                if (!item || item.id === undefined) { return; }
+
+                if ($.inArray(String(item.id), selectedIds) > -1) {
+                    if ($option.attr('aria-disabled') !== 'true') {
+                        $option.attr('aria-disabled', 'true').removeAttr('aria-selected').data('select2Locked', true);
+                    }
+                } else if ($option.data('select2Locked')) {
+                    $option.removeAttr('aria-disabled').attr('aria-selected', 'false').removeData('select2Locked');
+                }
+            });
+        }
+
+        $select.off('.select2Lock').on('select2:open.select2Lock', function() {
+            var instance = $select.data('select2');
+            markSelectedDisabled();
+            if (instance && window.MutationObserver && !resultsObserver) {
+                resultsObserver = new MutationObserver(markSelectedDisabled);
+                resultsObserver.observe(instance.$results[0], { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+            }
+        }).on('select2:close.select2Lock', function() {
+            if (resultsObserver) {
+                resultsObserver.disconnect();
+                resultsObserver = null;
+            }
+        }).on('select2:select.select2Lock select2:unselect.select2Lock change.select2Lock', markSelectedDisabled);
+    });
+}
+
 $(document).on('click', '.deleteAjax', function (e) {
     e.preventDefault();
     var itemId = $(this).data('id');
