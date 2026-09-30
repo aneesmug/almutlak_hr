@@ -190,7 +190,7 @@ if (!defined('ALMUTLAK_CONNLIMIT_DIR')) {
 // show WHO/WHAT is holding connections (ip, page, age) instead of just a
 // count - needed to tell real traffic apart from a leak.
 if (!function_exists('app_acquire_concurrency_slot')) {
-    function app_acquire_concurrency_slot($key, $limit, $publicMessage, $staleSeconds = 30) {
+    function app_acquire_concurrency_slot($key, $limit, $publicMessage, $staleSeconds = 30, $waitSeconds = 0) {
         if (PHP_SAPI === 'cli') {
             return; // cron/CLI scripts not subject to this
         }
@@ -205,25 +205,37 @@ if (!function_exists('app_acquire_concurrency_slot')) {
             return; // fail open: don't block traffic if temp dir unwritable
         }
 
-        flock($fp, LOCK_EX);
-        $raw = stream_get_contents($fp);
-        $now = time();
-        $active = [];
-        foreach (preg_split('/\r?\n/', (string) $raw, -1, PREG_SPLIT_NO_EMPTY) as $line) {
-            $entry = json_decode($line, true);
-            if (is_array($entry) && ($entry['ts'] ?? 0) > $now - $staleSeconds) {
-                $active[] = $entry;
+        // A full key is queued for up to $waitSeconds before it is rejected: a
+        // waiting request holds no DB connection yet, so the pool stays protected
+        // while a page that fires several AJAX calls at once still gets served.
+        $deadline = microtime(true) + $waitSeconds;
+        while (true) {
+            flock($fp, LOCK_EX);
+            rewind($fp);
+            $raw = stream_get_contents($fp);
+            $now = time();
+            $active = [];
+            foreach (preg_split('/\r?\n/', (string) $raw, -1, PREG_SPLIT_NO_EMPTY) as $line) {
+                $entry = json_decode($line, true);
+                if (is_array($entry) && ($entry['ts'] ?? 0) > $now - $staleSeconds) {
+                    $active[] = $entry;
+                }
             }
-        }
 
-        if (count($active) >= $limit) {
+            if (count($active) < $limit) {
+                break; // keeps the lock - the slot is written below
+            }
+
             flock($fp, LOCK_UN);
-            fclose($fp);
-            app_render_runtime_error(
-                $publicMessage,
-                "Key '$key' exceeded $limit concurrent slots",
-                429
-            );
+            if (microtime(true) >= $deadline) {
+                fclose($fp);
+                app_render_runtime_error(
+                    $publicMessage,
+                    "Key '$key' exceeded $limit concurrent slots",
+                    429
+                );
+            }
+            usleep(100000);
         }
 
         // Logged-in user is already known here: session_check.php starts the
@@ -280,11 +292,15 @@ if (!function_exists('app_acquire_concurrency_slot')) {
     }
 }
 
-// Per-IP: stop one browser/bot/script alone eating the pool.
+// Per-IP: stop one browser/bot/script alone eating the pool. 6 = what a browser
+// opens in parallel to one host; the whole office shares one public IP, so a
+// burst above that is queued for a few seconds instead of failing outright.
 app_acquire_concurrency_slot(
     $_SERVER['REMOTE_ADDR'] ?? 'cli',
-    3,
-    'Too many concurrent requests from your connection. Please wait a moment and try again.'
+    6,
+    'Too many concurrent requests from your connection. Please wait a moment and try again.',
+    30,
+    5
 );
 
 // App-wide: MySQL max_connections is 500 and shared with other processes on

@@ -43,7 +43,7 @@ if ($preselectEmpId !== '') {
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/summernote/0.8.20/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
 
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
@@ -83,6 +83,14 @@ if ($preselectEmpId !== '') {
         .memo-step { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #6366f1; margin-bottom: 8px; }
         .memo-compose-disabled { opacity: .5; pointer-events: none; }
         .note-editor.note-frame { border-color: #e3e6f0; }
+        /* The theme's .btn-light gradient hides its own teal toolbar colour and leaves white icons on a near-white button. */
+        .note-editor .note-btn-group .btn-light { background-image: none !important; }
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light { background-color: #fff !important; color: #334155 !important; border: 1px solid #e3e6f0 !important; }
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light:hover,
+        html:not(.app-dark) .note-editor .note-btn-group .btn-light.active { background-color: #eef2ff !important; color: #4338ca !important; }
+        /* Keep the editor usable even if the Summernote stylesheet fails to load. */
+        .note-editor .note-editing-area .note-editable { overflow: auto; word-wrap: break-word; }
+        .note-editor:not(.codeview) .note-editing-area .note-codable { display: none; }
         .memo-view-body { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; background: #fff; color: #1f2937; text-align: left; max-height: 60vh; overflow: auto; }
         .select2-container { width: 100% !important; }
         .memo-draft-flag { display: none; }
@@ -324,7 +332,7 @@ if ($preselectEmpId !== '') {
 <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
 <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
 <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-bs4.min.js"></script>
+<script src="./plugins/summernote/0.8.20/summernote-bs4.min.js"></script>
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 <script>window.MEMO_OPEN_DRAFT_ID = <?= (int) $preselectDraftId ?>;</script>

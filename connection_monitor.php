@@ -569,7 +569,7 @@ $('#activeUsersTable').closest('.dataTables_wrapper').on('click', '.btn-signout'
 let refreshInFlight = false;
 async function refresh() {
     // Guards against overlapping polls piling up (each hits db.php, which caps
-    // concurrent DB-connecting requests per IP at 3 - a slow/stalled response
+    // concurrent DB-connecting requests per IP at 6 - a slow/stalled response
     // combined with the unconditional 4s interval below was queuing up new
     // fetches on top of one still pending, tripping that same-IP limit for
     // real admins just watching this page).
