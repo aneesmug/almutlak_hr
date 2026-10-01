@@ -135,6 +135,17 @@ if (!function_exists('memo_lookup_sources')) {
             // Picked as Company > City > Location (three linked dropdowns), see memo_location_tree().
             'locations' => ['label' => 'Locations / branches (Company > City > Location)', 'sql' => "SELECT id, name_en AS en, name_ar AS ar FROM locations ORDER BY name_en"],
             'companies' => ['label' => 'Companies', 'sql' => "SELECT comp_id AS id, comp_name AS en, comp_name_ar AS ar FROM companies ORDER BY comp_name"],
+            // Fixed list (no table): the result sentence of the Probation Period Result memo,
+            // read after "you have ..." / "نفيدكم بأنكم ...".
+            'probation_outcomes' => ['label' => 'Probation results (passed / extended / not passed)', 'sql' => "SELECT 'passed' AS id,
+                    'successfully completed your probation period. We are pleased to confirm your employment with the company' AS en,
+                    'أتممتم فترة التجربة بنجاح، ويسرنا تثبيتكم في العمل لدى الشركة' AS ar
+                UNION ALL SELECT 'extended',
+                    'not yet fully met the requirements of the probation period. In accordance with Article 53 of the Saudi Labor Law, and subject to your written agreement, your probation period is extended until the date below',
+                    'لم تستوفوا بعد متطلبات فترة التجربة بشكل كامل، ووفقاً للمادة (53) من نظام العمل السعودي وبموافقتكم الكتابية، تم تمديد فترة التجربة حتى التاريخ المذكور أدناه'
+                UNION ALL SELECT 'not_passed',
+                    'not successfully completed your probation period. In accordance with Article 53 of the Saudi Labor Law, your employment contract will end on the date below',
+                    'لم تجتازوا فترة التجربة بنجاح، ووفقاً للمادة (53) من نظام العمل السعودي سينتهي عقد عملكم في التاريخ المذكور أدناه'"],
         ];
     }
 }
@@ -447,6 +458,7 @@ if (!function_exists('memo_placeholder_list')) {
             'employee_name' => 'Employee name', 'emp_id' => 'Employee ID', 'iqama' => 'Iqama / ID No.',
             'job_title' => 'Job title', 'department' => 'Department', 'company' => 'Company',
             'nationality' => 'Nationality', 'location' => 'Location', 'joining_date' => 'Joining date',
+            'probation_period' => 'Probation period', 'probation_end_date' => 'Probation end date',
             'basic_salary' => 'Basic salary', 'total_salary' => 'Total salary', 'salary_table' => 'Salary breakdown table',
             'today' => 'Today\'s date', 'reference_no' => 'Reference No.', 'sender_name' => 'Sender (you)',
             // Built from the template's own number fields whose key starts with sal_ (job offer).
@@ -706,6 +718,19 @@ if (!function_exists('memo_default_templates')) {
                 . '<p style="margin-top:22px"><strong>القبول</strong><br>أوافق على هذا العرض وفق الشروط المذكورة أعلاه.</p>'
                 . '<p>الاسم: ______________________________<br><br>التوقيع: ____________________________<br><br>التاريخ: ____________________________</p>',
         ];
+        $t['probation_result'] = [
+            'label' => 'Probation Period Result', 'label_ar' => 'نتيجة فترة التجربة', 'icon' => 'fa-user-check',
+            'subject' => 'Probation Period Result - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'نتيجة فترة التجربة - {{employee_name}}',
+            'fields' => [
+                $sel('outcome', 'Result', 'النتيجة', 'probation_outcomes'),
+                $f('effective_date', 'Effective date (confirmation / extended until / last working day)', 'تاريخ السريان (التثبيت / التمديد حتى / آخر يوم عمل)', 'date'),
+                $f('remarks', 'Evaluation notes', 'ملاحظات التقييم', 'textarea', true, false),
+            ],
+            'body' => $head . $dear . '<p>With reference to your probation period of <strong>{{probation_period}}</strong>, which started on <strong>{{joining_date}}</strong> and ends on <strong>{{probation_end_date}}</strong>, we would like to inform you that, based on the evaluation of your performance, you have {{f:outcome}}.</p>'
+                . '<p><strong>Effective date:</strong> {{f:effective_date}}</p><p>{{f:remarks}}</p><p>For any clarification, please contact the HR Department.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>بالإشارة إلى فترة التجربة الخاصة بكم ومدتها <strong>{{probation_period}}</strong>، والتي بدأت في <strong>{{joining_date}}</strong> وتنتهي في <strong>{{probation_end_date}}</strong>، وبناءً على تقييم أدائكم خلال هذه الفترة، نفيدكم بأنكم {{f:outcome}}.</p>'
+                . '<p><strong>تاريخ السريان:</strong> {{f:effective_date}}</p><p>{{f:remarks}}</p><p>لأي استفسار يرجى التواصل مع إدارة الموارد البشرية.</p>' . $signAr,
+        ];
         $t['other_custom'] = [
             'label' => 'Other / Custom Memo', 'label_ar' => 'مذكرة أخرى', 'icon' => 'fa-pen-to-square',
             'subject' => '{{f:topic}}', 'subject_ar' => '{{f:topic}}',
@@ -742,7 +767,7 @@ if (!function_exists('memo_employee_placeholders')) {
     function memo_employee_placeholders($conDB, $empId, $senderName = '', $referenceNo = '') {
         // Login email (admin_login) is the one kept up to date for every user; the
         // employee record's emails are only a fallback.
-        $sql = "SELECT e.emp_id, e.name, e.iqama, e.email, e.c_email, e.joining_date,
+        $sql = "SELECT e.emp_id, e.name, e.iqama, e.email, e.c_email, e.joining_date, e.probation,
                        (SELECT al.email FROM admin_login al
                         WHERE al.emp_id = e.emp_id AND al.email IS NOT NULL AND al.email <> ''
                         ORDER BY al.status DESC, al.id DESC LIMIT 1) AS login_email,
@@ -796,6 +821,13 @@ if (!function_exists('memo_employee_placeholders')) {
         $joinTs = $joining !== '' ? strtotime(str_replace('/', '-', $joining)) : false;
         $joinText = $joinTs ? date('d/m/Y', $joinTs) : $joining;
 
+        // Probation: months from the employee record ("3", "3 Months"), 90 days when not
+        // set - same rule as view_employee.php / employee_profile.php.
+        $probMonths = (int) $row['probation'];
+        $probEn = $probMonths > 0 ? $probMonths . ' months' : '90 days';
+        $probAr = $probMonths > 0 ? $probMonths . ' أشهر' : '90 يوماً';
+        $probEnd = $joinTs ? date('d/m/Y', strtotime(($probMonths > 0 ? '+' . $probMonths . ' months' : '+90 days') . ' -1 day', $joinTs)) : '-';
+
         $h = function ($v) {
             return htmlspecialchars(trim((string) $v), ENT_QUOTES, 'UTF-8');
         };
@@ -807,6 +839,7 @@ if (!function_exists('memo_employee_placeholders')) {
             'emp_id' => $h($row['emp_id']),
             'iqama' => $h($row['iqama']),
             'joining_date' => $h($joinText),
+            'probation_end_date' => $probEnd,
             'basic_salary' => memo_money($row['basic']),
             'total_salary' => memo_money($total),
             'today' => date('d/m/Y'),
@@ -821,6 +854,7 @@ if (!function_exists('memo_employee_placeholders')) {
                 'company' => $h($companyEn),
                 'nationality' => $h($row['country_name'] ?: '-'),
                 'location' => $h($row['location_name'] ?: '-'),
+                'probation_period' => $probEn,
                 'salary_table' => '<table style="border-collapse:collapse;margin:8px 0 14px">' . $rowsEn . '</table>',
             ],
             'ar' => $common + [
@@ -831,6 +865,7 @@ if (!function_exists('memo_employee_placeholders')) {
                 'company' => $h($row['comp_name_ar'] ?: $companyEn),
                 'nationality' => $h($row['country_name_ar'] ?: ($row['country_name'] ?: '-')),
                 'location' => $h($row['location_name_ar'] ?: ($row['location_name'] ?: '-')),
+                'probation_period' => $probAr,
                 'salary_table' => '<table style="border-collapse:collapse;margin:8px 0 14px" dir="rtl">' . $rowsAr . '</table>',
             ],
             '_name' => $nameEn,
