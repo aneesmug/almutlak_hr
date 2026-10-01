@@ -397,7 +397,9 @@ try {
     
     switch ($reportType) {
         case 'employee':
-            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
+            $employeeCtcAccess = ($is_system_admin ?? false)
+                || user_has_special_access($conDB, $current_emp_id_for_reports, 'access_ctc_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+            $result = generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId, $companies, $countries, $employeeCtcAccess);
             break;
         case 'vacation':
             $result = generateVacationReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $vacationType, $employeeId, $companies, $countries);
@@ -643,8 +645,66 @@ function getColumnLabel($column) {
 }
 
 // Employee Report
-function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $dateTo, $status, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = [], $canViewCtc = false) {
     global $is_rtl;
+
+    // Extended columns sourced from the CTC row builder (location, sub-department,
+    // salary breakdown, cost figures...). Employee-report column ID => CTC field key.
+    $ctcGeneralCols = [
+        'position' => 'position',
+        'sub_department' => 'sub_department',
+        'location' => 'location',
+        'location_code' => 'location_code',
+        'department_code' => 'department_code',
+        'direct_manager_id' => 'direct_manager_id',
+        'age' => 'age',
+        'service_days' => 'service_days',
+        'salary_grade' => 'salary_grade',
+        'contract_type' => 'contract_type',
+        'years_contract' => 'years_contract',
+        'no_of_dependents' => 'no_of_dependents',
+        'medical_class' => 'medical_class',
+        'citizen_local' => 'citizen_local',
+    ];
+    // Money/cost columns - only returned to users with CTC report access
+    $ctcCostCols = [
+        'basic' => 'basic',
+        'housing' => 'housing',
+        'transport' => 'transport',
+        'food' => 'food',
+        'misc' => 'misc',
+        'cashier' => 'cashier',
+        'fuel' => 'fuel',
+        'tel' => 'tel',
+        'other' => 'other',
+        'guard' => 'guard',
+        'total_salary' => 'total_salary',
+        'med_insurance_amount' => 'med_insurance_amount',
+        'labour_office_expense' => 'labour_office_expense',
+        'iqama_renewal_fee' => 'iqama_renewal_fee',
+        'ticket' => 'ticket',
+        'gosi_amount' => 'gosi',
+        'monthly_leave_accrual' => 'monthly_leave_accrual',
+        'leave_balance' => 'leave_balance',
+        'total_accrual' => 'total_accrual',
+        'eos_until_today' => 'eos_until_today',
+        'total_cost' => 'total_cost',
+    ];
+    $ctcExtMap = $canViewCtc ? array_merge($ctcGeneralCols, $ctcCostCols) : $ctcGeneralCols;
+    $extCols = array_values(array_filter($columns, function($c) use ($ctcExtMap) { return isset($ctcExtMap[$c]); }));
+    // Columns that are neither base nor allowed extended (e.g. cost columns without access)
+    // still get a header so the table stays aligned, but always render empty.
+    $blankCols = [];
+
+    // Whitelist plain employees.* columns to keep arbitrary POSTed names out of the SQL
+    static $employeeTableCols = null;
+    if ($employeeTableCols === null) {
+        $employeeTableCols = [];
+        $colRes = mysqli_query($conDB, "SHOW COLUMNS FROM employees");
+        while ($colRes && ($c = mysqli_fetch_assoc($colRes))) {
+            $employeeTableCols[$c['Field']] = true;
+        }
+    }
     // Map column IDs to actual database columns with proper joins
     $columnMap = [
         'actual_job' => 'j.job, j.job_ar',  // Select both
@@ -675,9 +735,22 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         $selectCols[] = 'e.vac_period AS vac_period_id';  // For calculation
     }
     
+    if (!empty($extCols)) {
+        $selectCols[] = 'e.emp_id AS __emp_key';
+    }
+
     foreach ($columns as $col) {
         // Skip contract_expiry in SELECT - we'll calculate it later
         if ($col === 'contract_expiry') {
+            continue;
+        }
+
+        // Extended columns are filled from the CTC row builder after the main query
+        if (isset($ctcExtMap[$col])) {
+            continue;
+        }
+        if (isset($ctcCostCols[$col])) {
+            $blankCols[] = $col;
             continue;
         }
         
@@ -709,9 +782,14 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
             $selectCols[] = 'COALESCE(al.email, e.c_email) AS c_email';
         } elseif (isset($columnMap[$col])) {
             $selectCols[] = $columnMap[$col] . ' AS ' . $col;
+        } elseif (isset($employeeTableCols[$col])) {
+            $selectCols[] = 'e.`' . $col . '`';
         } else {
-            $selectCols[] = 'e.' . $col;
+            $blankCols[] = $col;
         }
+    }
+    if (empty($selectCols)) {
+        $selectCols[] = 'e.emp_id AS __emp_key';
     }
     $selectClause = implode(', ', $selectCols);
     
@@ -892,10 +970,41 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
                 unset($row['joining_date']);
             }
         }
-        
+
+        foreach ($blankCols as $col) {
+            $row[$col] = '';
+        }
+
         $data[] = $row;
     }
-    
+
+    // Fill extended columns (location, sub-department, salary breakdown, CTC figures)
+    if (!empty($extCols) && !empty($data)) {
+        $empKeys = array_values(array_unique(array_filter(array_column($data, '__emp_key'), 'strlen')));
+        $ctcRows = [];
+        if (!empty($empKeys)) {
+            $needsEos = in_array('eos_until_today', $extCols, true);
+            $needsBalance = in_array('leave_balance', $extCols, true) || in_array('total_accrual', $extCols, true);
+            foreach (array_chunk($empKeys, 500) as $chunk) {
+                $inList = implode(',', array_map(function($id) use ($conDB) {
+                    return "'" . mysqli_real_escape_string($conDB, $id) . "'";
+                }, $chunk));
+                $ctcRows += ctc_report_build_rows($conDB, "e.emp_id IN ($inList)", $needsEos, $needsBalance);
+            }
+        }
+        foreach ($data as &$row) {
+            $ctcRow = $ctcRows[$row['__emp_key'] ?? ''] ?? [];
+            foreach ($extCols as $col) {
+                $row[$col] = $ctcRow[$ctcExtMap[$col]] ?? '';
+            }
+        }
+        unset($row);
+    }
+    foreach ($data as &$row) {
+        unset($row['__emp_key']);
+    }
+    unset($row);
+
     return ['data' => $data, 'headers' => $headers];
 }
 
@@ -1533,35 +1642,10 @@ function ctc_report_get_vacation_balance_snapshot($conDB, $empId) {
     ];
 }
 
-function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+// Builds the full CTC field set (keyed by emp_id) for every employee matching $whereClause.
+// Shared by the CTC report and the Employee report so both compute cost figures identically.
+function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
     global $is_rtl;
-
-    $where = ['e.status = 1'];
-
-    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
-                            !empty($_SESSION['allowed_departments_array']) ||
-                            !empty($_SESSION['allowed_companies_array']);
-
-    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
-        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
-    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
-        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
-        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
-    }
-
-    $company_filter = getCompanyFilterSQL('e.comp_no', true);
-    if (!empty($company_filter)) {
-        $where[] = substr($company_filter, 5);
-    }
-    $department_filter = getDepartmentFilterSQL('e.dept', true);
-    if (!empty($department_filter)) {
-        $where[] = substr($department_filter, 5);
-    }
-    if (!empty($employeeId)) {
-        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
-    }
-    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
-    $whereClause = implode(' AND ', $where);
 
     $sql = "SELECT
             e.emp_id, e.iqama, e.name, e.sex, e.joining_date, e.dob, e.mobile, e.status, e.country, e.gosi, e.supervisor_id,
@@ -1599,15 +1683,7 @@ function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $user
         throw new Exception('CTC report query error: ' . mysqli_error($conDB));
     }
 
-    $needsEos = in_array('eos_until_today', $columns, true);
-    $needsBalance = in_array('leave_balance', $columns, true) || in_array('total_accrual', $columns, true);
-
-    $data = [];
-    $headers = [];
-    foreach ($columns as $col) {
-        $headers[] = getColumnLabel($col);
-    }
-
+    $rows = [];
     while ($srcRow = mysqli_fetch_assoc($query)) {
         $age = null;
         if (!empty($srcRow['dob']) && $srcRow['dob'] !== '0000-00-00') {
@@ -1725,7 +1801,52 @@ function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $user
             'mobile' => $srcRow['mobile'] ?? '',
             'status' => ((int)($srcRow['status'] ?? 0) === 1) ? __('active') : __('inactive'),
         ];
+        $rows[$srcRow['emp_id']] = $row;
+    }
 
+    return $rows;
+}
+
+function generateCTCReport($conDB, $columns, $departments, $hasFullAccess, $userDept, $employeeId = '', $companies = [], $countries = []) {
+    global $is_rtl;
+
+    $where = ['e.status = 1'];
+
+    $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
+                            !empty($_SESSION['allowed_departments_array']) ||
+                            !empty($_SESSION['allowed_companies_array']);
+
+    if (!$hasFullAccess && !$hasSpecialRestrictions && !empty($userDept)) {
+        $where[] = "e.dept = '" . mysqli_real_escape_string($conDB, $userDept) . "'";
+    } elseif (!$hasFullAccess && !$hasSpecialRestrictions && !empty($departments)) {
+        $deptList = array_map(function($d) use ($conDB) { return "'" . mysqli_real_escape_string($conDB, $d) . "'"; }, $departments);
+        $where[] = "e.dept IN (" . implode(',', $deptList) . ")";
+    }
+
+    $company_filter = getCompanyFilterSQL('e.comp_no', true);
+    if (!empty($company_filter)) {
+        $where[] = substr($company_filter, 5);
+    }
+    $department_filter = getDepartmentFilterSQL('e.dept', true);
+    if (!empty($department_filter)) {
+        $where[] = substr($department_filter, 5);
+    }
+    if (!empty($employeeId)) {
+        $where[] = "e.emp_id = '" . mysqli_real_escape_string($conDB, $employeeId) . "'";
+    }
+    applyEmployeeCompanyCountryFilter($conDB, $where, $companies, $countries);
+    $whereClause = implode(' AND ', $where);
+
+    $needsEos = in_array('eos_until_today', $columns, true);
+    $needsBalance = in_array('leave_balance', $columns, true) || in_array('total_accrual', $columns, true);
+
+    $data = [];
+    $headers = [];
+    foreach ($columns as $col) {
+        $headers[] = getColumnLabel($col);
+    }
+
+    foreach (ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) as $row) {
         $filteredRow = [];
         foreach ($columns as $col) {
             $filteredRow[$col] = $row[$col] ?? '';

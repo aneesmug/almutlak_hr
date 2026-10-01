@@ -830,7 +830,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php */ ?>
-                <?php if (!empty($isSupervisor) || in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
+                <?php if (!empty($is_system_admin) || !empty($isSupervisor) || in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa-duotone fa-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 

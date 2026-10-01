@@ -46,7 +46,7 @@ require_once __DIR__ . '/includes/helper_functions.php';
 // ================================================================
 // (or an explicit 'Access Page: Employee Evaluation' Special Access grant)
 // Direct supervisors (anyone set as supervisor_id of an active employee) always get access.
-if (!$isDeptManager && empty($isSupervisor) && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+if (empty($is_system_admin) && !$isDeptManager && empty($isSupervisor) && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: ./dashboard.php");
     exit();
 }
@@ -107,7 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
         }
         
         // Verify manager has permission to evaluate this employee (must be their direct supervisor)
-        if ($employee['supervisor_id'] != $empid) {
+        // System admins may evaluate any active employee.
+        if (empty($is_system_admin) && $employee['supervisor_id'] != $empid) {
             throw new Exception('You can only evaluate employees who are directly under your supervision.');
         }
         
@@ -185,21 +186,23 @@ if (isset($_GET['success']) && $_GET['success'] == '1') {
 // GET DIRECT SUBORDINATE EMPLOYEES FOR DROPDOWN
 // ================================================================
 $dept_employees = [];
+// System admins see every active employee; everyone else only their direct reports.
+$scope_sql = !empty($is_system_admin) ? '' : 'e.supervisor_id = ? AND ';
+$scope_params = !empty($is_system_admin) ? [$empid] : [$empid, $empid];
 try {
-    // Get employees where current user is their direct supervisor
     // Exclude employees who have been evaluated in the current month
     $stmt = $pdo->prepare("
         SELECT e.emp_id, e.name, e.actual_job, j.job
         FROM employees e
         LEFT JOIN ac_jobs j ON e.actual_job = j.id
-        LEFT JOIN emp_evaluations ev ON ev.employee_emp_id = e.emp_id 
-            AND YEAR(ev.created_at) = YEAR(CURDATE()) 
+        LEFT JOIN emp_evaluations ev ON ev.employee_emp_id = e.emp_id
+            AND YEAR(ev.created_at) = YEAR(CURDATE())
             AND MONTH(ev.created_at) = MONTH(CURDATE())
-        WHERE e.supervisor_id = ? AND e.status = 1 AND e.emp_id != ?
+        WHERE {$scope_sql}e.status = 1 AND e.emp_id != ?
             AND ev.id IS NULL
         ORDER BY e.name ASC
     ");
-    $stmt->execute([$empid, $empid]); // Filter by supervisor_id instead of dept
+    $stmt->execute($scope_params);
     $dept_employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("Error fetching direct subordinate employees: " . $e->getMessage());
@@ -208,8 +211,8 @@ try {
 // Total direct reports (to tell "none assigned" apart from "all evaluated")
 $total_subordinates = 0;
 try {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM employees WHERE supervisor_id = ? AND status = 1 AND emp_id != ?");
-    $stmt->execute([$empid, $empid]);
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM employees e WHERE {$scope_sql}e.status = 1 AND e.emp_id != ?");
+    $stmt->execute($scope_params);
     $total_subordinates = (int)$stmt->fetchColumn();
 } catch (PDOException $e) {
     error_log("Error counting direct subordinates: " . $e->getMessage());
