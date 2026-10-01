@@ -2026,7 +2026,7 @@ code {
 .btn-group-sm>.btn,
 .btn-sm {
   padding: .2rem .8rem;
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .btn-group-lg>.btn,

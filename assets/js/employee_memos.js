@@ -1102,12 +1102,12 @@
                         + '<td class="small">' + esc(tpl.subject) + '</td>'
                         + '<td><div class="custom-control custom-switch"><input type="checkbox" class="custom-control-input memo-tpl-toggle" id="tplAct_' + esc(tpl.key) + '" data-key="' + esc(tpl.key) + '"' + (tpl.is_active ? ' checked' : '') + '><label class="custom-control-label" for="tplAct_' + esc(tpl.key) + '"></label></div></td>'
                         + '<td class="small text-muted">' + esc(tpl.updated_at ? tpl.updated_at + (tpl.updated_by ? ' - ' + tpl.updated_by : '') : '-') + '</td>'
-                        + '<td class="text-right text-nowrap">'
-                        + '<button type="button" class="btn btn-sm btn-outline-primary memo-tpl-edit" data-key="' + esc(tpl.key) + '"><i class="fa fa-pen"></i></button> '
+                        + '<td class="text-right text-nowrap"><div class="btn-group" role="group">'
+                        + '<button type="button" class="btn btn-sm btn-outline-primary memo-tpl-edit" data-key="' + esc(tpl.key) + '"><i class="fa fa-pen"></i></button>'
                         + (tpl.is_builtin
                             ? '<button type="button" class="btn btn-sm btn-outline-secondary memo-tpl-reset" data-key="' + esc(tpl.key) + '" title="' + esc(t('reset_to_default', 'Reset to default')) + '"><i class="fa fa-rotate-left"></i></button>'
                             : '<button type="button" class="btn btn-sm btn-outline-danger memo-tpl-delete" data-key="' + esc(tpl.key) + '" title="' + esc(t('delete', 'Delete')) + '"><i class="fa fa-trash"></i></button>')
-                        + '</td></tr>';
+                        + '</div></td></tr>';
                 }).join(''));
             });
         }

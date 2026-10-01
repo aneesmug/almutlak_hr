@@ -11253,7 +11253,7 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     html += `
                         <div class="vacation-card">
                             <div class="vacation-card-header"><i class="fa fa-link"></i> ${__('actions')}</div>
-                            <div class="et-report-actions">${actionsHtml}</div>
+                            <div class="et-report-actions"><div class="btn-group flex-wrap" role="group">${actionsHtml}</div></div>
                         </div>`;
                 }
                 html += '</div>';

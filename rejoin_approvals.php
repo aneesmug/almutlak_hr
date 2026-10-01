@@ -493,11 +493,11 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                                 <i class="fa fa-check"></i> Review
                             </button>`;
                             if (window.canCancelRejoinRequests) {
-                                html += ` <button class="btn btn-sm btn-danger" onclick="cancelRejoinRequestAdmin(${row.rejoin_request_id}, '${empNameJs}')">
+                                html += `<button class="btn btn-sm btn-danger" onclick="cancelRejoinRequestAdmin(${row.rejoin_request_id}, '${empNameJs}')">
                                     <i class="fa fa-ban"></i> Cancel
                                 </button>`;
                             }
-                            return html;
+                            return `<div class="btn-group" role="group">${html}</div>`;
                         }
                     }
                 ],

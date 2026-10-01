@@ -2590,7 +2590,7 @@ code {
 
 .btn-sm,
 .btn-group-sm>.btn {
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .btn-pill {
