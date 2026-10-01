@@ -73,8 +73,8 @@ if ($ajaxType == 'add_location') {
     $loc_address = mysqli_real_escape_string($conDB, $_POST['loc_address']);
     $municipality = mysqli_real_escape_string($conDB, $_POST['municipality']);
     $sub_municipality = mysqli_real_escape_string($conDB, $_POST['sub_municipality']);
-    $status = $_POST['status'];
-    $location_id = $_POST['smid'];
+    $status = (isset($_POST['status']) && (string)$_POST['status'] === '0') ? '0' : '1';
+    $location_id = (int)($_POST['smid'] ?? 0);
     
     // Fetch old location data for logging
     $old_result = mysqli_query($conDB, "SELECT * FROM section WHERE id = '{$location_id}'");
@@ -172,15 +172,15 @@ if ($ajaxType == 'add_location') {
     $contract_no = mysqli_real_escape_string($conDB, $_POST['contract_no']);
     $start_cont_date = mysqli_real_escape_string($conDB, $_POST['start_cont_date']);
     $end_cont_date = mysqli_real_escape_string($conDB, $_POST['end_cont_date']);
-    $rent = str_replace(',', '', $_POST['rent']);
-    $service = str_replace(',', '', $_POST['service']);
-    $elect_prc = str_replace(',', '', $_POST['elect_prc']);
-    $water_prc = str_replace(',', '', $_POST['water_prc']);
-    $incuranse_prc = str_replace(',', '', $_POST['incuranse_prc']);
-    $others = str_replace(',', '', $_POST['others']);
-    $sql = "INSERT INTO `location_contract` (`location_id`,`owner_name`, `owner_number`, `owner_email`, `contract_no`, `start_cont_date`, `end_cont_date`, `rent`, `service`, `elect_prc`, `water_prc`, `incuranse_prc`, `others`, `created_at`) VALUES ('".$_POST['locid']."','".$owner_name."', '".$owner_number."', '".$owner_email."','".$contract_no."','".$start_cont_date."','".$end_cont_date."','".$rent."','".$service."','".$elect_prc."','".$water_prc."','".$incuranse_prc."','".$others."', '".date('Y-m-d H:i:s')."')";
+    $rent = (float)str_replace(',', '', $_POST['rent'] ?? '0');
+    $service = (float)str_replace(',', '', $_POST['service'] ?? '0');
+    $elect_prc = (float)str_replace(',', '', $_POST['elect_prc'] ?? '0');
+    $water_prc = (float)str_replace(',', '', $_POST['water_prc'] ?? '0');
+    $incuranse_prc = (float)str_replace(',', '', $_POST['incuranse_prc'] ?? '0');
+    $others = (float)str_replace(',', '', $_POST['others'] ?? '0');
+    $sql = "INSERT INTO `location_contract` (`location_id`,`owner_name`, `owner_number`, `owner_email`, `contract_no`, `start_cont_date`, `end_cont_date`, `rent`, `service`, `elect_prc`, `water_prc`, `incuranse_prc`, `others`, `created_at`) VALUES ('".(int)$_POST['locid']."','".$owner_name."', '".$owner_number."', '".$owner_email."','".$contract_no."','".$start_cont_date."','".$end_cont_date."','".$rent."','".$service."','".$elect_prc."','".$water_prc."','".$incuranse_prc."','".$others."', '".date('Y-m-d H:i:s')."')";
         mysqli_query($conDB, $query);
-        mysqli_query($conDB, "UPDATE `section` SET `location_owner`='".$owner_name."' WHERE `id`='".$_POST['locid']."' ");
+        mysqli_query($conDB, "UPDATE `section` SET `location_owner`='".$owner_name."' WHERE `id`='".(int)$_POST['locid']."' ");
     if(mysqli_query($conDB, $sql)){
         $contract_id = mysqli_insert_id($conDB);
         

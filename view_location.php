@@ -1,4 +1,8 @@
 <?php
+// Location detail. Same look as the Smart Request pages (assets/css/smart_request.css).
+// Edit / upload documents / add contract / change photos / delete keep using the shared
+// handlers in assets/js/jquery.app.js (.editLocationAttr, .upldLocDocuAttr,
+// .addLocContractAttr, .upload_img, .deleteAjax) - keep their class names + data-* attributes.
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
@@ -7,6 +11,7 @@ $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" .
 if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
 
+    $location_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
     $getquery = mysqli_query($conDB, "
 SELECT *,
     (SELECT COUNT(*) FROM `machines` WHERE `machines`.`location_id` = `section`.`id`) AS `location_count`,
@@ -17,9 +22,9 @@ FROM `section`
     LEFT JOIN `location_img` ON `section`.`id` = `location_img`.`location_id`
     LEFT JOIN `location_docu` ON `section`.`id` = `location_docu`.`location_id`
     LEFT JOIN `location_contract` ON `section`.`id` = `location_contract`.`location_id`
-WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
+WHERE `section`.`id` = " . $location_id . " GROUP BY `section`.`id`");
 
-    if (mysqli_num_rows($getquery) !== 0) {
+    if ($getquery && mysqli_num_rows($getquery) !== 0) {
         while ($rec = mysqli_fetch_assoc($getquery)) {
             $id_loc = $rec["lid"];
             $section_name = $rec["section_name"];
@@ -38,68 +43,65 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
             $location_name = $rec["location_name"];
             $municipality = $rec["municipality"];
             $sub_municipality = $rec["sub_municipality"];
-            $loc_address = $rec["location_name"];
             $status = $rec["locstatus"];
             $in_img = $rec["in_img"];
             $out_img = $rec["out_img"];
             $id_img = $rec["limgid"];
+            $location_count = (int)$rec["location_count"];
 
             if (!$id_img) {
+                // First visit: give the location default inside/outside photos, then reload.
                 $defult_img = "./assets/location_content/default_in.jpg";
-                mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`created_at`) VALUES ('" . $id_loc . "','" . $defult_img . "','" . $defult_img . "','" . date('Y-m-d H:i:s') . "')") or die();
-                header("refresh:1 ; url=view_location.php?id=$_GET[id]");
-                // return false;
+                mysqli_query($conDB, "INSERT INTO `location_img` (`location_id`,`in_img`,`out_img`,`created_at`) VALUES ('" . (int)$id_loc . "','" . $defult_img . "','" . $defult_img . "','" . date('Y-m-d H:i:s') . "')") or die();
+                header("refresh:1 ; url=view_location.php?id=" . (int)$id_loc);
+                $in_img = $out_img = $defult_img;
             }
         }
-
-        $query_mac_count = mysqli_query($conDB, "SELECT count(`location_id`) AS `location_count` FROM `machines` WHERE `location_id`='" . $id_loc . "'");
-        while ($rec = mysqli_fetch_array($query_mac_count)) {
-            $location_count = $rec["location_count"];
-        }
     } else {
-        //when the id not equals id show database
         header("Location: ./all_locations.php");
+        exit;
     }
 
-    /*$in_img = ($id_loc !== $id_img ) ? "./assets/location_content/default_in.jpg" : $in_img ;
-    $out_img = ($id_loc !== $id_img ) ? "./assets/location_content/default_in.jpg" : $out_img ;*/
+    // Documents, contracts, machines
+    $documents = [];
+    $queryempdocu = mysqli_query($conDB, "SELECT * FROM `location_docu` WHERE `location_id`='" . (int)$id_loc . "' ORDER BY `id` DESC ");
+    while ($queryempdocu && ($r = mysqli_fetch_assoc($queryempdocu))) { $documents[] = $r; }
 
+    $contracts = [];
+    $query_loc_cont = mysqli_query($conDB, "SELECT * FROM `location_contract` WHERE `location_id`='" . (int)$id_loc . "' ");
+    while ($query_loc_cont && ($r = mysqli_fetch_assoc($query_loc_cont))) { $contracts[] = $r; }
+
+    $machines = [];
+    // Machines are linked by location_id (used for the count) and, on older rows, only by name.
+    $query_mactrn = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `location_id`='" . (int)$id_loc . "' OR `location`='" . escape_string($section_name) . "' ORDER BY `id` ASC");
+    while ($query_mactrn && ($r = mysqli_fetch_assoc($query_mactrn))) { $machines[] = $r; }
+
+    $is_active = ($status == 1);
+    $has_coords = is_numeric($latitude) && is_numeric($longitude) && ((float)$latitude != 0 || (float)$longitude != 0);
+    $can_delete_children = ($user_type == $access1 or $user_type == $access2);
+    $h = function ($v) { return htmlspecialchars((string)$v); };
+    $val = function ($v) { $v = trim((string)$v); return $v === '' ? '<span class="text-muted">&ndash;</span>' : htmlspecialchars($v); };
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
     <head>
         <meta charset="utf-8" />
-        <title><?= $site_title ?> - <?= $section_name ?></title>
+        <title><?= $site_title ?> - <?= $h($section_name) ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-        <!-- App favicon -->
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
-        <!-- Modal -->
-        <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-
-        <!-- Plugins css -->
-        <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
-        <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <!-- Responsive datatable examples -->
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-        <!-- Multi Item Selection examples -->
-        <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link rel="stylesheet" href="./plugins/croppie/croppie.css">
-
-        <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css" rel="stylesheet">
+        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
+        <link href="./plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css" />
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -107,22 +109,33 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
-
-        <!-- Bootstrap fileupload css -->
-        <link href="./plugins/bootstrap-fileupload/bootstrap-fileupload.css" rel="stylesheet" />
-
-        <!-- Dropzone css -->
-        <link href="./plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css" />
-
         <style>
-            /* Set the size of the div element that contains the map */
-            #map {
-                height: 400px;
-                /* The height is 400 pixels */
-                width: 100%;
-                /* The width is the width of the web page */
+            .loc-hero-img { width: 76px; height: 76px; border-radius: 16px; object-fit: cover; flex: 0 0 auto; border: 1px solid var(--sr-border); background: var(--sr-surface-3); }
+            .loc-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+            .loc-stat { min-width: 96px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface-2); text-align: center; }
+            .loc-stat b { display: block; font-size: 22px; font-weight: 800; color: var(--sr-text); line-height: 1.1; }
+            .loc-stat span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+            .sr-meta.loc-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .sr-meta.loc-meta .sr-meta-item { border-bottom: 1px solid var(--sr-border); }
+            .sr-meta.loc-meta .sr-meta-value { white-space: normal; overflow-wrap: anywhere; }
+            @media (max-width: 991px) { .sr-meta.loc-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            .sr-meta.loc-meta .sr-meta-item:nth-child(4n) { border-inline-end: 0; }
+            #map { height: 340px; width: 100%; border-radius: 0 0 var(--sr-radius) var(--sr-radius); }
+            .loc-map-empty { height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--sr-muted); }
+            .loc-map-empty i { font-size: 34px; color: var(--sr-border-strong); }
+            .loc-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            .loc-photo { position: relative; display: block; border-radius: 12px; overflow: hidden; border: 1px solid var(--sr-border); background: var(--sr-surface-3); height: 300px; text-decoration: none !important; }
+            .loc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
+            .loc-photo:hover img { transform: scale(1.03); }
+            .loc-photo .cap {
+                position: absolute; inset-inline: 0; bottom: 0; padding: 10px 12px; color: #fff; font-size: 13px; font-weight: 700;
+                background: linear-gradient(transparent, rgba(15, 23, 42, .78)); display: flex; justify-content: space-between; align-items: center;
             }
+            .loc-photo .cap i { font-size: 16px; opacity: .9; }
+            @media (max-width: 575px) { .loc-photos { grid-template-columns: 1fr; } .loc-photo { height: 220px; } }
+            .sr-file-thumb img.sr-file-icon { width: 46px; height: 46px; }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -133,418 +146,257 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
     </head>
 
     <body class="enlarged" data-keep-enlarged="true">
-
-        <!-- Begin page -->
         <div id="wrapper">
-
-            <!-- ========== Left Sidebar Start ========== -->
             <div class="left side-menu">
-
                 <div class="slimscroll-menu" id="remove-scroll">
-
-                    <!-- LOGO -->
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span>
-                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-                            </span>
-                            <i>
-                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-                            </i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
-
-                    <!-- User box -->
-
-                    <!--- Sidemenu -->
                     <?php include("./includes/main_menu.php"); ?>
-                    <!-- Sidebar -->
-
                     <div class="clearfix"></div>
-
                 </div>
-                <!-- Sidebar -left -->
-
             </div>
-            <!-- Left Sidebar End -->
-
-
-
-            <!-- ============================================================== -->
-            <!-- Start right Content here -->
-            <!-- ============================================================== -->
 
             <div class="content-page">
-
-                <!-- Top Bar Start -->
                 <?php include("./includes/topbar.php"); ?>
-                <!-- Top Bar End -->
 
-
-                <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-xl-12">
-                                <!-- meta -->
-                                <div class="profile-user-box card-box <?= ($status == 1) ? "bg-custom-mocha" : "bg-danger"; ?>">
-                                    <div class="row">
-                                        <div class="col-sm-4">
-                                            <div class="media-body text-white">
-                                                <h4 class="mt-1 mb-1 font-18"><?= __('location_name') ?>: <?= $section_name ?></h4>
-                                                <p class="text-light mb-0"><?= __('total_building_size') ?>: <?= $t_bulding_size ?> (M)</p>
-                                                <p class="text-light mb-0"><?= __('district') ?>: <?= $location_name ?></p>
-                                                <p class="text-light mb-0"><?= __('camera_in') ?>: <?= $camera_in ?></p>
-                                                <p class="text-light mb-0"><?= __('camera_out') ?>: <?= $camera_out ?></p>
 
-                                            </div>
+                        <!-- ===== Header ===== -->
+                        <div class="sr-card sr-hero">
+                            <a href="./all_locations.php" class="sr-back"><i class="mdi mdi-arrow-left"></i> <?= __('all_locations_title') ?></a>
+                            <div class="sr-hero-top">
+                                <div class="d-flex align-items-center" style="gap: 16px; min-width: 0; flex: 1 1 420px;">
+                                    <img src="<?= $h($out_img ?: $in_img) ?>" class="loc-hero-img" alt="">
+                                    <div style="min-width: 0;">
+                                        <div class="sr-hero-tags">
+                                            <span class="sr-chip sr-mono"><i class="mdi mdi-pound"></i><?= (int)$id_loc ?></span>
+                                            <span class="sr-pill sr-pill-lg <?= $is_active ? 'tone-green' : 'tone-red' ?>"><span class="sr-dot"></span><?= $is_active ? __('active_status') : __('closed_status') ?></span>
+                                            <?php if ($dept): ?><span class="sr-chip"><i class="mdi mdi-domain"></i><?= $h($dept) ?></span><?php endif; ?>
                                         </div>
-                                        <div class="col-sm-4">
-                                            <div class="media-body text-white">
-                                                <p class="text-light mb-0"><?= __('owner_name') ?>: <?= $location_owner ?></p>
-                                                <p class="text-light mb-0"><?= __('license_no') ?>: <?= $b_license_no ?></p>
-                                                <p class="text-light mb-0"><?= __('license_exp') ?>: <?= $b_license_exp ?></p>
-                                                <p class="text-light mb-0"><?= __('address') ?>: <?= $location_name ?> - <?= $location_dist ?></p>
-                                                <p class="text-light mb-0"><?= __('municipality') ?>: <?= $municipality ?></p>
-                                                <p class="text-light mb-0"><?= __('sub_municipality') ?>: <?= $sub_municipality ?></p>
-                                            </div>
-                                        </div>
-                                        <div class="col-sm-4">
-                                            <div class="text-left text-white">
-                                                <p class="text-light mb-0"><?= __('total_machines') ?>: <?= $location_count ?></p>
-                                                <p class="text-light mb-0"><?= __('latitude') ?>: <?= $latitude ?></p>
-                                                <p class="text-light mb-0"><?= __('longitude') ?>: <?= $longitude ?></p>
-                                                <p class="text-light mb-0"><?= __('building_base') ?>: <?= $bulding_base ?></p>
-                                                <p class="text-light mb-0"><?= __('building_size') ?>: <?= $bulding_size ?></p>
-                                            </div>
-
-                                            <div class="text-right">
-                                                <div class="btn-group" role="group" aria-label="Edit Button">
-
-                                                    <!-- <a href="add_mac_transfer.php?id=<?php //echo $id_car 
-                                                                                            ?>" class="btn btn-sm btn-primary waves-effect">
-                                                    <i class="mdi mdi-transfer"></i> Transfer
-                                                </a> -->
-                                                    <?php if ($status == 1) { ?>
-                                                        <a href="javascript:void(0);" class="btn btn-sm btn-custom waves-effect waves-light upldLocDocuAttr" data-id="<?= $id_loc ?>">
-                                                            <i class="mdi mdi-cloud-upload "></i></i> <?= __('upload_documents_button') ?>
-                                                        </a>
-                                                        <a href="javascript:void(0);" data-id="<?= $id_loc ?>" class="btn btn-sm btn-primary waves-effect waves-light addLocContractAttr">
-                                                            <i class="mdi mdi-clipboard-text"></i></i> <?= __('add_contract_button') ?>
-                                                        </a>
-                                                    <?php } ?>
-                                                    <?php if ($can_edit_location): ?>
-                                                    <a href="javascript:void(0);" class="btn btn-sm btn-light waves-effect editLocationAttr" data-id="<?= $id_loc ?>" data-id="<?= $id_loc ?>" data-section_name="<?= $section_name ?>" data-dept="<?= $dept ?>" data-location_owner="<?= $location_owner ?>" data-camera_in="<?= $camera_in ?>" data-camera_out="<?= $camera_out ?>" data-b_license_exp="<?= $b_license_exp ?>" data-b_license_no="<?= $b_license_no ?>" data-location_dist="<?= $location_dist ?>" data-bulding_base="<?= $bulding_base ?>" data-bulding_size="<?= $bulding_size ?>" data-t_bulding_size="<?= $t_bulding_size ?>" data-latitude="<?= $latitude ?>" data-longitude="<?= $longitude ?>" data-location_name="<?= $location_name ?>" data-municipality="<?= $municipality ?>" data-sub_municipality="<?= $sub_municipality ?>" data-status="<?= $status ?>">
-                                                        <i class="fa fa-edit"></i> <?= __('edit_button') ?>
-                                                    </a>
-                                                    <?php endif; ?>
-
-                                                </div>
-
-                                            </div>
-
-                                        </div>
+                                        <h1 class="sr-hero-title"><?= $h($section_name) ?></h1>
+                                        <div class="sr-card-sub"><i class="mdi mdi-map-marker"></i> <?= $h(trim($location_name . ($location_dist ? ' - ' . $location_dist : ''))) ?: '-' ?></div>
                                     </div>
                                 </div>
-                                <!--/ meta -->
-
+                                <div class="loc-stats">
+                                    <div class="loc-stat"><b><?= max($location_count, count($machines)) ?></b><span><?= __('total_machines') ?></span></div>
+                                    <div class="loc-stat"><b><?= count($contracts) ?></b><span><?= __('contracts', 'Contracts') ?></span></div>
+                                    <div class="loc-stat"><b><?= count($documents) ?></b><span><?= __('documents', 'Documents') ?></span></div>
+                                </div>
                             </div>
 
+                            <div class="sr-meta loc-meta">
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-account"></i> <?= __('owner_name') ?></div><div class="sr-meta-value"><?= $val($location_owner) ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-file-document"></i> <?= __('license_no') ?></div><div class="sr-meta-value"><?= $val($b_license_no) ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-calendar"></i> <?= __('license_exp') ?></div><div class="sr-meta-value"><?= $val($b_license_exp) ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-city"></i> <?= __('municipality') ?></div><div class="sr-meta-value"><?= $val($municipality) ?><?= $sub_municipality ? ' &middot; ' . $h($sub_municipality) : '' ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-home"></i> <?= __('building_base') ?></div><div class="sr-meta-value"><?= $val($bulding_base) ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-ruler"></i> <?= __('building_size') ?></div><div class="sr-meta-value"><?= $val($bulding_size) ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-ruler"></i> <?= __('total_building_size') ?></div><div class="sr-meta-value"><?= $t_bulding_size !== '' && $t_bulding_size !== null ? $h($t_bulding_size) . ' (M)' : $val('') ?></div></div>
+                                <div class="sr-meta-item"><div class="sr-meta-label"><i class="mdi mdi-video"></i> <?= __('camera_in') ?> / <?= __('camera_out') ?></div><div class="sr-meta-value"><?= $val($camera_in) ?> / <?= $val($camera_out) ?></div></div>
+                            </div>
 
+                            <div class="sr-hero-actions">
+                                <?php if ($is_active): ?>
+                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm upldLocDocuAttr" data-id="<?= (int)$id_loc ?>"><i class="mdi mdi-cloud-upload"></i> <?= __('upload_documents_button') ?></a>
+                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm addLocContractAttr" data-id="<?= (int)$id_loc ?>"><i class="mdi mdi-clipboard-text"></i> <?= __('add_contract_button') ?></a>
+                                <?php endif; ?>
+                                <?php if ($can_edit_location): ?>
+                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm editLocationAttr" data-id="<?= (int)$id_loc ?>" data-section_name="<?= $h($section_name) ?>" data-dept="<?= $h($dept) ?>" data-location_owner="<?= $h($location_owner) ?>" data-camera_in="<?= $h($camera_in) ?>" data-camera_out="<?= $h($camera_out) ?>" data-b_license_exp="<?= $h($b_license_exp) ?>" data-b_license_no="<?= $h($b_license_no) ?>" data-location_dist="<?= $h($location_dist) ?>" data-bulding_base="<?= $h($bulding_base) ?>" data-bulding_size="<?= $h($bulding_size) ?>" data-t_bulding_size="<?= $h($t_bulding_size) ?>" data-latitude="<?= $h($latitude) ?>" data-longitude="<?= $h($longitude) ?>" data-location_name="<?= $h($location_name) ?>" data-municipality="<?= $h($municipality) ?>" data-sub_municipality="<?= $h($sub_municipality) ?>" data-status="<?= $h($status) ?>">
+                                        <i class="mdi mdi-pencil"></i> <?= __('edit_button') ?>
+                                    </a>
+                                <?php endif; ?>
+                                <span class="sr-spacer"></span>
+                                <?php if ($has_coords): ?>
+                                    <a href="https://www.google.com/maps?q=<?= rawurlencode($latitude . ',' . $longitude) ?>" target="_blank" rel="noopener" class="sr-btn sr-btn-sm"><i class="mdi mdi-google-maps"></i> <?= __('open_in_google_maps', 'Open in Google Maps') ?></a>
+                                <?php endif; ?>
+                            </div>
                         </div>
 
                         <div class="row">
-                            <div class="col-6">
-                                <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title"><?= __('location_google_map_header') ?></h4>
-                                    <!-- <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3709.809497175475!2d39.10374531494239!3d21.59335798569526!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjHCsDM1JzM2LjEiTiAzOcKwMDYnMjEuNCJF!5e0!3m2!1sen!2ssa!4v1602506255704!5m2!1sen!2ssa" width="600" height="450" frameborder="0" style="border:0;" allowfullscreen="" aria-hidden="false" tabindex="0"></iframe> -->
-
-                                    <div class='contact-form-wrapper'>
-                                        <div class='contact-form-content right'>
-                                            <div id='map' class='map-contact-style'></div>
+                            <!-- Map -->
+                            <div class="col-xl-6">
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-map"></i> <?= __('location_google_map_header') ?></h5>
+                                        <?php if ($has_coords): ?><span class="sr-card-sub sr-mono"><?= $h($latitude) ?>, <?= $h($longitude) ?></span><?php endif; ?>
+                                    </div>
+                                    <?php if ($has_coords): ?>
+                                        <div id="map"></div>
+                                    <?php else: ?>
+                                        <div class="loc-map-empty"><i class="mdi mdi-map-marker-off"></i><?= __('no_coordinates', 'No latitude / longitude saved for this location.') ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <!-- Photos -->
+                            <div class="col-xl-6">
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-image-multiple"></i> <?= __('photos', 'Photos') ?></h5>
+                                        <span class="sr-card-sub"><?= __('click_photo_to_change', 'Click a photo to change it') ?></span>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <div class="loc-photos">
+                                            <a href="javascript:void(0);" class="loc-photo upload_img" data-id="<?= (int)$id_loc ?>" data-img="<?= $h($in_img) ?>" data-section="<?= $h($section_name) ?>" data-postion="in">
+                                                <img src="<?= $h($in_img) ?>" alt="<?= __('no_uploaded_image_inside') ?>">
+                                                <span class="cap"><?= __('inside_image_header') ?> <i class="mdi mdi-camera"></i></span>
+                                            </a>
+                                            <a href="javascript:void(0);" class="loc-photo upload_img" data-id="<?= (int)$id_loc ?>" data-img="<?= $h($out_img) ?>" data-section="<?= $h($section_name) ?>" data-postion="out">
+                                                <img src="<?= $h($out_img) ?>" alt="<?= __('no_uploaded_image_inside') ?>">
+                                                <span class="cap"><?= __('outside_image_header') ?> <i class="mdi mdi-camera"></i></span>
+                                            </a>
                                         </div>
                                     </div>
-
-                                    <!-- <iframe src="https://www.google.com/maps?q=21.593358, 39.105934"></iframe> -->
-                                </div>
-                            </div>
-                            <div class="col-3">
-                                <div class="card-box table-responsive" style="height: 470px !important;">
-                                    <h4 class="m-t-0 header-title"><?= __('inside_image_header') ?></h4>
-                                    <a href="javascript:void(0);" class="image-popup upload_img" data-id="<?= $id_loc ?>" data-img="<?= $in_img ?>" data-section="<?= $section_name ?>" data-postion="in">
-                                        <div class="portfolio-masonry-box">
-                                            <div class="portfolio-masonry-img">
-                                                <img src="<?= $in_img; ?>" class="thumb-img img-fluid" alt="<?= __('no_uploaded_image_inside') ?>">
-                                            </div>
-                                            <div class="portfolio-masonry-detail">
-                                                <h4 class="font-18"><?= __('inside_image_of') ?> <?= $section_name ?></h4>
-                                            </div>
-                                        </div>
-                                    </a>
-                                </div>
-                            </div>
-                            <div class="col-3">
-                                <div class="card-box table-responsive" style="height: 470px !important;">
-                                    <h4 class="m-t-0 header-title"><?= __('outside_image_header') ?></h4>
-                                    <a href="javascript:void(0);" class="image-popup upload_img" data-id="<?= $id_loc ?>" data-img="<?= $out_img ?>" data-section="<?= $section_name ?>" data-postion="out">
-                                        <div class="portfolio-masonry-box">
-                                            <div class="portfolio-masonry-img">
-                                                <img src="<?= $out_img; ?>" class="thumb-img img-fluid" alt="<?= __('no_uploaded_image_inside') ?>">
-                                            </div>
-                                            <div class="portfolio-masonry-detail">
-                                                <h4 class="font-18"><?= __('outside_image_of') ?> <?= $section_name ?></h4>
-                                            </div>
-                                        </div>
-                                    </a>
                                 </div>
                             </div>
                         </div>
 
-
-
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box">
-                                    <h4 class="header-title m-b-30"><?= __('documents_for_location') ?> <?= $section_name ?></h4>
-                                    <div class="row">
-                                        <?php
-                                        $queryempdocu = mysqli_query($conDB, "SELECT * FROM `location_docu` WHERE `location_id`='" . $id_loc . "' ORDER BY `id` DESC ");
-                                        while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
-                                            $id_empdoc_get = $recempdoc["id"];
-                                            $file_name_get = $recempdoc["file_name"];
-                                            $docu_ext_get = $recempdoc["docu_ext"];
-                                            $doc_date_reg_get = $recempdoc["date_reg"];
-
-                                            $times_reg = strtotime("$doc_date_reg_get");
-                                            $doc_date_reg_get = date('d, M Y h:ia', $times_reg);
-
-                                            $ext = ($docu_ext_get == "jpg" ? "jpg" : ($docu_ext_get == "jpeg" ? "jpg" : ($docu_ext_get == "png" ? "png" : ($docu_ext_get == "pdf" ? "pdf" : ""))));
-
+                        <!-- Documents -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-paperclip"></i> <?= __('documents_for_location') ?> <?= $h($section_name) ?> <span class="sr-count"><?= count($documents) ?></span></h5>
+                                <?php if ($is_active): ?>
+                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-ghost upldLocDocuAttr" data-id="<?= (int)$id_loc ?>"><i class="mdi mdi-cloud-upload"></i> <?= __('upload_documents_button') ?></a>
+                                <?php endif; ?>
+                            </div>
+                            <div class="sr-card-body">
+                                <?php if (empty($documents)): ?>
+                                    <div class="sr-empty-files"><i class="mdi mdi-file"></i> <?= __('no_data_available_in_table') ?></div>
+                                <?php else: ?>
+                                    <div class="sr-files">
+                                        <?php foreach ($documents as $doc):
+                                            $ext = strtolower((string)$doc["docu_ext"]);
+                                            $icon = in_array($ext, ['jpg', 'jpeg']) ? 'jpg' : ($ext === 'png' ? 'png' : ($ext === 'pdf' ? 'pdf' : 'blank'));
+                                            $is_image = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp']);
+                                            $file_url = './assets/location_content/' . $doc["file_name"];
                                         ?>
-                                            <div class="col-lg-3 col-xl-2">
-                                                <div class="file-man-box">
-                                                    <?php if ($user_type == "administrator" or $user_type == "hr") { ?>
-                                                        <a href="javascript:void(0);" data-id="<?= $id_empdoc_get ?>" data-tbl="location_docu" data-file="1" data-column='file_name' class="file-close deleteAjax"><i class="mdi mdi-close-circle"></i></a>
-                                                    <?php } ?>
-                                                    <div class="file-img-box" onclick="javascript:displayPopup('./assets/location_content/<?= $file_name_get ?>')" style="cursor: pointer;">
-                                                        <img src="assets/images/file_icons/<?= $ext ?>.svg" alt="icon">
-                                                    </div>
-                                                    <div class="file-man-title">
-                                                        <h5 class="mb-0 text-overflow"><?= $file_name_get ?></h5>
-                                                        <p class="mb-0"><small><?= $doc_date_reg_get ?></small></p>
-                                                    </div>
-
-                                                    <!-- <div id="articleContent"></div> -->
+                                            <div class="sr-file">
+                                                <?php if ($can_delete_children): ?>
+                                                    <a href="javascript:void(0);" class="sr-file-del deleteAjax" title="<?= __('delete_link') ?>" data-id="<?= (int)$doc["id"] ?>" data-tbl="location_docu" data-file="1" data-column="file_name"><i class="mdi mdi-close"></i></a>
+                                                <?php endif; ?>
+                                                <div class="sr-file-thumb" role="button" tabindex="0" onclick="displayPopup(<?= $h(json_encode($file_url)) ?>)">
+                                                    <?php if ($is_image): ?>
+                                                        <img src="<?= $h($file_url) ?>" alt="" loading="lazy">
+                                                    <?php else: ?>
+                                                        <img class="sr-file-icon" src="assets/images/file_icons/<?= $icon ?>.svg" alt="<?= $h($ext) ?>">
+                                                    <?php endif; ?>
                                                 </div>
-
-
+                                                <div class="sr-file-foot">
+                                                    <div style="min-width: 0;">
+                                                        <div class="sr-file-name" title="<?= $h($doc["file_name"]) ?>"><?= $h($doc["file_name"]) ?></div>
+                                                        <div class="sr-file-date"><?= $doc["date_reg"] ? date('d M Y, h:ia', strtotime($doc["date_reg"])) : '' ?></div>
+                                                    </div>
+                                                    <a href="./downloadFile.php?file=<?= urlencode($file_url) ?>" class="sr-file-dl" title="<?= __('download', 'Download') ?>"><i class="mdi mdi-download"></i></a>
+                                                </div>
                                             </div>
-                                        <?php } ?>
-
+                                        <?php endforeach; ?>
                                     </div>
-
-                                </div>
+                                <?php endif; ?>
                             </div>
                         </div>
 
-
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title"><?= $section_name ?> <?= __('contract_detail_header') ?></h4>
-                                    <table id="location_countrt" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                        <thead>
+                        <!-- Contracts -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-clipboard-text"></i> <?= $h($section_name) ?> <?= __('contract_detail_header') ?> <span class="sr-count"><?= count($contracts) ?></span></h5>
+                                <div class="d-flex align-items-center" style="gap: 8px;">
+                                    <div id="contractButtons" class="sr-toolbar" style="padding: 0; border: 0;"></div>
+                                    <?php if ($is_active): ?>
+                                        <a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-ghost addLocContractAttr" data-id="<?= (int)$id_loc ?>"><i class="mdi mdi-plus"></i> <?= __('add_contract_button') ?></a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="location_countrt" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('sr_header') ?></th>
+                                            <th><?= __('owner_name_header') ?></th>
+                                            <th><?= __('contact_header') ?></th>
+                                            <th><?= __('email_header') ?></th>
+                                            <th><?= __('contract_no_header') ?></th>
+                                            <th><?= __('start_date_header') ?></th>
+                                            <th><?= __('end_date_header') ?></th>
+                                            <th class="text-right"><?= __('rent_header') ?></th>
+                                            <th class="text-right"><?= __('action_header') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php $x = 1; foreach ($contracts as $c): ?>
                                             <tr>
-                                                <th><?= __('sr_header') ?></th>
-                                                <th><?= __('owner_name_header') ?></th>
-                                                <th><?= __('contact_header') ?></th>
-                                                <th><?= __('email_header') ?></th>
-                                                <th><?= __('contract_no_header') ?></th>
-                                                <th><?= __('start_date_header') ?></th>
-                                                <th><?= __('end_date_header') ?></th>
-                                                <th><?= __('rent_header') ?></th>
-                                                <th width="20"><?= __('action_header') ?></th>
+                                                <td><span class="sr-line-no"><?= $x++ ?></span></td>
+                                                <td><span class="sr-person-name"><?= $h($c["owner_name"]) ?></span></td>
+                                                <td><?= $h($c["owner_number"]) ?></td>
+                                                <td><?= $h($c["owner_email"]) ?></td>
+                                                <td><span class="sr-chip sr-mono"><?= $h($c["contract_no"]) ?></span></td>
+                                                <td><?= $h($c["start_cont_date"]) ?></td>
+                                                <td><?= $h($c["end_cont_date"]) ?></td>
+                                                <td class="text-right"><span class="sr-money"><?= is_numeric($c["rent"]) ? number_format((float)$c["rent"], 2) : $h($c["rent"]) ?></span></td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <a href="./location_profile.php?location_id=<?= (int)$id_loc ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-eye-outline"></i> <?= __('open_link') ?></a>
+                                                        <?php if ($can_delete_children): ?>
+                                                            <a href="javascript:void(0);" class="sr-more-btn deleteAjax" title="<?= __('delete_link') ?>" data-id="<?= (int)$c["id"] ?>" data-tbl="location_contract" data-file="0"><i class="mdi mdi-delete text-danger"></i></a>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php
-
-                                            // SELECT *, SUM(`qty`*`price`) / 100 * 15 + SUM(`qty`*`price`) AS total FROM machine_inv WHERE `location`='JM-01' Group By `location`
-
-                                            $x = 1;
-
-                                            $query_loc_cont = mysqli_query($conDB, "SELECT * FROM `location_contract` WHERE `location_id`='" . $id_loc . "' ");
-                                            while ($rec = mysqli_fetch_array($query_loc_cont)) {
-                                                $id = $rec["id"];
-                                                $owner_name = $rec["owner_name"];
-                                                $owner_number = $rec["owner_number"];
-                                                $owner_email = $rec["owner_email"];
-                                                $contract_no = $rec["contract_no"];
-                                                $start_cont_date = $rec["start_cont_date"];
-                                                $end_cont_date = $rec["end_cont_date"];
-                                                $rent = $rec["rent"];
-                                                $datereg = $rec["date_reg"];
-                                                //  $times_reg = strtotime("$date_emp");
-                                                //  $datevac = date('d, M Y', $times_reg);
-                                                $timestamp_reg = strtotime("$datereg");
-                                                $date_reg = date('d, M Y', $timestamp_reg);
-
-                                            ?>
-                                                <tr>
-                                                    <th><?= $x++; ?></th>
-                                                    <th><?= $owner_name; ?></th>
-                                                    <th><?= $owner_number; ?></th>
-                                                    <th><?= $owner_email; ?></th>
-                                                    <th><?= $contract_no; ?></th>
-                                                    <th><?= $start_cont_date; ?></th>
-                                                    <th><?= $end_cont_date; ?></th>
-                                                    <th><?= $rent; ?></th>
-                                                    <th>
-                                                        <div class='btn-group dropdown'>
-                                                            <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                                                            <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                <a href='./location_profile.php?location_id=<?= $id_loc ?>' target="blank" class='dropdown-item text-dark'><i class='fa fa-eye mr-2 font-18 vertical-middle'></i><?= __('open_link') ?></a>
-                                                                <?php if ($user_type == $access1 or $user_type == $access2) { ?>
-                                                                    <a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' data-id='<?= $rec["id"] ?>' data-tbl='location_contract' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('delete_link') ?></a>
-                                                                <?php } ?>
-                                                            </div>
-                                                        </div>
-                                                    </th>
-                                                </tr>
-                                            <?php } ?>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title"><?= $section_name ?> <?= __('machines_detail_header') ?></h4>
-                                    <table id="mac_trans" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                        <thead>
-                                            <tr>
-                                                <th><?= __('sr_header') ?></th>
-                                                <th><?= __('machine_name_header') ?></th>
-                                                <th><?= __('m_id_header') ?></th>
-                                                <th><?= __('serial_header') ?></th>
-                                                <th><?= __('model_header') ?></th>
-                                                <th><?= __('issue_date_header') ?></th>
-                                                <th><?= __('remarks_header') ?></th>
-                                                <th width="20"><?= __('action_header') ?></th>
+                        <!-- Machines -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-cellphone-link"></i> <?= $h($section_name) ?> <?= __('machines_detail_header') ?> <span class="sr-count"><?= count($machines) ?></span></h5>
+                                <div id="machineButtons" class="sr-toolbar" style="padding: 0; border: 0;"></div>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="mac_trans" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('sr_header') ?></th>
+                                            <th><?= __('machine_name_header') ?></th>
+                                            <th><?= __('m_id_header') ?></th>
+                                            <th><?= __('serial_header') ?></th>
+                                            <th><?= __('model_header') ?></th>
+                                            <th><?= __('issue_date_header') ?></th>
+                                            <th><?= __('remarks_header') ?></th>
+                                            <th class="text-right"><?= __('action_header') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php $x = 1; foreach ($machines as $m): ?>
+                                            <tr data-href="./view_machine.php?id=<?= (int)$m["id"] ?>">
+                                                <td><span class="sr-line-no"><?= $x++ ?></span></td>
+                                                <td><span class="sr-person-name"><?= $h($m["name_mach"]) ?></span></td>
+                                                <td><span class="sr-chip sr-mono"><?= $h($m["m_id"]) ?></span></td>
+                                                <td class="sr-mono"><?= $h($m["serial"]) ?></td>
+                                                <td><?= $h($m["maker_name"]) ?></td>
+                                                <td><?= $h($m["made_year"]) ?></td>
+                                                <td><?= $h($m["remarks"]) ?></td>
+                                                <td class="text-right"><a href="./view_machine.php?id=<?= (int)$m["id"] ?>" class="sr-open-btn"><i class="mdi mdi-eye-outline"></i> <?= __('open_link') ?></a></td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php
-
-                                            // SELECT *, SUM(`qty`*`price`) / 100 * 15 + SUM(`qty`*`price`) AS total FROM machine_inv WHERE `location`='JM-01' Group By `location`
-
-                                            $x = 1;
-
-                                            $query_mactrn = mysqli_query($conDB, "SELECT * FROM `machines` WHERE `location`='" . $section_name . "' ");
-                                            while ($rec = mysqli_fetch_array($query_mactrn)) {
-                                                $id = $rec["id"];
-                                                $name_mach = $rec["name_mach"];
-                                                $m_id = $rec["m_id"];
-                                                $maker_name = $rec["maker_name"];
-                                                $location = $rec["location"];
-                                                $serial = $rec["serial"];
-                                                $remarks = $rec["remarks"];
-                                                $datereg = $rec["date_reg"];
-                                                $made_year = $rec["made_year"];
-                                                //  $times_reg = strtotime("$date_emp");
-                                                //  $datevac = date('d, M Y', $times_reg);
-                                                $timestamp_reg = strtotime("$datereg");
-                                                $date_reg = date('d, M Y', $timestamp_reg);
-
-                                            ?>
-                                                <tr>
-                                                    <th><?= $x++; ?></th>
-                                                    <th><?= $name_mach; ?></th>
-                                                    <th><?= $m_id; ?></th>
-                                                    <th><?= $serial; ?></th>
-                                                    <th><?= $maker_name; ?></th>
-                                                    <th><?= $made_year; ?></th>
-                                                    <th><?= $remarks; ?></th>
-                                                    <th>
-                                                        <div class="btn-group" role="group" aria-label="Edit Button">
-                                                            <a href="./view_machine.php?id=<?= $id ?>" class="btn btn-sm btn-dark waves-effect">
-                                                                <i class="mdi mdi-eye-outline"></i>
-                                                            </a>
-                                                        </div>
-                                                    </th>
-                                                </tr>
-                                            <?php } ?>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-
-                    </div> <!-- container -->
-
-                </div> <!-- content -->
+                    </div>
+                </div>
 
                 <footer class="footer">
                     <?= $site_footer ?>
                 </footer>
-
             </div>
-
-            <!-- ============================================================== -->
-            <!-- End Right content here -->
-            <!-- ============================================================== -->
         </div>
-        <!-- END wrapper -->
-
-        <?php /* ?>
-<div class="modal fade upload_documents" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" style="display: none;">
-<!--    <div class="modal-dialog modal-lg" style="max-width: 1450px !important">-->
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header" style="background-color: #2D7BF4 !important; color: #fff !important;">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                <h4 class="modal-title" id="myLargeModalLabel">
-                    <i class="mdi mdi-image-filter-tilt-shift "></i> 
-                    <?=__('upload_documents_for')?> <?=$section_name ?>
-                </h4>
-            </div>
-            <div class="modal-body">
-<!---->
-                
-        <div class="row">
-
-            <div class="col-12">
-            <div class="card-box">
-                <h4 class="header-title m-t-0"><?=__('dropzone_file_upload')?></h4>
-                <p class="text-muted font-14 m-b-10">
-                    Your awesome text goes here.
-                </p>
-                <form action="#" class="dropzone" id="dropzone">
-                    <div class="fallback">
-                        <input name="file" type="file" multiple />
-                    </div>
-
-                </form>
-            </div>
-            </div>
-            
-        </div>
-                
-<!---->
-            </div>
-            <div class="modal-footer">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-danger waves-effect" data-dismiss="modal"><?=__('close')?></button>
-                    <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> <?=__('upload_button')?></button>
-                </div>
-            </div>
-        </div><!-- /.modal-content -->
-    </div><!-- /.modal-dialog -->
-</div><!-- /.modal -->
-<?php */ ?>
 
         <!-- jQuery  -->
         <script src="assets/js/jquery.min.js"></script>
@@ -552,31 +404,15 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
         <script src="assets/js/metisMenu.min.js"></script>
         <script src="assets/js/waves.js"></script>
         <script src="assets/js/jquery.slimscroll.js"></script>
-
-        <!-- Modal-Effect -->
         <script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
-        <script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
         <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
-
-
         <script src="./plugins/moment/moment.js"></script>
-        <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
-        <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
-        <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
         <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-
-        <!-- App js -->
-        <script src="assets/pages/jquery.form-pickers.init.js"></script>
-        <script src="assets/pages/jquery.form-hijri-pickers.init.js"></script>
-        <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"></script>
         <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"></script>
-        <script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"></script>
 
         <!-- Required datatable js -->
         <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
         <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-        <!-- Buttons examples -->
         <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
         <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
         <script src="./plugins/datatables/jszip.min.js"></script>
@@ -584,349 +420,68 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
         <script src="./plugins/datatables/vfs_fonts.js"></script>
         <script src="./plugins/datatables/buttons.html5.min.js"></script>
         <script src="./plugins/datatables/buttons.print.min.js"></script>
-
-        <!-- Key Tables -->
-        <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
-
-        <!-- Responsive examples -->
         <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
         <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-
-        <!-- Selection table -->
-        <script src="./plugins/datatables/dataTables.select.min.js"></script>
-
-        <!-- Bootstrap fileupload js -->
-        <!-- <script src="./plugins/bootstrap-fileupload/bootstrap-fileupload.js"></script> -->
 
         <!-- Dropzone js -->
         <script src="./plugins/dropzone/dropzone.js"></script>
 
-
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <script src="assets/js/location_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/location_forms.js') ?>"></script>
 
-
-        <!-- <script src='https://maps.googleapis.com/maps/api/js?key=AIzaSyAAmpMDQXVtsHabQM2U1NqP1rhls03ZxMc&amp;sensor=false'></script>
-        <script src='assets/js/contact.js'></script> -->
-
-
-        <script>
-            //Disabling autoDiscover
-            //Dropzone.autoDiscover = false;
-
-            /*$(function() {
-                //Dropzone class
-                var myDropzone = new Dropzone(".dropzone", {
-                    url: "upload_documents.php?location_id=<?= $id_loc ?>",
-                    paramName: "file",
-                    maxFilesize: 5,
-                    maxFiles: 10,
-                    acceptedFiles: "image/*,application/pdf",
-                    autoProcessQueue: false
-                });
-                
-                $('#startUpload').click(function(){           
-                    myDropzone.processQueue();
-                });
-            });*/
-        </script>
-
+        <?php if ($has_coords): ?>
         <script>
             function initMap() {
-                var options = {
-                    zoom: 16,
-                    center: {
-                        lat: <?= $latitude; ?>,
-                        lng: <?= $longitude; ?>
-                    } //Coordinates of New York 
-                }
-                var map = new google.maps.Map(document.getElementById('map'), options);
-                var marker = new google.maps.Marker({
-                    position: {
-                        lat: <?= $latitude; ?>,
-                        lng: <?= $longitude; ?>
-                    }, // Brooklyn Coordinates
-                    map: map, //Map that we need to add
-                    icon: 'assets/images/map-maker/map-maker.png',
-                    draggarble: false // If set to true you can drag the marker
-                });
-                var information = new google.maps.InfoWindow({
-                    content: '<h5><?= $section_name; ?></h5>'
-                });
-                marker.addListener('click', function() {
-                    information.open(map, marker);
-                });
+                var pos = { lat: <?= (float)$latitude ?>, lng: <?= (float)$longitude ?> };
+                var map = new google.maps.Map(document.getElementById('map'), { zoom: 16, center: pos });
+                var marker = new google.maps.Marker({ position: pos, map: map, icon: 'assets/images/map-maker/map-maker.png' });
+                var information = new google.maps.InfoWindow({ content: $('<h5>').text(<?= json_encode((string)$section_name) ?>)[0] });
+                marker.addListener('click', function() { information.open(map, marker); });
             }
         </script>
-        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAAmpMDQXVtsHabQM2U1NqP1rhls03ZxMc&callback=initMap"></script>
-
+        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAAmpMDQXVtsHabQM2U1NqP1rhls03ZxMc&callback=initMap" async defer></script>
+        <?php endif; ?>
 
         <script type="text/javascript">
-            jQuery(function($) {
-                $('.autonumber').autoNumeric('init');
-            });
             $(document).ready(function() {
-
-                var buttonConfig = [];
-                var exportTitle = "<?= __('serial_no_label') ?>: <?= $serial ?> | <?= __('id_no_label') ?>: <?= $m_id ?>"
-                var exportTitleP = "<h4><?= __('serial_no_label') ?>: <?= $serial ?> | <?= __('id_no_label') ?>: <?= $m_id ?></h4>"
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4]
-                    },
-                    title: exportTitle,
-                    className: 'btn-success'
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4]
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger'
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4]
-                    },
-                    title: exportTitleP,
-                    className: 'btn-dark'
-                });
-                // buttonConfig.push({text: '<i class="fa fa-plus"></i> Add Machine', action: function ( e, dt, button, config ) {window.location = './add_machine.php' } ,className: 'btn-info'});
-
-                $('form').parsley();
-
-                //Buttons examples
-                var table = $('#cars_docu').DataTable({
-                    lengthChange: false,
-                    buttons: buttonConfig,
-                    order: [
-                        [5, "desc"]
-                    ],
-                    "columnDefs": [{
-                        targets: [5],
-                        visible: false,
-                        searchable: false
-                    }, ],
-
-                    "footerCallback": function(row, data, start, end, display) {
-                        var api = this.api(),
-                            data;
-
-                        // Remove the formatting to get integer data for summation
-                        var intVal = function(i) {
-                            return typeof i === 'string' ?
-                                i.replace(/[\$,]/g, '') * 1 :
-                                typeof i === 'number' ?
-                                i : 0;
-                        };
-
-                        // Total over all pages
-                        total = api
-                            .column(4)
-                            .data()
-                            .reduce(function(a, b) {
-                                return intVal(a) + intVal(b);
-                            }, 0);
-
-                        // Total over this page
-                        pageTotal = api
-                            .column(4, {
-                                page: 'current'
-                            })
-                            .data()
-                            .reduce(function(a, b) {
-                                return intVal(a) + intVal(b);
-                            }, 0);
-
-                        // Update footer
-                        $(api.column(4).footer()).html(
-                            'SAR ' + pageTotal + ''
-                            // 'SAR '+pageTotal +' ( SAR'+ total +' total)'
-                        );
-                    },
-                    language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                        paginate: {
-                            first: __('first'),
-                            last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
-                        },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                    }
-                });
-
-                table.buttons().container()
-                    .appendTo('#cars_docu_wrapper .col-md-6:eq(0)');
-
-            });
-
-
-            $(document).ready(function() {
-
-                var buttonConfig = [];
-                var exportTitle = "<?= __('location_no_label') ?>: <?= $section_name ?>"
-                var exportTitleP = "<h4><?= __('location_no_label') ?>: <?= $section_name ?></h4>"
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-success'
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger'
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitleP,
-                    className: 'btn-dark'
-                });
-
-                $('form').parsley();
-
-                //Buttons examples
-                var table = $('#mac_trans').DataTable({
-                    lengthChange: false,
-                    buttons: buttonConfig,
-                    language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                        paginate: {
-                            first: __('first'),
-                            last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
-                        },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                    }
-                });
-
-                table.buttons().container()
-                    .appendTo('#mac_trans_wrapper .col-md-6:eq(0)');
-
-            });
-
-
-            $(document).ready(function() {
-
-                var buttonConfig = [];
-                var exportTitle = "<?= __('location_no_label') ?>: <?= $section_name ?>"
-                var exportTitleP = "<h4><?= __('location_no_label') ?>: <?= $section_name ?></h4>"
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-success'
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger'
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitleP,
-                    className: 'btn-dark'
-                });
-
-                $('form').parsley();
-
-                //Buttons examples
-                var table = $('#location_countrt').DataTable({
-                    lengthChange: false,
-                    buttons: buttonConfig,
-                    language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                        paginate: {
-                            first: __('first'),
-                            last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
-                        },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                    }
-                });
-
-                table.buttons().container()
-                    .appendTo('#location_countrt_wrapper .col-md-6:eq(0)');
-
-            });
-
-            jQuery.browser = {};
-            (function() {
-                jQuery.browser.msie = false;
-                jQuery.browser.version = 0;
-                if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
-                    jQuery.browser.msie = true;
-                    jQuery.browser.version = RegExp.$1;
+                const exportTitle = <?= json_encode(__('location_no_label') . ': ' . $section_name) ?>;
+                const language = {
+                    info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                    infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                    infoFiltered: '',
+                    paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                    emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+                    zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
+                };
+                function exportButtons(columns) {
+                    return [
+                        { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: { columns: columns }, title: exportTitle },
+                        { extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', exportOptions: { columns: columns }, title: exportTitle },
+                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + <?= json_encode(__('print')) ?>, exportOptions: { columns: columns }, title: exportTitle }
+                    ];
                 }
-            })();
 
-            $(document).ready(function() {
-                $("input[name$='note']").click(function() {
-                    var value = $(this).val();
-                    if (value == 'Encashed') {
-                        $("#return_date").show();
-                        $("#note").hide();
-                        $("#return_date").removeAttr('required');
-                        $("#permit_no").removeAttr('required');
-                    } else if (value == 'Fly') {
-                        //document.getElementById("pet_id").required = true;
-                        $("#return_date").attr('required', '');
-                        $("#permit_no").attr('required', '');
-                        $("#note").show();
-                        //    $("#pet_id_box").hide();
-                    }
+                const contracts = $('#location_countrt').DataTable({
+                    dom: 'Brtip', pageLength: 10, responsive: true, ordering: false,
+                    buttons: exportButtons([0, 1, 2, 3, 4, 5, 6, 7]), language: language
                 });
-                $("#return_date").removeAttr('required');
-                //  	$("#pet_id_box").show();
-                $("#note").hide();
+                contracts.buttons().container().appendTo('#contractButtons');
+
+                const machines = $('#mac_trans').DataTable({
+                    dom: 'Brtip', pageLength: 10, responsive: true, ordering: false,
+                    buttons: exportButtons([0, 1, 2, 3, 4, 5, 6]), language: language
+                });
+                machines.buttons().container().appendTo('#machineButtons');
+
+                $('#mac_trans tbody').on('click', 'tr', function(e) {
+                    if ($(e.target).closest('a, button, .dtr-control').length) return;
+                    const href = $(this).data('href');
+                    if (href) window.location = href;
+                });
             });
         </script>
-
     </body>
-
     </html>
 <?php } ?>

@@ -536,7 +536,7 @@
                 confirmButtonColor: APP_COLORS.primary,
                 cancelButtonColor: APP_COLORS.danger_dark,
                 showLoaderOnConfirm: true,
-                allowOutsideClick: () => !Swal.isLoading(),
+                allowOutsideClick: false,
                 customClass: { popup: 'sr-addline-popup' },
                 didOpen: () => {
                     Swal.disableButtons();
@@ -577,7 +577,7 @@
                 }
             }).then((result) => {
                 if (result.isConfirmed && result.value) {
-                    Swal.fire({ title: result.value.title, text: T.nextStep, icon: 'success', timer: 1800, showConfirmButton: false })
+                    Swal.fire({ allowOutsideClick: false, title: result.value.title, text: T.nextStep, icon: 'success', timer: 1800, showConfirmButton: false })
                         .then(() => { window.location = 'open_request.php?id=' + encodeURIComponent(result.value.inv_no); });
                 }
             });

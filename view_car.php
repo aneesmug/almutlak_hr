@@ -1,152 +1,101 @@
 <?php
+// Car detail. Same look as the Smart Request pages (assets/css/smart_request.css).
+// Forms: assets/js/car_forms.js (.editCarAttr, .addMaintAttr, .addDrvrAtter, .addDocuAtter);
+// return car (.addRtrnDrvrAtter) and delete (.deleteAjax) stay in assets/js/jquery.app.js.
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/special_access_helper.php';
+$can_edit_car = !empty($is_system_admin) || user_has_special_access($conDB, $empid ?? '', 'cars_edit', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
 	include("./includes/avatar_select.php");
 
+	$car_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 	$getquery = mysqli_query($conDB, "
 SELECT `cars`.*, `car_maker`.`maker` AS `maker_name`, `car_maker`.`logo_pos`, `car_model`.`model`, `car_model`.`id` AS `mdid`, `car_maker`.`id` AS `mkid`
 FROM `cars`
 LEFT JOIN `car_maker` ON `car_maker`.`id` = `cars`.`maker_name`
-LEFT JOIN `car_model` ON `car_model`.`id` = `cars`.`model` 
-WHERE `cars`.`id` = '" . $_GET['id'] . "'
+LEFT JOIN `car_model` ON `car_model`.`id` = `cars`.`model`
+WHERE `cars`.`id` = " . $car_id);
 
-");
-
-	if (mysqli_num_rows($getquery) !== 0) {
-		while ($rec = mysqli_fetch_assoc($getquery)) {
-			$id_car = $rec["id"];
-			$maker_name = $rec["maker_name"];
-			$model = $rec["model"];
-			$made_year = $rec["made_year"];
-			$plate_no = $rec["plate_no"];	
-			$type = $rec["type"];
-			$status = $rec["status"];
-			$remarks = $rec["remarks"];
-			$logo_pos = $rec["logo_pos"];
-			$datereg = $rec["created_at"];
-
-			$mdid = $rec["mdid"];
-			$mkid = $rec["mkid"];
-
-			$timestamp_reg = strtotime("$datereg");
-			$date_reg = date('d, M Y', $timestamp_reg);
-		}
-	} else {
-		//when the id not equals id show database
+	if (!$getquery || mysqli_num_rows($getquery) === 0) {
 		header("Location: ./all_cars.php");
+		exit;
 	}
+	$car = mysqli_fetch_assoc($getquery);
+	$id_car = (int)$car["id"];
+	$maker_name = (string)$car["maker_name"];
+	$model = (string)$car["model"];
+	$made_year = $car["made_year"];
+	$plate_no = (string)$car["plate_no"];
+	$type = (string)$car["type"];
+	$status = $car["status"];
+	$remarks = (string)$car["remarks"];
+	$logo_pos = $car["logo_pos"];
+	$mdid = $car["mdid"];
+	$mkid = $car["mkid"];
+	$date_reg = $car["created_at"] ? date('d M Y', strtotime($car["created_at"])) : '';
+	$is_active = ($status == 1);
+	$plate = explode('-', $plate_no, 2);
 
-	/********************Start***********************/
-	$today = strtotime(date('M d Y', strtotime(date('M d Y', strtotime(date("c"))))));
-	/********************Start Licence***********************/
-	$exp_date_lic = null;
-	$exp_lic = '';
-	$licqry = mysqli_query($conDB, "SELECT * FROM `cars_docu` WHERE `doc_type` = 'Licence' AND `car_id`='" . $_GET['id'] . "' ORDER BY `id` DESC LIMIT 1 ");
-	while ($rec_lic = mysqli_fetch_assoc($licqry)) {
-		$exp_date_lic = $rec_lic["exp_date"];
-		$exp_lic = date('d, M Y', strtotime($exp_date_lic));
-	}
-	$licdate = strtotime(date('M d Y', strtotime(date('M d Y', strtotime($exp_date_lic ?? 'now')))));
-	$secs_lic = $licdate - $today; // == <seconds between the two times>
-	$licdays = $secs_lic / 86400;
-	/********************End Licence***********************/
-	/********************Start Insurance***********************/
-	$exp_date_inc = null;
-	$exp_inc = '';
-	$incqry = mysqli_query($conDB, "SELECT * FROM `cars_docu` WHERE `doc_type` = 'Insurance' AND `car_id`='" . $_GET['id'] . "' ORDER BY `id` DESC LIMIT 1 ");
-	while ($rec_inc = mysqli_fetch_assoc($incqry)) {
-		$exp_date_inc = $rec_inc["exp_date"];
-		$exp_inc = date('d, M Y', strtotime($exp_date_inc));
-	}
-	$incdate = strtotime(date('M d Y', strtotime(date('M d Y', strtotime($exp_date_inc ?? 'now')))));
-	$secs_inc = $incdate - $today; // == <seconds between the two times>
-	$incdays = $secs_inc / 86400;
-	/********************End Insurance***********************/
-	/********************Start MVPI***********************/
-	$exp_date_mvpi = null;
-	$exp_mvpi = '';
-	$mvpiqry = mysqli_query($conDB, "SELECT * FROM `cars_docu` WHERE `doc_type` = 'MVPI' AND `car_id`='" . $_GET['id'] . "' ORDER BY `id` DESC LIMIT 1 ");
-	while ($rec_mvpi = mysqli_fetch_assoc($mvpiqry)) {
-		$exp_date_mvpi = $rec_mvpi["exp_date"];
-		$exp_mvpi = date('d, M Y', strtotime($exp_date_mvpi));
-	}
-	$mvpidate = strtotime(date('M d Y', strtotime(date('M d Y', strtotime($exp_date_mvpi ?? 'now')))));
-	$secs_mvpi = $mvpidate - $today; // == <seconds between the two times>
-	$mvpidays = $secs_mvpi / 86400;
-	/********************End MVPI***********************/
-	/********************End***********************/
-	$sql_yes_drv = mysqli_query($conDB, "SELECT COUNT(*) `car_id` FROM `cars_drv` WHERE `car_id`='" . $_GET['id'] . "' && `status`='1' ");
-	$cont_drv = mysqli_fetch_array($sql_yes_drv)[0];
-	// Initialize variables to prevent undefined warnings
-	$car_drv_id = '';
-	$car_drv_car_id = '';
-	$car_undrv_name = '';
-	$car_udrv_id = '';
-	$car_rcv_date = '';
-	$sql_drv = mysqli_query($conDB, "SELECT `cars_drv`.*, `employees`.`name` FROM `cars_drv` LEFT JOIN `employees` ON `cars_drv`.`car_user` = `employees`.`emp_id` WHERE `cars_drv`.`car_id`='" . $_GET['id'] . "' && `cars_drv`.`status`='1' ");
-	while ($rec = mysqli_fetch_assoc($sql_drv)) {
-		$car_drv_id = $rec["id"];
-		$car_drv_car_id = $rec["car_id"];
-		$car_undrv_name = $rec["name"];
-		$car_udrv_id = $rec["car_user"];
-		//		$car_rcv_date = $rec["rcv_date"];
-		$car_rcv_date = date('d, M Y', strtotime($rec["rcv_date"]));
-	}
-
-	// Build "More Actions" menu HTML (same design pattern as view_employee.php)
-	$carActionsHtml = '';
-	if ($status == 1) {
-		if (45 > $licdays or 45 > $incdays or 45 > $mvpidays) {	
-			$carActionsHtml .= '<div class="menu-item text-primary" role="button" data-target=".addDocuAtter"><i class="mdi mdi-library-plus"></i><span>' . __('add_docs_button') . '</span></div>';
+	// Documents (newest first) + latest of each type
+	$today = strtotime(date('Y-m-d'));
+	$documents = [];
+	$latest_doc = ['Licence' => null, 'Insurance' => null, 'MVPI' => null];
+	$q = mysqli_query($conDB, "SELECT * FROM `cars_docu` WHERE `car_id`='" . $id_car . "' ORDER BY `id` DESC");
+	while ($q && ($r = mysqli_fetch_assoc($q))) {
+		$r['days'] = $r['exp_date'] ? (int)floor((strtotime($r['exp_date']) - $today) / 86400) : null;
+		$documents[] = $r;
+		if (array_key_exists($r['doc_type'], $latest_doc) && $latest_doc[$r['doc_type']] === null) {
+			$latest_doc[$r['doc_type']] = $r;
 		}
-		if ($cont_drv < 1) {
-			$carActionsHtml .= '<div class="menu-item text-success" role="button" data-target=".addDrvrAtter"><i class="mdi mdi-human-greeting"></i><span>' . __('add_driver_button') . '</span></div>';
-		} else {
-			$carActionsHtml .= '<div class="menu-item text-danger" role="button" data-target=".addRtrnDrvrAtter"><i class="mdi mdi-car-convertable"></i><span>' . __('return_car_button') . '</span></div>';
-		}
-		$carActionsHtml .= '<div class="menu-item text-dark" role="button" data-target=".addMaintAttr"><i class="fa fa-solid fa-screwdriver-wrench"></i><span>' . __('add_maintenance_button') . '</span></div>';
 	}
-	$carActionsHtml .= '<div class="menu-item text-secondary" role="button" data-target=".editCarAttr"><i class="fa fa-edit"></i><span>' . __('edit_button') . '</span></div>';
+	// Days left on the latest document of each type (missing = 0, same as before)
+	$doc_days = [];
+	foreach ($latest_doc as $k => $d) { $doc_days[$k] = $d ? $d['days'] : 0; }
+	$tone_for = function ($days) { return $days < 7 ? 'red' : ($days <= 30 ? 'amber' : 'green'); };
 
+	// Drivers
+	$drivers = [];
+	$current_driver = null;
+	$q = mysqli_query($conDB, "SELECT `cars_drv`.*, `employees`.`name` FROM `cars_drv` LEFT JOIN `employees` ON `cars_drv`.`car_user` = `employees`.`emp_id` WHERE `cars_drv`.`car_id`='" . $id_car . "' ORDER BY `cars_drv`.`id` DESC");
+	while ($q && ($r = mysqli_fetch_assoc($q))) {
+		$drivers[] = $r;
+		if ($r['status'] == 1 && $current_driver === null) { $current_driver = $r; }
+	}
+
+	// Maintenance
+	$maintenance = [];
+	$q = mysqli_query($conDB, "SELECT `cars_maint`.*, `employees`.`name` FROM `cars_maint` LEFT JOIN `employees` ON `cars_maint`.`car_user`=`employees`.`emp_id` WHERE `car_id`='" . $id_car . "' ORDER BY `cars_maint`.`id` DESC");
+	while ($q && ($r = mysqli_fetch_assoc($q))) { $maintenance[] = $r; }
+	$last_meter = $maintenance ? (int)$maintenance[0]['meter'] : null;
+
+	$can_delete_children = ($user_type == $access1 or $user_type == $access2);
+	$show_add_docs = $is_active && (45 > $doc_days['Licence'] or 45 > $doc_days['Insurance'] or 45 > $doc_days['MVPI']);
+	$h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES); };
+	$fmt_date = function ($v) { return $v ? date('d M Y', strtotime($v)) : ''; };
+	$doc_label = ['Licence' => __('licence_label', 'Licence'), 'Insurance' => __('insurance_label', 'Insurance'), 'MVPI' => __('mvpi_label', 'MVPI')];
+	$doc_icon = ['Licence' => 'mdi-account-card-details', 'Insurance' => 'mdi-security', 'MVPI' => 'mdi-clipboard-check'];
 ?>
 	<!doctype html>
 	<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
 	<head>
 		<meta charset="utf-8" />
-		<title><?= $site_title ?> - <?= __('car_view_title') ?></title>
+		<title><?= $site_title ?> - <?= $h(trim($maker_name . ' ' . $model) . ' ' . $plate_no) ?></title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
 		<meta content="Anees Afzal" name="author" />
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-		<!-- App favicon -->
 		<link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
-		<!-- Modal -->
-		<link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-
 		<!-- Plugins css -->
-		<link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
 		<link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
-		<link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
 		<link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
 		<!-- DataTables -->
 		<link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 		<link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-		<!-- Responsive datatable examples -->
 		<link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-		<!-- Multi Item Selection examples -->
-		<link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-		<link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
 
 		<!-- App css -->
 		<link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -154,324 +103,22 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 		<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+		<link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 		<script src="assets/js/modernizr.min.js"></script>
-
-		<style type="text/css">
-			.make-logo {
-				background-image: url("./assets/images/make_desktop_logos.png");
-				display: block;
-				background-repeat: no-repeat;
-				height: 60px;
-				margin: 0 auto;
-				width: 130px !important;
-				background-position: 0px 60px;
+		<style>
+			.car-hero-plate { flex: 0 0 auto; transform: scale(.82); transform-origin: top left; margin: 0 -40px -22px 0; }
+			[dir="rtl"] .car-hero-plate { transform-origin: top right; margin: 0 0 -22px -40px; }
+			.car-hero-plate .plate-text-top, .car-hero-plate .plate-text-bottom { color: #000; }
+			.car-hero-plate div.plateTb { border-color: var(--sr-border-strong) !important; box-shadow: var(--sr-shadow); }
+			.car-brand {
+				flex: 0 0 auto; width: 150px; padding: 10px; border-radius: 12px; text-align: center;
+				border: 1px solid var(--sr-border); background: #fff; color: #334155; font-size: 12px; font-weight: 600;
 			}
-
-			.brand {
-				width: 152px;
-				height: 100%;
-				border-radius: 4px;
-				background: #fff;
-				border: 0.5px solid #f0f0f0;
-				box-shadow: 0px 3px 4px rgba(0, 0, 0, 0.08);
-				padding: 16px;
-				text-align: center;
-				line-height: normal;
-				font-size: 14px;
+			.car-brand .make-logo {
+				display: block; width: 130px; height: 60px; margin: 0 auto 4px;
+				background: url("./assets/images/make_desktop_logos.png") no-repeat 0 60px;
 			}
-
-			/* Tilebox styling with colored left border (matches view_employee.php) */
-			.card-box.tilebox-one {
-				position: relative;
-				border-left: 4px solid #e9ecef;
-				background: #fff;
-				transition: all 0.3s ease-in-out;
-			}
-
-			.card-box.tilebox-one:hover {
-				box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-				transform: translateY(-2px);
-			}
-
-			.card-box.tilebox-one.border-left-success { border-left-color: #28a745; }
-			.card-box.tilebox-one.border-left-warning { border-left-color: #ffc107; }
-			.card-box.tilebox-one.border-left-danger { border-left-color: #dc3545; }
-
-			/* Car header layout (plate/logo, brand, info, actions) */
-			.car-header-content {
-				display: flex;
-				align-items: center;
-				flex-wrap: wrap;
-				gap: 24px;
-				position: relative;
-				z-index: 1;
-				width: 100%;
-			}
-
-			.car-header-content .header-plate-block {
-				flex-shrink: 0;
-			}
-
-			/* Saudi plate graphic renders on a white plateTb box; force dark
-			   text since .profile-header cascades color:white onto it otherwise */
-			.car-header-content .plate-text-top,
-			.car-header-content .plate-text-bottom {
-				color: #000;
-			}
-
-			.car-header-content .header-info-block {
-				flex: 1 1 200px;
-				min-width: 180px;
-			}
-
-			.car-header-content .header-actions-block {
-				flex-shrink: 0;
-				margin-left: auto;
-				display: flex;
-				flex-direction: column;
-				align-items: center;
-				gap: 10px;
-			}
-
-			@media (max-width: 767px) {
-				.car-header-content {
-					gap: 16px;
-				}
-				.car-header-content .header-actions-block {
-					margin-left: 0;
-					width: 100%;
-				}
-			}
-
-			/* Brand box sits on a white background, so force dark text
-			   regardless of .profile-header's white color cascade (Bootstrap 4
-			   has no .text-black utility, so relying on it silently did nothing) */
-			.car-header-content .header-actions-block .brand,
-			.car-header-content .header-actions-block .p4t {
-				color: #343a40;
-			}
-
-			.car-header-content .header-info-block p,
-			.car-header-content .header-info-block h4,
-			.car-header-content .header-info-block h5 {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-			}
-
-			.car-header-content .header-info-block i {
-				width: 18px;
-				text-align: center;
-				opacity: 0.9;
-			}
-
-			/* Employee Detail Tabs style (matches view_employee.php) */
-			.emp-tabs {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 4px;
-				list-style: none;
-				margin: 0;
-				padding: 6px 6px 0 6px;
-				background: #f4f6f9;
-				border: 1px solid rgba(67, 97, 238, 0.18);
-				border-bottom: none;
-				border-radius: 12px 12px 0 0;
-			}
-
-			.emp-tabs .nav-item {
-				flex: 1 1 auto;
-			}
-
-			.emp-tabs .nav-link {
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				gap: 8px;
-				white-space: nowrap;
-				padding: 10px 16px;
-				margin-bottom: 6px;
-				border-radius: 8px;
-				font-weight: 600;
-				font-size: 0.875rem;
-				color: #64748b;
-				background: transparent;
-				border: none;
-				transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
-			}
-
-			.emp-tabs .nav-link i {
-				font-size: 1rem;
-				line-height: 1;
-			}
-
-			.emp-tabs .nav-link:hover {
-				color: #1f2937;
-				background: rgba(255, 255, 255, 0.7);
-			}
-
-			.emp-tabs .nav-link.active {
-				color: #fff;
-				background: var(--primary, #4361ee);
-				box-shadow: 0 4px 10px rgba(67, 97, 238, 0.25);
-			}
-
-			@media (max-width: 768px) {
-				.emp-tabs {
-					overflow-x: auto;
-					flex-wrap: nowrap;
-					-webkit-overflow-scrolling: touch;
-				}
-
-				.emp-tabs .nav-item {
-					flex: 0 0 auto;
-				}
-			}
-
-			.tab-content {
-				margin: 0;
-				border: 1px solid rgba(67, 97, 238, 0.35);
-				border-top: none;
-				border-radius: 0 0 12px 12px;
-				background: #fff;
-				box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.08), 0 10px 28px rgba(67, 97, 238, 0.14);
-			}
-
-			.tab-content > .tab-pane {
-				padding: 20px;
-			}
-
-			/* More Actions Modal - Professional Action-Sheet Design (matches view_employee.php) */
-			.more-actions-modal .swal2-popup {
-				border-radius: 16px;
-				box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
-				overflow: hidden;
-				background: #f7f8fa;
-			}
-
-			.more-actions-modal .swal2-title {
-				font-size: 1.25rem;
-				font-weight: 700;
-				color: #1f2937;
-				padding: 1.25rem 1.5rem 1rem;
-				margin: 0;
-				text-align: left;
-				background: #fff;
-				border-bottom: 1px solid #eef0f4;
-			}
-
-			.more-actions-modal .swal2-html-container {
-				margin: 0 !important;
-				padding: 0 !important;
-				overflow: visible;
-			}
-
-			.more-actions-modal .menu-items-container {
-				display: flex;
-				flex-direction: column;
-				gap: 6px;
-				margin: 0;
-				padding: 10px 10px 14px;
-				width: 100%;
-				background: #f7f8fa;
-				max-height: 60vh;
-				overflow-y: auto;
-			}
-
-			.more-actions-modal .menu-item {
-				display: flex !important;
-				align-items: center;
-				gap: 12px;
-				padding: 10px 12px !important;
-				margin: 0 !important;
-				cursor: pointer !important;
-				transition: all 0.2s ease;
-				border: 1px solid transparent;
-				border-radius: 12px;
-				font-weight: 600;
-				font-size: 14.5px;
-				user-select: none;
-				box-sizing: border-box;
-				background-color: #fff;
-				position: relative;
-				box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-			}
-
-			.more-actions-modal .menu-item:hover {
-				transform: translateX(2px);
-				box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-				border-color: currentColor;
-			}
-
-			.more-actions-modal .menu-item:active {
-				transform: translateX(2px) scale(0.99);
-			}
-
-			.more-actions-modal .menu-item i {
-				font-size: 15px;
-				width: 34px;
-				height: 34px;
-				border-radius: 10px;
-				text-align: center;
-				flex-shrink: 0;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				background-color: rgba(108, 117, 125, 0.14);
-			}
-
-			.more-actions-modal .menu-item span {
-				font-size: 14.5px;
-				white-space: nowrap;
-				flex: 1;
-				overflow: hidden;
-				text-overflow: ellipsis;
-				color: #374151;
-			}
-
-			.more-actions-modal .menu-item::after {
-				content: '\f105';
-				font-family: 'Font Awesome 5 Free', 'FontAwesome';
-				font-weight: 900;
-				font-size: 13px;
-				color: #c7cbd1;
-				flex-shrink: 0;
-				transition: transform 0.2s ease, color 0.2s ease;
-			}
-
-			.more-actions-modal .menu-item:hover::after {
-				transform: translateX(3px);
-				color: currentColor;
-			}
-
-			.more-actions-modal .menu-item.text-primary { color: #007bff !important; }
-			.more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, 0.14); }
-
-			.more-actions-modal .menu-item.text-warning { color: #ffc107 !important; }
-			.more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, 0.16); }
-
-			.more-actions-modal .menu-item.text-success { color: #28a745 !important; }
-			.more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, 0.14); }
-
-			.more-actions-modal .menu-item.text-danger { color: #dc3545 !important; }
-			.more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
-
-			.more-actions-modal .menu-item.text-secondary { color: #6c757d !important; }
-			.more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, 0.14); }
-
-			.more-actions-modal .menu-item.text-dark { color: #343a40 !important; }
-			.more-actions-modal .menu-item.text-dark i { background-color: rgba(52, 58, 64, 0.14); }
-
-			.more-actions-modal .swal2-close {
-				font-size: 1.5rem;
-				color: #9aa1ac;
-				width: 36px;
-				height: 36px;
-			}
-
-			.more-actions-modal .swal2-close:hover {
-				color: #f46a6a;
-			}
+			.car-meter { font-variant-numeric: tabular-nums; }
 		</style>
 		<?php if ($is_rtl): ?>
 			<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -479,398 +126,304 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 		<script>
 			window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
 		</script>
-
 	</head>
 
 	<body class="enlarged" data-keep-enlarged="true">
-
-		<!-- Begin page -->
 		<div id="wrapper">
-
-			<!-- ========== Left Sidebar Start ========== -->
 			<div class="left side-menu">
-
 				<div class="slimscroll-menu" id="remove-scroll">
-
-					<!-- LOGO -->
 					<div class="topbar-left">
 						<a href="dashboard.php" class="logo">
-							<span>
-								<img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-							</span>
-							<i>
-								<img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-							</i>
+							<span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+							<i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
 						</a>
 					</div>
-
-					<!-- User box -->
-
-					<!--- Sidemenu -->
 					<?php include("./includes/main_menu.php"); ?>
-					<!-- Sidebar -->
-
 					<div class="clearfix"></div>
-
 				</div>
-				<!-- Sidebar -left -->
-
 			</div>
-			<!-- Left Sidebar End -->
-
-
-
-			<!-- ============================================================== -->
-			<!-- Start right Content here -->
-			<!-- ============================================================== -->
 
 			<div class="content-page">
-
-				<!-- Top Bar Start -->
 				<?php include("./includes/topbar.php"); ?>
-				<!-- Top Bar End -->
 
-
-				<!-- Start Page content -->
-				<div class="content">
+				<div class="content sr-page">
 					<div class="container-fluid">
-						<div class="row">
-							<div class="col-xl-12">
-								<!-- meta -->
-								<div class="profile-header <?= ($status == 1) ? "" : "inactive"; ?>">
-									<div class="car-header-content">
-										<div class="header-plate-block">
-											<div class="plateTb centerAlignObj">
-												<div class="row containerTb">
-													<div class="col-12 centerAlignObj">
-														<div class="row plate-content-new">
-															<!-- English Section -->
-															<div class="col-4 pltgrid plate-section-new">
-																<div class="plate-text-top"><?= explode("-", $plate_no)[0] ?></div>
-																<div class="plate-divider-h"></div>
-																<div class="plate-text-bottom"><?= explode("-", $plate_no)[1] ?></div>
-															</div>
 
-															<!-- Logo Section -->
-															<div class="col-4 pltgrid plate-section-new plate-logo">
-																<img src="./assets/cars_documents/logo.png" height="60" />
-															</div>
-
-															<!-- Arabic Section -->
-															<div class="col-4 pltgrid plate-section-new">
-																<div class="plate-text-top plateNumberValAr"><?= explode("-", $plate_no)[0] ?></div>
-																<div class="plate-divider-h"></div>
-																<div class="plate-text-bottom plateNumberDigAr"><?= strtolower(explode("-", $plate_no)[1]) ?></div>
-															</div>
+						<!-- ===== Header ===== -->
+						<div class="sr-card sr-hero">
+							<a href="./all_cars.php" class="sr-back"><i class="mdi mdi-arrow-left"></i> <?= __('all_cars', 'All cars') ?></a>
+							<div class="sr-hero-top">
+								<div class="d-flex align-items-center flex-wrap" style="gap: 20px; min-width: 0; flex: 1 1 520px;">
+									<div class="car-hero-plate ad-keep">
+										<div class="plateTb centerAlignObj">
+											<div class="row containerTb">
+												<div class="col-12 centerAlignObj">
+													<div class="row plate-content-new">
+														<div class="col-4 pltgrid plate-section-new">
+															<div class="plate-text-top"><?= $h($plate[0] ?? '') ?></div>
+															<div class="plate-divider-h"></div>
+															<div class="plate-text-bottom"><?= $h($plate[1] ?? '') ?></div>
+														</div>
+														<div class="col-4 pltgrid plate-section-new plate-logo">
+															<img src="./assets/cars_documents/logo.png" height="60" alt="" />
+														</div>
+														<div class="col-4 pltgrid plate-section-new">
+															<div class="plate-text-top plateNumberValAr"><?= $h($plate[0] ?? '') ?></div>
+															<div class="plate-divider-h"></div>
+															<div class="plate-text-bottom plateNumberDigAr"><?= $h(strtolower($plate[1] ?? '')) ?></div>
 														</div>
 													</div>
 												</div>
 											</div>
 										</div>
-
-										<div class="header-info-block text-white">
-											<h4 class="mt-1 mb-1 font-18 carinfo"><i class="mdi mdi-card-text-outline"></i> <?= __('plate_no_label') ?>: <span><?= $plate_no ?></span></h4>
-											<h5 class="mt-1 mb-1 font-16 carinfo"><i class="mdi mdi-car"></i> <?= __('type_label') ?>: <span><?= $type ?></span></h5>
-											<p class="font-14 text-light mb-0"><i class="mdi mdi-calendar-check"></i> <?= __('date_registration_label') ?>: <?= $date_reg ?></p>
-											<?php if ($remarks !== ""): ?>
-												<p class="font-13 text-light mb-0 mt-2"><?= __('remarks_label') ?>: <?= $remarks ?></p>
-											<?php endif ?>
+									</div>
+									<div style="min-width: 0;">
+										<div class="sr-hero-tags">
+											<span class="sr-chip sr-mono"><i class="mdi mdi-pound"></i><?= $id_car ?></span>
+											<span class="sr-pill sr-pill-lg <?= $is_active ? 'tone-green' : 'tone-slate' ?>"><span class="sr-dot"></span><?= $is_active ? __('active', 'Active') : __('inactive', 'Inactive') ?></span>
+											<span class="sr-chip"><i class="mdi mdi-car"></i><?= $h(__(strtolower(str_replace(' ', '_', $type)), $type)) ?></span>
 										</div>
-
-										<div class="header-actions-block">
-											<div class="brand">
-												<i class="make-logo" style="background-position: <?= $logo_pos ?>;"></i>
-												<div class="p4t"><?= $maker_name ?> - <?= $model ?></div>
-												<div class="p4t"><?= $made_year ?></div>
-											</div>
-											<div style="display:none;">
-												<a href="javascript:void(0);" class="addDocuAtter" data-id="<?= $id_car ?>"></a>
-												<a href="javascript:void(0);" class="addDrvrAtter" data-id="<?= $id_car ?>"></a>
-												<a href="javascript:void(0);" class="addRtrnDrvrAtter" data-id="<?= $car_drv_id ?>" data-cid="<?= $id_car ?>"></a>
-												<a href="javascript:void(0);" class="addMaintAttr" data-id="<?= $id_car ?>" data-caruser="<?= $car_udrv_id ?>"></a>
-												<a href="javascript:void(0);" class="editCarAttr" data-id="<?= $id_car ?>" data-maker_name="<?= $mkid ?>" data-model="<?= $mdid ?>" data-made_year="<?= $made_year ?>" data-plate_no="<?= $plate_no ?>" data-type="<?= $type ?>" data-remarks="<?= $remarks ?>" data-status="<?= $status ?>"></a>
-											</div>
-											<button type="button" id="moreActionsBtnCar" class="more-actions-btn">
-												<i class="fa fa-bars"></i> <?= __('more') ?>
-											</button>
+										<h1 class="sr-hero-title"><?= $h(trim($maker_name . ' ' . $model) ?: '-') ?></h1>
+										<div class="sr-card-sub">
+											<i class="mdi mdi-calendar"></i> <?= __('made_year') ?>: <b><?= $h($made_year) ?></b>
+											&nbsp;&middot;&nbsp; <i class="mdi mdi-calendar-check"></i> <?= __('date_registration_label', 'Registered') ?>: <?= $h($date_reg) ?>
+											<?php if ($last_meter !== null): ?>&nbsp;&middot;&nbsp; <i class="mdi mdi-speedometer"></i> <span class="car-meter"><?= number_format($last_meter) ?> km</span><?php endif; ?>
 										</div>
 									</div>
 								</div>
-								<!--/ meta -->
-
-							</div>
-
-
-						</div>
-
-						<div class="row">
-							<div class="col-xl-12">
-								<div class="row">
-
-									<div class="col-sm-3">
-										<div class="card-box tilebox-one <?= ($cont_drv < 1) ? "border-left-danger" : "border-left-success"; ?>" style="height:130px !important;">
-											<i class="mdi mdi-car-sports float-right"></i>
-											<h4 class="text-uppercase mt-0"><?= __('driver_label') ?></h4>
-											<h4 class="m-b-20" data-plugin="counterup"><?= ($cont_drv < 1) ? "<h2>" . __('no_driver_text') . "</h2>" : (explode(" ", $car_undrv_name)[0]) . " " . (explode(" ", $car_undrv_name)[1]); ?></h4>
-											<?= __('receive_date_label') ?>: <div class="float-right"><?= $car_rcv_date ?></div>
-										</div>
-									</div><!-- end col -->
-
-									<div class="col-sm-3">
-										<div class="card-box tilebox-one <?= (7 > $licdays ? "border-left-danger" : (30 >= $licdays ? "border-left-warning" : "border-left-success")) ?>" style="height:130px !important;">
-											<i class="dripicons-wallet float-right"></i>
-											<h4 class="text-uppercase mt-0"><?= __('licence_label') ?></h4>
-											<h2 class="m-b-20" data-plugin="counterup"><?= ($exp_date_lic == "") ? "0" : $licdays ?> <?= __('days_text') ?></h2>
-											<?= __('expiry_date_label') ?>: <div class="float-right"><?= $exp_lic ?></div>
-										</div>
-									</div><!-- end col -->
-
-									<div class="col-sm-3">
-										<div class="card-box tilebox-one <?= (7 > $incdays ? "border-left-danger" : (30 >= $incdays ? "border-left-warning" : "border-left-success")) ?>" style="height:130px !important;">
-											<i class="mdi mdi-clipboard-text float-right"></i>
-											<h4 class="text-uppercase mt-0"><?= __('insurance_label') ?></h4>
-											<h2 class="m-b-20"><span data-plugin="counterup"><?= ($exp_date_inc == "") ? "0" : $incdays ?> <?= __('days_text') ?></span></h2>
-											<?= __('expiry_date_label') ?>: <div class="float-right"><?= $exp_inc ?></div>
-										</div>
-									</div><!-- end col -->
-
-									<div class="col-sm-3">
-										<div class="card-box tilebox-one <?= (7 > $mvpidays ? "border-left-danger" : (30 >= $mvpidays ? "border-left-warning" : "border-left-success")) ?>" style="height:130px !important;">
-											<i class="mdi mdi-autorenew float-right"></i>
-											<h4 class="text-uppercase mt-0"><?= __('mvpi_label') ?></h4>
-											<h2 class="m-b-20" data-plugin="counterup"><?= ($exp_date_mvpi == "") ? "0" : $mvpidays ?> <?= __('days_text') ?></h2>
-											<?= __('expiry_date_label') ?>: <div class="float-right"><?= $exp_mvpi ?></div>
-										</div>
-									</div><!-- end col -->
-
+								<div class="car-brand ad-keep">
+									<i class="make-logo" style="background-position: <?= $h($logo_pos) ?>;"></i>
+									<?= $h($maker_name) ?>
 								</div>
 							</div>
+
+							<?php if (trim($remarks) !== ''): ?>
+								<div class="sr-remarks"><strong><?= __('remarks_label', 'Remarks') ?>:</strong><?= $h($remarks) ?></div>
+							<?php endif; ?>
+
+							<div class="sr-stats">
+								<div class="sr-stat <?= $current_driver ? 'is-sky' : '' ?>">
+									<div class="sr-stat-label"><?= __('driver_label', 'Driver') ?> <i class="mdi mdi-steering"></i></div>
+									<?php if ($current_driver): ?>
+										<div class="sr-stat-value" title="<?= $h($current_driver['name']) ?>"><?= $h($current_driver['name'] ?: $current_driver['car_user']) ?></div>
+										<div class="sr-stat-sub"><?= __('receive_date_label', 'Received') ?>: <?= $h($fmt_date($current_driver['rcv_date'])) ?></div>
+									<?php else: ?>
+										<div class="sr-stat-value text-muted"><?= __('no_driver_text', 'No driver') ?></div>
+										<div class="sr-stat-sub">&nbsp;</div>
+									<?php endif; ?>
+								</div>
+								<?php foreach ($latest_doc as $k => $d): $days = $doc_days[$k]; ?>
+									<div class="sr-stat is-<?= $tone_for($days) ?>">
+										<div class="sr-stat-label"><?= $h($doc_label[$k]) ?> <i class="mdi <?= $doc_icon[$k] ?>"></i></div>
+										<?php if (!$d): ?>
+											<div class="sr-stat-value"><?= __('not_added', 'Not added') ?></div>
+											<div class="sr-stat-sub">&nbsp;</div>
+										<?php else: ?>
+											<div class="sr-stat-value"><?= $days < 0 ? __('expired', 'Expired') : $days . ' ' . __('days_text', 'days') ?></div>
+											<div class="sr-stat-sub"><?= __('expiry_date_label', 'Expiry') ?>: <?= $h($fmt_date($d['exp_date'])) ?></div>
+										<?php endif; ?>
+									</div>
+								<?php endforeach; ?>
+							</div>
+
+							<div class="sr-hero-actions">
+								<?php if ($is_active): ?>
+									<?php if (!$current_driver): ?>
+										<a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-primary addDrvrAtter" data-id="<?= $id_car ?>"><i class="mdi mdi-account-plus"></i> <?= __('add_driver_button', 'Assign driver') ?></a>
+									<?php else: ?>
+										<a href="javascript:void(0);" class="sr-btn sr-btn-sm addRtrnDrvrAtter" data-id="<?= (int)$current_driver['id'] ?>" data-cid="<?= $id_car ?>"><i class="mdi mdi-car-convertable"></i> <?= __('return_car_button', 'Return car') ?></a>
+									<?php endif; ?>
+									<a href="javascript:void(0);" class="sr-btn sr-btn-sm addMaintAttr" data-id="<?= $id_car ?>" data-caruser="<?= $h($current_driver['car_user'] ?? '') ?>"><i class="mdi mdi-wrench"></i> <?= __('add_maintenance_button', 'Add maintenance') ?></a>
+									<?php if ($show_add_docs): ?>
+										<a href="javascript:void(0);" class="sr-btn sr-btn-sm addDocuAtter" data-id="<?= $id_car ?>"><i class="mdi mdi-file-document"></i> <?= __('add_docs_button', 'Add document') ?></a>
+									<?php endif; ?>
+								<?php endif; ?>
+								<span class="sr-spacer"></span>
+								<?php if ($can_edit_car): ?>
+									<a href="javascript:void(0);" class="sr-btn sr-btn-sm editCarAttr" data-id="<?= $id_car ?>" data-maker_name="<?= $h($mkid) ?>" data-model="<?= $h($mdid) ?>" data-made_year="<?= $h($made_year) ?>" data-plate_no="<?= $h($plate_no) ?>" data-type="<?= $h($type) ?>" data-remarks="<?= $h($remarks) ?>" data-status="<?= $h($status) ?>"><i class="mdi mdi-pencil"></i> <?= __('edit_button', 'Edit') ?></a>
+								<?php endif; ?>
+							</div>
 						</div>
 
-						<div class="row">
-							<div class="col-xl-12">
-								<div class="card-box">
-									<ul class="nav emp-tabs" id="carDetailTabs">
-										<li class="nav-item">
-											<a href="#docsTab" data-toggle="tab" aria-expanded="true" class="nav-link active show">
-												<i class="mdi mdi-book-open-page-variant"></i> <?= __('documents_details_header') ?>
-											</a>
-										</li>
-										<li class="nav-item">
-											<a href="#driversTab" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="mdi mdi-account-tie"></i> <?= __('drivers_details_header') ?>
-											</a>
-										</li>
-										<li class="nav-item">
-											<a href="#maintTab" data-toggle="tab" aria-expanded="false" class="nav-link">
-												<i class="fa fa-solid fa-screwdriver-wrench"></i> <?= __('maintenance_details_header') ?>
-											</a>
-										</li>
-									</ul>
-									<div class="tab-content">
-										<div class="tab-pane active show" id="docsTab">
-											<div class="table-responsive">
-												<table id="cars_docu" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-													<thead>
-														<tr>
-															<th><?= __('id') ?></th>
-															<th><?= __('documents_type_header') ?></th>
-															<th><?= __('issue_date_header') ?></th>
-															<th><?= __('expiry_date_header') ?></th>
-															<th><?= __('attachment_header') ?></th>
-															<th><?= __('reg_date_header') ?></th>
-															<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																<th width="60"><?= __('action') ?></th>
-															<?php } ?>
-														</tr>
-													</thead>
-													<tbody>
-														<?php
+						<!-- ===== History ===== -->
+						<div class="sr-card">
+							<ul class="nav sr-tabs" id="carDetailTabs" role="tablist">
+								<li class="nav-item"><a href="#docsTab" data-toggle="tab" class="nav-link active"><i class="mdi mdi-file-document"></i> <?= __('documents_details_header', 'Documents') ?> <span class="sr-count"><?= count($documents) ?></span></a></li>
+								<li class="nav-item"><a href="#driversTab" data-toggle="tab" class="nav-link"><i class="mdi mdi-steering"></i> <?= __('drivers_details_header', 'Drivers') ?> <span class="sr-count"><?= count($drivers) ?></span></a></li>
+								<li class="nav-item"><a href="#maintTab" data-toggle="tab" class="nav-link"><i class="mdi mdi-wrench"></i> <?= __('maintenance_details_header', 'Maintenance') ?> <span class="sr-count"><?= count($maintenance) ?></span></a></li>
+							</ul>
+							<div class="tab-content">
+								<!-- Documents -->
+								<div class="tab-pane active" id="docsTab">
+									<div class="sr-tab-tools">
+										<div id="docsButtons" class="sr-toolbar" style="padding: 0; border: 0;"></div>
+										<?php if ($is_active): ?>
+											<a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-ghost addDocuAtter" data-id="<?= $id_car ?>"><i class="mdi mdi-plus"></i> <?= __('add_docs_button', 'Add document') ?></a>
+										<?php endif; ?>
+									</div>
+									<div class="sr-table-wrap">
+										<table id="cars_docu" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+											<thead>
+												<tr>
+													<th><?= __('documents_type_header', 'Type') ?></th>
+													<th><?= __('issue_date_header', 'Issue date') ?></th>
+													<th><?= __('expiry_date_header', 'Expiry date') ?></th>
+													<th><?= __('status_header', 'Status') ?></th>
+													<th><?= __('attachment_header', 'Attachment') ?></th>
+													<th><?= __('reg_date_header', 'Added') ?></th>
+													<th class="text-right"><?= __('action') ?></th>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ($documents as $doc):
+													$is_latest = isset($latest_doc[$doc['doc_type']]) && $latest_doc[$doc['doc_type']]['id'] == $doc['id'];
+													$days = $doc['days'];
+												?>
+													<tr>
+														<td><span class="sr-person-name"><i class="mdi <?= $doc_icon[$doc['doc_type']] ?? 'mdi-file' ?> mr-1" style="color: var(--sr-accent);"></i><?= $h($doc_label[$doc['doc_type']] ?? $doc['doc_type']) ?></span></td>
+														<td><?= $h($fmt_date($doc['issue_date'])) ?></td>
+														<td data-order="<?= $h($doc['exp_date']) ?>"><?= $h($fmt_date($doc['exp_date'])) ?></td>
+														<td>
+															<?php if ($days === null): ?>
+																<span class="text-muted">&ndash;</span>
+															<?php elseif (!$is_latest): ?>
+																<span class="sr-pill sr-pill-xs tone-slate"><?= __('replaced', 'Replaced') ?></span>
+															<?php elseif ($days < 0): ?>
+																<span class="sr-pill sr-pill-xs tone-red"><span class="sr-dot"></span><?= __('expired', 'Expired') ?></span>
+															<?php else: ?>
+																<span class="sr-pill sr-pill-xs tone-<?= $tone_for($days) ?>"><span class="sr-dot"></span><?= $days ?> <?= __('days_left', 'days left') ?></span>
+															<?php endif; ?>
+														</td>
+														<td>
+															<?php if ($doc['file']): ?>
+																<a href="javascript:void(0);" onclick="displayPopup(<?= $h(json_encode('./assets/cars_documents/' . $doc['file'])) ?>)" class="sr-open-btn"><i class="mdi mdi-paperclip"></i> <?= __('view_file_button', 'View file') ?></a>
+															<?php else: ?>
+																<span class="text-muted"><?= __('no_file_text', 'No file') ?></span>
+															<?php endif; ?>
+														</td>
+														<td><?= $h($fmt_date($doc['created_at'])) ?></td>
+														<td class="text-right">
+															<?php if ($can_delete_children): ?>
+																<a href="javascript:void(0);" class="sr-more-btn deleteAjax" title="<?= __('delete') ?>" data-id="<?= (int)$doc['id'] ?>" data-tbl="cars_docu" data-file="1" data-column="file"><i class="mdi mdi-delete text-danger"></i></a>
+															<?php endif; ?>
+														</td>
+													</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+									</div>
+								</div>
 
-														$query_cardoc = mysqli_query($conDB, "SELECT * FROM `cars_docu` WHERE `car_id`='" . $_GET['id'] . "' ");
-														while ($rec = mysqli_fetch_array($query_cardoc)) {
-															$id_car_doc = $rec["id"];
-															$car_id_doc = $rec["car_id"];
-															$doc_type_doc = $rec["doc_type"];
-															$issue_date_doc = $rec["issue_date"];
-															$exp_date_doc = $rec["exp_date"];
-															$file_doc = $rec["file"];
-															$dateregdoc = $rec["created_at"];
+								<!-- Drivers -->
+								<div class="tab-pane" id="driversTab">
+									<div class="sr-tab-tools">
+										<div id="drvButtons" class="sr-toolbar" style="padding: 0; border: 0;"></div>
+										<?php if ($is_active && !$current_driver): ?>
+											<a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-ghost addDrvrAtter" data-id="<?= $id_car ?>"><i class="mdi mdi-plus"></i> <?= __('add_driver_button', 'Assign driver') ?></a>
+										<?php endif; ?>
+									</div>
+									<div class="sr-table-wrap">
+										<table id="cars_drvs" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+											<thead>
+												<tr>
+													<th><?= __('drivers_name_header', 'Driver') ?></th>
+													<th><?= __('receiving_header', 'Received') ?></th>
+													<th><?= __('return_date_header', 'Returned') ?></th>
+													<th class="text-center"><?= __('days_text', 'Days') ?></th>
+													<th><?= __('status_header', 'Status') ?></th>
+													<th><?= __('created_at_header', 'Added') ?></th>
+													<th class="text-right"><?= __('action') ?></th>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ($drivers as $drv):
+													$on_job = ($drv['status'] == 1);
+													$from = $drv['rcv_date'] ? strtotime($drv['rcv_date']) : null;
+													$to = $drv['rtn_date'] ? strtotime($drv['rtn_date']) : time();
+													$span = $from ? max(0, (int)floor(($to - $from) / 86400)) : null;
+												?>
+													<tr>
+														<td>
+															<span class="sr-person-name"><?= $h($drv['name'] ?: '-') ?></span>
+															<span class="sr-cell-sub sr-mono"><?= $h($drv['car_user']) ?></span>
+														</td>
+														<td data-order="<?= $h($drv['rcv_date']) ?>"><?= $h($fmt_date($drv['rcv_date'])) ?></td>
+														<td><?= $drv['rtn_date'] ? $h($fmt_date($drv['rtn_date'])) : '<span class="text-muted">' . __('on_job_text', 'On job') . '</span>' ?></td>
+														<td class="text-center"><?= $span === null ? '&ndash;' : '<span class="sr-count">' . $span . '</span>' ?></td>
+														<td><?= $on_job
+															? '<span class="sr-pill sr-pill-xs tone-sky"><span class="sr-dot"></span>' . __('on_driving_text', 'Driving') . '</span>'
+															: '<span class="sr-pill sr-pill-xs tone-slate"><span class="sr-dot"></span>' . __('returned_text', 'Returned') . '</span>' ?></td>
+														<td><?= $h($fmt_date($drv['created_at'])) ?></td>
+														<td class="text-right">
+															<?php if ($can_delete_children): ?>
+																<a href="javascript:void(0);" class="sr-more-btn deleteAjax" title="<?= __('delete') ?>" data-id="<?= (int)$drv['id'] ?>" data-tbl="cars_drv" data-file="0"><i class="mdi mdi-delete text-danger"></i></a>
+															<?php endif; ?>
+														</td>
+													</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
+									</div>
+								</div>
 
-															$date_reg_doc = date('d, M Y', strtotime($dateregdoc));
-
-														?>
-															<tr>
-																<th><?= $id_car_doc; ?></th>
-																<th><?= $doc_type_doc; ?></th>
-																<th><?= $issue_date_doc; ?></th>
-																<th><?= $exp_date_doc; ?></th>
-																<th><?= ($file_doc) ? "<a href=\"javascript:displayPopup('./assets/cars_documents/" . "$file_doc')\" class='btn btn-primary btn-sm'><i class='fa fa-paperclip'></i> " . __('view_file_button') . "</a>" : "<a href='javascript:void(0)' class='btn btn-dark btn-sm'><i class='fa fa-link-slash'></i> " . __('no_file_text') . "</a>" ?>
-																</th>
-																<th><?= $date_reg_doc; ?></th>
-																<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																	<th>
-																		<div class='btn-group dropdown'>
-																			<a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-																			<div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-																				<a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' data-id='<?= $rec['id'] ?>' data-tbl='cars_docu' data-file='1' data-column='file'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('delete') ?></a>
-																			</div>
-																		</div>
-																	</th>
-																<?php } ?>
-
-															</tr>
-														<?php } ?>
-													</tbody>
-												</table>
-											</div>
-										</div>
-										<div class="tab-pane" id="driversTab">
-											<div class="table-responsive">
-												<table id="cars_drvs" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-													<thead>
-														<tr>
-															<th><?= __('id') ?></th>
-															<th><?= __('drivers_name_header') ?></th>
-															<th><?= __('receiving_header') ?></th>
-															<th><?= __('return_date_header') ?></th>
-															<th><?= __('status_header') ?></th>
-															<th><?= __('created_at_header') ?></th>
-															<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																<th width="60"><?= __('action') ?></th>
-															<?php } ?>
-
-														</tr>
-													</thead>
-													<tbody>
-														<?php
-
-														$query_cardrv = mysqli_query($conDB, "SELECT `cars_drv`.*,`cars_drv`.`id` AS `cdrid`, `employees`.`name` FROM `cars_drv` LEFT JOIN `employees` ON `cars_drv`.`car_user` = `employees`.`emp_id` WHERE `car_id`='" . $_GET['id'] . "' ");
-														while ($rec = mysqli_fetch_array($query_cardrv)) {
-															$id_car_drv = $rec["id"];
-															$cdrid = $rec['cdrid'];
-															$car_id_drv = $rec["car_id"];
-															$drv_name_drv = $rec["name"];
-															$rcv_date_drv = $rec["rcv_date"];
-															$rtndatedrv = $rec["rtn_date"];
-															$status_drv = $rec["status"];
-															$date_reg_drv = date('d, M Y', strtotime($rec["created_at"]));
-
-															if ($rtndatedrv == "") {
-																$rtn_date_drv = __('on_job_text');
-															} else {
-																$rtn_date_drv =  date('d, M Y', strtotime($rtndatedrv));
-															}
-
-														?>
-															<tr>
-																<th><?= $id_car_drv; ?></th>
-																<th><?= $drv_name_drv; ?></th>
-																<th><?= $rcv_date_drv; ?></th>
-																<th><?= $rtn_date_drv; ?></th>
-																<th><?= ($status_drv == 1) ? "<span class='badge badge-success'>" . __('on_driving_text') . "</span>" : "<span class='badge badge-danger'>" . __('returned_text') . "</span>" ?></th>
-																<th><?= $date_reg_drv; ?></th>
-																<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																	<th>
-																		<div class='btn-group dropdown'>
-																			<a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-																			<div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-																				<a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' data-id='<?= $cdrid ?>' data-tbl='cars_drv' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('delete') ?></a>
-																			</div>
-																		</div>
-																	</th>
-																<?php } ?>
-
-															</tr>
-														<?php } ?>
-													</tbody>
-												</table>
-											</div>
-										</div>
-										<div class="tab-pane" id="maintTab">
-											<div class="table-responsive">
-												<table id="cars_maint" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-													<thead>
-														<tr>
-															<th><?= __('id') ?></th>
-															<th><?= __('drivers_name_header') ?></th>
-															<th><?= __('meter_reading_header') ?></th>
-															<th><?= __('difference_reading_header') ?></th>
-															<th><?= __('date_header') ?></th>
-															<th><?= __('type_of_maint_header') ?></th>
-															<th><?= __('details_header') ?></th>
-															<th><?= __('remarks_header') ?></th>
-															<th><?= __('created_header') ?></th>
-															<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																<th width="60"><?= __('action') ?></th>
-															<?php } ?>
-
-														</tr>
-													</thead>
-													<tbody>
-														<?php
-
-														$query_cardrv = mysqli_query($conDB, "SELECT `cars_maint`.*, `employees`.`name` FROM `cars_maint` LEFT JOIN `employees` ON `cars_maint`.`car_user`=`employees`.`emp_id` WHERE `car_id`='" . $_GET['id'] . "' ");
-														while ($rec = mysqli_fetch_array($query_cardrv)) {
-															$id_car_maint 	= $rec["id"];
-															$drv_name_maint 	= $rec["name"];
-															$meter_maint 	= $rec["meter"];
-															$diffmeter_maint 	= $rec["diffmeter"];
-															$date_maint 	= $rec["date"];
-															$type_maint 	= $rec["type"];
-															$details_maint 	= $rec["details"];
-															$remarks_maint 	= $rec["remarks"];
-															$created_at_maint 	= $rec["created_at"];
-															$created_at_maint =  date('d, M Y', strtotime($created_at_maint));
-
-														?>
-															<tr>
-																<th><?= $id_car_maint; ?></th>
-																<th><?= htmlspecialchars($drv_name_maint ?? '', ENT_QUOTES, 'UTF-8'); ?></th>
-																<th><?= $meter_maint; ?></th>
-																<th><?= $diffmeter_maint; ?></th>
-																<th><?= $date_maint; ?></th>
-																<th><?= $type_maint; ?></th>
-																<th><?= $details_maint; ?></th>
-																<th><?= $remarks_maint; ?></th>
-																<th><?= $created_at_maint; ?></th>
-																<?php if ($user_type == $access1 or $user_type == $access2) { ?>
-																	<th>
-																		<div class='btn-group dropdown'>
-																			<a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-																			<div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-																				<a href='javascript:void(0);' class='dropdown-item text-danger deleteAjax' data-id='<?= $rec['id'] ?>' data-tbl='cars_maint' data-file='0'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i><?= __('delete') ?></a>
-																			</div>
-																		</div>
-																	</th>
-																<?php } ?>
-															</tr>
-														<?php } ?>
-													</tbody>
-												</table>
-											</div>
-										</div>
+								<!-- Maintenance -->
+								<div class="tab-pane" id="maintTab">
+									<div class="sr-tab-tools">
+										<div id="maintButtons" class="sr-toolbar" style="padding: 0; border: 0;"></div>
+										<?php if ($is_active): ?>
+											<a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-ghost addMaintAttr" data-id="<?= $id_car ?>" data-caruser="<?= $h($current_driver['car_user'] ?? '') ?>"><i class="mdi mdi-plus"></i> <?= __('add_maintenance_button', 'Add maintenance') ?></a>
+										<?php endif; ?>
+									</div>
+									<div class="sr-table-wrap">
+										<table id="cars_maint" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+											<thead>
+												<tr>
+													<th><?= __('date_header', 'Date') ?></th>
+													<th><?= __('type_of_maint_header', 'Type') ?></th>
+													<th><?= __('drivers_name_header', 'Driver') ?></th>
+													<th class="text-right"><?= __('meter_reading_header', 'Meter') ?></th>
+													<th class="text-right"><?= __('difference_reading_header', 'Difference') ?></th>
+													<th><?= __('details_header', 'Details') ?></th>
+													<th><?= __('remarks_header', 'Remarks') ?></th>
+													<th><?= __('created_header', 'Added') ?></th>
+													<th class="text-right"><?= __('action') ?></th>
+												</tr>
+											</thead>
+											<tbody>
+												<?php foreach ($maintenance as $m):
+													$diff = (int)preg_replace('/[^\d-]/', '', (string)$m['diffmeter']);
+												?>
+													<tr>
+														<td data-order="<?= $h($m['date']) ?>"><?= $h($fmt_date($m['date'])) ?></td>
+														<td><span class="sr-chip"><?= $h($m['type']) ?></span></td>
+														<td><?= $h($m['name'] ?: $m['car_user']) ?></td>
+														<td class="text-right car-meter sr-mono" data-order="<?= (int)$m['meter'] ?>"><?= number_format((int)$m['meter']) ?></td>
+														<td class="text-right car-meter" data-order="<?= $diff ?>"><?= $diff > 0 ? '+' . number_format($diff) . ' km' : '<span class="text-muted">' . number_format($diff) . ' km</span>' ?></td>
+														<td style="white-space: normal; min-width: 180px;"><?= $h($m['details']) ?></td>
+														<td style="white-space: normal;"><?= $h($m['remarks']) ?></td>
+														<td><?= $h($fmt_date($m['created_at'])) ?></td>
+														<td class="text-right">
+															<?php if ($can_delete_children): ?>
+																<a href="javascript:void(0);" class="sr-more-btn deleteAjax" title="<?= __('delete') ?>" data-id="<?= (int)$m['id'] ?>" data-tbl="cars_maint" data-file="0"><i class="mdi mdi-delete text-danger"></i></a>
+															<?php endif; ?>
+														</td>
+													</tr>
+												<?php endforeach; ?>
+											</tbody>
+										</table>
 									</div>
 								</div>
 							</div>
 						</div>
 
-					</div> <!-- container -->
+					</div>
+				</div>
 
-				</div> <!-- content -->
-
-			<footer class="footer">
-				<?= $site_footer ?>
-			</footer>
-
+				<footer class="footer">
+					<?= $site_footer ?>
+				</footer>
+			</div>
 		</div>
-
-		<!-- ============================================================== -->
-		<!-- End Right content here -->
-		<!-- ============================================================== -->
-		</div>
-		<!-- END wrapper -->
-
 
 		<!-- jQuery  -->
 		<script src="assets/js/jquery.min.js"></script>
@@ -878,36 +431,13 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 		<script src="assets/js/metisMenu.min.js"></script>
 		<script src="assets/js/waves.js"></script>
 		<script src="assets/js/jquery.slimscroll.js"></script>
-
-
-		<!-- Modal-Effect -->
-		<script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
-		<!-- <script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script> -->
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.inputmask/3.3.4/jquery.inputmask.bundle.min.js" type="text/javascript"></script>
-		<script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
-
-
 		<script src="./plugins/moment/moment.js"></script>
-		<script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
-		<script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
-		<script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-		<script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
 		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-
-		<!-- App js -->
-		<script src="assets/pages/jquery.form-pickers.init.js"></script>
-		<script src="assets/pages/jquery.form-hijri-pickers.init.js"></script>
-		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"></script>
-		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"></script>
-		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"></script>
-
 		<script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
-		<script src="./plugins/bootstrap-select/js/bootstrap-select.js" type="text/javascript"></script>
 
 		<!-- Required datatable js -->
 		<script src="./plugins/datatables/jquery.dataTables.min.js"></script>
 		<script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-		<!-- Buttons examples -->
 		<script src="./plugins/datatables/dataTables.buttons.min.js"></script>
 		<script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
 		<script src="./plugins/datatables/jszip.min.js"></script>
@@ -915,210 +445,48 @@ WHERE `cars`.`id` = '" . $_GET['id'] . "'
 		<script src="./plugins/datatables/vfs_fonts.js"></script>
 		<script src="./plugins/datatables/buttons.html5.min.js"></script>
 		<script src="./plugins/datatables/buttons.print.min.js"></script>
-
-		<!-- Key Tables -->
-		<script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
-
-		<!-- Responsive examples -->
 		<script src="./plugins/datatables/dataTables.responsive.min.js"></script>
 		<script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
 
-		<!-- Selection table -->
-		<script src="./plugins/datatables/dataTables.select.min.js"></script>
-
-
 		<!-- App js -->
-		<!-- <script src="assets/js/jquery.core.js"></script> -->
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+		<script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
+		<script src="assets/js/car_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/car_forms.js') ?>"></script>
 
 		<script type="text/javascript">
-			jQuery(function($) {
-				$('.autonumber').autoNumeric('init');
-			});
 			$(document).ready(function() {
-				var carActionsHtml = <?= json_encode($carActionsHtml); ?>;
-				$('#moreActionsBtnCar').click(function() {
-					Swal.fire({
-						title: '<?= __('more_actions') ?>',
-						html: '<div class="menu-items-container">' + carActionsHtml + '</div>',
-						showConfirmButton: false,
-						showCloseButton: true,
-						customClass: {
-							container: 'more-actions-modal',
-							popup: 'swal2-popup',
-							closeButton: 'swal2-close'
-						},
-						width: '450px',
-						padding: '0',
-						allowOutsideClick: false,
-						didOpen: function() {
-							var modalContainer = $(Swal.getHtmlContainer());
-							modalContainer.find('.menu-item[data-target]').on('click', function(e) {
-								e.preventDefault();
-								var target = $(this).data('target');
-								Swal.close();
-								setTimeout(function() {
-									$(target).trigger('click');
-								}, 100);
-							});
-						}
+				const exportTitle = <?= json_encode(__('plate_no_label', 'Plate no') . ': ' . $plate_no) ?>;
+				const language = {
+					info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+					infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+					infoFiltered: '',
+					paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+					emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+					zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
+				};
+				function makeTable(sel, holder, columns, actionCol) {
+					const dt = $(sel).DataTable({
+						dom: 'Brtip', pageLength: 10, responsive: true, order: [],
+						columnDefs: [{ targets: [actionCol], orderable: false }],
+						buttons: [
+							{ extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: { columns: columns }, title: exportTitle },
+							{ extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', exportOptions: { columns: columns }, title: exportTitle },
+							{ extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + <?= json_encode(__('print')) ?>, exportOptions: { columns: columns }, title: exportTitle }
+						],
+						language: language
 					});
-				});
-			});
-			$(document).ready(function() {
-				$('#carDetailTabs a[data-toggle="tab"]').on('shown.bs.tab', function() {
-					$.fn.dataTable.tables({
-						visible: true,
-						api: true
-					}).columns.adjust();
-				});
-			});
-			$(document).ready(function() {
-				$('form').parsley();
-
-				//Buttons examples
-				var table = $('#cars_docu').DataTable({
-					lengthChange: false,
-					buttons: ['copy', 'excel', 'pdf', 'print'],
-					order: [
-						[0, "desc"]
-					],
-					"columnDefs": [{
-						targets: [0],
-						visible: false,
-						searchable: false
-					}, ],
-					language: {
-						search: `<span>${__('search')}:</span> _INPUT_`,
-						searchPlaceholder: `${__('search')}...`,
-						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-						infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-						infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-						paginate: {
-							first: __('first'),
-							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
-						},
-						emptyTable: __('no_data_available_in_table'),
-						zeroRecords: __('no_matching_records_found'),
-						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-					}
-				});
-
-				table.buttons().container()
-					.appendTo('#cars_docu_wrapper .col-md-6:eq(0)');
-
-			});
-			$(document).ready(function() {
-				$('form').parsley();
-
-				//Buttons examples
-				var table = $('#cars_drvs').DataTable({
-					lengthChange: false,
-					buttons: ['copy', 'excel', 'pdf', 'print'],
-					order: [
-						[0, "desc"]
-					],
-					"columnDefs": [{
-						targets: [0],
-						visible: false,
-						searchable: false
-					}, ],
-					language: {
-						search: `<span>${__('search')}:</span> _INPUT_`,
-						searchPlaceholder: `${__('search')}...`,
-						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-						infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-						infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-						paginate: {
-							first: __('first'),
-							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
-						},
-						emptyTable: __('no_data_available_in_table'),
-						zeroRecords: __('no_matching_records_found'),
-						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-					}
-				});
-
-				table.buttons().container()
-					.appendTo('#cars_drvs_wrapper .col-md-6:eq(0)');
-
-			});
-
-			$(document).ready(function() {
-				$('form').parsley();
-				//Buttons examples
-				var table = $('#cars_maint').DataTable({
-					lengthChange: false,
-					buttons: ['copy', 'excel', 'pdf', 'print'],
-					order: [
-						[0, "desc"]
-					],
-					"columnDefs": [{
-						targets: [0],
-						visible: false,
-						searchable: false
-					}, ],
-					language: {
-						search: `<span>${__('search')}:</span> _INPUT_`,
-						searchPlaceholder: `${__('search')}...`,
-						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-						infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-						infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-						paginate: {
-							first: __('first'),
-							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
-						},
-						emptyTable: __('no_data_available_in_table'),
-						zeroRecords: __('no_matching_records_found'),
-						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-					}
-				});
-				table.buttons().container()
-					.appendTo('#cars_maint_wrapper .col-md-6:eq(0)');
-
-			});
-
-			jQuery.browser = {};
-			(function() {
-				jQuery.browser.msie = false;
-				jQuery.browser.version = 0;
-				if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
-					jQuery.browser.msie = true;
-					jQuery.browser.version = RegExp.$1;
+					dt.buttons().container().appendTo(holder);
+					return dt;
 				}
-			})();
+				makeTable('#cars_docu', '#docsButtons', [0, 1, 2, 3, 5], 6);
+				makeTable('#cars_drvs', '#drvButtons', [0, 1, 2, 3, 4, 5], 6);
+				makeTable('#cars_maint', '#maintButtons', [0, 1, 2, 3, 4, 5, 6, 7], 8);
 
-			$(document).ready(function() {
-				$("input[name$='note']").click(function() {
-					var value = $(this).val();
-					if (value == 'Encashed') {
-						$("#return_date").show();
-						$("#note").hide();
-						$("#return_date").removeAttr('required');
-						$("#permit_no").removeAttr('required');
-					} else if (value == 'Fly') {
-						//document.getElementById("pet_id").required = true;
-						$("#return_date").attr('required', '');
-						$("#permit_no").attr('required', '');
-						$("#note").show();
-						//    $("#pet_id_box").hide();
-					}
+				$('#carDetailTabs a[data-toggle="tab"]').on('shown.bs.tab', function() {
+					$.fn.dataTable.tables({ visible: true, api: true }).columns.adjust().responsive.recalc();
 				});
-				$("#return_date").removeAttr('required');
-				//  	$("#pet_id_box").show();
-				$("#note").hide();
 			});
 		</script>
-
 	</body>
 
 	</html>

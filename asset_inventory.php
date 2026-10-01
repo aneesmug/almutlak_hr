@@ -46,15 +46,15 @@
 
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -63,83 +63,37 @@
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
     </script>
     <style>
-        .asset-detail-header {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            border-radius: 10px;
-            padding: 18px 20px;
-            display: flex;
-            align-items: center;
-            color: #fff;
-            text-align: left;
+        .sr-page .sr-tiles.asset-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        @media (max-width: 575px) { .sr-page .sr-tiles.asset-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } }
+        .asset-avatar { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
+        .asset-types { display: flex; flex-wrap: wrap; gap: 6px; }
+        .asset-type-btn {
+            display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+            border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600;
         }
-        .asset-detail-header .avatar-circle {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            margin-right: 14px;
-            flex-shrink: 0;
-            overflow: hidden;
-        }
-        .asset-detail-header .avatar-circle img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 50%;
-        }
-        .asset-detail-header .header-sub {
-            font-size: 12.5px;
-            opacity: 0.85;
-        }
-        .asset-detail-header .header-status {
-            margin-left: auto;
-        }
-        .asset-detail-section {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 14px 16px;
-            margin-top: 14px;
-            text-align: left;
-        }
-        .asset-detail-section h6 {
-            font-weight: 700;
-            font-size: 13px;
-            color: #4b5563;
-            border-bottom: 1px solid #dee2e6;
-            padding-bottom: 8px;
-            margin-bottom: 10px;
-        }
-        .asset-detail-row {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 5px 0;
-            font-size: 13.5px;
-        }
-        .asset-detail-row .label {
-            color: #6c757d;
-            flex-shrink: 0;
-            white-space: nowrap;
-        }
-        .asset-detail-row .value {
-            font-weight: 600;
-            color: #212529;
-            text-align: right;
-            word-break: break-word;
-        }
-        .asset-detail-row.stack {
-            flex-direction: column;
-            gap: 2px;
-        }
-        .asset-detail-row.stack .value {
-            text-align: left;
-        }
+        .asset-type-btn:hover { border-color: var(--sr-accent); color: var(--sr-accent-strong); }
+        .asset-type-btn.active { background: var(--sr-accent-soft); border-color: var(--sr-accent); color: var(--sr-accent-strong); }
+        .asset-type-btn .sr-count { height: 18px; min-width: 18px; padding: 0 5px; }
+        .asset-type-btn.active .sr-count { background: var(--sr-accent); color: #fff; }
+        .sr-toolbar.asset-toolbar-2 { border-bottom: 1px solid var(--sr-border); padding-top: 0; }
+
+        /* Details popup */
+        .asset-dh { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: var(--sr-accent-soft); margin-bottom: 12px; }
+        .asset-dh .sr-avatar { width: 52px; height: 52px; font-size: 24px; border-radius: 14px; background: var(--sr-surface); overflow: hidden; }
+        .asset-dh .sr-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .asset-dh-title { font-size: 16px; font-weight: 700; color: var(--sr-text); }
+        .asset-dh-sub { font-size: 12px; color: var(--sr-muted); }
+        .asset-dh .sr-pill { margin-inline-start: auto; }
+        .asset-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; }
+        .sr-form .sr-kv { padding: 6px 14px; }
+
+        /* Signature pad */
+        .sig-wrap { border: 1px solid var(--sr-border-strong); border-radius: 10px; background: #fff; overflow: hidden; }
+        .sig-wrap canvas { display: block; width: 100%; height: 220px; cursor: crosshair; touch-action: none; }
+        .sig-tools { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+        .sig-preview { margin-top: 8px; max-height: 160px; max-width: 100%; border: 1px solid var(--sr-border); border-radius: 8px; display: none; background: #fff; }
+        .sr-steps-list { margin: 0; padding-inline-start: 18px; font-size: 12.5px; }
+        .sr-steps-list li { margin: 2px 0; }
     </style>
 </head>
 
@@ -149,12 +103,8 @@
             <div class="slimscroll-menu" id="remove-scroll">
                 <div class="topbar-left">
                     <a href="dashboard.php" class="logo">
-                        <span>
-                            <img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22">
-                        </span>
-                        <i>
-                            <img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28">
-                        </i>
+                        <span><img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22"></span>
+                        <i><img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28"></i>
                     </a>
                 </div>
                 <?php include("./includes/main_menu.php"); ?>
@@ -165,56 +115,75 @@
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box table-responsive">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="m-t-0 header-title"><?= __('asset_inventory', 'Asset Inventory') ?></h4>
-                                    <?php if ($can_add_asset): ?>
-                                    <button id="btn-add-asset" type="button" class="btn btn-primary btn-sm waves-effect waves-light">
-                                        <i class="mdi mdi-plus-circle mr-2"></i><?= __('add_asset', 'Add Asset') ?>
-                                    </button>
-                                    <?php endif; ?>
-                                </div>
 
-                                <div id="response"></div>
-
-                                <div class="row pb-3 border-bottom">
-                                    <div class="col-md-4 mb-2">
-                                        <label for="filterStatus" class="form-label small font-weight-bold d-block mb-1"><?= __('filter_by_status', 'Filter by Status') ?></label>
-                                        <div class="asset_status"></div>
-                                    </div>
-                                    <div class="col-md-4 mb-2">
-                                        <label for="filterType" class="form-label small font-weight-bold d-block mb-1"><?= __('filter_by_asset_type', 'Filter by Asset Type') ?></label>
-                                        <div class="asset_type"></div>
-                                    </div>
-                                </div>
-
-                                <table id="inventory_table" class="table table-striped table-bordered dt-responsive nowrap inventory_table" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                    <thead>
-                                        <tr>
-                                            <th><?= __('id', 'ID') ?></th>
-                                            <th></th>
-                                            <th><?= __('tracking_id', 'Tracking ID') ?></th>
-                                            <th><?= __('asset_type', 'Asset Type') ?></th>
-                                            <th><?= __('serial_number', 'Serial Number') ?></th>
-                                            <th><?= __('description', 'Description') ?></th>
-                                            <th><?= __('status', 'Status') ?></th>
-                                            <th><?= __('assigned_to', 'Assigned To') ?></th>
-                                            <th><?= __('assigned_date', 'Assigned Date') ?></th>
-                                            <th style="width: 30px"><?= __('action', 'Action') ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="inventory-body">
-                                    </tbody>
-                                </table>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('asset_inventory', 'Asset Inventory') ?></h1>
+                            <p><?= __('asset_inventory_subtitle', 'Laptops, phones, SIM cards and cars handed out to employees.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <?php if ($can_add_asset): ?>
+                                <button id="btn-add-asset" type="button" class="sr-btn sr-btn-primary"><i class="fa fa-plus"></i> <?= __('add_asset', 'Add Asset') ?></button>
+                            <?php endif; ?>
                         </div>
                     </div>
+
+                    <div class="sr-tiles asset-tiles" id="assetTiles">
+                        <button type="button" class="sr-tile active" data-status="">
+                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
+                            <span class="sr-tile-value" data-count="all">&ndash;</span>
+                        </button>
+                        <button type="button" class="sr-tile" data-status="Available">
+                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('available', 'Available') ?></span>
+                            <span class="sr-tile-value" data-count="Available">&ndash;</span>
+                        </button>
+                        <button type="button" class="sr-tile" data-status="Assigned">
+                            <span class="sr-tile-label"><span class="sr-dot dot-indigo"></span><?= __('assigned', 'Assigned') ?></span>
+                            <span class="sr-tile-value" data-count="Assigned">&ndash;</span>
+                        </button>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="assetSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <div id="assetExportButtons"></div>
+                            </div>
+                        </div>
+                        <div class="sr-toolbar asset-toolbar-2">
+                            <div class="asset-types" id="assetTypes"></div>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table id="inventory_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?= __('asset_type', 'Asset') ?></th>
+                                        <th><?= __('serial_number', 'Serial Number') ?></th>
+                                        <th><?= __('description', 'Description') ?></th>
+                                        <th><?= __('status', 'Status') ?></th>
+                                        <th><?= __('assigned_to', 'Assigned To') ?></th>
+                                        <th class="text-right"><?= __('action', 'Action') ?></th>
+                                        <th>status</th>
+                                        <th>type</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </div>
             </div>
+
+            <footer class="footer">
+                <?= $site_footer ?>
+            </footer>
         </div>
     </div>
 
@@ -227,36 +196,40 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
-    <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfobject/2.2.0/pdfobject.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
+    <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
+    <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
+    <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
+    <script src="./plugins/datatables/jszip.min.js"></script>
+    <script src="./plugins/datatables/pdfmake.min.js"></script>
+    <script src="./plugins/datatables/vfs_fonts.js"></script>
+    <script src="./plugins/datatables/buttons.html5.min.js"></script>
+    <script src="./plugins/datatables/buttons.print.min.js"></script>
+    <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
+    <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
 
     <script>
     (function() {
         const apiUrl = './includes/ajaxFile/ajaxAssetInventory.php';
+        const F = window.SRForm, t = F.t, esc = F.esc;
+        const CAR_ASSET_ID = 4;
         let inventoryTable;
-        
+        let allRows = [];
+        let typeFilter = '';
+
         // User role information from backend
         const userRole = {
             userType: '<?= htmlspecialchars($userType) ?>',
-            empType: '<?= htmlspecialchars($empType) ?>',
             isSystemAdmin: <?= $isSystemAdmin ? 'true' : 'false' ?>,
             // Special Access grants (App Settings > Special Access), independent of role
             canAdd: <?= $can_add_asset ? 'true' : 'false' ?>,
             canEdit: <?= $can_edit_asset ? 'true' : 'false' ?>,
             canDelete: <?= $can_delete_asset ? 'true' : 'false' ?>,
-            // Allowed assets for this user
             allowedAssets: <?= json_encode($allowedAssets) ?>,
-            // Excluded assets for this user (exclusive filtering)
+            // Asset types hidden from this role (exclusive filtering)
             excludedAssets: function() {
                 if (this.isSystemAdmin || this.canAdd) return [];
                 if (this.userType === 'it') return ['SIM Card', 'Car', 'Mobile Phone'];
@@ -265,1073 +238,589 @@
             }
         };
 
-        // Check if user can access asset type
-        function canAccessAsset(assetName) {
-            if (userRole.isSystemAdmin || userRole.canAdd) return true;
-            if (userRole.allowedAssets.length === 0) return false;
-            return userRole.allowedAssets.includes(assetName);
+        function typeKey(name) { return String(name || '').toLowerCase().replace(/ /g, '_'); }
+        function typeLabel(name) { return name ? t(typeKey(name), name) : '-'; }
+        function typeIcon(name) {
+            return ({ 'Laptop': 'mdi-laptop', 'Mobile Phone': 'mdi-cellphone', 'SIM Card': 'mdi-sim', 'Car': 'mdi-car' })[name] || 'mdi-package-variant';
+        }
+        function statusPill(status, xs) {
+            const tone = status === 'Assigned' ? 'indigo' : (status === 'Available' ? 'green' : 'amber');
+            return `<span class="sr-pill ${xs ? 'sr-pill-xs ' : ''}tone-${tone}"><span class="sr-dot"></span>${esc(t(typeKey(status), status))}</span>`;
+        }
+        function fail(title, xhr, fallback) {
+            Swal.fire({ allowOutsideClick: false, title: title || t('error', 'Error'), text: (xhr && xhr.responseJSON && xhr.responseJSON.message) || (xhr && xhr.message) || fallback || '', icon: 'error', confirmButtonText: t('ok', 'OK') });
         }
 
-        // Initialize DataTable
+        /* ---------------- List ---------------- */
 
-        function statusBadge(status, translatedStatus) {
-            const cls = status === 'Assigned' ? 'success' : (status === 'Available' ? 'secondary' : 'warning');
-            return `<span class="badge badge-${cls}">${translatedStatus || status}</span>`;
+        function actionsHtml(row) {
+            const isAssigned = row.status === 'Assigned', isCar = row.asset_id == CAR_ASSET_ID;
+            let menu = '';
+            if (!isAssigned && userRole.canEdit) {
+                menu += `<a href="javascript:void(0);" class="dropdown-item editAssetBtn" data-id="${row.id}"><i class="mdi mdi-pencil mr-2"></i>${esc(t('edit', 'Edit'))}</a>`;
+            }
+            if (row.status === 'Available') {
+                menu += isCar
+                    ? `<a href="javascript:void(0);" class="dropdown-item btn-assign-driver" data-id="${row.id}"><i class="mdi mdi-steering mr-2"></i>${esc(t('assign_driver', 'Assign driver'))}</a>`
+                    : `<a href="javascript:void(0);" class="dropdown-item btn-assign" data-id="${row.id}"><i class="mdi mdi-link-variant mr-2"></i>${esc(t('assign', 'Assign'))}</a>`;
+            }
+            if (isAssigned) {
+                menu += `<a href="javascript:void(0);" class="dropdown-item print-asset-report" data-id="${row.id}"><i class="mdi mdi-printer mr-2"></i>${esc(t('print_report', 'Print report'))}</a>`;
+                menu += `<a href="javascript:void(0);" class="dropdown-item text-warning btn-unassign" data-id="${row.id}"><i class="mdi mdi-link-variant-off mr-2"></i>${esc(t('unassign', 'Unassign'))}</a>`;
+            }
+            if (!isAssigned && userRole.canDelete) {
+                menu += `<div class="dropdown-divider"></div><a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax" data-tbl="asset_items" data-file="0" data-id="${row.id}"><i class="fa fa-trash mr-2"></i>${esc(t('delete', 'Delete'))}</a>`;
+            }
+            return `<div class="sr-actions">
+                <a href="javascript:void(0);" class="sr-open-btn view-asset-details" data-id="${row.id}"><i class="mdi mdi-eye-outline"></i> ${esc(t('view_details', 'View'))}</a>
+                ${menu ? `<div class="btn-group dropdown">
+                    <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                    <div class="dropdown-menu dropdown-menu-right">${menu}</div>
+                </div>` : ''}
+            </div>`;
         }
 
-        function showAssetDetailsModal(itemId) {
-            Swal.showLoading();
-            $.ajax({
-                url: apiUrl,
-                type: 'POST',
-                data: { action: 'get_item_details', item_id: itemId },
-                dataType: 'json',
-                success: function(resp) {
-                    Swal.close();
-                    if (!resp.success || !resp.data.item) {
-                        Swal.fire('Error', resp.message || 'Could not load asset details', 'error');
-                        return;
-                    }
-
-                    const it = resp.data.item;
-                    const isAssigned = it.status === 'Assigned';
-                    const assetTypeLabel = it.asset_name ? (__(it.asset_name.toLowerCase().replace(/ /g, '_')) || it.asset_name) : '-';
-
-                    const avatarHtml = (isAssigned && it.avatar_url)
-                        ? `<img src="${it.avatar_url}" alt="">`
-                        : `<i class="mdi mdi-${isAssigned ? 'account' : 'package-variant-closed'}"></i>`;
-
-                    const headerHtml = `
-                        <div class="asset-detail-header">
-                            <div class="avatar-circle">${avatarHtml}</div>
-                            <div>
-                                <div style="font-weight:700; font-size:15px;">${isAssigned ? (it.employee_name || '-') : (assetTypeLabel)}</div>
-                                <div class="header-sub">${isAssigned ? ('Emp ID: ' + (it.emp_id || '-')) : ''}${isAssigned ? ' &bull; ' : ''}${it.tracking_id || '-'}</div>
+        function initTable() {
+            const exportOptions = { columns: [0, 1, 2, 3, 4], orthogonal: 'export' };
+            const title = <?= json_encode(__('asset_inventory', 'Asset Inventory')) ?>;
+            inventoryTable = $('#inventory_table').DataTable({
+                dom: 'Brtip',
+                pageLength: 15,
+                responsive: true,
+                order: [],
+                data: [],
+                columns: [
+                    { data: 'asset_name', render: function(d, type, row) {
+                        if (type === 'export') return typeLabel(d) + ' - ' + (row.tracking_id || '');
+                        if (type !== 'display') return typeLabel(d) + ' ' + (row.tracking_id || '');
+                        return `<div class="sr-person">
+                            <span class="sr-avatar asset-avatar"><i class="mdi ${typeIcon(d)}"></i></span>
+                            <div style="min-width:0;">
+                                <span class="sr-cell-title">${esc(typeLabel(d))}</span>
+                                <span class="sr-cell-sub sr-mono"><i class="mdi mdi-barcode-scan"></i>${esc(row.tracking_id || '-')}</span>
                             </div>
-                            <div class="header-status">${statusBadge(it.status, __(it.status.toLowerCase()))}</div>
-                        </div>
-                        <div class="asset-detail-section">
-                            <h6><i class="mdi mdi-package-variant mr-1"></i>${__('asset_information', 'Asset Information')}</h6>
-                            <div class="asset-detail-row"><span class="label">${__('asset_type', 'Asset Type')}</span><span class="value">${assetTypeLabel}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('tracking_id', 'Tracking ID')}</span><span class="value">${it.tracking_id || '-'}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('serial_number', 'Serial Number')}</span><span class="value">${it.serial_number || '-'}</span></div>
-                            <div class="asset-detail-row stack"><span class="label">${__('description', 'Description')}</span><span class="value">${it.description || '-'}</span></div>
-                        </div>
-                        ${isAssigned ? `
-                        <div class="asset-detail-section">
-                            <h6><i class="mdi mdi-account-arrow-right mr-1"></i>${__('assignment_information', 'Assignment Information')}</h6>
-                            <div class="asset-detail-row"><span class="label">${__('assigned_to', 'Assigned To')}</span><span class="value">${it.employee_name || '-'}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('employee_id', 'Employee ID')}</span><span class="value">${it.emp_id || '-'}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('department', 'Department')}</span><span class="value">${it.dept || '-'}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('mobile', 'Mobile')}</span><span class="value">${it.mobile || '-'}</span></div>
-                            <div class="asset-detail-row"><span class="label">${__('assigned_date', 'Assigned Date')}</span><span class="value">${it.assigned_date || '-'}</span></div>
-                            ${it.assignment_note ? `<div class="asset-detail-row stack"><span class="label">${__('note', 'Note')}</span><span class="value">${it.assignment_note}</span></div>` : ''}
-                        </div>
-                        ` : ''}
-                        <div class="asset-detail-section" id="asset-detail-actions">
-                            <h6><i class="mdi mdi-link-variant mr-1"></i>${__('actions', 'Actions')}</h6>
-                            <div class="d-flex flex-wrap" style="gap:8px;">
-                                <div class="btn-group flex-wrap" role="group">
-                                    ${isAssigned ? `<button type="button" class="btn btn-info btn-sm print-asset-report" data-id="${it.id}"><i class="fa fa-print mr-1"></i>${__('print_report', 'Print Report')}</button>` : ''}
-                                    ${isAssigned ? `<button type="button" class="btn btn-warning btn-sm btn-unassign" data-id="${it.id}" data-tracking="${it.tracking_id || ''}"><i class="fa fa-unlink mr-1"></i>${__('unassign', 'Unassign')}</button>` : ''}
-                                    ${(!isAssigned && it.asset_name !== 'Car') ? `<button type="button" class="btn btn-primary btn-sm btn-assign" data-id="${it.id}"><i class="fa fa-link mr-1"></i>${__('assign', 'Assign')}</button>` : ''}
-                                    ${(!isAssigned && userRole.canEdit) ? `<button type="button" class="btn btn-light btn-sm editAssetBtn" data-id="${it.id}" data-asset_id="${it.asset_id || ''}" data-asset_name="${it.asset_name || ''}" data-tracking="${it.tracking_id || ''}" data-serial="${it.serial_number || ''}" data-description="${(it.description || '').replace(/"/g, '&quot;')}" data-status="${it.status}"><i class="fa fa-edit mr-1"></i>${__('edit', 'Edit')}</button>` : ''}
-                                    ${(!isAssigned && userRole.canDelete) ? `<button type="button" class="btn btn-outline-danger btn-sm deleteAjax" data-tbl="asset_items" data-file="0" data-id="${it.id}"><i class="fa fa-trash mr-1"></i>${__('delete', 'Delete')}</button>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-
-                    Swal.fire({
-                        title: __('asset_details', 'Asset Details'),
-                        html: headerHtml,
-                        width: "60%",
-                        showConfirmButton: true,
-                        confirmButtonText: __('close', 'Close'),
-                        allowOutsideClick: false,
-                        confirmButtonColor: APP_COLORS.secondary
-                    });
-                },
-                error: function(xhr, status, error) {
-                    Swal.close();
-                    console.error('Get Item Details Error:', status, error, xhr.responseText);
-                    Swal.fire('Error', 'Could not load asset details: ' + (xhr.responseJSON?.message || error), 'error');
+                        </div>`;
+                    } },
+                    { data: 'serial_number', render: function(d, type) { return type === 'display' ? `<span class="sr-mono">${esc(d || '-')}</span>` : (d || ''); } },
+                    { data: 'description', render: function(d, type) { return type === 'display' ? (d ? esc(d) : '<span class="text-muted">&ndash;</span>') : (d || ''); } },
+                    { data: 'status', render: function(d, type) { return type === 'display' ? statusPill(d) : t(typeKey(d), d); } },
+                    { data: 'employee_name', render: function(d, type, row) {
+                        if (type !== 'display') return d ? d + (row.assigned_date ? ' (' + row.assigned_date + ')' : '') : '';
+                        if (!d) return '<span class="text-muted">&ndash;</span>';
+                        return `<span class="sr-person-name">${esc(d)}</span><span class="sr-cell-sub"><i class="mdi mdi-calendar-check"></i>${esc(row.assigned_date || '')}</span>`;
+                    } },
+                    { data: null, orderable: false, className: 'text-right', render: function(d, type, row) { return type === 'display' ? actionsHtml(row) : ''; } },
+                    { data: 'status', visible: false },
+                    { data: 'asset_name', visible: false }
+                ],
+                createdRow: function(tr, row) { $(tr).attr('data-id', row.id); },
+                buttons: [
+                    { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: exportOptions, title: title },
+                    { extend: 'csv', text: '<i class="mdi mdi-file-document"></i> CSV', exportOptions: exportOptions, title: title },
+                    { extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', exportOptions: exportOptions, title: title },
+                    { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + t('print', 'Print'), exportOptions: exportOptions, title: title }
+                ],
+                language: {
+                    info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                    infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                    infoFiltered: '',
+                    paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                    emptyTable: `<div class="sr-empty"><i class="mdi mdi-package-variant"></i>${__('no_data_available_in_table')}</div>`,
+                    zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+                    loadingRecords: `<div class="sr-empty"><i class="mdi mdi-loading mdi-spin"></i>${t('loading', 'Loading')}...</div>`
                 }
             });
+            inventoryTable.buttons().container().appendTo('#assetExportButtons');
+
+            $('#assetSearch').on('input', function() { inventoryTable.search(this.value).draw(); });
+            $('#assetTiles').on('click', '.sr-tile', function() {
+                $('#assetTiles .sr-tile').removeClass('active');
+                $(this).addClass('active');
+                const s = $(this).data('status');
+                inventoryTable.column(6).search(s ? '^' + s + '$' : '', true, false).draw();
+            });
+            $('#assetTypes').on('click', '.asset-type-btn', function() {
+                $('#assetTypes .asset-type-btn').removeClass('active');
+                $(this).addClass('active');
+                typeFilter = $(this).data('type') || '';
+                inventoryTable.column(7).search(typeFilter ? '^' + $.fn.dataTable.util.escapeRegex(typeFilter) + '$' : '', true, false).draw();
+            });
+            // Whole row opens the details (except buttons/links/menus)
+            $('#inventory_table tbody').on('click', 'tr', function(e) {
+                if ($(e.target).closest('a, button, .dropdown-menu, .dtr-control').length) return;
+                const id = $(this).data('id');
+                if (id) showAssetDetailsModal(id);
+            });
+        }
+
+        function renderCounts(rows) {
+            const by = { all: rows.length, Available: 0, Assigned: 0 }, types = {};
+            rows.forEach(r => { by[r.status] = (by[r.status] || 0) + 1; types[r.asset_name] = (types[r.asset_name] || 0) + 1; });
+            $('#assetTiles [data-count]').each(function() { $(this).text(by[$(this).data('count')] || 0); });
+            const names = Object.keys(types).sort();
+            let html = `<button type="button" class="asset-type-btn ${typeFilter ? '' : 'active'}" data-type=""><i class="mdi mdi-view-grid"></i>${esc(t('all_types', 'All types'))} <span class="sr-count">${rows.length}</span></button>`;
+            names.forEach(n => {
+                html += `<button type="button" class="asset-type-btn ${typeFilter === n ? 'active' : ''}" data-type="${esc(n)}"><i class="mdi ${typeIcon(n)}"></i>${esc(typeLabel(n))} <span class="sr-count">${types[n]}</span></button>`;
+            });
+            $('#assetTypes').html(html);
         }
 
         function loadInventory() {
-            $.ajax({
-                url: apiUrl,
-                type: 'POST',
-                data: { action: 'list_items' },
-                dataType: 'json',
-                success: function(resp) {
-                    if (!resp.success) {
-                        Swal.fire('Error', resp.message || 'Failed to load assets', 'error');
+            $.ajax({ url: apiUrl, type: 'POST', data: { action: 'list_items' }, dataType: 'json' })
+                .done(function(resp) {
+                    if (!resp.success) { fail(null, null, resp.message || 'Failed to load assets'); return; }
+                    const excluded = userRole.isSystemAdmin ? [] : userRole.excludedAssets();
+                    allRows = (resp.data.items || []).filter(r => !excluded.includes(r.asset_name));
+                    renderCounts(allRows);
+                    inventoryTable.clear().rows.add(allRows).draw(false);
+                })
+                .fail(function(xhr) { fail(null, xhr, 'Could not load assets'); });
+        }
+
+        /* ---------------- Details ---------------- */
+
+        function showAssetDetailsModal(itemId) {
+            Swal.fire({ title: t('loading', 'Loading') + '...', didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
+            $.ajax({ url: apiUrl, type: 'POST', data: { action: 'get_item_details', item_id: itemId }, dataType: 'json' })
+                .done(function(resp) {
+                    if (!resp.success || !resp.data.item) { fail(null, null, resp.message || 'Could not load asset details'); return; }
+                    const it = resp.data.item;
+                    const row = allRows.find(r => r.id == it.id) || {};
+                    const isAssigned = it.status === 'Assigned', isCar = row.asset_id == CAR_ASSET_ID || it.asset_name === 'Car';
+                    const avatar = (isAssigned && it.avatar_url) ? `<img src="${esc(it.avatar_url)}" alt="">` : `<i class="mdi ${isAssigned ? 'mdi-account' : typeIcon(it.asset_name)}"></i>`;
+                    const kv = (label, value) => `<div class="row-kv"><dt>${esc(label)}</dt><dd>${value ? esc(value) : '<span class="text-muted">&ndash;</span>'}</dd></div>`;
+
+                    let actions = '';
+                    if (isAssigned) {
+                        actions += `<button type="button" class="sr-btn sr-btn-sm print-asset-report" data-id="${it.id}"><i class="mdi mdi-printer"></i> ${esc(t('print_report', 'Print report'))}</button>`;
+                        actions += `<button type="button" class="sr-btn sr-btn-sm btn-unassign" data-id="${it.id}"><i class="mdi mdi-link-variant-off"></i> ${esc(t('unassign', 'Unassign'))}</button>`;
+                    } else {
+                        actions += isCar
+                            ? `<button type="button" class="sr-btn sr-btn-sm sr-btn-primary btn-assign-driver" data-id="${it.id}"><i class="mdi mdi-steering"></i> ${esc(t('assign_driver', 'Assign driver'))}</button>`
+                            : `<button type="button" class="sr-btn sr-btn-sm sr-btn-primary btn-assign" data-id="${it.id}"><i class="mdi mdi-link-variant"></i> ${esc(t('assign', 'Assign'))}</button>`;
+                        if (userRole.canEdit) actions += `<button type="button" class="sr-btn sr-btn-sm editAssetBtn" data-id="${it.id}"><i class="mdi mdi-pencil"></i> ${esc(t('edit', 'Edit'))}</button>`;
+                        if (userRole.canDelete) actions += `<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost text-danger deleteAjax" data-tbl="asset_items" data-file="0" data-id="${it.id}"><i class="fa fa-trash"></i> ${esc(t('delete', 'Delete'))}</button>`;
+                    }
+
+                    const html = `<div class="sr-page sr-form text-left">
+                        <div class="asset-dh">
+                            <span class="sr-avatar">${avatar}</span>
+                            <div style="min-width:0;">
+                                <div class="asset-dh-title">${esc(isAssigned ? (it.employee_name || '-') : typeLabel(it.asset_name))}</div>
+                                <div class="asset-dh-sub sr-mono">${isAssigned ? esc(t('emp_id', 'Emp ID') + ': ' + (it.emp_id || '-')) + ' &middot; ' : ''}${esc(it.tracking_id || '-')}</div>
+                            </div>
+                            ${statusPill(it.status)}
+                        </div>
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-package-variant"></i> ${esc(t('asset_information', 'Asset information'))}</span></div>
+                            <dl class="sr-kv">
+                                ${kv(t('asset_type', 'Asset type'), typeLabel(it.asset_name))}
+                                ${kv(t('tracking_id', 'Tracking ID'), it.tracking_id)}
+                                ${kv(t('serial_number', 'Serial number'), it.serial_number)}
+                                ${kv(t('description', 'Description'), it.description)}
+                            </dl>
+                        </div>
+                        ${isAssigned ? `<div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-account-check"></i> ${esc(t('assignment_information', 'Assignment'))}</span></div>
+                            <dl class="sr-kv">
+                                ${kv(t('assigned_to', 'Assigned to'), it.employee_name)}
+                                ${kv(t('employee_id', 'Employee ID'), it.emp_id)}
+                                ${kv(t('department', 'Department'), it.dept)}
+                                ${kv(t('mobile', 'Mobile'), it.mobile)}
+                                ${kv(t('assigned_date', 'Assigned date'), it.assigned_date)}
+                                ${it.assignment_note ? kv(t('note', 'Note'), it.assignment_note) : ''}
+                            </dl>
+                        </div>` : ''}
+                        <div class="sr-fsec" style="margin-bottom:0;">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-link-variant"></i> ${esc(t('actions', 'Actions'))}</span></div>
+                            <div class="asset-actions">${actions}</div>
+                        </div>
+                    </div>`;
+
+                    Swal.fire({ allowOutsideClick: false,
+                        title: t('asset_details', 'Asset details'),
+                        html: html,
+                        width: '640px',
+                        showConfirmButton: false,
+                        showCloseButton: true,
+                        customClass: { popup: 'sr-addline-popup' }
+                    });
+                })
+                .fail(function(xhr) { fail(null, xhr, 'Could not load asset details'); });
+        }
+
+        /* ---------------- Add / edit ---------------- */
+
+        function registerAssetModal() {
+            $.ajax({ url: apiUrl, type: 'POST', data: { action: 'get_assets' }, dataType: 'json' })
+                .done(function(resp) {
+                    if (!resp.success || !resp.data.assets) { fail(null, null, 'Could not load asset types'); return; }
+                    let assets = resp.data.assets;
+                    if (!userRole.isSystemAdmin && !userRole.canAdd) {
+                        assets = userRole.allowedAssets.length
+                            ? assets.filter(a => userRole.allowedAssets.some(al => a.name.toLowerCase().includes(al.toLowerCase())))
+                            : [];
+                    }
+                    if (!assets.length) {
+                        Swal.fire({ title: t('access_denied', 'Access denied'), text: t('no_permission_add_assets', 'You do not have permission to add assets'), icon: 'warning', allowOutsideClick: false });
                         return;
                     }
-                    
-                    const rows = resp.data.items || [];
-                    
-                    // Destroy existing table if it exists
-                    if ($.fn.dataTable.isDataTable('#inventory_table')) {
-                        inventoryTable.destroy();
-                    }
-                    
-                    // Clear the tbody and rebuild
-                    $('#inventory-body').empty();
-                    
-                    if (rows.length > 0) {
-                        rows.forEach(row => {
-                            // Filter rows based on user role - exclude assets not allowed for this role
-                            if (!userRole.isSystemAdmin) {
-                                const excluded = userRole.excludedAssets();
-                                if (excluded.includes(row.asset_name)) {
-                                    return; // Skip this row
+
+                    const html = '<form id="registerAssetForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                        F.section('mdi-package-variant', t('asset_type', 'Asset type'),
+                            F.field({ col: 12, name: 'asset_id', html: F.choices('asset_id', assets.map(a => ({ v: a.id, l: typeLabel(a.name), icon: typeIcon(a.name) })), true, t('please_select_an_asset_type', 'Select an asset type')) })
+                        ) +
+                        F.section('mdi-information-outline', t('details', 'Details'),
+                            F.field({ col: 12, name: 'car_id', label: t('select_car', 'Car'), req: false,
+                                html: F.select({ name: 'car_id', id: 'swal-car-select', placeholder: t('search_and_select_a_car', 'Search and select a car'), msg: t('please_select_a_car', 'Select a car') }),
+                                hint: esc(t('cars_already_assigned_disabled', 'Cars that already have a driver cannot be picked.')) }).replace('sr-fcol c-12', 'sr-fcol c-12 js-car-row" style="display:none;') +
+                            F.field({ col: 12, name: 'serial_number', id: 'swal-serial-number', label: t('serial_number_identifier', 'Serial number / identifier'), req: true, cls: 'sr-mono',
+                                ph: t('enter_serial_number_identifier', ''), msg: t('please_enter_serial_number', 'Enter the serial number') }).replace('sr-fcol c-12', 'sr-fcol c-12 js-serial-row') +
+                            F.field({ col: 12, name: 'description', id: 'swal-description', type: 'textarea', label: t('description', 'Description'), ph: t('enter_asset_description', '') })
+                        ) +
+                    '</form>';
+
+                    F.open({
+                        title: t('add_new_asset_item', 'Add asset'),
+                        html: html,
+                        width: '680px',
+                        confirm: t('add_asset', 'Add asset'),
+                        didOpen: function() {
+                            const $form = $('#registerAssetForm');
+                            F.liveClear($form);
+                            let carsLoaded = false;
+                            $form.on('change', 'input[name="asset_id"]', function() {
+                                const isCar = this.value == CAR_ASSET_ID;
+                                $form.find('.js-car-row').toggle(isCar);
+                                $form.find('.js-serial-row').toggle(!isCar);
+                                $('#swal-serial-number').attr('data-required', isCar ? null : '1');
+                                $('#swal-car-select').attr('data-required', isCar ? '1' : null);
+                                if (isCar && !carsLoaded) {
+                                    carsLoaded = true;
+                                    $.ajax({ url: apiUrl, type: 'POST', data: { action: 'get_cars' }, dataType: 'json' }).done(function(r) {
+                                        if (!r.success || !r.data.cars) return;
+                                        const $sel = $('#swal-car-select');
+                                        r.data.cars.forEach(car => {
+                                            const label = `${car.maker_name || ''} ${car.model || ''} (${car.plate_no})`.trim();
+                                            const assigned = car.is_assigned == 1;
+                                            $sel.append($('<option>', { value: car.id, disabled: assigned, 'data-label': label })
+                                                .text(assigned ? `${label} - ${t('assigned', 'Assigned')} (${car.assigned_to || ''})` : label));
+                                        });
+                                        F.select2($sel, { placeholder: t('search_and_select_a_car', 'Search and select a car'), allowClear: true });
+                                    });
                                 }
-                            }
-                            
-                            const rowHtml = `<tr>
-                                <td>${row.id}</td>
-                                <td><input type="checkbox" name="status" class="asset-status-checkbox" value="${row.id}" /></td>
-                                <td><strong>${row.tracking_id || '-'}</strong></td>
-                                <td>${__(row.asset_name.toLowerCase().replace(/ /g, '_')) || '-'}</td>
-                                <td>${row.serial_number || '-'}</td>
-                                <td>${row.description || '-'}</td>
-                                <td>${statusBadge(row.status, __(row.status.toLowerCase()))}</td>
-                                <td>${row.employee_name || '-'}</td>
-                                <td>${row.assigned_date || '-'}</td>
-                                <td>
-                                    <div class="btn-group dropdown">
-                                        <a href="javascript: void(0);" class="table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm" data-toggle="dropdown" aria-expanded="false">
-                                            <i class="mdi mdi-dots-horizontal"></i>
-                                        </a>
-                                        <div class="dropdown-menu dropdown-menu-right">
-                                            <a href="javascript:void(0);" class="dropdown-item view-asset-details"
-                                                data-id="${row.id}">
-                                                <i class="fa fa-eye mr-2 font-18 vertical-middle"></i>${__('view_details', 'View Details')}
-                                            </a>
-                                            ${(row.status !== 'Assigned' && userRole.canEdit) ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-custom editAssetBtn"
-                                                data-id="${row.id}"
-                                                data-asset_id="${row.asset_id}"
-                                                data-asset_name="${(row.asset_name) || ''}"
-                                                data-tracking="${row.tracking_id || ''}"
-                                                data-serial="${row.serial_number || ''}"
-                                                data-description="${(row.description || '').replace(/"/g, '&quot;')}"
-                                                data-status="${row.status}">
-                                                <i class="fa fa-edit mr-2 font-18 vertical-middle"></i>${__('edit', 'Edit')}
-                                            </a>
-                                            ` : ''}
-                                            ${(row.status !== 'Assigned' && userRole.canDelete) ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-danger deleteAjax"
-                                                data-tbl='asset_items'
-                                                data-file='0'
-                                                data-id="${row.id}">
-                                                <i class="fa fa-trash mr-2 font-18 vertical-middle"></i>${__('delete', 'Delete')}
-                                            </a>
-                                            ` : ''}
-                                            ${row.status === 'Assigned' ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-info print-asset-report" 
-                                                data-id="${row.id}">
-                                                <i class="fa fa-print mr-2 font-18 vertical-middle"></i>${__('print_report', 'Print Report')}
-                                            </a>
-                                            ` : ''}
-                                            ${row.asset_id != 4 && row.status === 'Available' ? `
-                                            <a href="javascript:void(0);" class="dropdown-item btn-assign" 
-                                                data-id="${row.id}">
-                                                <i class="fa fa-link mr-2 font-18 vertical-middle"></i>${__('assign', 'Assign')}
-                                            </a>
-                                            ` : ''}
-                                            ${row.status === 'Assigned' ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-warning btn-unassign" 
-                                                data-id="${row.id}"
-                                                data-tracking="${row.tracking_id}">
-                                                <i class="fa fa-unlink mr-2 font-18 vertical-middle"></i>${__('unassign', 'Unassign')}
-                                            </a>
-                                            ` : ''}
-                                            ${row.asset_id == 4 && row.status === 'Available' ? `
-                                            <a href="javascript:void(0);" class="dropdown-item text-success btn-assign-driver" 
-                                                data-id="${row.id}"
-                                                data-tracking="${row.tracking_id}">
-                                                <i class="fa fa-user mr-2 font-18 vertical-middle"></i>${__('assign_driver', 'Assign Driver')}
-                                            </a>
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>`;
-                            $('#inventory-body').append(rowHtml);
-                        });
-                    }
-                    
-                    // Reinitialize DataTable
-                    initializeDataTable();
-                    
-                    // Populate filters
-                    populateFilters(rows);
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX Error:', status, error, xhr.responseText);
-                    Swal.fire('Error', 'Could not load assets: ' + (xhr.responseJSON?.message || error), 'error');
-                }
-            });
-        }
-
-        function initializeDataTable() {
-            // Export button configuration
-            const exportColumns = [2, 3, 4, 5, 6, 7, 8]; // Tracking ID, Asset Type, Serial, Description, Status, Assigned To, Assigned Date
-            const buttonConfig = [];
-            
-            buttonConfig.push({
-                extend: 'copy',
-                text: '<i class="mdi mdi-content-copy text-info mr-1"></i>Copy',
-                exportOptions: { columns: exportColumns }
-            });
-            buttonConfig.push({
-                extend: 'excel',
-                text: '<i class="mdi mdi-file-excel text-success mr-1"></i>Excel',
-                exportOptions: { columns: exportColumns }
-            });
-            buttonConfig.push({
-                extend: 'csv',
-                text: '<i class="mdi mdi-file-document mr-1"></i>CSV',
-                exportOptions: { columns: exportColumns }
-            });
-            buttonConfig.push({
-                extend: 'pdf',
-                text: '<i class="mdi mdi-file-pdf text-danger mr-1"></i>PDF',
-                exportOptions: { columns: exportColumns }
-            });
-            buttonConfig.push({
-                extend: 'print',
-                text: '<i class="mdi mdi-printer text-primary mr-1"></i>Print',
-                exportOptions: { columns: exportColumns }
-            });
-            
-            inventoryTable = $('#inventory_table').DataTable({
-                responsive: true,
-                pageLength: 10,
-                language: {
-                    emptyTable: 'No assets found',
-                    loadingRecords: 'Loading...',
-                    processing: 'Processing...'
-                },
-                columnDefs: [
-                    { visible: false, searchable: false, targets: 0 },
-                    { orderable: false, targets: 1 },
-                    { orderable: false, targets: 9 }
-                ],
-                dom: 'Bfrtip',
-                buttons: [{
-                    extend: 'collection',
-                    className: 'btn-dark',
-                    text: '<i class="icon-share-alt me-1 ti-xs"></i> Export',
-                    buttons: buttonConfig
-                }],
-                bDestroy: true,
-                language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                        paginate: {
-                            first: __('first'),
-                            last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
+                            });
+                            $form.on('change', '#swal-car-select', function() {
+                                const label = $(this).find(':selected').data('label');
+                                const $d = $('#swal-description');
+                                if (label && (!$d.val() || $d.data('auto'))) { $d.val(label).data('auto', true); }
+                            });
+                            $form.on('input', '#swal-description', function() { $(this).data('auto', false); });
                         },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                        preConfirm: function() {
+                            const $form = $('#registerAssetForm');
+                            const msg = F.validate($form);
+                            if (msg) { Swal.showValidationMessage(msg); return false; }
+                            const assetId = $form.find('input[name="asset_id"]:checked').val();
+                            const isCar = assetId == CAR_ASSET_ID;
+                            return F.post(apiUrl, {
+                                action: 'create_item',
+                                asset_id: assetId,
+                                car_id: isCar ? $('#swal-car-select').val() : '',
+                                serial_number: isCar ? '' : $.trim($('#swal-serial-number').val()),
+                                description: $.trim($('#swal-description').val())
+                            });
+                        }
+                    }).then(function(result) {
+                        if (!(result.isConfirmed && result.value)) return;
+                        Swal.fire({ allowOutsideClick: false, title: t('added_successfully', 'Added'), html: esc(t('tracking_id', 'Tracking ID')) + ': <b class="sr-mono">' + esc(result.value.data.tracking_id) + '</b>', icon: 'success', confirmButtonText: t('ok', 'OK') })
+                            .then(loadInventory);
+                    });
+                })
+                .fail(function(xhr) { fail(null, xhr, 'Could not load asset types'); });
+        }
+
+        function openEditModal(itemId) {
+            const row = allRows.find(r => r.id == itemId);
+            if (!row) return;
+            // The list trims long descriptions - fetch the full one
+            $.ajax({ url: apiUrl, type: 'POST', data: { action: 'get_item_details', item_id: itemId }, dataType: 'json' }).always(function(resp) {
+                const full = (resp && resp.success && resp.data.item) ? resp.data.item : row;
+                const html = '<form id="editAssetForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                    F.section(typeIcon(row.asset_name), typeLabel(row.asset_name),
+                        F.field({ col: 12, name: 'serial_number', id: 'edit-serial-number', label: t('serial_number', 'Serial number'), req: true, cls: 'sr-mono',
+                            value: full.serial_number || '', msg: t('serial_number_required', 'Serial number is required') }) +
+                        F.field({ col: 12, name: 'description', id: 'edit-description', type: 'textarea', label: t('description', 'Description'), value: full.description || '' }),
+                        `<span class="sr-chip sr-mono"><i class="mdi mdi-barcode-scan"></i>${esc(row.tracking_id || '')}</span>`
+                    ) +
+                '</form>';
+                F.open({
+                    title: t('edit_asset_item', 'Edit asset'),
+                    html: html,
+                    width: '620px',
+                    confirm: t('update', 'Update'),
+                    didOpen: function() { F.liveClear($('#editAssetForm')); $('#edit-serial-number').trigger('focus'); },
+                    preConfirm: function() {
+                        const $form = $('#editAssetForm');
+                        const msg = F.validate($form);
+                        if (msg) { Swal.showValidationMessage(msg); return false; }
+                        return F.post(apiUrl, { action: 'update_item', item_id: itemId, serial_number: $.trim($('#edit-serial-number').val()), description: $('#edit-description').val() });
                     }
+                }).then(function(result) {
+                    if (!(result.isConfirmed && result.value)) return;
+                    Swal.fire({ allowOutsideClick: false, title: t('updated', 'Updated'), text: t('asset_item_updated_successfully', 'Asset item updated successfully'), icon: 'success', confirmButtonText: t('ok', 'OK') }).then(loadInventory);
+                });
             });
         }
 
-        function populateFilters(rows) {
-            const selectOpt = '<select class="form-control select2-single" style="width: 100%;"><option value=""></option></select>';
-            const statusOptions = new Set();
-            const typeOptions = new Set();
-            
-            rows.forEach(row => {
-                // Filter based on user role - only add options for assets the user can see
-                if (!userRole.isSystemAdmin) {
-                    const excluded = userRole.excludedAssets();
-                    if (excluded.includes(row.asset_name)) {
-                        return; // Skip this row
-                    }
-                }
-                statusOptions.add(row.status);
-                typeOptions.add(row.asset_name);
-            });
-            
-            // Clear existing filters before adding new ones
-            $('.asset_status').empty();
-            $('.asset_type').empty();
-            
-            // Status filter
-            const statusSelect = $(selectOpt).appendTo('.asset_status').on('change', function() {
-                const val = $(this).val();
-                inventoryTable.column(6).search(val, true, false).draw();
-            });
-            Array.from(statusOptions).sort().forEach(status => {
-                statusSelect.append(`<option value="${__(status.toLowerCase().replace(/ /g, '_'))}">${__(status.toLowerCase().replace(/ /g, '_'))}</option>`);
-            });
-            statusSelect.select2({
-                placeholder: __('select_status', 'Select Status'),
-                allowClear: true,
-                width: '100%'
-            });
-            
-            // Asset Type filter
-            const typeSelect = $(selectOpt).appendTo('.asset_type').on('change', function() {
-                const val = $(this).val();
-                inventoryTable.column(3).search(val, true, false).draw();
-            });
-            Array.from(typeOptions).sort().forEach(type => {
-                typeSelect.append(`<option value="${__(type.toLowerCase().replace(/ /g, '_'))}">${__(type.toLowerCase().replace(/ /g, '_'))}</option>`);
-            });
-            typeSelect.select2({
-                placeholder: __('select_asset_type', 'Select Asset Type'),
-                allowClear: true,
-                width: '100%'
-            });
-        }
+        /* ---------------- Assign ---------------- */
 
-        function initEmployeeSelect(selector) {
-            $(selector).select2({
-                width: '100%',
-                dropdownParent: $('.swal2-container'),
+        function employeeSelect($sel) {
+            F.select2($sel, {
+                placeholder: t('search_employee', 'Search by name or ID'),
+                minimumInputLength: 0,
                 ajax: {
                     url: apiUrl,
                     dataType: 'json',
                     delay: 250,
                     data: params => ({ action: 'search_employees', q: params.term || '' }),
-                    processResults: data => ({ results: data.data.results || [] })
+                    processResults: data => ({ results: (data && data.data && data.data.results) || [] })
                 }
             });
         }
 
-        async function openAssignDriverModal(itemId, trackingId) {
-            const { value: form } = await Swal.fire({
-                title: 'Assign Driver to Car',
-                html: `
-                    <div class="form-group text-left">
-                        <label>Employee/Driver</label>
-                        <select id="swal-driver-emp" class="form-control swal2-select2"></select>
-                    </div>
-                    <div class="form-group text-left">
-                        <label>Assignment Date</label>
-                        <input type="date" id="swal-driver-date" class="form-control" value="${new Date().toISOString().slice(0,10)}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label>Notes (Optional)</label>
-                        <textarea id="swal-driver-notes" class="form-control" rows="2"></textarea>
-                    </div>
-                `,
-                showCancelButton: true,
-                preConfirm: () => {
-                    const empId = $('#swal-driver-emp').val();
-                    const date = $('#swal-driver-date').val();
-                    const notes = $('#swal-driver-notes').val();
-                    if (!empId) {
-                        Swal.showValidationMessage('Employee is required');
-                        return false;
-                    }
-                    return { emp_id: empId, rcv_date: date, notes: notes };
+        function assetSummary(row) {
+            return `<div class="asset-dh" style="margin-bottom:12px;">
+                <span class="sr-avatar"><i class="mdi ${typeIcon(row.asset_name)}"></i></span>
+                <div style="min-width:0;"><div class="asset-dh-title">${esc(typeLabel(row.asset_name))}</div>
+                <div class="asset-dh-sub sr-mono">${esc(row.tracking_id || '')}${row.serial_number ? ' &middot; ' + esc(row.serial_number) : ''}</div></div>
+                ${row.status ? statusPill(row.status, true) : ''}
+            </div>`;
+        }
+
+        function openAssignModal(itemId, isCar) {
+            const row = allRows.find(r => r.id == itemId) || { id: itemId };
+            const html = '<form id="assignAssetForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                assetSummary(row) +
+                F.section(isCar ? 'mdi-steering' : 'mdi-account-check', isCar ? t('driver', 'Driver') : t('employee', 'Employee'),
+                    F.field({ col: 7, name: 'emp_id', label: isCar ? t('employee_driver', 'Employee / driver') : t('employee', 'Employee'), req: true,
+                        html: '<select name="emp_id" id="swal-emp" class="form-control" data-required="1" data-msg="' + esc(t('employee_is_required', 'Select the employee')) + '"></select>' }) +
+                    F.field({ col: 5, name: 'date', id: 'swal-date', label: isCar ? t('assignment_date', 'Assignment date') : t('assign_date', 'Assign date'), req: true, value: F.today(), ph: 'YYYY-MM-DD' }) +
+                    F.field({ col: 12, name: 'note', id: 'swal-note', type: 'textarea', rows: 2, label: isCar ? t('notes_optional', 'Notes (optional)') : t('note', 'Note') })
+                ) +
+            '</form>';
+            F.open({
+                title: isCar ? t('assign_driver_to_car', 'Assign driver to car') : t('assign_asset', 'Assign asset'),
+                html: html,
+                width: '660px',
+                icon: 'mdi-link-variant',
+                confirm: t('assign', 'Assign'),
+                didOpen: function() {
+                    F.liveClear($('#assignAssetForm'));
+                    employeeSelect($('#swal-emp'));
+                    F.datepicker($('#swal-date'));
                 },
-                didOpen: () => initEmployeeSelect('#swal-driver-emp')
+                preConfirm: function() {
+                    const $form = $('#assignAssetForm');
+                    const msg = F.validate($form);
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    const data = isCar
+                        ? { action: 'assign_driver', item_id: itemId, tracking_id: row.tracking_id || '', emp_id: $('#swal-emp').val(), rcv_date: $('#swal-date').val(), notes: $('#swal-note').val() }
+                        : { action: 'assign_item', item_id: itemId, emp_id: $('#swal-emp').val(), assigned_date: $('#swal-date').val(), description: $('#swal-note').val() };
+                    return F.post(apiUrl, data);
+                }
+            }).then(function(result) {
+                if (!(result.isConfirmed && result.value)) return;
+                const tid = result.value.data && result.value.data.tracking_id;
+                Swal.fire({ allowOutsideClick: false,
+                    title: isCar ? t('driver_assigned', 'Driver assigned') : t('assigned', 'Assigned'),
+                    html: tid ? esc(t('tracking_id', 'Tracking ID')) + ': <b class="sr-mono">' + esc(tid) + '</b>' : '',
+                    icon: 'success', confirmButtonText: t('ok', 'OK')
+                }).then(loadInventory);
             });
-            if (!form) return;
-            Swal.showLoading();
-            $.ajax({
-                url: apiUrl,
-                type: 'POST',
-                data: { 
-                    action: 'assign_driver', 
-                    item_id: itemId,
-                    tracking_id: trackingId,
-                    emp_id: form.emp_id, 
-                    rcv_date: form.rcv_date, 
-                    notes: form.notes 
+        }
+
+        /* ---------------- Return (unassign) ---------------- */
+
+        function openReturnModal(itemId) {
+            const row = allRows.find(r => r.id == itemId) || { id: itemId };
+            const TYPES = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
+            const html = '<form id="returnAssetForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                assetSummary(row) +
+                '<div class="sr-notice tone-sky" style="margin-bottom:12px;"><i class="mdi mdi-information-outline"></i><div><strong>' + esc(t('instructions', 'Instructions')) + '</strong>' +
+                    '<ol class="sr-steps-list">' +
+                        '<li>' + esc(t('click_print_report_to_print_asset_details', 'Print the report from the asset actions')) + '</li>' +
+                        '<li>' + esc(t('get_the_printed_document_signed', 'Get the printed document signed by the employee')) + '</li>' +
+                        '<li>' + esc(t('upload_the_signed_proof_below', 'Upload the signed proof below')) + '</li>' +
+                    '</ol></div></div>' +
+                F.section('mdi-clipboard-check', t('asset_condition', 'Condition'),
+                    F.field({ col: 12, name: 'asset_condition', html: F.choices('asset_condition', [
+                        { v: 'Good', l: t('good', 'Good'), icon: 'mdi-check-circle' },
+                        { v: 'Damage', l: t('damage', 'Damage'), icon: 'mdi-alert-circle-outline' },
+                        { v: 'Lost', l: t('lost', 'Lost'), icon: 'mdi-help-circle' },
+                        { v: 'Buy', l: t('buy', 'Buy'), icon: 'mdi-cash-multiple' },
+                        { v: 'Other', l: t('other', 'Other'), icon: 'mdi-dots-horizontal' }
+                    ], true, t('please_select_an_asset_condition', 'Select the asset condition')) }) +
+                    F.field({ col: 5, name: 'return_date', id: 'return-date', label: t('return_date', 'Return date'), req: true, value: F.today(), ph: 'YYYY-MM-DD',
+                        msg: t('return_date_is_required', 'Return date is required') }) +
+                    F.field({ col: 7, name: 'notes', id: 'return-notes', label: t('notes_optional', 'Notes (optional)'), ph: t('add_return_notes', 'Add any return notes...') })
+                ) +
+                F.section('mdi-paperclip', t('proof_of_return', 'Proof of return'),
+                    F.field({ col: 12, name: 'proof_file', html: F.filePicker({ id: 'proof-file', accept: '.pdf,.jpg,.jpeg,.png,.doc,.docx',
+                        title: t('upload_signed_document', 'Upload the signed document'), hint: 'PDF, JPG, PNG, DOC' }) })
+                ) +
+            '</form>';
+            F.open({
+                title: t('return_asset_item', 'Return asset'),
+                html: html,
+                width: '720px',
+                icon: 'mdi-keyboard-return',
+                confirm: t('confirm_return', 'Confirm return'),
+                confirmColor: window.APP_COLORS && APP_COLORS.success,
+                didOpen: function() {
+                    const $form = $('#returnAssetForm');
+                    F.liveClear($form);
+                    F.bindFilePicker($form);
+                    F.datepicker($('#return-date'), { endDate: '+0d' });
                 },
-                dataType: 'json',
-                success: function(resp) {
-                    Swal.close();
-                    if (!resp.success) {
-                        Swal.fire('Error', resp.message || 'Could not assign driver', 'error');
-                        return;
-                    }
-                    Swal.fire('Success', 'Driver assigned successfully', 'success');
+                preConfirm: function() {
+                    const $form = $('#returnAssetForm');
+                    const msg = F.validate($form, function() {
+                        const input = $('#proof-file')[0];
+                        if (!input.files.length) return { el: $form.find('.sr-filepick')[0], msg: t('proof_of_return_document_is_required', 'Proof of return document is required') };
+                        const m = F.checkFile(input, TYPES, 10);
+                        return m ? { el: $form.find('.sr-filepick')[0], msg: m } : null;
+                    });
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    const fd = new FormData();
+                    fd.append('action', 'unassign_item');
+                    fd.append('item_id', itemId);
+                    fd.append('tracking_id', row.tracking_id || '');
+                    fd.append('asset_condition', $form.find('input[name="asset_condition"]:checked').val());
+                    fd.append('return_date', $('#return-date').val());
+                    fd.append('proof_file', $('#proof-file')[0].files[0]);
+                    fd.append('notes', $('#return-notes').val());
+                    return F.post(apiUrl, fd, true);
+                }
+            }).then(function(result) {
+                if (!(result.isConfirmed && result.value)) return;
+                const recId = result.value.data && result.value.data.asset_record_id;
+                Swal.fire({ allowOutsideClick: false,
+                    title: t('returned', 'Returned'),
+                    text: t('asset_item_returned_and_unassigned_successfully', 'Asset item returned and unassigned successfully'),
+                    icon: 'success',
+                    showCancelButton: !!recId,
+                    confirmButtonText: recId ? '<i class="mdi mdi-printer"></i> ' + esc(t('print_report', 'Print report')) : t('ok', 'OK'),
+                    cancelButtonText: t('done', 'Done'),
+                    confirmButtonColor: window.APP_COLORS && APP_COLORS.primary,
+                    cancelButtonColor: window.APP_COLORS && APP_COLORS.secondary
+                }).then(function(r) {
                     loadInventory();
-                },
-                error: function(xhr, status, error) {
-                    Swal.close();
-                    console.error('Assign Driver Error:', status, error, xhr.responseText);
-                    Swal.fire('Error', 'Could not assign driver: ' + (xhr.responseJSON?.message || error), 'error');
-                }
+                    if (r.isConfirmed && recId) window.open('asset_return_report.php?asset_id=' + recId, '_blank');
+                });
             });
         }
 
-        async function openAssignModal(itemId) {
-            const { value: form } = await Swal.fire({
-                title: 'Assign Asset',
-                html: `
-                    <div class="form-group text-left">
-                        <label>Employee</label>
-                        <select id="swal-emp" class="form-control swal2-select2"></select>
-                    </div>
-                    <div class="form-group text-left">
-                        <label>Assign Date</label>
-                        <input type="text" id="swal-date" class="form-control" autocomplete="off" value="${new Date().toISOString().slice(0,10)}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label>Note</label>
-                        <textarea id="swal-note" class="form-control" rows="2"></textarea>
-                    </div>
-                `,
-                showCancelButton: true,
-                preConfirm: () => {
-                    const empId = $('#swal-emp').val();
-                    const date = $('#swal-date').val();
-                    const note = $('#swal-note').val();
-                    if (!empId) {
-                        Swal.showValidationMessage('Employee is required');
-                        return false;
-                    }
-                    return { emp_id: empId, assigned_date: date, description: note };
-                },
-                didOpen: () => {
-                    initEmployeeSelect('#swal-emp');
-                    $('#swal-date').datepicker({
-                        format: 'yyyy-mm-dd',
-                        autoclose: true,
-                        todayHighlight: true
+        /* ---------------- Print report + signature ---------------- */
+
+        function openPrintModal(itemId) {
+            $.ajax({ type: 'POST', url: apiUrl, data: { action: 'get_asset_record', asset_id: itemId }, dataType: 'json' })
+                .done(function(resp) {
+                    if (!(resp.success && resp.data && resp.data.tracking_id)) { fail(null, null, t('could_not_find_asset_record', 'Could not find the asset record for printing')); return; }
+                    const employeeAssetId = resp.data.employee_asset_id;
+                    const reportUrl = 'asset_return_report.php?asset_id=' + employeeAssetId;
+                    let pad = null, uploaded = null, mode = 'draw';
+                    const html = '<form id="printAssetForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                        '<div class="sr-notice tone-sky" style="margin-bottom:12px;"><i class="mdi mdi-information-outline"></i><div>' +
+                            '<ol class="sr-steps-list">' +
+                                '<li>' + esc(t('review_asset_details_then_click_confirm_to_open_report', 'Review the details, then confirm to open the report')) + '</li>' +
+                                '<li>' + esc(t('draw_or_upload_signature_to_attach_as_proof', 'Draw or upload a signature to attach as proof')) + '</li>' +
+                            '</ol></div></div>' +
+                        F.section('mdi-lead-pencil', t('signature', 'Signature'),
+                            F.field({ col: 12, name: 'mode', html: '<div class="sr-seg">' +
+                                '<label class="sr-seg-opt is-on checked"><input type="radio" name="sig_mode" value="draw" checked><span><i class="mdi mdi-lead-pencil"></i> ' + esc(t('draw_signature', 'Draw')) + '</span></label>' +
+                                '<label class="sr-seg-opt is-on"><input type="radio" name="sig_mode" value="upload"><span><i class="mdi mdi-upload"></i> ' + esc(t('upload_signature', 'Upload')) + '</span></label>' +
+                            '</div>' }) +
+                            F.field({ col: 12, name: 'pad', html:
+                                '<div class="js-pane-draw"><div class="sig-wrap ad-keep"><canvas id="print-signature-canvas"></canvas></div>' +
+                                '<div class="sig-tools"><small class="sr-fhint">' + esc(t('draw_your_signature_above', 'Draw the signature above')) + '</small>' +
+                                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost js-clear"><i class="mdi mdi-eraser"></i> ' + esc(t('clear_signature', 'Clear')) + '</button></div></div>' +
+                                '<div class="js-pane-upload" style="display:none;">' +
+                                    F.filePicker({ id: 'print-signature-file', accept: '.jpg,.jpeg,.png', title: t('select_signature_image_file', 'Choose a signature image'), hint: 'JPG, PNG' }) +
+                                    '<img class="sig-preview" id="print-signature-preview" alt="">' +
+                                '</div>' })
+                        ) +
+                    '</form>';
+                    F.open({
+                        title: t('asset_return_report', 'Asset return report'),
+                        html: html,
+                        width: '620px',
+                        icon: 'mdi-printer',
+                        confirm: t('confirm_and_open_report', 'Confirm and open report'),
+                        didOpen: function() {
+                            const $form = $('#printAssetForm');
+                            F.liveClear($form);
+                            F.bindFilePicker($form);
+                            const canvas = document.getElementById('print-signature-canvas');
+                            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+                            canvas.width = canvas.offsetWidth * ratio;
+                            canvas.height = canvas.offsetHeight * ratio;
+                            canvas.getContext('2d').scale(ratio, ratio);
+                            if (window.SignaturePad) pad = new SignaturePad(canvas, { backgroundColor: 'rgb(255,255,255)' });
+                            $form.on('click', '.js-clear', () => pad && pad.clear());
+                            $form.on('change', 'input[name="sig_mode"]', function() {
+                                mode = this.value;
+                                $form.find('.js-pane-draw').toggle(mode === 'draw');
+                                $form.find('.js-pane-upload').toggle(mode === 'upload');
+                            });
+                            $('#print-signature-file').on('change', function() {
+                                const f = this.files[0];
+                                uploaded = null;
+                                $('#print-signature-preview').hide();
+                                if (!f || F.checkFile(this, ['jpg', 'jpeg', 'png'], 5)) return;
+                                const reader = new FileReader();
+                                reader.onload = e => { uploaded = e.target.result; $('#print-signature-preview').attr('src', uploaded).show(); };
+                                reader.readAsDataURL(f);
+                            });
+                        },
+                        preConfirm: function() {
+                            const $form = $('#printAssetForm');
+                            let signature = null;
+                            if (mode === 'upload') {
+                                const m = F.checkFile($('#print-signature-file')[0], ['jpg', 'jpeg', 'png'], 5);
+                                if (m) { $form.find('.sr-filepick').addClass('is-invalid'); Swal.showValidationMessage(m); return false; }
+                                signature = uploaded;
+                            } else if (pad && !pad.isEmpty()) {
+                                signature = pad.toDataURL('image/png');
+                            }
+                            const fd = new FormData();
+                            fd.append('action', 'save_print_proof');
+                            fd.append('item_id', itemId);
+                            fd.append('tracking_id', resp.data.tracking_id);
+                            if (employeeAssetId) fd.append('employee_asset_id', employeeAssetId);
+                            if (signature) fd.append('signature', signature);
+                            return F.post(apiUrl, fd, true);
+                        }
+                    }).then(function(result) {
+                        if (result.isConfirmed && result.value) window.open(reportUrl, '_blank');
                     });
-                }
-            });
-            if (!form) return;
-            Swal.showLoading();
-            $.ajax({
-                url: apiUrl,
-                type: 'POST',
-                data: { action: 'assign_item', item_id: itemId, emp_id: form.emp_id, assigned_date: form.assigned_date, description: form.description },
-                dataType: 'json',
-                success: function(resp) {
-                    Swal.close();
-                    if (!resp.success) {
-                        Swal.fire('Error', resp.message || 'Could not assign asset', 'error');
-                        return;
-                    }
-                    Swal.fire('Assigned', 'Tracking ID: ' + resp.data.tracking_id, 'success');
-                    loadInventory();
-                },
-                error: function(xhr, status, error) {
-                    Swal.close();
-                    console.error('Assign Item Error:', status, error, xhr.responseText);
-                    Swal.fire('Error', 'Could not assign asset: ' + (xhr.responseJSON?.message || error), 'error');
-                }
-            });
+                })
+                .fail(function(xhr) { fail(null, xhr, t('failed_to_retrieve_asset_record', 'Failed to retrieve the asset record')); });
         }
 
-        function registerAssetModal() {
-            // First fetch asset types
-            $.ajax({
-                url: apiUrl,
-                type: 'POST',
-                data: { action: 'get_assets' },
-                dataType: 'json',
-                success: function(resp) {
-                    if (!resp.success || !resp.data.assets) {
-                        Swal.fire('Error', 'Could not load asset types', 'error');
-                        return;
-                    }
-                    
-                    let assets = resp.data.assets;
-                    
-                    // Filter assets based on user role - only show allowed assets
-                    if (!userRole.isSystemAdmin && !userRole.canAdd) {
-                        if (userRole.allowedAssets.length > 0) {
-                            // Check if asset name contains any of the allowed keywords
-                            assets = assets.filter(asset => {
-                                return userRole.allowedAssets.some(allowed => 
-                                    asset.name.toLowerCase().includes(allowed.toLowerCase())
-                                );
-                            });
-                        } else {
-                            assets = []; // No assets allowed
-                        }
-                    }
-                    
-                    if (assets.length === 0) {
-                        Swal.fire('Access Denied', 'You do not have permission to add assets', 'warning');
-                        return;
-                    }
-                    
-                    let assetOptions = `<option value="">${__('select_asset_type')}</option>`;
-                    assets.forEach(asset => {
-                        assetOptions += `<option value="${asset.id}">${__(asset.name.toLowerCase().replace(/ /g, '_'))}</option>`;
-                    });
-                    
-                    Swal.fire({
-                        title: __('add_new_asset_item'),
-                        html: `
-                            <form id="registerAssetForm" class="text-left">
-                                <div class="form-group">
-                                    <label for="swal-asset-type">${__('asset_type')}</label>
-                                    <select id="swal-asset-type" class="form-control">
-                                        ${assetOptions}
-                                    </select>
-                                </div>
-                                <div class="form-group" id="car-selector-group" style="display: none;">
-                                    <label for="swal-car-select">${__('select_car')}</label>
-                                    <select id="swal-car-select" class="form-control">
-                                        <option value="">${__('select_car')}</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="swal-serial-number">${__('serial_number_identifier')}</label>
-                                    <input id="swal-serial-number" class="form-control" placeholder="${__('enter_serial_number_identifier')}">
-                                </div>
-                                <div class="form-group">
-                                    <label for="swal-description">${__('description')}</label>
-                                    <textarea id="swal-description" class="form-control" placeholder="${__('enter_asset_description')}" rows="3"></textarea>
-                                </div>
-                            </form>
-                        `,
-                        showCancelButton: true,
-                        cancelButtonText: __('cancel'),
-                        confirmButtonText: __('add_asset'),
-                        confirmButtonColor: '#3085d6',
-                        showLoaderOnConfirm: true,
-                        allowOutsideClick: () => !Swal.isLoading(),
-                        didOpen: () => {
-                            // Handle asset type change to show car selector
-                            $('#swal-asset-type').on('change', function() {
-                                const assetTypeId = $(this).find('option:selected').val();
-                                console.log('Selected Asset Type ID:', assetTypeId);
-                                const carGroup = $('#car-selector-group');
-                                
-                                // Only show car selector for Car asset (ID = 4)
-                                if (assetTypeId == 4) {
-                                    carGroup.show();
-                                    // Fetch cars from database
-                                    $.ajax({
-                                        url: apiUrl,
-                                        type: 'POST',
-                                        data: { action: 'get_cars' },
-                                        dataType: 'json',
-                                        success: function(resp) {
-                                            if (resp.success && resp.data.cars) {
-                                                const carSelect = $('#swal-car-select');
-                                                carSelect.empty();
-                                                carSelect.append(`<option value="">${__('select_car')}</option>`);
-                                                resp.data.cars.forEach(car => {
-                                                    const isAssigned = car.is_assigned == 1;
-                                                    const displayText = isAssigned ? 
-                                                        `${car.maker_name} ${car.model} (${car.plate_no}) - ${__('assigned')} (${car.assigned_to})` :
-                                                        `${car.maker_name} ${car.model} (${car.plate_no})`;
-                                                    const option = $(`<option value="${car.id}" ${isAssigned ? 'disabled' : ''}>${displayText}</option>`);
-                                                    carSelect.append(option);
-                                                });
-                                                
-                                                // Apply Select2 to car selector
-                                                carSelect.select2({
-                                                    dropdownParent: $('.swal2-container'),
-                                                    placeholder: __('search_and_select_a_car'),
-                                                    allowClear: true,
-                                                    width: '100%'
-                                                });
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    carGroup.hide();
-                                }
-                            });
-                        },
-                        preConfirm: () => {
-                            const assetId = document.getElementById('swal-asset-type').value;
-                            const carId = document.getElementById('swal-car-select').value;
-                            const serialNumber = document.getElementById('swal-serial-number').value;
-                            const description = document.getElementById('swal-description').value;
-                            
-                            if (!assetId) {
-                                Swal.showValidationMessage(__('please_select_an_asset_type'));
-                                return false;
-                            }
-                            
-                            // If it's Car type (ID = 4), require car selection
-                            if (assetId == 4 && !carId) {
-                                Swal.showValidationMessage(__('please_select_a_car'));
-                                return false;
-                            }
-                            
-                            if (!serialNumber && !carId) {
-                                Swal.showValidationMessage(__('please_enter_serial_number'));
-                                return false;
-                            }
-                            
-                            return {
-                                asset_id: assetId,
-                                car_id: carId,
-                                serial_number: serialNumber || carId,
-                                description: description
-                            };
-                        },
-                        allowOutsideClick: false
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            $.ajax({
-                                type: 'POST',
-                                url: apiUrl,
-                                data: {
-                                    action: 'create_item',
-                                    asset_id: result.value.asset_id,
-                                    car_id: result.value.car_id,
-                                    serial_number: result.value.serial_number,
-                                    description: result.value.description
-                                },
-                                dataType: 'json',
-                                success: function(ajaxResponse) {
-                                    if (ajaxResponse.success) {
-                                        Swal.fire({
-                                            title: 'Success',
-                                            text: 'Tracking ID: ' + ajaxResponse.data.tracking_id,
-                                            icon: 'success',
-                                            allowOutsideClick: false
-                                        }).then(() => {
-                                            loadInventory();
-                                        });
-                                    } else {
-                                        Swal.fire({
-                                            title: 'Error',
-                                            text: ajaxResponse.message || 'Could not add asset',
-                                            icon: 'error',
-                                            allowOutsideClick: false
-                                        });
-                                    }
-                                },
-                                error: function(xhr, status, error) {
-                                    Swal.fire({
-                                        title: 'Error',
-                                        text: xhr.responseJSON?.message || 'Failed to add asset',
-                                        icon: 'error',
-                                        allowOutsideClick: false
-                                    });
-                                }
-                            });
-                        }
-                    });
-                },
-                error: function(xhr, status, error) {
-                    Swal.fire('Error', 'Could not load asset types: ' + (xhr.responseJSON?.message || error), 'error');
-                }
-            });
-        }
+        /* ---------------- Events ---------------- */
 
-        // Event handlers
-        $(document).on('click', '#btn-add-asset', function() {
-            registerAssetModal();
-        });
+        $(document).on('click', '#btn-add-asset', registerAssetModal);
+        $(document).on('click', '.view-asset-details', function() { showAssetDetailsModal($(this).data('id')); });
+        $(document).on('click', '.btn-assign', function() { openAssignModal($(this).data('id'), false); });
+        $(document).on('click', '.btn-assign-driver', function() { openAssignModal($(this).data('id'), true); });
+        $(document).on('click', '.btn-unassign', function() { openReturnModal($(this).data('id')); });
+        $(document).on('click', '.editAssetBtn', function() { openEditModal($(this).data('id')); });
+        $(document).on('click', '.print-asset-report', function() { openPrintModal($(this).data('id')); });
 
-        $(document).on('click', '.view-asset-details', function() {
-            showAssetDetailsModal($(this).data('id'));
-        });
-
-        $(document).on('click', '.btn-assign', function() {
-            openAssignModal($(this).data('id'));
-        });
-
-        $(document).on('click', '.btn-assign-driver', function() {
-            openAssignDriverModal($(this).data('id'), $(this).data('tracking'));
-        });
-
-        $(document).on('click', '.btn-unassign', function() {
-            const itemId = $(this).data('id');
-            const trackingId = $(this).data('tracking');
-            
-            Swal.fire({
-                title: __('return_asset_item', 'Return Asset Item'),
-                html: `
-                    <div class="text-left">
-                        <div class="alert alert-info mb-3">
-                            <strong>${__('instructions', 'Instructions')}:</strong><br>
-                            1. ${__('click_print_report_to_print_asset_details', 'Click "Print Report" from the asset actions to print asset details and capture signature')}<br>
-                            2. ${__('get_the_printed_document_signed', 'Get the printed document signed by the employee')}<br>
-                            3. ${__('upload_the_signed_proof_below', 'Upload the signed proof document below')}
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label><strong>${__('asset_condition', 'Asset Condition')}</strong></label>
-                            <select id="asset-condition" class="form-control" required>
-                                <option value="">${__('select_condition', 'Select Condition')}</option>
-                                <option value="Good">${__('good', 'Good')}</option>
-                                <option value="Damage">${__('damage', 'Damage')}</option>
-                                <option value="Lost">${__('lost', 'Lost')}</option>
-                                <option value="Buy">${__('buy', 'Buy')}</option>
-                                <option value="Other">${__('other', 'Other')}</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label><strong>${__('return_date', 'Return Date')}</strong></label>
-                            <input type="date" id="return-date" class="form-control" value="${new Date().toISOString().split('T')[0]}">
-                        </div>
-                        
-                        <div class="form-group mb-3">
-                            <label><strong>${__('proof_of_return', 'Proof of Return (Signed Document/Receipt)')}</strong></label>
-                            <input type="file" id="proof-file" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
-                            <small class="form-text text-muted">${__('accepted_formats', 'Upload the signed printed document here (PDF, JPG, PNG, DOC)')}</small>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label><strong>${__('notes_optional', 'Notes (Optional)')}</strong></label>
-                            <textarea id="return-notes" class="form-control" rows="2" placeholder="${__('add_return_notes', 'Add any return notes...')}"></textarea>
-                        </div>
-                    </div>
-                `,
-                width: '45%',
-                showCancelButton: true,
-                confirmButtonText: __('confirm_return', 'Confirm Return'),
-                confirmButtonColor: APP_COLORS.success,
-                cancelButtonColor: APP_COLORS.danger_dark,
-                cancelButtonText: __('cancel', 'Cancel'),
-                showLoaderOnConfirm: true,
-                preConfirm: () => {
-                    const assetCondition = document.getElementById('asset-condition').value;
-                    const returnDate = document.getElementById('return-date').value;
-                    const proofFile = document.getElementById('proof-file').files[0];
-                    const returnNotes = document.getElementById('return-notes').value;
-                    
-                    if (!assetCondition) {
-                        Swal.showValidationMessage(__('please_select_an_asset_condition', 'Please select an asset condition'));
-                        return false;
-                    }
-                    
-                    if (!returnDate) {
-                        Swal.showValidationMessage(__('return_date_is_required', 'Return date is required'));
-                        return false;
-                    }
-                    
-                    if (!proofFile) {
-                        Swal.showValidationMessage(__('proof_of_return_document_is_required', 'Proof of return document is required'));
-                        return false;
-                    }
-                    
-                    return {
-                        assetCondition: assetCondition,
-                        returnDate: returnDate,
-                        proofFile: proofFile,
-                        notes: returnNotes
-                    };
-                },
-                allowOutsideClick: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const formData = new FormData();
-                    formData.append('action', 'unassign_item');
-                    formData.append('item_id', itemId);
-                    formData.append('tracking_id', trackingId);
-                    formData.append('asset_condition', result.value.assetCondition);
-                    formData.append('return_date', result.value.returnDate);
-                    formData.append('proof_file', result.value.proofFile);
-                    formData.append('notes', result.value.notes);
-                    
-                    $.ajax({
-                        type: 'POST',
-                        url: apiUrl,
-                        data: formData,
-                        contentType: false,
-                        processData: false,
-                        dataType: 'json',
-                        success: function(resp) {
-                            if (resp.success) {
-                                Swal.fire({
-                                    title: __('returned', 'Returned'),
-                                    text: __('asset_item_returned_and_unassigned_successfully', 'Asset item returned and unassigned successfully'),
-                                    icon: 'success',
-                                    showCancelButton: true,
-                                    confirmButtonText: __('print_report', 'Print Report'),
-                                    cancelButtonText: __('done', 'Done'),
-                                    confirmButtonColor: APP_COLORS.primary,
-                                    cancelButtonColor: APP_COLORS.secondary,
-                                    allowOutsideClick: false
-                                }).then((printResult) => {
-                                    loadInventory();
-                                    if (printResult.isConfirmed) {
-                                        // Open print report for this asset
-                                        window.open('asset_return_report.php?asset_id=' + resp.data.asset_record_id, '_blank');
-                                    }
-                                });
-                            } else {
-                                Swal.fire('Error', resp.message || 'Could not unassign asset', 'error');
-                            }
-                        },
-                        error: function(xhr) {
-                            Swal.fire('Error', xhr.responseJSON?.message || 'Could not unassign asset', 'error');
-                        }
-                    });
-                }
-            });
-        });
-
-        $(document).on('click', '.editAssetBtn', function() {
-            const itemId = $(this).data('id');
-            const assetId = $(this).data('asset_id');
-            const assetName = $(this).data('asset_name');
-            const serial = $(this).data('serial');
-            const description = $(this).data('description');
-            
-            Swal.fire({
-                title: __('edit_asset_item', 'Edit Asset Item'),
-                html: `
-                    <form id="editAssetForm" class="text-left">
-                        <div class="form-group">
-                            <label for="edit-asset-name">${__('asset_type', 'Asset Type')}</label>
-                            <input type="text" class="form-control" value="${__(assetName.toLowerCase())}" readonly>
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-serial-number">${__('serial_number', 'Serial Number')}</label>
-                            <input id="edit-serial-number" type="text" class="form-control" value="${serial}">
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-description">${__('description', 'Description')}</label>
-                            <textarea id="edit-description" class="form-control" rows="3">${description}</textarea>
-                        </div>
-                    </form>
-                `,
-                showCancelButton: true,
-                cancelButtonText: __('cancel', 'Cancel'),
-                confirmButtonText: __('update', 'Update'),
-                confirmButtonColor: APP_COLORS.success,
-                showLoaderOnConfirm: true,
-                preConfirm: () => {
-                    const newSerial = document.getElementById('edit-serial-number').value;
-                    const newDesc = document.getElementById('edit-description').value;
-                    if (!newSerial) {
-                        Swal.showValidationMessage('Serial number is required');
-                        return false;
-                    }
-                    return { serial: newSerial, description: newDesc };
-                },
-                allowOutsideClick: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        type: 'POST',
-                        url: apiUrl,
-                        data: {
-                            action: 'update_item',
-                            item_id: itemId,
-                            serial_number: result.value.serial,
-                            description: result.value.description
-                        },
-                        dataType: 'json',
-                        success: function(resp) {
-                            if (resp.success) {
-                                Swal.fire({
-                                    title: __('updated', 'Updated!'), 
-                                    text: __('asset_item_updated_successfully', 'Asset item updated successfully'),
-                                    icon: 'success',
-                                    confirmButtonText: __('ok', 'OK'),
-                                    allowOutsideClick: false
-                                }).then(() => {
-                                    loadInventory();
-                                });
-                            } else {
-                                Swal.fire({
-                                    title: __('error', 'Error'),
-                                    text: resp.message || __('could_not_update_asset', 'Could not update asset'),
-                                    icon: 'error',
-                                    allowOutsideClick: false,
-                                    confirmButtonText: __('ok', 'OK')
-                                });
-                            }
-                        },
-                        error: function(xhr) {
-                            Swal.fire({
-                                title: __('error', 'Error'),
-                                text: xhr.responseJSON?.message || __('failed_to_update_asset', 'Failed to update asset'),
-                                icon: 'error',
-                                allowOutsideClick: false,
-                                confirmButtonText: __('ok', 'OK')
-                            });
-                        }
-                    });
-                }
-            });
-        });
-
-        $(document).on('click', '.print-asset-report', function() {
-            const itemId = $(this).data('id');
-            
-            // Get the asset tracking ID for the report
-            $.ajax({
-                type: 'POST',
-                url: apiUrl,
-                data: {
-                    action: 'get_asset_record',
-                    asset_id: itemId
-                },
-                dataType: 'json',
-                success: function(resp) {
-                    if (resp.success && resp.data && resp.data.tracking_id) {
-                        const employeeAssetId = resp.data.employee_asset_id;
-                        const reportUrl = 'asset_return_report.php?asset_id=' + employeeAssetId;
-                        let signaturePad;
-                        let uploadedSignatureImage = null;
-                        
-                        // Show modal to capture signature and optionally upload signed report before opening
-                        Swal.fire({
-                            title: __('asset_return_report', 'Asset Return Report'),
-                            html: `
-                                <div class="">
-                                    <div class="alert alert-info mb-3">
-                                        <strong>${__('instructions', 'Instructions')}:</strong><br>
-                                        1. ${__('review_asset_details_then_click_confirm_to_open_report', 'Review asset details then click Confirm to open the report')}<br>
-                                        2. ${__('draw_or_upload_signature_to_attach_as_proof', 'Draw or upload signature to attach as proof')}
-                                    </div>
-                                    <div class="form-group mb-3">
-                                        <label><strong>${__('signature', 'Signature')}</strong></label>
-                                        <ul class="nav nav-tabs mb-2" id="print-signature-tabs" role="tablist">
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link active" id="print-draw-tab" data-bs-toggle="tab" data-bs-target="#print-draw-pane" type="button" role="tab">${__('draw_signature', 'Draw Signature')}</button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link" id="print-upload-tab" data-bs-toggle="tab" data-bs-target="#print-upload-pane" type="button" role="tab">${__('upload_signature', 'Upload Signature')}</button>
-                                            </li>
-                                        </ul>
-                                        <div class="tab-content">
-                                            <div class="tab-pane fade show active" id="print-draw-pane" role="tabpanel">
-                                                <div id="print-signature-pad-container" style="border: 2px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
-                                                    <canvas id="print-signature-canvas" width="560" height="250" style="display: block; width: 560px; height: 250px; cursor: crosshair; touch-action: none; border-radius: 4px;"></canvas>
-                                                </div>
-                                                <small class="form-text text-muted">${__('draw_your_signature_above', 'Draw your signature above')}</small>
-                                                <button type="button" id="print-clear-signature-btn" class="btn btn-sm btn-secondary mt-2">${__('clear_signature', 'Clear Signature')}</button>
-                                            </div>
-                                            <div class="tab-pane fade" id="print-upload-pane" role="tabpanel">
-                                                <input type="file" id="print-signature-file" class="form-control mb-2" accept=".jpg,.jpeg,.png,.gif,.bmp">
-                                                <small class="form-text text-muted">${__('select_signature_image_file', 'Select a signature image file (JPG, PNG, GIF, BMP)')}</small>
-                                                <div id="print-uploaded-signature-preview" style="margin-top: 10px; display: none;">
-                                                    <img id="print-signature-preview-img" src="" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 4px;">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `,
-                            // icon: 'info',
-                            showCancelButton: true,
-                            confirmButtonText: __('confirm_and_open_report', 'Confirm and Open Report'),
-                            cancelButtonText: __('cancel', 'Cancel'),
-                            confirmButtonColor: APP_COLORS.primary,
-                            cancelButtonColor: APP_COLORS.secondary,
-                            allowOutsideClick: false,
-                            width: '35%',
-                            didOpen: () => {
-                                const canvas = document.getElementById('print-signature-canvas');
-                                signaturePad = new SignaturePad(canvas, {
-                                    backgroundColor: 'rgb(255,255,255)'
-                                });
-                                document.getElementById('print-clear-signature-btn').addEventListener('click', () => {
-                                    signaturePad.clear();
-                                });
-                                // Tabs toggle
-                                const drawTab = document.getElementById('print-draw-tab');
-                                const uploadTab = document.getElementById('print-upload-tab');
-                                const drawPane = document.getElementById('print-draw-pane');
-                                const uploadPane = document.getElementById('print-upload-pane');
-                                drawTab.addEventListener('click', () => {
-                                    drawTab.classList.add('active');
-                                    uploadTab.classList.remove('active');
-                                    drawPane.classList.add('show', 'active');
-                                    uploadPane.classList.remove('show', 'active');
-                                });
-                                uploadTab.addEventListener('click', () => {
-                                    uploadTab.classList.add('active');
-                                    drawTab.classList.remove('active');
-                                    uploadPane.classList.add('show', 'active');
-                                    drawPane.classList.remove('show', 'active');
-                                });
-                                // Signature file upload
-                                document.getElementById('print-signature-file').addEventListener('change', function(e) {
-                                    const file = e.target.files[0];
-                                    if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = function(event) {
-                                            uploadedSignatureImage = event.target.result;
-                                            const previewImg = document.getElementById('print-signature-preview-img');
-                                            previewImg.src = uploadedSignatureImage;
-                                            document.getElementById('print-uploaded-signature-preview').style.display = 'block';
-                                        };
-                                        reader.readAsDataURL(file);
-                                    }
-                                });
-                            },
-                            preConfirm: () => {
-                                // Build form data to save signature prior to report open
-                                const formData = new FormData();
-                                formData.append('action', 'save_print_proof');
-                                formData.append('item_id', itemId);
-                                formData.append('tracking_id', resp.data.tracking_id);
-                                if (employeeAssetId) { formData.append('employee_asset_id', employeeAssetId); }
-                                let signature = null;
-                                if (uploadedSignatureImage) {
-                                    signature = uploadedSignatureImage;
-                                } else {
-                                    signature = signaturePad.toDataURL('image/png');
-                                }
-                                if (signature) {
-                                    formData.append('signature', signature);
-                                }
-                                return new Promise((resolve) => {
-                                    $.ajax({
-                                        type: 'POST',
-                                        url: apiUrl,
-                                        data: formData,
-                                        contentType: false,
-                                        processData: false,
-                                        dataType: 'json',
-                                        success: function(saveResp) {
-                                            if (!saveResp.success) {
-                                                Swal.showValidationMessage(saveResp.message || __('failed_to_save_signature_or_proof', 'Failed to save signature/proof'));
-                                                resolve(false);
-                                                return;
-                                            }
-                                            resolve(true);
-                                        },
-                                        error: function(xhr) {
-                                            Swal.showValidationMessage(xhr.responseJSON?.message || __('failed_to_save_signature_or_proof', 'Failed to save signature/proof'));
-                                            resolve(false);
-                                        }
-                                    });
-                                });
-                            }
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                // Open report in new tab for printing/downloading
-                                window.open(reportUrl, '_blank');
-                            }
-                        });
-                    } else {
-                        Swal.fire('Error', 'Could not find asset record for printing', 'error');
-                    }
-                },
-                error: function(xhr) {
-                    Swal.fire('Error', 'Failed to retrieve asset record', 'error');
-                }
-            });
-        });
-
-        // Initialize on document ready
         $(document).ready(function() {
-            setTimeout(function() {
-                loadInventory();
-            }, 500);
+            initTable();
+            loadInventory();
         });
     })();
     </script>

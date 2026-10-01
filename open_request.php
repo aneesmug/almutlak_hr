@@ -1475,11 +1475,11 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                 const approverName = $.trim($selected.text());
 
                 if (!approverId) {
-                    Swal.fire(<?= json_encode(__('error')) ?>, <?= json_encode(__('select_approver_from_list')) ?>, 'warning');
+                    Swal.fire({ title: <?= json_encode(__('error')) ?>, text: <?= json_encode(__('select_approver_from_list')) ?>, icon: 'warning', allowOutsideClick: false });
                     return;
                 }
                 if ($approverList.find('input[name="approvers[]"][value="' + approverId + '"]').length) {
-                    Swal.fire(<?= json_encode(__('error')) ?>, <?= json_encode(__('approver_already_added')) ?>, 'warning');
+                    Swal.fire({ title: <?= json_encode(__('error')) ?>, text: <?= json_encode(__('approver_already_added')) ?>, icon: 'warning', allowOutsideClick: false });
                     return;
                 }
 
@@ -1591,7 +1591,7 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                 },
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({
+                    Swal.fire({ allowOutsideClick: false,
                         title: '<?=__('success')?>!',
                         text: result.value.message,
                         icon: 'success'
@@ -1669,7 +1669,7 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                     confirmButtonColor: APP_COLORS.primary,
                     cancelButtonColor: APP_COLORS.danger_dark,
                     showLoaderOnConfirm: true,
-                    allowOutsideClick: () => !Swal.isLoading(),
+                    allowOutsideClick: false,
                     customClass: { popup: 'sr-addline-popup' },
                     didOpen: () => {
                         const editor = SRLines.bind($('#srAddLineForm'), $('#srAddLines'), function(sum) {
@@ -1701,7 +1701,7 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                     }
                 }).then((result) => {
                     if (result.isConfirmed && result.value) {
-                        Swal.fire({ title: result.value.title, text: result.value.message, icon: result.value.type, timer: 1600, showConfirmButton: false })
+                        Swal.fire({ allowOutsideClick: false, title: result.value.title, text: result.value.message, icon: result.value.type, timer: 1600, showConfirmButton: false })
                             .then(() => location.reload());
                     }
                 });
@@ -1789,10 +1789,10 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                         Swal.showValidationMessage(`<?=__('request_failed')?>: ${error.message || error.statusText}`)
                     });
                 },
-                allowOutsideClick: () => !Swal.isLoading()
+                allowOutsideClick: false
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({
+                    Swal.fire({ allowOutsideClick: false,
                         title: result.value.title,
                         text: result.value.message,
                         icon: result.value.type
@@ -1968,7 +1968,7 @@ $fmt = function ($n) { return number_format((float)$n, 2); };
                 },
             }).then(function(result) {
                 if (result.isConfirmed) {
-                    Swal.fire({
+                    Swal.fire({ allowOutsideClick: false,
                         title: result.value.title,
                         text: result.value.message,
                         icon: result.value.type,

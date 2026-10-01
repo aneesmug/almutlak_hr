@@ -549,3 +549,137 @@ html.app-dark .swal2-popup.sr-addline-popup { background: var(--ad-surface, #161
 .sr-totals .sr-cash-balance dt { font-weight: 700; color: var(--sr-text); }
 .sr-totals .sr-cash-balance dd { font-size: 16px; font-weight: 800; color: var(--tone-green-fg); }
 .sr-totals .sr-cash-balance.is-negative dd { color: var(--tone-red-fg); }
+
+/* ---------- Sectioned SweetAlert2 forms (assets/js/location_forms.js) ---------- */
+.sr-form { text-align: start; }
+.sr-fsec { border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); margin-bottom: 12px; overflow: hidden; }
+.sr-fsec-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 9px 14px; background: var(--sr-surface-2); border-bottom: 1px solid var(--sr-border);
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted);
+}
+.sr-fsec-head i { color: var(--sr-accent); font-size: 15px; margin-inline-end: 4px; }
+.sr-fsec-head .sr-btn, .sr-fsec-head .sr-chip { text-transform: none; letter-spacing: 0; }
+.sr-fsec-tools { display: inline-flex; gap: 6px; }
+.sr-fgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; padding: 14px; }
+.sr-fcol { min-width: 0; }
+.sr-fcol.c-3 { grid-column: span 3; } .sr-fcol.c-4 { grid-column: span 4; } .sr-fcol.c-5 { grid-column: span 5; }
+.sr-fcol.c-6 { grid-column: span 6; } .sr-fcol.c-7 { grid-column: span 7; } .sr-fcol.c-8 { grid-column: span 8; }
+.sr-fcol.c-2 { grid-column: span 2; } .sr-fcol.c-9 { grid-column: span 9; } .sr-fcol.c-12 { grid-column: span 12; }
+@media (max-width: 767px) { .sr-fcol { grid-column: span 12 !important; } }
+.sr-form label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+.sr-form .form-control {
+    height: 38px; border-radius: 9px; border-color: var(--sr-border-strong); background: var(--sr-surface-2);
+    color: var(--sr-text); font-size: 13px;
+}
+.sr-form .form-control:focus { background: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+.sr-form .form-control.is-invalid { border-color: #dc2626; background-image: none; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
+.sr-fhint { display: block; margin-top: 4px; font-size: 11px; color: var(--sr-muted); }
+.sr-seg { display: flex; gap: 6px; }
+.sr-seg-opt { flex: 1 1 0; margin: 0 !important; position: relative; }
+.sr-seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.sr-seg-opt span {
+    display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--sr-border-strong); background: var(--sr-surface); font-size: 13px; font-weight: 600; color: var(--sr-text-2);
+}
+.sr-seg-opt.is-on.checked span { border-color: #16a34a; background: var(--tone-green-bg); color: var(--tone-green-fg); box-shadow: 0 0 0 1px #16a34a inset; }
+.sr-seg-opt.is-off.checked span { border-color: #dc2626; background: var(--tone-red-bg); color: var(--tone-red-fg); box-shadow: 0 0 0 1px #dc2626 inset; }
+.sr-ftotal {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px;
+    background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-weight: 700;
+}
+.sr-ftotal b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.sr-ftotal .icon-saudi_riyal { font-size: .8em !important; }
+/* Date pickers opened from inside a SweetAlert2 popup must sit above it */
+.datepicker.dropdown-menu, .bootstrap-datetimepicker-widget { z-index: 2000 !important; }
+.sr-form textarea.form-control { height: auto; min-height: 76px; padding-top: 8px; resize: vertical; }
+.sr-form .form-control[readonly] { background: var(--sr-surface-3); color: var(--sr-text-2); }
+
+/* Select2 inside sectioned forms */
+.sr-form .select2-container { width: 100% !important; }
+.sr-form .select2-container--default .select2-selection--single {
+    height: 38px; border-radius: 9px; border-color: var(--sr-border-strong); background: var(--sr-surface-2);
+}
+.sr-form .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px; color: var(--sr-text); padding-inline: 12px 28px; font-size: 13px; }
+.sr-form .select2-container--default .select2-selection--single .select2-selection__placeholder { color: var(--sr-muted); }
+.swal2-container .select2-results__option { font-size: 13px; padding: 7px 12px; }
+.swal2-container .select2-search--dropdown .select2-search__field { height: 32px; border-radius: 7px; font-size: 13px; }
+.sr-form .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
+.sr-form .select2-container--default.select2-container--focus .select2-selection--single,
+.sr-form .select2-container--default.select2-container--open .select2-selection--single { border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+.sr-form select.is-invalid + .select2-container .select2-selection--single { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
+.swal2-container .select2-dropdown { border-color: var(--sr-border-strong, #d4d9e3); border-radius: 9px; overflow: hidden; }
+
+/* Input + small button on one row (e.g. maintenance type + "new type") */
+.sr-inrow { display: flex; gap: 6px; }
+.sr-inrow > select, .sr-inrow > .select2-container, .sr-inrow > input { flex: 1 1 auto; min-width: 0; }
+.sr-inrow > .sr-btn { flex: 0 0 auto; height: 38px; }
+.sr-inline-new { display: none; margin-top: 8px; }
+.sr-inline-new.show { display: flex; }
+
+/* Read-only figures inside a form (old meter / difference ...) */
+.sr-fstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--sr-border); border-radius: 10px; overflow: hidden; background: var(--sr-surface-2); }
+.sr-fstats > div { padding: 8px 12px; border-inline-end: 1px solid var(--sr-border); min-width: 0; }
+.sr-fstats > div:last-child { border-inline-end: 0; }
+.sr-fstats span { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+.sr-fstats b { display: block; margin-top: 2px; font-size: 15px; color: var(--sr-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-fstats .is-bad b { color: var(--tone-red-fg); }
+.sr-fstats .is-good b { color: var(--tone-green-fg); }
+
+/* File picker */
+.sr-form .sr-filepick {
+    position: relative; display: flex; align-items: center; gap: 12px; margin: 0; padding: 14px 16px; cursor: pointer;
+    border: 1.5px dashed var(--sr-border-strong); border-radius: 10px; background: var(--sr-surface-2); color: var(--sr-text-2);
+    transition: border-color .15s, background .15s;
+}
+.sr-form .sr-filepick:hover, .sr-form .sr-filepick.is-drag { border-color: var(--sr-accent); background: var(--sr-accent-soft); }
+.sr-form .sr-filepick.is-invalid { border-color: #dc2626; background: var(--tone-red-bg); }
+.sr-form .sr-filepick.has-file { border-style: solid; border-color: var(--tone-green-bd); background: var(--tone-green-bg); }
+.sr-form .sr-filepick input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.sr-form .sr-filepick > i { font-size: 28px; color: var(--sr-accent); line-height: 1; }
+.sr-form .sr-filepick.has-file > i { color: var(--tone-green-fg); }
+.sr-form .sr-filepick b { display: block; font-size: 13px; color: var(--sr-text); word-break: break-all; }
+.sr-form .sr-filepick small { display: block; font-size: 11px; color: var(--sr-muted); }
+.sr-form .sr-attach-choice .sr-choice { margin: 0; }
+.sr-form .sr-notice { margin-bottom: 0; }
+
+/* Tabs inside a card */
+.sr-tabs { display: flex; gap: 4px; margin: 0; padding: 8px 10px; list-style: none; border-bottom: 1px solid var(--sr-border); overflow-x: auto; }
+.sr-tabs .nav-link {
+    display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 0; border-radius: 9px;
+    font-size: 13px; font-weight: 600; color: var(--sr-muted); white-space: nowrap; background: transparent;
+}
+.sr-tabs .nav-link i { font-size: 15px; }
+.sr-tabs .nav-link:hover { background: var(--sr-surface-3); color: var(--sr-text); }
+.sr-tabs .nav-link.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+.sr-tabs .nav-link.active .sr-count { background: var(--sr-accent); color: #fff; }
+.sr-tab-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 18px 0; }
+
+/* Stat cards with a coloured edge (car documents / driver) */
+.sr-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+@media (max-width: 991px) { .sr-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575px) { .sr-stats { grid-template-columns: 1fr; } }
+.sr-stat { position: relative; min-width: 0; padding: 13px 16px 13px 20px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface-2); overflow: hidden; }
+.sr-stat::before { content: ''; position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 4px; background: var(--sr-border-strong); }
+.sr-stat.is-green::before { background: #22c55e; }
+.sr-stat.is-amber::before { background: #f59e0b; }
+.sr-stat.is-red::before { background: #ef4444; }
+.sr-stat.is-sky::before { background: #0ea5e9; }
+.sr-stat-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--sr-muted); }
+.sr-stat-label i { font-size: 18px; color: var(--sr-border-strong); }
+.sr-stat-value { margin-top: 6px; font-size: 20px; font-weight: 800; color: var(--sr-text); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-stat.is-red .sr-stat-value { color: var(--tone-red-fg); }
+.sr-stat.is-amber .sr-stat-value { color: var(--tone-amber-fg); }
+.sr-stat-sub { margin-top: 2px; font-size: 12px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-pill-xs { padding: 2px 8px; font-size: 11px; gap: 4px; }
+
+/* Saudi plate as a compact chip (lists) */
+.car-plate {
+    display: inline-flex; align-items: stretch; border: 1.5px solid #0f172a; border-radius: 6px; background: #fff; color: #0f172a;
+    font: 700 12px/1 "SFMono-Regular", Consolas, "Liberation Mono", monospace; letter-spacing: .6px; white-space: nowrap; overflow: hidden;
+}
+.car-plate span { padding: 5px 7px; }
+.car-plate span + span { border-inline-start: 1.5px solid #0f172a; }
+.car-docs { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.sr-form .sr-attach-choice.is-invalid .sr-choice span { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
+.sr-form .sr-choice span { justify-content: center; }
