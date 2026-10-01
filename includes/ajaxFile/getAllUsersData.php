@@ -158,6 +158,10 @@ try {
     $totalResult = mysqli_query($conDB, $countSql);
     $totalRow = mysqli_fetch_assoc($totalResult);
     $totalRecords = $totalRow['total'] ?? 0;
+
+    // Active / inactive totals for the status tiles on all_users.php
+    $countsRes = mysqli_query($conDB, "SELECT SUM(`admin_login`.`status` = 1) AS `active`, SUM(`admin_login`.`status` <> 1) AS `inactive`, COUNT(*) AS `all` FROM `admin_login` WHERE 1=1" . ($employee_filter ?? ''));
+    $counts = array_map('intval', $countsRes ? (mysqli_fetch_assoc($countsRes) ?: []) : []);
     
     // Count filtered records
     $filteredResult = mysqli_query($conDB, $sql);
@@ -266,6 +270,7 @@ try {
         'draw' => $draw,
         'recordsTotal' => $totalRecords,
         'recordsFiltered' => $filteredRecords,
+        'counts' => $counts,
         'data' => $data
     ]);
     

@@ -14,6 +14,15 @@
  **************************************************************************************************/
 
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../../includes/page_access_helper.php';
+// Translation management is limited to people allowed on language.php.
+if (!page_role_allowed($conDB, 'language.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['type' => 'error', 'status' => 'error', 'title' => 'Error', 'message' => 'Access denied.']);
+    exit;
+}
 require_once __DIR__ . '/../../includes/helper_functions.php';
 
 header('Content-Type: application/json');
@@ -23,7 +32,7 @@ $draw = isset($_POST['draw']) ? intval($_POST['draw']) : 0;
 $row = isset($_POST['start']) ? intval($_POST['start']) : 0;
 $rowperpage = isset($_POST['length']) ? intval($_POST['length']) : 10;
 $columnIndex = isset($_POST['order'][0]['column']) ? intval($_POST['order'][0]['column']) : 0;
-$columnSortOrder = isset($_POST['order'][0]['dir']) ? mysqli_real_escape_string($conDB, $_POST['order'][0]['dir']) : 'asc';
+$columnSortOrder = (strtolower($_POST['order'][0]['dir'] ?? 'asc') === 'desc') ? 'DESC' : 'ASC';
 $searchValue = isset($_POST['search']['value']) ? mysqli_real_escape_string($conDB, $_POST['search']['value']) : '';
 
 ## Column Sorting Logic (The Fix)

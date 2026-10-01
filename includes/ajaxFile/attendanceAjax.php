@@ -38,30 +38,56 @@ function list_attendance($conDB) {
     if ($empFilter !== '') {
         $where[] = "a.emp_id = " . (int) $empFilter;
     }
-    if ($fromDate !== '' && $toDate !== '') {
-        $fromEsc = mysqli_real_escape_string($conDB, $fromDate);
-        $toEsc = mysqli_real_escape_string($conDB, $toDate);
-        $where[] = "a.date BETWEEN '{$fromEsc}' AND '{$toEsc} 23:59:59'";
+    $isDate = function ($v) { $d = DateTime::createFromFormat('Y-m-d', $v); return $d && $d->format('Y-m-d') === $v; };
+    if ($fromDate !== '' && $isDate($fromDate)) {
+        $where[] = "a.date >= '{$fromDate}'";
+    }
+    if ($toDate !== '' && $isDate($toDate)) {
+        $where[] = "a.date <= '{$toDate} 23:59:59'";
     }
     if ($searchValue !== '') {
         $searchEsc = mysqli_real_escape_string($conDB, $searchValue);
         $where[] = "(e.name LIKE '%{$searchEsc}%' OR a.emp_id LIKE '%{$searchEsc}%' OR a.note LIKE '%{$searchEsc}%')";
     }
+    // Status tiles: counts use the employee/date filter only, the list also applies the chosen tile + search.
+    $stateGroups = [
+        'present'    => "a.state = 'Present'",
+        'late'       => "a.state LIKE 'Late%'",
+        'early'      => "a.state LIKE '%Early Leave%'",
+        'incomplete' => "a.state LIKE '%Incomplete%'",
+        'dayoff'     => "a.state IN ('Day Off', 'Leave', 'Absent')",
+    ];
+    $countWhere = $where;
+    foreach ($countWhere as $i => $cond) {
+        if (strpos($cond, 'e.name LIKE') !== false) unset($countWhere[$i]);
+    }
+    $countSql = "COUNT(*) AS `all`";
+    foreach ($stateGroups as $key => $cond) {
+        $countSql .= ", SUM({$cond}) AS `{$key}`";
+    }
+    $countRes = mysqli_query($conDB, "SELECT {$countSql} FROM attendance a WHERE " . implode(' AND ', $countWhere));
+    $counts = array_map('intval', $countRes ? (mysqli_fetch_assoc($countRes) ?: []) : []);
+
+    $stateFilter = (string) ($_POST['state_group'] ?? '');
+    if (isset($stateGroups[$stateFilter])) {
+        $where[] = $stateGroups[$stateFilter];
+    }
     $whereSql = implode(' AND ', $where);
 
-    $totalResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance a LEFT JOIN employees e ON e.emp_id = a.emp_id");
+    // attendance.emp_id is INT, employees.emp_id is a latin1 VARCHAR - the joins cast so the employees index is used.
+    $totalResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance a");
     $totalRecords = (int) (mysqli_fetch_assoc($totalResult)['cnt'] ?? 0);
 
-    $filteredResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance a LEFT JOIN employees e ON e.emp_id = a.emp_id WHERE {$whereSql}");
+    $filteredResult = mysqli_query($conDB, "SELECT COUNT(*) AS cnt FROM attendance a LEFT JOIN employees e ON e.emp_id = CAST(a.emp_id AS CHAR CHARACTER SET latin1) WHERE {$whereSql}");
     $filteredRecords = (int) (mysqli_fetch_assoc($filteredResult)['cnt'] ?? 0);
 
     $rows = mysqli_query(
         $conDB,
         "SELECT a.id, a.emp_id, e.name, a.date, a.time_in, a.time_out, a.state, a.source, a.note
          FROM attendance a
-         LEFT JOIN employees e ON e.emp_id = a.emp_id
+         LEFT JOIN employees e ON e.emp_id = CAST(a.emp_id AS CHAR CHARACTER SET latin1)
          WHERE {$whereSql}
-         ORDER BY a.date DESC
+         ORDER BY a.date DESC, a.time_in DESC
          LIMIT {$start}, {$length}"
     );
 
@@ -117,6 +143,7 @@ function list_attendance($conDB) {
         'recordsTotal' => $totalRecords,
         'recordsFiltered' => $filteredRecords,
         'data' => $data,
+        'counts' => $counts,
     ]);
 }
 

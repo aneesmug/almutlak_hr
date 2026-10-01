@@ -217,6 +217,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_employees_payroll_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_import_iqama_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page)) ||
+                       !empty($isSupervisor) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['employee_memos.php'] ?? [])) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['manage_holidays.php'] ?? []));
 
@@ -829,7 +830,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php */ ?>
-                <?php if (in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
+                <?php if (!empty($isSupervisor) || in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa-duotone fa-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 

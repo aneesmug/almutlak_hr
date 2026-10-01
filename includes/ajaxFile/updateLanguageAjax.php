@@ -21,6 +21,15 @@
  **************************************************************************************************/
 
 require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../../includes/page_access_helper.php';
+// Translation management is limited to people allowed on language.php.
+if (!page_role_allowed($conDB, 'language.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['type' => 'error', 'status' => 'error', 'title' => 'Error', 'message' => 'Access denied.']);
+    exit;
+}
 
 header('Content-Type: application/json');
 

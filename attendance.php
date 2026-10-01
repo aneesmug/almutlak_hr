@@ -1,4 +1,6 @@
 <?php
+// Attendance records. Same look as the Smart Request pages (assets/css/smart_request.css).
+// Data + save: includes/ajaxFile/attendanceAjax.php (list_attendance, add_edit_attendance); delete: .deleteAjax in jquery.app.js.
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
@@ -10,6 +12,15 @@ if (!$canManageAttendance) {
     header('Location: dashboard.php');
     exit;
 }
+
+$tiles = [
+    ''           => ['dot-all', __('all', 'All')],
+    'present'    => ['dot-green', __('present', 'Present')],
+    'late'       => ['dot-amber', __('late', 'Late')],
+    'early'      => ['dot-indigo', __('early_leave', 'Early leave')],
+    'incomplete' => ['dot-red', __('incomplete', 'Incomplete')],
+    'dayoff'     => ['dot-slate', __('day_off', 'Day off')],
+];
 ?>
 
 <!doctype html>
@@ -24,23 +35,48 @@ if (!$canManageAttendance) {
 
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css" rel="stylesheet" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <?php if ($is_rtl ?? false): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .attendance-source-badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; }
-        .attendance-source-device { background-color: #e3f2ff; color: #1c6fd6; }
-        .attendance-source-manual { background-color: #fff2df; color: #d68c1c; }
+        .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+        @media (max-width: 1199px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 575px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .att-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .att-filters .att-emp { width: 300px; max-width: 100%; }
+        .att-filters input[type=date] {
+            height: 38px; width: 150px; padding: 0 10px; border-radius: 10px; font-size: 13px;
+            border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text);
+        }
+        .att-filters input[type=date]:focus { outline: 0; border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+        .att-sep { color: var(--sr-muted); font-size: 12px; }
+        .att-range { display: inline-flex; border: 1px solid var(--sr-border-strong); border-radius: 10px; overflow: hidden; }
+        .att-range button { height: 36px; padding: 0 12px; border: 0; background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600; cursor: pointer; }
+        .att-range button + button { border-inline-start: 1px solid var(--sr-border-strong); }
+        .att-range button:hover { color: var(--sr-accent-strong); }
+        .att-range button.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+        .att-filters .select2-container--default .select2-selection--single {
+            height: 38px; border-radius: 10px; border-color: var(--sr-border-strong); background: var(--sr-surface-2);
+        }
+        .att-filters .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px; color: var(--sr-text); padding-inline: 12px 40px; font-size: 13px; }
+        .att-filters .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
+        .att-time { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--sr-text); }
+        .att-time i { font-size: 14px; }
+        .att-time.in i { color: #16a34a; }
+        .att-time.out i { color: #dc2626; }
+        .att-hours { font-variant-numeric: tabular-nums; font-weight: 600; }
+        .att-note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+        .sr-form .att-punch .sr-seg-opt.checked span { border-color: var(--sr-accent); background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
     </style>
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
@@ -65,62 +101,74 @@ if (!$canManageAttendance) {
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box table-responsive">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="m-t-0 header-title"><?= __('attendance_record', 'Attendance Record') ?></h4>
-                                    <button id="btn-add-attendance" type="button" class="btn btn-primary btn-sm waves-effect waves-light">
-                                        <i class="mdi mdi-plus-circle mr-2"></i><?= __('add_attendance', 'Add Record') ?>
-                                    </button>
-                                </div>
 
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <label><?= __('employee', 'Employee') ?></label>
-                                        <select id="filterEmployee" class="form-control" style="width: 100%;"></select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label><?= __('from', 'From') ?></label>
-                                        <input type="date" id="filterFromDate" class="form-control">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label><?= __('to', 'To') ?></label>
-                                        <input type="date" id="filterToDate" class="form-control">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label>&nbsp;</label>
-                                        <button id="btn-apply-filters" type="button" class="btn btn-secondary btn-block"><?= __('filter', 'Filter') ?></button>
-                                    </div>
-                                </div>
-
-                                <table id="attendance_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                    <thead>
-                                        <tr>
-                                            <th><?= __('emp_id', 'Emp ID') ?></th>
-                                            <th><?= __('employee_name', 'Employee Name') ?></th>
-                                            <th><?= __('date') ?></th>
-                                            <th><?= __('check_in', 'Check In') ?></th>
-                                            <th><?= __('check_out', 'Check Out') ?></th>
-                                            <th><?= __('state', 'State') ?></th>
-                                            <th><?= __('source', 'Source') ?></th>
-                                            <th><?= __('note') ?></th>
-                                            <th width="60"><?= __('action_header', 'Action') ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('attendance_record', 'Attendance Record') ?></h1>
+                            <p><?= __('attendance_subtitle', 'Daily check-in / check-out from the devices and manual entries.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <button id="btn-add-attendance" type="button" class="sr-btn sr-btn-primary"><i class="fa fa-plus"></i> <?= __('add_attendance', 'Add Record') ?></button>
                         </div>
                     </div>
-                </div>
 
-                <footer class="footer">
-                    <?= $site_footer ?? '' ?>
-                </footer>
+                    <div class="sr-tiles att-tiles" id="attTiles">
+                        <?php foreach ($tiles as $key => $tile): ?>
+                            <button type="button" class="sr-tile <?= $key === '' ? 'active' : '' ?>" data-group="<?= $key ?>">
+                                <span class="sr-tile-label"><span class="sr-dot <?= $tile[0] ?>"></span><?= htmlspecialchars($tile[1]) ?></span>
+                                <span class="sr-tile-value" data-count="<?= $key === '' ? 'all' : $key ?>">&ndash;</span>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="attSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                            <div class="att-filters">
+                                <div class="att-emp"><select id="filterEmployee" style="width: 100%;"></select></div>
+                                <div class="att-range" id="attRange">
+                                    <button type="button" data-range="today"><?= __('today', 'Today') ?></button>
+                                    <button type="button" data-range="week"><?= __('this_week', 'This week') ?></button>
+                                    <button type="button" data-range="month"><?= __('this_month', 'This month') ?></button>
+                                    <button type="button" data-range="" class="active"><?= __('all', 'All') ?></button>
+                                </div>
+                                <input type="date" id="filterFromDate" aria-label="<?= __('from', 'From') ?>">
+                                <span class="att-sep">&ndash;</span>
+                                <input type="date" id="filterToDate" aria-label="<?= __('to', 'To') ?>">
+                            </div>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table id="attendance_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?= __('employee', 'Employee') ?></th>
+                                        <th><?= __('date') ?></th>
+                                        <th><?= __('check_in', 'Check In') ?></th>
+                                        <th><?= __('check_out', 'Check Out') ?></th>
+                                        <th><?= __('hours', 'Hours') ?></th>
+                                        <th><?= __('state', 'State') ?></th>
+                                        <th><?= __('source', 'Source') ?></th>
+                                        <th><?= __('note') ?></th>
+                                        <th class="text-right"><?= __('action_header', 'Action') ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
             </div>
+
+            <footer class="footer">
+                <?= $site_footer ?? '' ?>
+            </footer>
         </div>
     </div>
 
@@ -134,299 +182,259 @@ if (!$canManageAttendance) {
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
     <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="./plugins/select2/js/select2.min.js"></script>
 
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
 
     <script>
     $(document).ready(function() {
-        $('#filterEmployee').select2({
-            theme: 'bootstrap4',
-            placeholder: __('all_employees', 'All employees'),
-            allowClear: true,
-            ajax: {
+        const F = window.SRForm, t = F.t, esc = F.esc;
+        const AJAX_URL = './includes/ajaxFile/attendanceAjax.php';
+        const STATES = ['Present', 'Late', 'Early Leave', 'Late & Early Leave', 'Incomplete', 'Late & Incomplete', 'Half Day', 'Leave', 'Day Off', 'Absent'];
+        let stateGroup = '';
+
+        function stateTone(s) {
+            s = String(s || '');
+            if (s === 'Present') return 'green';
+            if (s.indexOf('Incomplete') > -1 || s === 'Absent') return 'red';
+            if (s.indexOf('Late') === 0) return 'amber';
+            if (s.indexOf('Early Leave') > -1 || s === 'Half Day') return 'indigo';
+            return 'slate';
+        }
+        function stateLabel(s) { return t(String(s || '').toLowerCase().replace(/ & /g, '_and_').replace(/ /g, '_'), s); }
+        function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+        function minutes(hm) { const m = /^(\d{1,2}):(\d{2})/.exec(hm || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+
+        // Employee search (shared by the filter and the form)
+        function empAjax() {
+            return {
                 url: './includes/ajaxFile/hrHandler.php',
                 type: 'POST',
                 dataType: 'json',
                 delay: 250,
-                data: function(params) {
-                    return { ajaxType: 'emp_search_select2', search: params.term };
-                },
+                data: params => ({ ajaxType: 'emp_search_select2', search: params.term }),
                 processResults: function(response) {
                     if (response.status === 200 && response.data) {
-                        return {
-                            results: response.data.map(function(emp) {
-                                return { id: emp.emp_id, text: emp.emp_id + ' - ' + emp.name + (emp.department ? ' (' + emp.department + ')' : '') };
-                            })
-                        };
+                        return { results: response.data.map(emp => ({ id: emp.emp_id, text: emp.emp_id + ' - ' + emp.name + (emp.department ? ' (' + emp.department + ')' : '') })) };
                     }
                     return { results: [] };
                 }
-            }
+            };
+        }
+
+        $('#filterEmployee').select2({
+            placeholder: t('all_employees', 'All employees'),
+            allowClear: true,
+            width: '100%',
+            ajax: empAjax()
         });
 
-        var table = $('#attendance_table').DataTable({
+        const table = $('#attendance_table').DataTable({
+            dom: 'rtip',
             processing: true,
             serverSide: true,
-            order: [[2, 'desc']],
+            responsive: true,
+            pageLength: 25,
+            order: [[1, 'desc']],
             ajax: {
-                url: './includes/ajaxFile/attendanceAjax.php',
+                url: AJAX_URL,
                 type: 'POST',
                 data: function(d) {
                     d.action = 'list_attendance';
                     d.emp_id = $('#filterEmployee').val() || '';
                     d.from_date = $('#filterFromDate').val() || '';
                     d.to_date = $('#filterToDate').val() || '';
+                    d.state_group = stateGroup;
+                },
+                dataSrc: function(json) {
+                    const c = json.counts || {};
+                    $('#attTiles [data-count]').each(function() {
+                        const v = c[$(this).data('count')];
+                        $(this).text(v == null ? 0 : Number(v).toLocaleString('en-US'));
+                    });
+                    return json.data || [];
                 }
             },
             columns: [
-                { data: 'emp_id' },
-                { data: 'name' },
-                { data: 'date' },
-                { data: 'time_in' },
-                { data: 'time_out' },
-                { data: 'state' },
-                { data: 'source', render: function(source) {
-                    var cls = source === 'manual' ? 'attendance-source-manual' : 'attendance-source-device';
-                    var label = source === 'manual' ? __('manual', 'Manual') : __('device', 'Device');
-                    return '<span class="attendance-source-badge ' + cls + '">' + label + '</span>';
-                }},
-                { data: 'note' },
-                { data: 'action', orderable: false, searchable: false }
+                { data: 'name', orderable: false, render: function(name, type, row) {
+                    return `<div class="sr-person">
+                        <span class="sr-avatar">${esc(String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</span>
+                        <div style="min-width:0;"><span class="sr-cell-title">${esc(name || '-')}</span><span class="sr-cell-sub sr-mono">${esc(row.emp_id)}</span></div>
+                    </div>`;
+                } },
+                { data: 'date', render: function(d) {
+                    const dt = new Date(d + 'T00:00:00');
+                    if (isNaN(dt)) return esc(d);
+                    return `<span class="sr-date">${dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}<small>${dt.toLocaleDateString('en-US', { weekday: 'long' })}</small></span>`;
+                } },
+                { data: 'time_in', orderable: false, render: v => v ? `<span class="att-time in"><i class="mdi mdi-login"></i>${esc(v)}</span>` : '<span class="text-muted">&ndash;</span>' },
+                { data: 'time_out', orderable: false, render: v => v ? `<span class="att-time out"><i class="mdi mdi-logout"></i>${esc(v)}</span>` : '<span class="text-muted">&ndash;</span>' },
+                { data: null, orderable: false, render: function(d, type, row) {
+                    const a = minutes(row.time_in), b = minutes(row.time_out);
+                    if (a === null || b === null) return '<span class="text-muted">&ndash;</span>';
+                    let m = b - a; if (m < 0) m += 1440;
+                    return `<span class="att-hours">${Math.floor(m / 60)}h ${('0' + (m % 60)).slice(-2)}m</span>`;
+                } },
+                { data: 'state', orderable: false, render: s => `<span class="sr-pill sr-pill-xs tone-${stateTone(s)}"><span class="sr-dot"></span>${esc(stateLabel(s))}</span>` },
+                { data: 'source', orderable: false, render: s => s === 'manual'
+                    ? `<span class="sr-chip"><i class="mdi mdi-pencil"></i>${esc(t('manual', 'Manual'))}</span>`
+                    : `<span class="sr-chip"><i class="mdi mdi-fingerprint"></i>${esc(t('device', 'Device'))}</span>` },
+                { data: 'note', orderable: false, render: n => n ? `<span class="att-note" title="${esc(n)}">${esc(n)}</span>` : '<span class="text-muted">&ndash;</span>' },
+                { data: 'action', orderable: false, searchable: false, className: 'text-right', render: function(html) {
+                    // Server sends a Bootstrap dropdown; restyle its toggle like the other sr pages.
+                    return String(html || '').replace('table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm', 'sr-more-btn dropdown-toggle arrow-none')
+                        .replace('mdi-dots-horizontal', 'mdi-dots-vertical');
+                } }
             ],
             language: {
-                search: `<span>${__('search')}:</span> _INPUT_`,
-                searchPlaceholder: `${__('search')}...`,
-                lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                 info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                paginate: { first: __('first'), last: __('last'), next: __('next'), previous: __('previous') },
-                emptyTable: __('no_data_available_in_table'),
-                zeroRecords: __('no_matching_records_found'),
-                processing: __('processing', 'Processing...'),
+                infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                infoFiltered: '',
+                paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                emptyTable: `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_data_available_in_table')}</div>`,
+                zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+                processing: t('processing', 'Processing...')
             }
         });
 
-        $('#btn-apply-filters').on('click', function() {
-            table.ajax.reload();
+        const reload = () => table.ajax.reload();
+        let searchTimer;
+        $('#attSearch').on('input', function() {
+            clearTimeout(searchTimer);
+            const v = this.value;
+            searchTimer = setTimeout(() => table.search(v).draw(), 350);
         });
-        $('#filterEmployee').on('change', function() {
-            table.ajax.reload();
+        $('#filterEmployee').on('change', reload);
+        $('#filterFromDate, #filterToDate').on('change', function() {
+            $('#attRange button').removeClass('active');
+            reload();
+        });
+        $('#attTiles').on('click', '.sr-tile', function() {
+            $('#attTiles .sr-tile').removeClass('active');
+            $(this).addClass('active');
+            stateGroup = $(this).data('group') || '';
+            reload();
+        });
+        $('#attRange').on('click', 'button', function() {
+            $('#attRange button').removeClass('active');
+            $(this).addClass('active');
+            const now = new Date(), r = $(this).data('range');
+            let from = '', to = '';
+            if (r === 'today') { from = to = ymd(now); }
+            else if (r === 'week') { const s = new Date(now); s.setDate(now.getDate() - ((now.getDay() + 1) % 7)); from = ymd(s); to = ymd(now); } // week starts Saturday
+            else if (r === 'month') { from = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); to = ymd(now); }
+            $('#filterFromDate').val(from);
+            $('#filterToDate').val(to);
+            reload();
         });
 
-        function attendanceFormHtml(empId, empLabel, date, timeIn, timeOut, state, note) {
-            var stateOptions = ['Present', 'Absent', 'Late', 'Half Day', 'Leave', 'Incomplete'].map(function(s) {
-                return `<option value="${s}" ${s === state ? 'selected' : ''}>${s}</option>`;
-            }).join('');
-            // Infer punch type from existing data so editing a partial record keeps its shape
-            var punchType = 'both';
-            if (timeIn && !timeOut) punchType = 'in';
-            else if (!timeIn && timeOut) punchType = 'out';
-            var punchOptions = [
-                ['both', __('punch_both', 'Check In & Check Out')],
-                ['in', __('punch_in_only', 'Check In Only')],
-                ['out', __('punch_out_only', 'Check Out Only')],
-            ].map(function(o) {
-                return `<option value="${o[0]}" ${o[0] === punchType ? 'selected' : ''}>${o[1]}</option>`;
-            }).join('');
-            return `
-                <div class="form-group text-left">
-                    <label>${__('employee', 'Employee')} *</label>
-                    <select id="attEmpId" class="form-control" style="width: 100%;" ${empId ? 'disabled' : ''}></select>
-                    <input type="hidden" id="attEmpIdValue" value="${empId || ''}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('date')} *</label>
-                    <input type="date" id="attDate" class="form-control" value="${date || ''}" ${date ? 'disabled' : ''}>
-                    <input type="hidden" id="attDateValue" value="${date || ''}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('punch_type', 'Punch Type')} *</label>
-                    <select id="attPunchType" class="form-control">${punchOptions}</select>
-                </div>
-                <div class="form-group text-left" id="attTimeInGroup">
-                    <label>${__('check_in', 'Check In')} *</label>
-                    <input type="time" id="attTimeIn" class="form-control" value="${timeIn || ''}">
-                </div>
-                <div class="form-group text-left" id="attTimeOutGroup">
-                    <label>${__('check_out', 'Check Out')} *</label>
-                    <input type="time" id="attTimeOut" class="form-control" value="${timeOut || ''}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('state', 'State')} *</label>
-                    <select id="attState" class="form-control">${stateOptions}</select>
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('note')}</label>
-                    <textarea id="attNote" class="form-control">${note || ''}</textarea>
-                </div>
-            `;
+        /* ---------------- Add / edit form ---------------- */
+
+        function formHtml(v) {
+            const isEdit = !!v.empId;
+            let punch = 'both';
+            if (v.timeIn && !v.timeOut) punch = 'in';
+            else if (!v.timeIn && v.timeOut) punch = 'out';
+            const states = STATES.indexOf(v.state) > -1 || !v.state ? STATES : STATES.concat([v.state]);
+            const seg = (val, icon, label) => `<label class="sr-seg-opt ${punch === val ? 'checked' : ''}"><input type="radio" name="punch" value="${val}" ${punch === val ? 'checked' : ''}><span><i class="mdi ${icon}"></i> ${esc(label)}</span></label>`;
+            return '<form id="attForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                F.section('mdi-account', t('employee', 'Employee'),
+                    F.field({ col: 8, name: 'emp_id', label: t('employee', 'Employee'), req: !isEdit,
+                        html: isEdit
+                            ? `<input type="text" class="form-control" value="${esc(v.empLabel)}" readonly>`
+                            : `<select id="attEmpId" name="emp_id" data-required="1" data-msg="${esc(t('select_employee', 'Select the employee'))}"></select>` }) +
+                    F.field({ col: 4, name: 'date', id: 'attDate', type: 'date', label: t('date', 'Date'), req: !isEdit, value: v.date || F.today(),
+                        attrs: isEdit ? ' readonly' : ` max="${F.today()}"`, msg: t('select_date', 'Select the date') })
+                ) +
+                F.section('mdi-clock', t('punches', 'Punches'),
+                    F.field({ col: 12, name: 'punch', label: t('punch_type', 'Punch type'),
+                        html: '<div class="sr-seg att-punch">' +
+                            seg('both', 'mdi-swap-horizontal', t('punch_both', 'Check in & out')) +
+                            seg('in', 'mdi-login', t('punch_in_only', 'Check in only')) +
+                            seg('out', 'mdi-logout', t('punch_out_only', 'Check out only')) +
+                        '</div>' }) +
+                    F.field({ col: 4, name: 'time_in', id: 'attTimeIn', type: 'time', label: t('check_in', 'Check in'), req: true, value: v.timeIn || '',
+                        msg: t('enter_check_in', 'Enter the check-in time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-in') +
+                    F.field({ col: 4, name: 'time_out', id: 'attTimeOut', type: 'time', label: t('check_out', 'Check out'), req: true, value: v.timeOut || '',
+                        msg: t('enter_check_out', 'Enter the check-out time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-out') +
+                    F.field({ col: 4, name: '_hours', label: t('hours', 'Hours'), html: '<div class="sr-fstats" style="grid-template-columns:1fr;"><div><span>' + esc(t('worked', 'Worked')) + '</span><b class="js-hours">&ndash;</b></div></div>' })
+                ) +
+                F.section('mdi-information-outline', t('details', 'Details'),
+                    F.field({ col: 5, name: 'state', label: t('state', 'State'), req: true,
+                        html: F.select({ name: 'state', id: 'attState', req: true, options: states.map(s => ({ v: s, l: stateLabel(s) })) }) }) +
+                    F.field({ col: 7, name: 'note', id: 'attNote', label: t('note', 'Note'), value: v.note || '', ph: t('optional', 'Optional') })
+                ) +
+            '</form>';
         }
 
-        function applyPunchTypeVisibility() {
-            var type = $('#attPunchType').val();
-            $('#attTimeInGroup').toggle(type === 'both' || type === 'in');
-            $('#attTimeOutGroup').toggle(type === 'both' || type === 'out');
-            if (type === 'in') $('#attTimeOut').val('');
-            if (type === 'out') $('#attTimeIn').val('');
-        }
-
-        function initEmpSelectInModal(preselectId, preselectLabel) {
-            var $sel = $('#attEmpId');
-            $sel.select2({
-                theme: 'bootstrap4',
-                dropdownParent: Swal.getContainer ? $(Swal.getContainer()) : undefined,
-                ajax: {
-                    url: './includes/ajaxFile/hrHandler.php',
-                    type: 'POST',
-                    dataType: 'json',
-                    delay: 250,
-                    data: function(params) {
-                        return { ajaxType: 'emp_search_select2', search: params.term };
-                    },
-                    processResults: function(response) {
-                        if (response.status === 200 && response.data) {
-                            return {
-                                results: response.data.map(function(emp) {
-                                    return { id: emp.emp_id, text: emp.emp_id + ' - ' + emp.name + (emp.department ? ' (' + emp.department + ')' : '') };
-                                })
-                            };
-                        }
-                        return { results: [] };
-                    }
-                }
-            });
-            if (preselectId) {
-                var opt = new Option(preselectLabel, preselectId, true, true);
-                $sel.append(opt).trigger('change');
-            }
-        }
-
-        $('#btn-add-attendance').on('click', function() {
-            Swal.fire({
-                title: __('add_attendance', 'Add Record'),
-                html: attendanceFormHtml('', '', '', '', '', 'Present', ''),
-                showCancelButton: true,
-                confirmButtonColor: APP_COLORS.primary,
-                cancelButtonColor: APP_COLORS.danger_dark,
-                confirmButtonText: __('save', 'Save'),
-                cancelButtonText: __('cancel'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
+        function openForm(v) {
+            const isEdit = !!v.empId;
+            F.open({
+                title: isEdit ? t('edit_attendance', 'Edit record') : t('add_attendance', 'Add record'),
+                html: formHtml(v),
+                width: '760px',
+                confirm: t('save', 'Save'),
                 didOpen: function() {
-                    initEmpSelectInModal('', '');
-                    applyPunchTypeVisibility();
-                    $('#attPunchType').on('change', applyPunchTypeVisibility);
+                    const $form = $('#attForm');
+                    F.liveClear($form);
+                    $('#attState').val(v.state || 'Present');
+                    if (!isEdit) {
+                        F.select2($('#attEmpId'), { placeholder: t('search_employee', 'Search by name or ID'), ajax: empAjax() });
+                        const pre = $('#filterEmployee').select2('data')[0];
+                        if (pre && pre.id) $('#attEmpId').append(new Option(pre.text, pre.id, true, true)).trigger('change');
+                    }
+                    function refresh() {
+                        const p = $form.find('input[name="punch"]:checked').val();
+                        $form.find('.js-in').toggle(p !== 'out').find('input').attr('data-required', p !== 'out' ? '1' : null);
+                        $form.find('.js-out').toggle(p !== 'in').find('input').attr('data-required', p !== 'in' ? '1' : null);
+                        const a = p === 'out' ? null : minutes($('#attTimeIn').val()), b = p === 'in' ? null : minutes($('#attTimeOut').val());
+                        let txt = '–';
+                        if (a !== null && b !== null) { let m = b - a; if (m < 0) m += 1440; txt = Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm'; }
+                        $form.find('.js-hours').text(txt);
+                    }
+                    $form.on('change', 'input[name="punch"]', refresh);
+                    $form.on('input change', '#attTimeIn, #attTimeOut', refresh);
+                    refresh();
                 },
                 preConfirm: function() {
-                    var empId = $('#attEmpId').val();
-                    var date = $('#attDate').val();
-                    var punchType = $('#attPunchType').val();
-                    var hasIn = !!$('#attTimeIn').val();
-                    var hasOut = !!$('#attTimeOut').val();
-                    var punchOk = (punchType === 'both' && hasIn && hasOut) ||
-                                  (punchType === 'in' && hasIn) ||
-                                  (punchType === 'out' && hasOut);
-                    if (!empId || !date || !punchOk) {
-                        Swal.showValidationMessage(__('fill_required_fields', 'Please fill all required fields.'));
-                        return false;
-                    }
-                    return new Promise(function(resolve, reject) {
-                        $.ajax({
-                            url: './includes/ajaxFile/attendanceAjax.php',
-                            type: 'POST',
-                            dataType: 'json',
-                            data: {
-                                action: 'add_edit_attendance',
-                                emp_id: empId,
-                                date: date,
-                                time_in: $('#attTimeIn').val(),
-                                time_out: $('#attTimeOut').val(),
-                                state: $('#attState').val(),
-                                note: $('#attNote').val(),
-                            },
-                        }).done(function(res) {
-                            if (res.status !== 'success') {
-                                reject(res.message);
-                                return;
-                            }
-                            resolve(res);
-                        }).fail(function() {
-                            reject(__('unexpected_error', 'Unexpected error.'));
-                        });
+                    const $form = $('#attForm');
+                    const msg = F.validate($form);
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    const p = $form.find('input[name="punch"]:checked').val();
+                    return $.ajax({
+                        url: AJAX_URL, type: 'POST', dataType: 'json',
+                        data: {
+                            action: 'add_edit_attendance',
+                            emp_id: isEdit ? v.empId : $('#attEmpId').val(),
+                            date: isEdit ? v.date : $('#attDate').val(),
+                            time_in: p === 'out' ? '' : $('#attTimeIn').val(),
+                            time_out: p === 'in' ? '' : $('#attTimeOut').val(),
+                            state: $('#attState').val(),
+                            note: $('#attNote').val()
+                        }
+                    }).then(function(res) {
+                        if (!res || res.status !== 'success') throw new Error((res && res.message) || 'Error');
+                        return res;
+                    }).catch(function(err) {
+                        Swal.showValidationMessage((err && err.message) || t('unexpected_error', 'Unexpected error.'));
                     });
-                },
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    table.ajax.reload(null, false);
                 }
+            }).then(function(result) {
+                if (!(result.isConfirmed && result.value)) return;
+                Swal.fire({ title: t('saved', 'Saved'), text: result.value.message, icon: 'success', timer: 1400, showConfirmButton: false, allowOutsideClick: false });
+                table.ajax.reload(null, false);
             });
-        });
+        }
+
+        $('#btn-add-attendance').on('click', function() { openForm({}); });
 
         $(document).on('click', '.btn-edit-attendance', function() {
-            var empId = $(this).data('emp-id');
-            var empLabel = $(this).data('emp-label');
-            var date = $(this).data('date');
-            var timeIn = $(this).data('time-in');
-            var timeOut = $(this).data('time-out');
-            var state = $(this).data('state');
-            var note = $(this).data('note');
-
-            Swal.fire({
-                title: __('edit_attendance', 'Edit Record'),
-                html: attendanceFormHtml(empId, empLabel, date, timeIn, timeOut, state, note),
-                showCancelButton: true,
-                confirmButtonColor: APP_COLORS.primary,
-                cancelButtonColor: APP_COLORS.danger_dark,
-                confirmButtonText: __('save', 'Save'),
-                cancelButtonText: __('cancel'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
-                didOpen: function() {
-                    initEmpSelectInModal(empId, empLabel);
-                    applyPunchTypeVisibility();
-                    $('#attPunchType').on('change', applyPunchTypeVisibility);
-                },
-                preConfirm: function() {
-                    var punchType = $('#attPunchType').val();
-                    var hasIn = !!$('#attTimeIn').val();
-                    var hasOut = !!$('#attTimeOut').val();
-                    var punchOk = (punchType === 'both' && hasIn && hasOut) ||
-                                  (punchType === 'in' && hasIn) ||
-                                  (punchType === 'out' && hasOut);
-                    if (!punchOk) {
-                        Swal.showValidationMessage(__('fill_required_fields', 'Please fill all required fields.'));
-                        return false;
-                    }
-                    return new Promise(function(resolve, reject) {
-                        $.ajax({
-                            url: './includes/ajaxFile/attendanceAjax.php',
-                            type: 'POST',
-                            dataType: 'json',
-                            data: {
-                                action: 'add_edit_attendance',
-                                emp_id: $('#attEmpIdValue').val(),
-                                date: $('#attDateValue').val(),
-                                time_in: $('#attTimeIn').val(),
-                                time_out: $('#attTimeOut').val(),
-                                state: $('#attState').val(),
-                                note: $('#attNote').val(),
-                            },
-                        }).done(function(res) {
-                            if (res.status !== 'success') {
-                                reject(res.message);
-                                return;
-                            }
-                            resolve(res);
-                        }).fail(function() {
-                            reject(__('unexpected_error', 'Unexpected error.'));
-                        });
-                    });
-                },
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    table.ajax.reload(null, false);
-                }
+            const d = $(this).data();
+            openForm({
+                empId: d.empId, empLabel: d.empLabel, date: d.date,
+                timeIn: d.timeIn || '', timeOut: d.timeOut || '', state: d.state, note: d.note || ''
             });
         });
     });

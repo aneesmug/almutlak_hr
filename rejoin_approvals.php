@@ -29,258 +29,32 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <!-- App favicon -->
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-
-    <!-- DataTables -->
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- Bootstrap Datepicker -->
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
-    
     <style>
-        /* Tab content display fix */
-        .tab-pane {
-            display: none;
-        }
-        
-        .tab-pane.active {
-            display: block;
-        }
-        
-        /* DataTable width fix */
-        .table-responsive {
-            width: 100%;
-        }
-        
-        table.dataTable {
-            width: 100% !important;
-        }
-        
-        /* Employee Information Container */
-        .employee-info-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .employee-info-card {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 6px;
-            border: 1px solid #e9ecef;
-        }
-        
-        .info-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #6c757d;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        
-        .info-value {
-            font-size: 18px;
-            font-weight: 600;
-            color: #212529;
-        }
-        
-        /* Remarks Section */
-        .remarks-section {
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .remarks-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #007bff;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .remarks-items {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .remark-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border: 1px solid #e9ecef;
-        }
-        
-        .remark-item i {
-            font-size: 20px;
-            color: #6c757d;
-            min-width: 20px;
-        }
-        
-        .remark-item span {
-            font-size: 14px;
-            font-weight: 500;
-            color: #495057;
-        }
-        
-        /* Action button tabs styling - Card style like vacation */
-        .action-cards-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        
-        .action-card {
-            position: relative;
-            cursor: pointer;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-            background-color: #f8f9fa;
-        }
-        
-        .action-card:hover {
-            border-color: #dee2e6;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        .action-card input[type="radio"] {
-            display: none;
-        }
-        
-        .action-card-icon {
-            font-size: 32px;
-            margin-bottom: 10px;
-            display: block;
-        }
-        
-        .action-card-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #495057;
-            word-break: break-word;
-        }
-        
-        /* Active state for approve */
-        .action-card input[value="approve"]:checked + .action-card-content,
-        .action-card.active[data-action="approve"] .action-card-content {
-            color: #28a745;
-        }
-        
-        .action-card input[value="approve"]:checked ~ .action-card-border,
-        .action-card.active[data-action="approve"] .action-card-border {
-            border-color: #28a745;
-            background-color: #f0f9f5;
-        }
-        
-        /* Active state for adjust */
-        .action-card input[value="adjust"]:checked + .action-card-content,
-        .action-card.active[data-action="adjust"] .action-card-content {
-            color: #ffc107;
-        }
-        
-        .action-card input[value="adjust"]:checked ~ .action-card-border,
-        .action-card.active[data-action="adjust"] .action-card-border {
-            border-color: #ffc107;
-            background-color: #fffbf0;
-        }
-        
-        /* Active state for reject */
-        .action-card input[value="reject"]:checked + .action-card-content,
-        .action-card.active[data-action="reject"] .action-card-content {
-            color: #dc3545;
-        }
-        
-        .action-card input[value="reject"]:checked ~ .action-card-border,
-        .action-card.active[data-action="reject"] .action-card-border {
-            border-color: #dc3545;
-            background-color: #fdf5f5;
-        }
-        
-        .action-card-border {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-            pointer-events: none;
-            transition: all 0.3s ease;
-        }
-        
-        .action-card-content {
-            position: relative;
-            z-index: 1;
-            transition: color 0.3s ease;
-        }
-        
-        .action-card input[type="radio"]:checked ~ .action-card-border {
-            border-width: 2px;
-        }
-        .action-card-border {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-            pointer-events: none;
-            transition: all 0.3s ease;
-        }
-        
-        .action-card-content {
-            position: relative;
-            z-index: 1;
-            transition: color 0.3s ease;
-        }
-        
-        .action-card input[type="radio"]:checked ~ .action-card-border {
-            border-width: 2px;
-        }
+        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .rj-pane { display: none; }
+        .rj-pane.active { display: block; }
+        .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
+        .rj-diff { font-size: 11px; font-weight: 700; }
     </style>
-    
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
     <script> window.isRejoinElevated = <?= $is_rejoin_elevated ? 'true' : 'false' ?>;</script>
     <script> window.canCancelRejoinRequests = <?= $can_cancel_rejoin_requests ? 'true' : 'false' ?>;</script>
 </head>
-
 <body class="enlarged" data-keep-enlarged="true">
     <div id="wrapper">
-        <!-- Sidebar -->
         <div class="left side-menu">
             <div class="slimscroll-menu" id="remove-scroll">
                 <div class="topbar-left">
@@ -292,112 +66,100 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 <?php include("./includes/main_menu.php"); ?>
             </div>
         </div>
-
         <div class="content-page">
-            <!-- Top Bar -->
             <?php include("./includes/topbar.php"); ?>
 
-            <!-- Page Content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="header-title mb-4">
-                                    <i class="fa fa-plane-arrival"></i> <?= __('rejoin_approval_requests', 'Rejoin Approval Requests') ?>
-                                </h4>
 
-                                <!-- Filter Tabs -->
-                                <ul class="nav nav-tabs mb-3" role="tablist">
-                                    <li class="nav-item">
-                                        <a class="nav-link active" href="#pending" data-toggle="tab" role="tab">
-                                            <i class="fa fa-hourglass-start"></i> <?= __('pending_requests', 'Pending') ?>
-                                            <span class="badge badge-warning ml-2" id="pending-count">0</span>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link" href="#approved" data-toggle="tab" role="tab">
-                                            <i class="fa fa-check-circle"></i> <?= __('approved_requests', 'Approved') ?>
-                                            <span class="badge badge-success ml-2" id="approved-count">0</span>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a class="nav-link" href="#rejected" data-toggle="tab" role="tab">
-                                            <i class="fa fa-times-circle"></i> <?= __('rejected_requests', 'Rejected') ?>
-                                            <span class="badge badge-danger ml-2" id="rejected-count">0</span>
-                                        </a>
-                                    </li>
-                                </ul>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('rejoin_approval_requests', 'Rejoin Approval Requests') ?></h1>
+                            <p><?= __('rejoin_approvals_subtitle', 'Employees back from vacation asking to confirm their rejoin date.') ?></p>
+                        </div>
+                    </div>
 
-                                <!-- Tab Content -->
-                                <div class="tab-content">
-                                    <!-- Pending Requests -->
-                                    <div class="tab-pane fade show active" id="pending" role="tabpanel">
-                                        <div class="table-responsive">
-                                            <table id="pendingRequestsTable" class="table table-striped table-hover">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th><?= __('employee_name', 'Employee Name') ?></th>
-                                                        <th><?= __('employee_id', 'Employee ID') ?></th>
-                                                        <th><?= __('planned_return_date', 'Planned Return') ?></th>
-                                                        <th><?= __('requested_rejoin_date', 'Requested Rejoin') ?></th>
-                                                        <th><?= __('reason', 'Reason') ?></th>
-                                                        <th><?= __('submitted_date', 'Submitted') ?></th>
-                                                        <th><?= __('actions', 'Actions') ?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
+                    <div class="sr-tiles rj-tiles" id="rjTiles">
+                        <button type="button" class="sr-tile active" data-pane="pending">
+                            <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('pending_requests', 'Pending') ?></span>
+                            <span class="sr-tile-value" id="pending-count">&ndash;</span>
+                        </button>
+                        <button type="button" class="sr-tile" data-pane="approved">
+                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('approved_requests', 'Approved') ?></span>
+                            <span class="sr-tile-value" id="approved-count">&ndash;</span>
+                        </button>
+                        <button type="button" class="sr-tile" data-pane="rejected">
+                            <span class="sr-tile-label"><span class="sr-dot dot-red"></span><?= __('rejected_requests', 'Rejected') ?></span>
+                            <span class="sr-tile-value" id="rejected-count">&ndash;</span>
+                        </button>
+                    </div>
 
-                                    <!-- Approved Requests -->
-                                    <div class="tab-pane fade" id="approved" role="tabpanel">
-                                        <div class="table-responsive">
-                                            <table id="approvedRequestsTable" class="table table-striped table-hover">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th><?= __('employee_name', 'Employee Name') ?></th>
-                                                        <th><?= __('employee_id', 'Employee ID') ?></th>
-                                                        <th><?= __('approved_date', 'Approved Date') ?></th>
-                                                        <th><?= __('approval_note', 'Approval Note') ?></th>
-                                                        <th><?= __('approved_at', 'Approved At') ?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
+                    <div class="sr-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="rjSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                        </div>
 
-                                    <!-- Rejected Requests -->
-                                    <div class="tab-pane fade" id="rejected" role="tabpanel">
-                                        <div class="table-responsive">
-                                            <table id="rejectedRequestsTable" class="table table-striped table-hover">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th><?= __('employee_name', 'Employee Name') ?></th>
-                                                        <th><?= __('employee_id', 'Employee ID') ?></th>
-                                                        <th><?= __('rejection_reason', 'Rejection Reason') ?></th>
-                                                        <th><?= __('rejected_at', 'Rejected At') ?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="rj-pane active" id="pending">
+                            <div class="sr-table-wrap">
+                                <table id="pendingRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee_name', 'Employee') ?></th>
+                                            <th>ID</th>
+                                            <th><?= __('planned_return_date', 'Planned return') ?></th>
+                                            <th><?= __('requested_rejoin_date', 'Requested rejoin') ?></th>
+                                            <th><?= __('reason', 'Reason') ?></th>
+                                            <th><?= __('submitted_date', 'Submitted') ?></th>
+                                            <th class="text-right"><?= __('actions', 'Actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="rj-pane" id="approved">
+                            <div class="sr-table-wrap">
+                                <table id="approvedRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee_name', 'Employee') ?></th>
+                                            <th>ID</th>
+                                            <th><?= __('approved_date', 'Approved date') ?></th>
+                                            <th><?= __('approval_note', 'Approval note') ?></th>
+                                            <th><?= __('approved_at', 'Approved at') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="rj-pane" id="rejected">
+                            <div class="sr-table-wrap">
+                                <table id="rejectedRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee_name', 'Employee') ?></th>
+                                            <th>ID</th>
+                                            <th><?= __('rejection_reason', 'Rejection reason') ?></th>
+                                            <th><?= __('rejected_at', 'Rejected at') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </div>
-
             <footer class="footer">
                 <?= $site_footer ?>
             </footer>
         </div>
     </div>
-
     <script src="assets/js/jquery.min.js"></script>
     <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
@@ -405,465 +167,240 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- DataTables -->
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
     <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-    <!-- Select2 -->
-    <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
     <script>
+        const F = window.SRForm, esc = F.esc;
+        const LOCALE = '<?= ($current_lang ?? 'en') === 'ar' ? 'ar-SA' : 'en-GB' ?>';
+        const T = {
+            review: <?= json_encode(__('review', 'Review')) ?>,
+            cancel: <?= json_encode(__('cancel', 'Cancel')) ?>,
+            fly: <?= json_encode(__('fly_vacation', 'Fly vacation')) ?>,
+            local: <?= json_encode(__('local_vacation', 'Local vacation')) ?>,
+            daysLate: <?= json_encode(__('days_after_plan', 'd after plan')) ?>,
+            daysEarly: <?= json_encode(__('days_before_plan', 'd before plan')) ?>,
+            onTime: <?= json_encode(__('on_time', 'On time')) ?>
+        };
         let pendingTable, approvedTable, rejectedTable;
 
-        function updateStatusCount(badgeSelector, json) {
-            const total = Number((json && json.recordsTotal) || 0);
-            $(badgeSelector).text(total);
+        function fmtDate(d) {
+            if (!d) return '<span class="text-muted">&ndash;</span>';
+            const dt = new Date(String(d).replace(' ', 'T'));
+            return isNaN(dt) ? esc(d) : dt.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        function person(name, id) {
+            const ini = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+            return `<div class="sr-person"><span class="sr-avatar">${esc(ini)}</span><div style="min-width:0;"><span class="sr-cell-title">${esc(name || '-')}</span><span class="sr-cell-sub sr-mono">${esc(id)}</span></div></div>`;
+        }
+        function longText(v) { return v ? `<div class="rj-reason">${esc(v)}</div>` : '<span class="text-muted">&ndash;</span>'; }
+        const language = {
+            info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+            infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+            infoFiltered: '',
+            paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+            emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+            zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+            processing: __('processing', 'Processing...')
+        };
+        function makeTable(sel, status, columns, order) {
+            return $(sel).DataTable({
+                dom: 'rtip', processing: true, serverSide: true, responsive: true, pageLength: 10, order: order,
+                ajax: {
+                    url: './includes/get_rejoin_requests.php',
+                    type: 'POST',
+                    data: d => { d.status = status; },
+                    dataSrc: json => { $('#' + status + '-count').text(Number((json && json.recordsTotal) || 0)); return json.data || []; }
+                },
+                columns: columns,
+                language: language
+            });
         }
 
         function loadRejoinRequests() {
-            if (pendingTable) {
-                pendingTable.ajax.reload(null, false);
-            }
-            if (approvedTable) {
-                approvedTable.ajax.reload(null, false);
-            }
-            if (rejectedTable) {
-                rejectedTable.ajax.reload(null, false);
-            }
+            [pendingTable, approvedTable, rejectedTable].forEach(t => t && t.ajax.reload(null, false));
         }
 
         $(document).ready(function() {
-            // Initialize DataTables
-            pendingTable = $('#pendingRequestsTable').DataTable({
-                processing: true,
-                serverSide: true,
-                ajax: {
-                    url: './includes/get_rejoin_requests.php',
-                    type: 'POST',
-                    data: function(d) {
-                        d.status = 'pending';
-                    },
-                    dataSrc: function(json) {
-                        updateStatusCount('#pending-count', json);
-                        return json.data || [];
+            // Column indexes are used for sorting by includes/get_rejoin_requests.php - keep emp_id at index 1
+            pendingTable = makeTable('#pendingRequestsTable', 'pending', [
+                { data: 'emp_name', render: (d, t, r) => person(d, r.emp_id) },
+                { data: 'emp_id', visible: false },
+                { data: 'return_date', render: fmtDate },
+                { data: 'requested_rejoin_date', render: function(d, t, r) {
+                    if (!d) return '<span class="text-muted">&ndash;</span>';
+                    let diff = '';
+                    if (r.return_date) {
+                        const n = Math.round((new Date(d) - new Date(r.return_date)) / 86400000);
+                        diff = n === 0 ? `<small class="rj-diff text-success">${esc(T.onTime)}</small>`
+                            : `<small class="rj-diff ${n > 0 ? 'text-danger' : 'text-primary'}">${Math.abs(n)}${esc(n > 0 ? T.daysLate : T.daysEarly)}</small>`;
                     }
-                },
-                columns: [
-                    { data: 'emp_name' },
-                    { data: 'emp_id' },
-                    { data: 'return_date' },
-                    { data: 'requested_rejoin_date' },
-                    { data: 'requested_reason' },
-                    { data: 'requested_at' },
-                    { data: null, orderable: false, searchable: false }
-                ],
-                columnDefs: [
-                    {
-                        targets: 2,
-                        render: function(data) {
-                            return data ? new Date(data).toLocaleDateString() : '-';
-                        }
-                    },
-                    {
-                        targets: 3,
-                        render: function(data) {
-                            return data ? `<span class="badge badge-warning">${new Date(data).toLocaleDateString()}</span>` : '-';
-                        }
-                    },
-                    {
-                        targets: 4,
-                        render: function(data) {
-                            return data || '-';
-                        }
-                    },
-                    {
-                        targets: 5,
-                        render: function(data) {
-                            return data ? new Date(data).toLocaleDateString() : '-';
-                        }
-                    },
-                    {
-                        targets: 6,
-                        render: function(data, type, row) {
-                            const empNameJs = (row.emp_name || '').replace(/'/g, "\\'");
-                            let html = `<button class="btn btn-sm btn-primary" onclick="viewAndApproveRequest(${row.rejoin_request_id}, ${row.emp_id}, '${row.requested_rejoin_date}', '${empNameJs}', '${row.vac_type || ''}')">
-                                <i class="fa fa-check"></i> Review
-                            </button>`;
-                            if (window.canCancelRejoinRequests) {
-                                html += `<button class="btn btn-sm btn-danger" onclick="cancelRejoinRequestAdmin(${row.rejoin_request_id}, '${empNameJs}')">
-                                    <i class="fa fa-ban"></i> Cancel
-                                </button>`;
-                            }
-                            return `<div class="btn-group" role="group">${html}</div>`;
-                        }
+                    return `<span class="sr-date"><span class="sr-pill sr-pill-xs tone-amber">${fmtDate(d)}</span><br>${diff}</span>`;
+                } },
+                { data: 'requested_reason', orderable: false, render: longText },
+                { data: 'requested_at', render: fmtDate },
+                { data: null, orderable: false, searchable: false, className: 'text-right', render: function(d, t, r) {
+                    let html = `<a href="javascript:void(0);" class="sr-open-btn js-review" data-id="${esc(r.rejoin_request_id)}" data-emp="${esc(r.emp_id)}" data-date="${esc(r.requested_rejoin_date)}" data-name="${esc(r.emp_name)}" data-vac="${esc(r.vac_type || '')}"><i class="mdi mdi-check"></i> ${esc(T.review)}</a>`;
+                    if (window.canCancelRejoinRequests) {
+                        html += `<a href="javascript:void(0);" class="sr-more-btn js-cancel" title="${esc(T.cancel)}" data-id="${esc(r.rejoin_request_id)}" data-name="${esc(r.emp_name)}"><i class="mdi mdi-cancel text-danger"></i></a>`;
                     }
-                ],
-                pageLength: 10,
-                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-                order: [[5, 'desc']]
+                    return `<div class="sr-actions">${html}</div>`;
+                } }
+            ], [[5, 'desc']]);
+
+            approvedTable = makeTable('#approvedRequestsTable', 'approved', [
+                { data: 'emp_name', render: (d, t, r) => person(d, r.emp_id) },
+                { data: 'emp_id', visible: false },
+                { data: 'final_approved_date', render: (d, t, r) => (d || r.approved_date) ? `<span class="sr-pill sr-pill-xs tone-green"><span class="sr-dot"></span>${fmtDate(d || r.approved_date)}</span>` : '<span class="text-muted">&ndash;</span>' },
+                { data: 'approval_note', orderable: false, render: longText },
+                { data: 'approved_at', render: fmtDate }
+            ], [[4, 'desc']]);
+
+            rejectedTable = makeTable('#rejectedRequestsTable', 'rejected', [
+                { data: 'emp_name', render: (d, t, r) => person(d, r.emp_id) },
+                { data: 'emp_id', visible: false },
+                { data: 'rejection_reason', orderable: false, render: longText },
+                { data: 'approved_at', render: fmtDate }
+            ], [[3, 'desc']]);
+
+            let timer;
+            $('#rjSearch').on('input', function() {
+                clearTimeout(timer);
+                const v = this.value;
+                timer = setTimeout(() => [pendingTable, approvedTable, rejectedTable].forEach(t => t.search(v).draw()), 350);
             });
 
-            approvedTable = $('#approvedRequestsTable').DataTable({
-                processing: true,
-                serverSide: true,
-                ajax: {
-                    url: './includes/get_rejoin_requests.php',
-                    type: 'POST',
-                    data: function(d) {
-                        d.status = 'approved';
-                    },
-                    dataSrc: function(json) {
-                        updateStatusCount('#approved-count', json);
-                        return json.data || [];
-                    }
-                },
-                columns: [
-                    { data: 'emp_name' },
-                    { data: 'emp_id' },
-                    { data: 'final_approved_date' },
-                    { data: 'approval_note' },
-                    { data: 'approved_at' }
-                ],
-                columnDefs: [
-                    {
-                        targets: 2,
-                        render: function(data, type, row) {
-                            const approvedDate = data || row.approved_date;
-                            return approvedDate ? `<span class="badge badge-success">${new Date(approvedDate).toLocaleDateString()}</span>` : '-';
-                        }
-                    },
-                    {
-                        targets: 3,
-                        render: function(data) {
-                            return data || '-';
-                        }
-                    },
-                    {
-                        targets: 4,
-                        render: function(data) {
-                            return data ? new Date(data).toLocaleDateString() : '-';
-                        }
-                    }
-                ],
-                pageLength: 10,
-                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-                order: [[4, 'desc']]
-            });
-
-            rejectedTable = $('#rejectedRequestsTable').DataTable({
-                processing: true,
-                serverSide: true,
-                ajax: {
-                    url: './includes/get_rejoin_requests.php',
-                    type: 'POST',
-                    data: function(d) {
-                        d.status = 'rejected';
-                    },
-                    dataSrc: function(json) {
-                        updateStatusCount('#rejected-count', json);
-                        return json.data || [];
-                    }
-                },
-                columns: [
-                    { data: 'emp_name' },
-                    { data: 'emp_id' },
-                    { data: 'rejection_reason' },
-                    { data: 'approved_at' }
-                ],
-                columnDefs: [
-                    {
-                        targets: 2,
-                        render: function(data) {
-                            return data || '-';
-                        }
-                    },
-                    {
-                        targets: 3,
-                        render: function(data) {
-                            return data ? new Date(data).toLocaleDateString() : '-';
-                        }
-                    }
-                ],
-                pageLength: 10,
-                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-                order: [[3, 'desc']]
-            });
-
-            // Handle tab clicks
-            $('.nav-link').on('click', function(e) {
-                e.preventDefault();
-                
-                // Remove active from all tabs
-                $('.nav-link').removeClass('active');
-                $('.tab-pane').removeClass('active show');
-                
-                // Add active to clicked tab
+            $('#rjTiles').on('click', '.sr-tile', function() {
+                $('#rjTiles .sr-tile').removeClass('active');
                 $(this).addClass('active');
-                
-                // Show corresponding content
-                const target = $(this).attr('href');
-                $(target).addClass('active show');
-                
-                // Redraw the visible DataTable after tab is shown
-                setTimeout(function() {
-                    if (target === '#pending' && pendingTable) {
-                        pendingTable.columns.adjust().responsive.recalc();
-                    } else if (target === '#approved' && approvedTable) {
-                        approvedTable.columns.adjust().responsive.recalc();
-                    } else if (target === '#rejected' && rejectedTable) {
-                        rejectedTable.columns.adjust().responsive.recalc();
-                    }
-                }, 150);
+                $('.rj-pane').removeClass('active');
+                $('#' + $(this).data('pane')).addClass('active');
+                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust().responsive.recalc();
+            });
+
+            $(document).on('click', '.js-review', function() {
+                const d = $(this).data();
+                viewAndApproveRequest(d.id, d.emp, d.date, d.name, d.vac);
+            });
+            $(document).on('click', '.js-cancel', function() {
+                cancelRejoinRequestAdmin($(this).data('id'), $(this).data('name'));
             });
         });
 
         function viewAndApproveRequest(rejoinRequestId, empId, rejoinDate, empName, vacationType) {
-            // Determine vacation type label and icon
-            const vacationTypeLabel = vacationType && vacationType.toLowerCase() === 'fly' ? '<?= __("fly_vacation", "Fly Vacation") ?>' : '<?= __("local_vacation", "Local Vacation") ?>';
-            const vacationIcon = vacationType && vacationType.toLowerCase() === 'fly' ? 'fa-plane' : 'fa-map-marker';
-            
-            // Open approval modal
-            Swal.fire({
-                title: '<?= __("approve_rejoin_request", "Approve Rejoin Request") ?>',
-                html: `
-                    <div class="employee-info-container">
-                        <div class="employee-info-card">
-                            <div class="info-label"><?= __("employee_name", "Employee Name") ?></div>
-                            <div class="info-value">${empName}</div>
-                        </div>
-                        <div class="employee-info-card">
-                            <div class="info-label"><?= __("employee_id", "Employee ID") ?></div>
-                            <div class="info-value">${empId}</div>
-                        </div>
-                    </div>
-                    <div class="remarks-section">
-                        <div class="remarks-label"><i class="fa fa-pencil"></i> <?= __("remarks", "Remarks") ?></div>
-                        <div class="remarks-items">
-                            <div class="remark-item">
-                                <i class="fa ${vacationIcon}"></i>
-                                <span>${vacationTypeLabel}</span>
-                            </div>
-                            <div class="remark-item">
-                                <i class="fa fa-calendar"></i>
-                                <span>${rejoinDate}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group text-left" style="margin-top: 20px;">
-                        <label><?= __("action", "Action") ?></label><br>
-                        <div class="action-cards-container">
-                            <label class="action-card active" data-action="approve">
-                                <input type="radio" name="action" id="actionApprove" value="approve" checked>
-                                <div class="action-card-content">
-                                    <span class="action-card-icon"><i class="fa fa-check"></i></span>
-                                    <span class="action-card-label"><?= __("approve_immediately", "Approve Immediately") ?></span>
-                                </div>
-                                <div class="action-card-border"></div>
-                            </label>
-                            <label class="action-card" data-action="adjust">
-                                <input type="radio" name="action" id="actionAdjust" value="adjust">
-                                <div class="action-card-content">
-                                    <span class="action-card-icon"><i class="fa fa-calendar"></i></span>
-                                    <span class="action-card-label"><?= __("allow_adjustment", "Allow ±3 Days Adjustment") ?></span>
-                                </div>
-                                <div class="action-card-border"></div>
-                            </label>
-                            <label class="action-card" data-action="reject">
-                                <input type="radio" name="action" id="actionReject" value="reject">
-                                <div class="action-card-content">
-                                    <span class="action-card-icon"><i class="fa fa-times"></i></span>
-                                    <span class="action-card-label"><?= __("reject_request", "Reject Request") ?></span>
-                                </div>
-                                <div class="action-card-border"></div>
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-group text-left" id="approvalNoteDiv" style="display:none;">
-                        <label for="approvalNote"><?= __("approval_note", "Approval Note") ?> (<?= __("optional", "Optional") ?>)</label>
-                        <textarea class="form-control" id="approvalNote" rows="3" placeholder="<?= __("add_note", "Add a note...") ?>"></textarea>
-                    </div>
-                    <div class="form-group text-left" id="adjustmentDiv" style="display:none;">
-                        <label for="adjustmentDate"><?= __("select_adjustment_date", "Select Adjustment Date") ?> <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="adjustmentDate" placeholder="<?= __("select_date", "Select date...") ?>" readonly>
-                        <small class="text-muted" id="adjustmentRangeText" style="margin-top: 10px; display: block;"></small>
-                        <label for="adjustmentNote" style="margin-top: 15px;"><?= __("adjustment_note", "Adjustment Note") ?> (<?= __("optional", "Optional") ?>)</label>
-                        <textarea class="form-control" id="adjustmentNote" rows="2" placeholder="<?= __("explain_adjustment_window", "Explain the adjustment window...") ?>"></textarea>
-                    </div>
-                    <div class="form-group text-left" id="rejectionReasonDiv" style="display:none;">
-                        <label for="rejectionReason"><?= __("rejection_reason", "Rejection Reason") ?> <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="rejectionReason" rows="3" placeholder="<?= __("reason_required", "Please provide a reason...") ?>"></textarea>
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonText: '<?= __("submit_rejoin", "Submit") ?>',
-                cancelButtonText: '<?= __("cancel", "Cancel") ?>',
-                width:"50%",
-                allowOutsideClick: false,
-                preConfirm: () => {
-                    const action = $('input[name="action"]:checked').val();
-                    const approvalNote = $('#approvalNote').val();
-                    const adjustmentDate = $('#adjustmentDate').val();
-                    const adjustmentNote = $('#adjustmentNote').val();
-                    const rejectionReason = $('#rejectionReason').val();
+            const isFly = String(vacationType || '').toLowerCase() === 'fly';
+            const reqDate = new Date(rejoinDate), toDate = new Date(reqDate);
+            toDate.setDate(toDate.getDate() + 3);
+            const rangeText = window.isRejoinElevated
+                ? <?= json_encode(__("adjustment_window_unrestricted", "You can select any date, including back dates")) ?>
+                : <?= json_encode(__("adjustment_window", "Employee can select date between")) ?> + ' ' + reqDate.toLocaleDateString(LOCALE) + ' ' + <?= json_encode(__("and", "and")) ?> + ' ' + toDate.toLocaleDateString(LOCALE);
 
-                    if (action === 'adjust' && !adjustmentDate) {
-                        Swal.showValidationMessage('<?= __("adjustment_date_required", "Please select an adjustment date") ?>');
-                        return false;
+            const ini = String(empName || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+            const html = '<form id="rjForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                `<div class="sr-fsec"><div class="sr-fgrid" style="align-items:center;">
+                    <div class="sr-fcol c-7"><div class="sr-person"><span class="sr-avatar" style="width:42px;height:42px;">${esc(ini)}</span>
+                        <div style="min-width:0;"><span class="sr-cell-title">${esc(empName)}</span><span class="sr-cell-sub sr-mono">${esc(empId)}</span></div></div></div>
+                    <div class="sr-fcol c-5" style="text-align:end;">
+                        <span class="sr-chip"><i class="mdi ${isFly ? 'mdi-airplane' : 'mdi-map-marker'}"></i>${esc(isFly ? T.fly : T.local)}</span>
+                        <span class="sr-chip"><i class="mdi mdi-calendar"></i>${esc(rejoinDate)}</span>
+                    </div>
+                </div></div>` +
+                F.section('mdi-gavel', <?= json_encode(__("action", "Action")) ?>,
+                    F.field({ col: 12, name: 'action', html:
+                        '<div class="sr-attach-choice" style="grid-template-columns: repeat(3, minmax(0, 1fr));">' +
+                            `<label class="sr-choice sr-choice-approve"><input type="radio" name="action" value="approve" checked><span><i class="mdi mdi-check-circle"></i> ${esc(<?= json_encode(__("approve_immediately", "Approve immediately")) ?>)}</span></label>` +
+                            `<label class="sr-choice"><input type="radio" name="action" value="adjust"><span><i class="mdi mdi-calendar-range"></i> ${esc(<?= json_encode(__("allow_adjustment", "Allow ±3 days adjustment")) ?>)}</span></label>` +
+                            `<label class="sr-choice sr-choice-reject"><input type="radio" name="action" value="reject"><span><i class="mdi mdi-close-circle"></i> ${esc(<?= json_encode(__("reject_request", "Reject request")) ?>)}</span></label>` +
+                        '</div>' }) +
+                    F.field({ col: 12, name: 'approval_note', id: 'approvalNote', type: 'textarea', rows: 2, label: <?= json_encode(__("approval_note", "Approval note") . ' (' . __("optional", "Optional") . ')') ?>, ph: <?= json_encode(__("add_note", "Add a note...")) ?> }).replace('sr-fcol c-12', 'sr-fcol c-12 js-approve') +
+                    F.field({ col: 5, name: 'adjustment_date', id: 'adjustmentDate', label: <?= json_encode(__("select_adjustment_date", "Adjustment date")) ?>, req: true, ph: 'YYYY-MM-DD', attrs: ' readonly', hint: esc(rangeText),
+                        msg: <?= json_encode(__("adjustment_date_required", "Please select an adjustment date")) ?> }).replace('sr-fcol c-5', 'sr-fcol c-5 js-adjust') +
+                    F.field({ col: 7, name: 'adjustment_note', id: 'adjustmentNote', type: 'textarea', rows: 2, label: <?= json_encode(__("adjustment_note", "Adjustment note") . ' (' . __("optional", "Optional") . ')') ?>, ph: <?= json_encode(__("explain_adjustment_window", "Explain the adjustment window...")) ?> }).replace('sr-fcol c-7', 'sr-fcol c-7 js-adjust') +
+                    F.field({ col: 12, name: 'rejection_reason', id: 'rejectionReason', type: 'textarea', rows: 3, label: <?= json_encode(__("rejection_reason", "Rejection reason")) ?>, req: true, ph: <?= json_encode(__("reason_required", "Please provide a reason...")) ?>,
+                        msg: <?= json_encode(__("rejection_reason_required", "Rejection reason is required")) ?> }).replace('sr-fcol c-12', 'sr-fcol c-12 js-reject')
+                ) +
+            '</form>';
+
+            F.open({
+                title: <?= json_encode(__("approve_rejoin_request", "Approve rejoin request")) ?>,
+                html: html,
+                width: '760px',
+                icon: 'mdi-check',
+                confirm: <?= json_encode(__("submit_rejoin", "Submit")) ?>,
+                didOpen: function() {
+                    const $form = $('#rjForm');
+                    F.liveClear($form);
+                    const opts = { format: 'yyyy-mm-dd', todayHighlight: true, autoclose: true };
+                    if (!window.isRejoinElevated) { opts.startDate = reqDate; opts.endDate = toDate; }
+                    F.datepicker($('#adjustmentDate'), opts);
+                    function sync() {
+                        const a = $form.find('input[name="action"]:checked').val();
+                        $form.find('.js-approve').toggle(a === 'approve');
+                        $form.find('.js-adjust').toggle(a === 'adjust');
+                        $form.find('.js-reject').toggle(a === 'reject');
+                        $('#adjustmentDate').attr('data-required', a === 'adjust' ? '1' : null);
+                        $('#rejectionReason').attr('data-required', a === 'reject' ? '1' : null);
+                        $('.swal2-confirm').css('background-color', a === 'reject' ? '#dc2626' : '');
                     }
-
-                    if (action === 'reject' && !rejectionReason) {
-                        Swal.showValidationMessage('<?= __("rejection_reason_required", "Rejection reason is required") ?>');
-                        return false;
-                    }
-
-                    return {
-                        action: action,
-                        approval_note: approvalNote,
-                        adjustment_date: adjustmentDate,
-                        adjustment_note: adjustmentNote,
-                        rejection_reason: rejectionReason
-                    };
+                    $form.on('change', 'input[name="action"]', sync);
+                    sync();
                 },
-                didOpen: () => {
-                    // Calculate adjustment range (±3 days from requested date)
-                    const calculateAdjustmentRange = () => {
-                        const reqDate = new Date(rejoinDate);
-                        const fromDate = new Date(reqDate);
-                        // fromDate.setDate(fromDate.getDate() - 3);
-                        const toDate = new Date(reqDate);
-                        toDate.setDate(toDate.getDate() + 3);
-                        
-                        const formatDate = (date) => date.toLocaleDateString('<?= $current_lang === "ar" ? "ar-SA" : "en-US" ?>');
-                        return {
-                            from: formatDate(fromDate),
-                            to: formatDate(toDate),
-                            fromObj: fromDate,
-                            toObj: toDate
-                        };
+                preConfirm: function() {
+                    const $form = $('#rjForm');
+                    const msg = F.validate($form);
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    return {
+                        action: $form.find('input[name="action"]:checked').val(),
+                        approval_note: $('#approvalNote').val(),
+                        adjustment_date: $('#adjustmentDate').val(),
+                        adjustment_note: $('#adjustmentNote').val(),
+                        rejection_reason: $('#rejectionReason').val()
                     };
-
-                    const range = calculateAdjustmentRange();
-                    const rangeText = window.isRejoinElevated
-                        ? '<?= __("adjustment_window_unrestricted", "You can select any date, including back dates") ?>'
-                        : `<?= __("adjustment_window", "Employee can select date between") ?> ${range.from} <?= __("and", "and") ?> ${range.to}`;
-
-                    // Initialize datepicker for adjustment using bootstrap-datepicker
-                    // HR Payroll / HR Senior BP / Administrator get no date restriction (full back date allowed)
-                    const datepickerOptions = {
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true
-                    };
-                    if (!window.isRejoinElevated) {
-                        datepickerOptions.startDate = range.fromObj;
-                        datepickerOptions.endDate = range.toObj;
-                    }
-                    $('#adjustmentDate').datepicker(datepickerOptions);
-
-                    // Handle radio button clicks to toggle card styles and show/hide fields
-                    $('input[name="action"]').on('change', function() {
-                        const action = $(this).val();
-                        
-                        // Update card styles
-                        $('.action-card').removeClass('active');
-                        $('input[name="action"]:checked').closest('.action-card').addClass('active');
-                        
-                        // Show/hide fields based on action selection
-                        $('#approvalNoteDiv').toggle(action === 'approve');
-                        $('#adjustmentDiv').toggle(action === 'adjust');
-                        $('#rejectionReasonDiv').toggle(action === 'reject');
-                        
-                        if (action === 'adjust') {
-                            $('#adjustmentRangeText').text(rangeText).show();
-                            // Set focus to datepicker
-                            setTimeout(() => $('#adjustmentDate').focus(), 100);
-                        }
-                    });
-                    
-                    // Set initial card state
-                    $('input[name="action"]:checked').closest('.action-card').addClass('active');
                 }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    processRejoinApproval(rejoinRequestId, result.value);
-                }
+            }).then(function(result) {
+                if (result.isConfirmed && result.value) processRejoinApproval(rejoinRequestId, result.value);
             });
         }
 
         function cancelRejoinRequestAdmin(rejoinRequestId, empName) {
-            Swal.fire({
-                title: 'Cancel Rejoin Request',
-                html: `Are you sure you want to cancel the rejoin request for <strong>${empName}</strong>?`,
-                input: 'textarea',
-                inputLabel: 'Cancellation reason',
-                inputPlaceholder: 'Enter reason for cancelling this request',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Yes, Cancel',
-                allowOutsideClick: false,
-                inputValidator: (value) => {
-                    if (!value) {
-                        return 'Cancellation reason is required.';
-                    }
+            const html = '<form id="rjCancelForm" class="sr-page sr-form text-left" novalidate>' +
+                `<div class="sr-notice tone-amber" style="margin-bottom:12px;"><i class="mdi mdi-alert"></i><div>${esc(<?= json_encode(__('cancel_rejoin_confirm', 'Cancel the rejoin request for')) ?>)} <strong>${esc(empName)}</strong>?</div></div>` +
+                F.section('mdi-comment-text', <?= json_encode(__('cancellation_reason', 'Cancellation reason')) ?>,
+                    F.field({ col: 12, name: 'note', id: 'rjCancelNote', type: 'textarea', rows: 3, req: true, ph: <?= json_encode(__('enter_cancellation_reason', 'Enter reason for cancelling this request')) ?>,
+                        msg: <?= json_encode(__('cancellation_reason_required', 'Cancellation reason is required.')) ?> })) +
+            '</form>';
+            F.open({
+                title: <?= json_encode(__('cancel_rejoin_request', 'Cancel rejoin request')) ?>,
+                html: html,
+                width: '560px',
+                icon: 'mdi-cancel',
+                confirm: <?= json_encode(__('yes_cancel', 'Yes, cancel')) ?>,
+                confirmColor: '#dc2626',
+                didOpen: () => F.liveClear($('#rjCancelForm')),
+                preConfirm: function() {
+                    const msg = F.validate($('#rjCancelForm'));
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    return F.post('./includes/ajaxFile/leaveHandler.php', { ajaxType: 'cancelRejoinRequestAdmin', rejoin_request_id: rejoinRequestId, cancellation_note: $('#rjCancelNote').val() });
                 }
-            }).then((result) => {
-                if (!result.isConfirmed) {
-                    return;
-                }
-
-                Swal.fire({
-                    title: 'Processing...',
-                    allowOutsideClick: false,
-                    didOpen: () => { Swal.showLoading(); }
-                });
-
-                $.ajax({
-                    url: './includes/ajaxFile/leaveHandler.php',
-                    type: 'POST',
-                    data: {
-                        ajaxType: 'cancelRejoinRequestAdmin',
-                        rejoin_request_id: rejoinRequestId,
-                        cancellation_note: result.value
-                    },
-                    dataType: 'JSON',
-                    success: function(response) {
-                        Swal.fire({
-                            icon: response.type === 'success' ? 'success' : 'error',
-                            title: response.title,
-                            text: response.message,
-                            allowOutsideClick: false
-                        }).then(() => {
-                            if (response.type === 'success') {
-                                location.reload();
-                            }
-                        });
-                    },
-                    error: function() {
-                        Swal.fire({ icon: 'error', title: 'Error', text: 'An unexpected error occurred.' });
-                    }
-                });
-            });
+            }).then(function(r) { F.done(r, loadRejoinRequests); });
         }
 
         function processRejoinApproval(rejoinRequestId, data) {
-            // Show loading state
             Swal.fire({
-                title: 'Processing...',
-                html: 'Processing rejoin approval and sending notification emails...',
-                icon: 'info',
+                title: <?= json_encode(__('processing', 'Processing...')) ?>,
+                html: <?= json_encode(__('processing_rejoin_and_emails', 'Processing rejoin approval and sending notification emails...')) ?>,
                 allowOutsideClick: false,
                 allowEscapeKey: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
+                didOpen: () => Swal.showLoading()
             });
-
             $.ajax({
                 url: './includes/ajaxFile/leaveHandler.php',
                 type: 'POST',
+                dataType: 'JSON',
                 data: {
                     ajaxType: 'processRejoinApproval',
                     rejoin_request_id: rejoinRequestId,
@@ -872,23 +409,17 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                     adjustment_date: data.adjustment_date,
                     adjustment_note: data.adjustment_note,
                     rejection_reason: data.rejection_reason
-                },
-                dataType: 'JSON',
-                success: function(response) {
-                    Swal.fire({
-                        icon: response.type === 'success' ? 'success' : 'error',
-                        title: response.title || response.type,
-                        text: response.message,
-                        confirmButtonText: '<?= __("ok", "OK") ?>'
-                    }).then(() => {
-                        if (response.type === 'success') {
-                            loadRejoinRequests(); // Reload the tables
-                        }
-                    });
-                },
-                error: function() {
-                    Swal.fire('<?= __("error", "Error") ?>', '<?= __("request_failed", "Request failed") ?>', 'error');
                 }
+            }).done(function(response) {
+                Swal.fire({
+                    icon: response.type === 'success' ? 'success' : 'error',
+                    title: response.title || response.type,
+                    text: response.message,
+                    confirmButtonText: <?= json_encode(__("ok", "OK")) ?>,
+                    allowOutsideClick: false
+                }).then(() => { if (response.type === 'success') loadRejoinRequests(); });
+            }).fail(function() {
+                Swal.fire({ icon: 'error', title: <?= json_encode(__("error", "Error")) ?>, text: <?= json_encode(__("request_failed", "Request failed")) ?>, allowOutsideClick: false });
             });
         }
     </script>

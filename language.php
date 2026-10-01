@@ -16,6 +16,13 @@
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."' ");
 	if(mysqli_num_rows($query) == 1){
 	include("./includes/avatar_select.php");
+	// Counts for the header tiles
+	$lang_stats = ['all' => 0, 'no_ar' => 0, 'no_en' => 0];
+	$ls = mysqli_query($conDB, "SELECT COUNT(*) AS `all`,
+		SUM(`ar` IS NULL OR `ar` = '') AS `no_ar`, SUM(`en` IS NULL OR `en` = '') AS `no_en`
+		FROM (SELECT `lang_key`, MAX(CASE WHEN `lang_code` = 'en' THEN `translation` END) AS `en`, MAX(CASE WHEN `lang_code` = 'ar' THEN `translation` END) AS `ar`
+		      FROM `translations` GROUP BY `lang_key`) AS `t`");
+	if ($ls && ($r = mysqli_fetch_assoc($ls))) { $lang_stats = array_map('intval', $r); }
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -27,231 +34,151 @@
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-        <!-- App favicon -->
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-
-        <!-- Modal -->
-        <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-
-		<!-- Plugins css -->
-        <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
-        <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
-		<!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <!-- Responsive datatable examples -->
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-        <!-- Multi Item Selection examples -->
-        <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-        <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-
+        <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
         <?php endif; ?>
-
         <script src="assets/js/modernizr.min.js"></script>
-
-
         <style type="text/css">
-            tr.disableLoc{
-                background-color: #f1556c !important;
-                color: #fff;
-            }
-            tr.disableLoc:hover{
-                background-color: #ef3d58 !important;
-            }
-            .swal2-html-container{
-                padding: 10px !important;
-            }
+            .sr-page .sr-tiles.lang-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .sr-page .sr-tile.is-info { cursor: default; }
+            .sr-page .sr-tile.is-info:hover { transform: none; }
+            .lang-form { display: grid; grid-template-columns: 1fr 1.3fr 1.3fr auto; gap: 12px; align-items: start; }
+            @media (max-width: 991px) { .lang-form { grid-template-columns: 1fr; } }
+            .sr-page .lang-form textarea.form-control { min-height: 80px; resize: vertical; }
+            .sr-page .lang-form #ar_translation_input { direction: rtl; font-size: 15px; }
+            .lang-form .lang-submit { padding-top: 22px; }
+            .lang-form .lang-submit .sr-btn { height: 80px; min-width: 120px; flex-direction: column; gap: 2px; }
+            .lang-form .lang-submit small { font-size: 10px; opacity: .8; font-weight: 500; }
+            .lang-key { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; font-weight: 600; color: var(--sr-accent-strong); background: var(--sr-accent-soft); padding: 3px 8px; border-radius: 6px; cursor: copy; }
+            .lang-cell { white-space: normal; max-width: 380px; font-size: 13px; color: var(--sr-text); }
+            .lang-cell.ar { direction: rtl; text-align: right; font-size: 14px; }
+            .lang-missing { color: var(--tone-red-fg); font-size: 12px; font-weight: 600; }
         </style>
-
         <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
     </head>
     <body class="enlarged" data-keep-enlarged="true">
-
-        <!-- Begin page -->
         <div id="wrapper">
-
-            <!-- ========== Left Sidebar Start ========== -->
             <div class="left side-menu">
-
                 <div class="slimscroll-menu" id="remove-scroll">
-
-                    <!-- LOGO -->
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span>
-                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-                            </span>
-                            <i>
-                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-                            </i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
-
-                    <!-- User box -->
-                    
-                    <!--- Sidemenu -->
                     <?php include("./includes/main_menu.php"); ?>
-                    <!-- Sidebar -->
-
                     <div class="clearfix"></div>
-
                 </div>
-                <!-- Sidebar -left -->
-
             </div>
-            <!-- Left Sidebar End -->
-
-
-
-            <!-- ============================================================== -->
-            <!-- Start right Content here -->
-            <!-- ============================================================== -->
 
             <div class="content-page">
-
-                <!-- Top Bar Start -->
                 <?php include("./includes/topbar.php"); ?>
-                <!-- Top Bar End -->
 
-
-                <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
 
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box">
-                                    <h4 class="m-t-0 header-title"><?= __('add_new_translation') ?></h4>
-                                    <p class="text-muted m-b-30 font-14">
-                                        <?= __('add_new_translation_desc', 'Use the form below to add a new translation key and its English and Arabic versions.') ?>
-                                    </p>
-
-                                    <form id="addTranslationForm">
-                                        <div class="row">
-                                            <div class="col-4">
-                                                <div class="form-group">
-                                                    <label for="lang_key"><?= __('language_key') ?></label>
-                                                    <input type="text" class="form-control" id="lang_key_input" name="lang_key" placeholder="<?= __('language_key') ?>">
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="form-group">
-                                                    <label for="en_translation"><?= __('english_translation') ?></label>
-                                                    <textarea class="form-control" id="en_translation_input" name="en_translation" placeholder="<?= __('english_translation') ?>" rows="3"></textarea>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <div class="form-group">
-                                                    <label for="ar_translation"><?= __('arabic_translation') ?></label>
-                                                    <textarea class="form-control" id="ar_translation_input" name="ar_translation" placeholder="<?= __('arabic_translation') ?>" rows="3"></textarea>
-                                                </div>
-                                            </div>
-                                            <div class="col-4">
-                                                <button type="submit" class="btn btn-primary waves-effect waves-light" style="display:none;"><?= __('add_language', 'Add') ?></button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('translation_management_page_title', 'Translations') ?></h1>
+                                <p><?= __('add_new_translation_desc', 'Add a translation key with its English and Arabic text.') ?></p>
                             </div>
                         </div>
-											
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title"><?= __('all_translations') ?></h4>
-                        <table id="language" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                            <thead>
-                                <tr>
-                                    <th><?= __('language_key', 'Language Key') ?></th>
-                                    <th><?= __('table_header_english', 'English') ?></th>
-                                    <th><?= __('table_header_arabic', 'Arabic') ?></th>
-                                    <th width="80"><?= __('table_header_action', 'Action') ?></th>
-                                </tr>
-                            </thead>
-                        </table>
+
+                        <div class="sr-tiles lang-tiles">
+                            <div class="sr-tile is-info">
+                                <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all_translations', 'All keys') ?></span>
+                                <span class="sr-tile-value"><?= number_format($lang_stats['all']) ?></span>
+                            </div>
+                            <div class="sr-tile is-info">
+                                <span class="sr-tile-label"><span class="sr-dot dot-red"></span><?= __('missing_arabic', 'Missing Arabic') ?></span>
+                                <span class="sr-tile-value"><?= number_format($lang_stats['no_ar']) ?></span>
+                            </div>
+                            <div class="sr-tile is-info">
+                                <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('missing_english', 'Missing English') ?></span>
+                                <span class="sr-tile-value"><?= number_format($lang_stats['no_en']) ?></span>
+                            </div>
+                        </div>
+
+                        <!-- Add -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-plus-circle"></i> <?= __('add_new_translation', 'Add new translation') ?></h5>
+                                <span class="sr-card-sub"><i class="mdi mdi-lightbulb-on"></i> <?= __('paste_key_hint', 'Paste a key - English is filled in and Arabic is translated automatically. Ctrl+Enter saves.') ?></span>
+                            </div>
+                            <div class="sr-card-body">
+                                <form id="addTranslationForm" class="lang-form" autocomplete="off">
+                                    <div>
+                                        <label class="sr-field-label" for="lang_key_input"><?= __('language_key', 'Language key') ?> <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control sr-mono" id="lang_key_input" name="lang_key" placeholder="my_new_key">
+                                    </div>
+                                    <div>
+                                        <label class="sr-field-label" for="en_translation_input"><?= __('english_translation', 'English') ?> <span class="text-danger">*</span></label>
+                                        <textarea class="form-control" id="en_translation_input" name="en_translation" placeholder="<?= __('english_translation', 'English') ?>" rows="3"></textarea>
+                                    </div>
+                                    <div>
+                                        <label class="sr-field-label" for="ar_translation_input"><?= __('arabic_translation', 'Arabic') ?> <span class="text-danger">*</span></label>
+                                        <textarea class="form-control" id="ar_translation_input" name="ar_translation" placeholder="<?= __('arabic_translation', 'Arabic') ?>" rows="3"></textarea>
+                                    </div>
+                                    <div class="lang-submit">
+                                        <button type="submit" class="sr-btn sr-btn-primary" style="display:none;"><i class="mdi mdi-content-save"></i> <?= __('add_language', 'Add') ?><small>Ctrl + Enter</small></button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- List -->
+                        <div class="sr-card">
+                            <div class="sr-toolbar">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="langSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                                </div>
+                                <span class="sr-card-sub"><?= __('click_key_to_copy', 'Click a key to copy it') ?></span>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="language" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('language_key', 'Language key') ?></th>
+                                            <th><?= __('table_header_english', 'English') ?></th>
+                                            <th><?= __('table_header_arabic', 'Arabic') ?></th>
+                                            <th class="text-right"><?= __('table_header_action', 'Action') ?></th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
-            </div>
-						
-
-                    </div> <!-- container -->
-
-                </div> <!-- content -->
 
                 <footer class="footer">
                     <?=$site_footer ?>
                 </footer>
-
             </div>
-
-            <!-- ============================================================== -->
-            <!-- End Right content here -->
-            <!-- ============================================================== -->
         </div>
-        <!-- END wrapper -->
 
-        <!-- jQuery  -->
         <script src="assets/js/jquery.min.js"></script>
         <script src="assets/js/bootstrap.bundle.min.js"></script>
         <script src="assets/js/metisMenu.min.js"></script>
         <script src="assets/js/waves.js"></script>
         <script src="assets/js/jquery.slimscroll.js"></script>
-
-
-        <!-- Modal-Effect -->
-		<script type="text/javascript" src="./plugins/parsleyjs/parsley.min.js"></script>
-		<script src="./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js" type="text/javascript"></script>
-        <script src="./plugins/autoNumeric/autoNumeric.js" type="text/javascript"></script>
-
-
-		<script src="./plugins/moment/moment.js"></script>
-        <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
-        <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
-        <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-
-        
-		<!-- Required datatable js -->
         <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
         <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-        <!-- Buttons examples -->
-        <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
-        <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
-        <script src="./plugins/datatables/jszip.min.js"></script>
-        <script src="./plugins/datatables/pdfmake.min.js"></script>
-        <script src="./plugins/datatables/vfs_fonts.js"></script>
-        <script src="./plugins/datatables/buttons.html5.min.js"></script>
-        <script src="./plugins/datatables/buttons.print.min.js"></script>
-
-        <!-- Key Tables -->
-        <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
-
-        <!-- Responsive examples -->
         <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
         <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-
-        <!-- Selection table -->
-        <script src="./plugins/datatables/dataTables.select.min.js"></script>
-		
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.0/jquery.validate.js"></script>
-
-        <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-
+        <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
 
 <script type="text/javascript">
 $(document).ready(function(){
@@ -763,36 +690,60 @@ $(document).ready(function(){
     // DataTable Initialization
     // =================================================================
     var languageTable = $('#language').DataTable({
+        dom: 'rtip',
         processing: true,
         serverSide: true,
+        responsive: true,
+        pageLength: 15,
         ajax: {
             url: "./includes/ajaxFile/ajaxLanguageTbl.php",
-            type: "POST" 
+            type: "POST"
         },
         columns: [
-            { data: 'lang_key', name: 'lang_key' },
-            { data: 'en_translation', name: 'en_translation' },
-            { data: 'ar_translation', name: 'ar_translation' },
-            { data: 'action', orderable: false, searchable: false }
+            { data: 'lang_key', name: 'lang_key', render: (d, type) => type === 'display' ? `<span class="lang-key" title="${__('copy', 'Copy')}">${d}</span>` : d },
+            { data: 'en_translation', name: 'en_translation', render: (d, type) => type !== 'display' ? d : (d ? `<div class="lang-cell">${d}</div>` : `<span class="lang-missing"><i class="mdi mdi-alert-circle"></i> ${__('missing', 'Missing')}</span>`) },
+            { data: 'ar_translation', name: 'ar_translation', render: (d, type) => type !== 'display' ? d : (d ? `<div class="lang-cell ar">${d}</div>` : `<span class="lang-missing"><i class="mdi mdi-alert-circle"></i> ${__('missing', 'Missing')}</span>`) },
+            { data: 'action', orderable: false, searchable: false, className: 'text-right', render: function(d) {
+                // Server sends two Bootstrap buttons; keep their data-* and restyle them.
+                var $h = $('<div>').html(d || '');
+                var $u = $h.find('.update-translation'), $x = $h.find('.delete-translation');
+                var attrs = function($el) {
+                    return ['key', 'en', 'ar'].map(function(k) {
+                        var v = $el.attr('data-' + k);
+                        return v === undefined ? '' : ' data-' + k + '="' + $('<div>').text(v).html().replace(/"/g, '&quot;') + '"';
+                    }).join('');
+                };
+                return '<div class="sr-actions">' +
+                    '<a href="javascript:void(0);" class="sr-open-btn update-translation"' + attrs($u) + '><i class="mdi mdi-pencil"></i> ' + __('edit', 'Edit') + '</a>' +
+                    '<a href="javascript:void(0);" class="sr-more-btn delete-translation"' + attrs($x) + ' title="' + __('delete', 'Delete') + '"><i class="mdi mdi-delete text-danger"></i></a>' +
+                '</div>';
+            } }
         ],
         order: [[0, 'desc']],
         language: {
-            search: `<span>${__('search')}:</span> _INPUT_`,
-            searchPlaceholder: `${__('search')}...`,
-            lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
             info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
             infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-            infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-            paginate: {
-                first: __('first'),
-                last: __('last'),
-                next: __('next'),
-                previous: __('previous')
-            },
-            emptyTable: __('no_data_available_in_table'),
-            zeroRecords: __('no_matching_records_found'),
-            processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+            infoFiltered: '',
+            paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+            emptyTable: `<div class="sr-empty"><i class="mdi mdi-translate"></i>${__('no_data_available_in_table')}</div>`,
+            zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+            processing: __('processing', 'Processing...')
         }
+    });
+
+    var langSearchTimer;
+    $('#langSearch').on('input', function() {
+        clearTimeout(langSearchTimer);
+        var v = this.value;
+        langSearchTimer = setTimeout(function() { languageTable.search(v).draw(); }, 350);
+    });
+
+    // Click a key to copy it
+    $('#language').on('click', '.lang-key', function() {
+        var key = $(this).text();
+        if (navigator.clipboard) navigator.clipboard.writeText(key);
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1800 })
+            .fire({ icon: 'success', title: key + ' - ' + __('copied', 'copied') });
     });
 
     // =================================================================
@@ -808,7 +759,7 @@ $(document).ready(function(){
     const arTranslation = $('#ar_translation_input').val().trim();
 
     if (!langKey) {
-        Swal.fire({
+        Swal.fire({ allowOutsideClick: false,
             title: __('validation_error', 'Validation Error'),
             text: __('language_key_required', 'Language Key is required'),
             icon: 'warning',
@@ -818,7 +769,7 @@ $(document).ready(function(){
     }
 
     if (!enTranslation) {
-        Swal.fire({
+        Swal.fire({ allowOutsideClick: false,
             title: __('validation_error', 'Validation Error'),
             text: __('english_translation_required', 'English Translation is required'),
             icon: 'warning',
@@ -828,7 +779,7 @@ $(document).ready(function(){
     }
 
     if (!arTranslation) {
-        Swal.fire({
+        Swal.fire({ allowOutsideClick: false,
             title: __('validation_error', 'Validation Error'),
             text: __('arabic_translation_required', 'Arabic Translation is required'),
             icon: 'warning',
@@ -846,7 +797,7 @@ $(document).ready(function(){
             // Check if the request was successful
             if (response.type === 'success' && response.lang_key) {
                 // If successful, show a confirmation dialog that copies the key on confirm
-                Swal.fire({
+                Swal.fire({ allowOutsideClick: false,
                     title: __(response.title, response.title),
                     icon: 'success',
                     // Use the html property to display the language key
@@ -913,7 +864,7 @@ $(document).ready(function(){
                 });
             } else {
                 // Handle other responses (e.g., validation errors) from the server
-                Swal.fire({
+                Swal.fire({ allowOutsideClick: false,
                     title: __(response.title, response.title),
                     text: __(response.message, response.message),
                     icon: response.type,
@@ -927,7 +878,7 @@ $(document).ready(function(){
         },
         error: function() {
             // Handle AJAX-level errors (e.g., server not responding)
-            Swal.fire(__('error', 'Error'), __('generic_error_message', 'An unexpected error occurred.'), 'error');
+            Swal.fire({ title: __('error', 'Error'), text: __('generic_error_message', 'An unexpected error occurred.'), icon: 'error', allowOutsideClick: false });
         }
     });
 });
@@ -941,25 +892,29 @@ $(document).ready(function(){
         var enText = $(this).data('en');
         var arText = $(this).data('ar');
         
+        var F = window.SRForm, esc = F.esc;
         Swal.fire({
             title: __('update_translation_title', 'Update Translation'),
-            html: `
-                <form id="updateTranslationForm" class="text-left">
-                    <input type="hidden" name="original_lang_key" value="${originalKey}">
-                    <div class="form-group">
-                        <label for="update_en_translation">${__('english_translation', 'English Translation')}</label>
-                        <input type="text" id="update_en_translation" name="en_translation" class="form-control" value="${enText}">
-                    </div>
-                    <div class="form-group">
-                        <label for="update_ar_translation">${__('arabic_translation', 'Arabic Translation')}</label>
-                        <input type="text" id="update_ar_translation" name="ar_translation" class="form-control" value="${arText}">
-                    </div>
-                </form>
-            `,
+            html: '<form id="updateTranslationForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                F.section('mdi-translate', __('language_key', 'Language key'),
+                    F.field({ col: 12, name: 'en_translation', id: 'update_en_translation', type: 'textarea', rows: 2, label: __('english_translation', 'English'), req: true, value: enText }) +
+                    F.field({ col: 12, name: 'ar_translation', id: 'update_ar_translation', type: 'textarea', rows: 2, label: __('arabic_translation', 'Arabic'), req: true, value: arText, attrs: ' dir="rtl"' }),
+                    '<span class="lang-key">' + esc(originalKey) + '</span>') +
+                '<input type="hidden" name="original_lang_key" value="' + esc(originalKey) + '">' +
+            '</form>',
+            width: '720px',
             showCancelButton: true,
-            confirmButtonText: __('update_button', 'Update'),
+            confirmButtonText: '<i class="mdi mdi-content-save"></i> ' + __('update_button', 'Update'),
             cancelButtonText: __('cancel_button', 'Cancel'),
+            confirmButtonColor: window.APP_COLORS && APP_COLORS.primary,
+            cancelButtonColor: window.APP_COLORS && APP_COLORS.danger_dark,
+            showLoaderOnConfirm: true,
+            allowOutsideClick: false,
+            customClass: { popup: 'sr-addline-popup' },
+            didOpen: function() { F.liveClear($('#updateTranslationForm')); $('#update_en_translation').trigger('focus'); },
             preConfirm: () => {
+                var msg = F.validate($('#updateTranslationForm'));
+                if (msg) { Swal.showValidationMessage(msg); return false; }
                 return $.ajax({
                     url: './includes/ajaxFile/updateLanguageAjax.php',
                     type: 'POST',
@@ -975,6 +930,7 @@ $(document).ready(function(){
                     title: __(result.value.title, result.value.title),
                     text: __(result.value.message, result.value.message),
                     icon: result.value.type,
+                    allowOutsideClick: false
                 }).then(() => {
                     if (result.value.type === 'success') {
                         languageTable.ajax.reload();
@@ -1000,6 +956,7 @@ $(document).ready(function(){
             cancelButtonColor: '#3085d6',
             confirmButtonText: __('yes_delete_it', 'Yes, delete it!'),
             cancelButtonText: __('cancel_button', 'Cancel'),
+            allowOutsideClick: false
         }).then((result) => {
             if (result.isConfirmed) {
                 $.ajax({
@@ -1008,7 +965,7 @@ $(document).ready(function(){
                     data: { lang_key: langKey },
                     dataType: 'json',
                     success: function(response) {
-                        Swal.fire({
+                        Swal.fire({ allowOutsideClick: false,
                             title: __(response.title, response.title),
                             text: __(response.message, response.message),
                             icon: response.type
@@ -1019,7 +976,7 @@ $(document).ready(function(){
                         });
                     },
                     error: function() {
-                         Swal.fire(__('error', 'Error'), __('generic_error_message', 'An unexpected error occurred.'), 'error');
+                         Swal.fire({ title: __('error', 'Error'), text: __('generic_error_message', 'An unexpected error occurred.'), icon: 'error', allowOutsideClick: false });
                     }
                 });
             }

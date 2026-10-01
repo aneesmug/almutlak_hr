@@ -45,7 +45,8 @@ require_once __DIR__ . '/includes/helper_functions.php';
 // ACCESS CONTROL - Only Managers Allowed
 // ================================================================
 // (or an explicit 'Access Page: Employee Evaluation' Special Access grant)
-if (!$isDeptManager && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+// Direct supervisors (anyone set as supervisor_id of an active employee) always get access.
+if (!$isDeptManager && empty($isSupervisor) && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: ./dashboard.php");
     exit();
 }
@@ -204,6 +205,16 @@ try {
     error_log("Error fetching direct subordinate employees: " . $e->getMessage());
 }
 
+// Total direct reports (to tell "none assigned" apart from "all evaluated")
+$total_subordinates = 0;
+try {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM employees WHERE supervisor_id = ? AND status = 1 AND emp_id != ?");
+    $stmt->execute([$empid, $empid]);
+    $total_subordinates = (int)$stmt->fetchColumn();
+} catch (PDOException $e) {
+    error_log("Error counting direct subordinates: " . $e->getMessage());
+}
+
 // ================================================================
 // GET DEPARTMENT NAME
 // ================================================================
@@ -218,574 +229,380 @@ try {
 }
 
 ?>
-
+<?php
+// ---- View (same look as the Smart Request pages, assets/css/smart_request.css) ----
+$criteria = [
+    'punctuality'            => ['Punctuality Attendance', 'الإنتظام وعدم التأخير', 'mdi-clock'],
+    'achieving_time'         => ['Achieving at the specified time', 'التحقيق في الوقت المحدد', 'mdi-calendar-check'],
+    'job_knowledge'          => ['Knowledge of job', 'معرفة الوظيفة', 'mdi-school'],
+    'problem_solving'        => ['The Ability to solve problems', 'القدرة على حل المشاكل', 'mdi-lightbulb-on'],
+    'feedback_receptiveness' => ['Receptiveness to Feedback and Instructions', 'تقبل التوجيهات والتعليمات', 'mdi-comment-check'],
+    'self_development'       => ['Self & Professional Development', 'السعي لتطوير المهارات والمعرفة وتحسين الأداء بإستمرار', 'mdi-trending-up'],
+    'work_under_pressure'    => ['Work under pressure', 'العمل تحت الضغط', 'mdi-speedometer'],
+    'communication_teamwork' => ['Communication skills and Teamwork', 'مهارات التواصل والعمل الجماعي', 'mdi-account-multiple'],
+    'creativity_response'    => ['Creativity and speed of response', 'الإبداع وسرعة الإستجابة', 'mdi-flash'],
+    'initiative_cooperation' => ['Initiative and cooperation', 'المبادرة والتعاون', 'mdi-account-multiple-plus'],
+];
+// Keep the manager's scores when the server rejects a submission.
+$posted = ($_SERVER['REQUEST_METHOD'] === 'POST') ? $_POST : [];
+$h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES); };
+$swal = $_SESSION['swal_alert'] ?? null;
+unset($_SESSION['swal_alert']);
+?>
 <!DOCTYPE html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - Employee Evaluation</title>
+    <title><?= $site_title ?> - <?= __('employee_performance_evaluation', 'Employee Evaluation') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Al-Mutlak HR System" name="description" />
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <!-- App favicon -->
-    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-
-    <!-- Plugins css -->
+    <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
-    <script src="assets/js/modernizr.min.js"></script>
+    <style>
+        .ev-crit { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--sr-border); }
+        .ev-crit:last-child { border-bottom: 0; }
+        .ev-crit-no { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-size: 17px; }
+        .ev-crit-text { flex: 1 1 260px; min-width: 0; }
+        .ev-crit-text b { display: block; font-size: 13.5px; color: var(--sr-text); }
+        .ev-crit-text small { display: block; font-size: 12px; color: var(--sr-muted); }
+        .ev-scale { display: flex; gap: 4px; flex: 0 0 auto; }
+        .ev-scale label { margin: 0; position: relative; }
+        .ev-scale input { position: absolute; opacity: 0; pointer-events: none; }
+        .ev-scale span {
+            display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+            border: 1px solid var(--sr-border-strong); background: var(--sr-surface); font-size: 12.5px; font-weight: 700; color: var(--sr-text-2);
+            font-variant-numeric: tabular-nums; transition: background .12s, border-color .12s, color .12s;
+        }
+        .ev-scale span:hover { border-color: var(--sr-accent); color: var(--sr-accent-strong); }
+        .ev-scale input:focus-visible + span { box-shadow: 0 0 0 3px rgba(99, 102, 241, .25); }
+        .ev-scale label.in span { background: var(--sr-accent-soft); border-color: transparent; color: var(--sr-accent-strong); }
+        .ev-scale input:checked + span { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; }
+        .ev-crit[data-tone="amber"] .ev-scale input:checked + span { background: #f59e0b; border-color: #f59e0b; }
+        .ev-crit[data-tone="red"] .ev-scale input:checked + span { background: #ef4444; border-color: #ef4444; }
+        .ev-crit[data-tone="amber"] .ev-scale label.in span { background: var(--tone-amber-bg); color: var(--tone-amber-fg); }
+        .ev-crit[data-tone="red"] .ev-scale label.in span { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+        @media (max-width: 991px) { .ev-crit { flex-wrap: wrap; } .ev-scale { width: 100%; justify-content: space-between; } .ev-scale span { width: 28px; } }
+
+        .ev-emp { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--sr-surface-2); border: 1px dashed var(--sr-border-strong); }
+        .ev-emp .sr-avatar { width: 44px; height: 44px; font-size: 15px; }
+        .ev-emp b { display: block; color: var(--sr-text); font-size: 14px; }
+        .ev-emp small { display: block; color: var(--sr-muted); font-size: 12px; }
+
+        .ev-ring { position: relative; width: 150px; height: 150px; margin: 6px auto 10px; }
+        .ev-ring svg { transform: rotate(-90deg); }
+        .ev-ring circle { fill: none; stroke-width: 12; }
+        .ev-ring .bg { stroke: var(--sr-surface-3); }
+        .ev-ring .fg { stroke: var(--sr-accent); stroke-linecap: round; transition: stroke-dashoffset .35s, stroke .2s; }
+        .ev-ring-val { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .ev-ring-val b { font-size: 34px; font-weight: 800; color: var(--sr-text); line-height: 1; font-variant-numeric: tabular-nums; }
+        .ev-ring-val span { font-size: 12px; color: var(--sr-muted); margin-top: 4px; }
+        .ev-grade { text-align: center; margin-bottom: 14px; }
+        .ev-quick { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+        .sr-page .sr-card textarea.form-control { min-height: 110px; }
+        .ev-prev-score { font-variant-numeric: tabular-nums; font-weight: 700; }
+    </style>
     <script>window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
-    <!-- Begin page -->
     <div id="wrapper">
-        <!-- ========== Left Sidebar Start ========== -->
         <div class="left side-menu">
             <div class="slimscroll-menu" id="remove-scroll">
-                <!-- LOGO -->
                 <div class="topbar-left">
                     <a href="dashboard.php" class="logo">
-                        <span>
-                            <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-                        </span>
-                        <i>
-                            <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-                        </i>
+                        <span><img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22"></span>
+                        <i><img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28"></i>
                     </a>
                 </div>
-                
-                <!--- Sidemenu -->
                 <?php include("./includes/main_menu.php"); ?>
-                <!-- Sidebar -->
-
                 <div class="clearfix"></div>
             </div>
-            <!-- Sidebar -left -->
         </div>
-        <!-- Left Sidebar End -->
-        <!-- Left Sidebar End -->
-
-        <!-- ============================================================== -->
-        <!-- Start right Content here -->
-        <!-- ============================================================== -->
 
         <div class="content-page">
-
-            <!-- Top Bar Start -->
             <?php include("./includes/topbar.php"); ?>
-            <!-- Top Bar End -->
 
-            <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    
-                    <!-- Page Title -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="page-title-box">
-                                <h4 class="page-title"><?=__('employee_performance_evaluation') ?></h4>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Success/Error Messages -->
-                    <?php if ($success_message): ?>
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                                <strong><?=__('success') ?>!</strong> <?=htmlspecialchars($success_message); ?>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('employee_performance_evaluation', 'Employee performance evaluation') ?></h1>
+                            <p><?= __('evaluation_subtitle', 'Score your direct reports on 10 criteria (1-10). Each employee can be evaluated once a month.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <a href="employee_evaluation_history.php" class="sr-btn"><i class="mdi mdi-history"></i> <?= __('evaluation_history', 'Evaluation history') ?></a>
                         </div>
                     </div>
-                    <?php endif; ?>
 
                     <?php if ($error_message): ?>
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                </button>
-                                <strong><?=__('error') ?>!</strong> <?=htmlspecialchars($error_message); ?>
-                            </div>
-                        </div>
-                    </div>
+                        <div class="sr-notice tone-red"><i class="mdi mdi-alert-circle"></i><div><strong><?= __('error') ?>:</strong> <?= $h($error_message) ?></div></div>
                     <?php endif; ?>
 
-                    <!-- Evaluation Form -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h4 class="header-title mb-4"><?=__('new_employee_evaluation') ?></h4>
-                                    
-                                    <form method="POST" action="" id="evaluationForm">
-                                        
-                                        <!-- Department and Employee Selection -->
-                                        <div class="row mb-4">
-                                            <div class="col-md-3">
-                                                <div class="form-group">
-                                                    <label for="dept_name"><?=__('department') ?> <span class="text-danger">*</span></label>
-                                                    <input type="text" class="form-control" id="dept_name" value="<?=($dept_name); ?>" readonly>
-                                                </div>
-                                            </div>
-                                            
-                                            <div class="col-md-3">
-                                                <div class="form-group">
-                                                    <label for="employee_emp_id"><?=__('select_employee') ?> <span class="text-danger">*</span></label>
-                                                    <select class="form-control select2" id="employee_emp_id" name="employee_emp_id" required>
-                                                        <option value="">-- <?=__('select_employee') ?> --</option>
-                                                        <?php foreach ($dept_employees as $emp): ?>
-                                                            <option value="<?=($emp['emp_id']); ?>" 
-                                                                    data-position="<?=($emp['job'] ?? 'N/A'); ?>"
-                                                                    data-name="<?=($emp['name']); ?>">
-                                                                <?=getDisplayName($emp['name']); ?>
-                                                            </option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            
-                                            <div class="col-md-3">
-                                                <div class="form-group">
-                                                    <label for="employee_name"><?=__('employee_name') ?></label>
-                                                    <input type="text" class="form-control" id="employee_name" readonly>
-                                                </div>
-                                            </div>
-
-                                            <div class="col-md-3">
-                                                <div class="form-group">
-                                                    <label for="employee_position"><?=__('employee_position') ?></label>
-                                                    <input type="text" class="form-control" id="employee_position" readonly>
-                                                </div>
-                                            </div>
-
-                                        </div>
-
-                                        <hr>
-
-                                        <!-- Evaluation Criteria -->
-                                        <h5 class="mb-3"><?=__('evaluation_criteria_scale') ?></h5>
-                                        <div class="table-responsive">
-                                            <table class="table table-bordered table-striped">
-                                                <thead class="thead-light">
-                                                    <tr>
-                                                        <th width="5%">#</th>
-                                                        <th width="50%"><?=__('criteria_english_arabic') ?></th>
-                                                        <th width="30%"><?=__('score_1_10') ?></th>
-                                                        <th width="15%"><?=__('default') ?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <tr>
-                                                        <td>1</td>
-                                                        <td>
-                                                            <strong>Punctuality Attendance</strong><br>
-                                                            <small class="text-muted">الإنتظام وعدم التأخير</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="punctuality" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>2</td>
-                                                        <td>
-                                                            <strong>Achieving at the specified time</strong><br>
-                                                            <small class="text-muted">التحقيق في الوقت المحدد</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="achieving_time" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>3</td>
-                                                        <td>
-                                                            <strong>Knowledge of job</strong><br>
-                                                            <small class="text-muted">معرفة الوظيفة</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="job_knowledge" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>4</td>
-                                                        <td>
-                                                            <strong>The Ability to solve problems</strong><br>
-                                                            <small class="text-muted">القدرة على حل المشاكل</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="problem_solving" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>5</td>
-                                                        <td>
-                                                            <strong>Receptiveness to Feedback and Instructions</strong><br>
-                                                            <small class="text-muted">تقبل التوجيهات والتعليمات</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="feedback_receptiveness" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>6</td>
-                                                        <td>
-                                                            <strong>Self & Professional Development</strong><br>
-                                                            <small class="text-muted">السعي لتطوير المهارات والمعرفة وتحسين الأداء بإستمرار</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="self_development" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>7</td>
-                                                        <td>
-                                                            <strong>Work under pressure</strong><br>
-                                                            <small class="text-muted">العمل تحت الضغط</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="work_under_pressure" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>8</td>
-                                                        <td>
-                                                            <strong>Communication skills and Teamwork</strong><br>
-                                                            <small class="text-muted">مهارات التواصل والعمل الجماعي</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="communication_teamwork" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>9</td>
-                                                        <td>
-                                                            <strong>Creativity and speed of response</strong><br>
-                                                            <small class="text-muted">الإبداع وسرعة الإستجابة</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="creativity_response" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                    
-                                                    <tr>
-                                                        <td>10</td>
-                                                        <td>
-                                                            <strong>Initiative and cooperation</strong><br>
-                                                            <small class="text-muted">المبادرة والتعاون</small>
-                                                        </td>
-                                                        <td>
-                                                            <select class="form-control evaluation-score" name="initiative_cooperation" required>
-                                                                <?php for ($i = 10; $i >= 1; $i--): ?>
-                                                                    <option value="<?php echo $i; ?>" <?php echo $i == 10 ? 'selected' : ''; ?>><?php echo $i; ?></option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge badge-success">10</span></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-
-                                        <!-- Observation/Remarks -->
-                                        <div class="row mt-4">
-                                            <div class="col-md-12">
-                                                <div class="form-group">
-                                                    <label for="observation"><?=__('remarks_observations') ?></label>
-                                                    <textarea class="form-control" id="observation" name="observation" rows="4" placeholder="<?=__('enter_any_additional_remarks_or_observations_about_the_employees_performance') ?>"></textarea>
-                                                </div>
+                    <form method="POST" action="" id="evaluationForm" novalidate>
+                        <input type="hidden" name="submit_evaluation" value="1">
+                        <div class="row">
+                            <div class="col-xl-8">
+                                <!-- Employee -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-account"></i> <?= __('new_employee_evaluation', 'New evaluation') ?></h5>
+                                        <span class="sr-chip"><i class="mdi mdi-domain"></i><?= $h($dept_name) ?></span>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <label class="sr-field-label" for="employee_emp_id"><?= __('select_employee') ?> <span class="text-danger">*</span></label>
+                                        <select id="employee_emp_id" name="employee_emp_id" style="width: 100%;">
+                                            <option value=""></option>
+                                            <?php foreach ($dept_employees as $emp): ?>
+                                                <option value="<?= $h($emp['emp_id']) ?>" data-position="<?= $h($emp['job'] ?? '') ?>" data-name="<?= $h($emp['name']) ?>"
+                                                    <?= (($posted['employee_emp_id'] ?? '') == $emp['emp_id']) ? 'selected' : '' ?>>
+                                                    <?= $h(getDisplayName($emp['name'])) ?> (<?= $h($emp['emp_id']) ?>)
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <?php if (empty($dept_employees)): ?>
+                                            <div class="sr-notice tone-amber mt-2"><i class="mdi mdi-information"></i><div>
+                                                <?= $total_subordinates > 0
+                                                    ? __('no_employees_to_evaluate', 'All your direct reports have been evaluated this month.')
+                                                    : __('no_direct_reports', 'No employees have you set as their direct supervisor.') ?>
+                                            </div></div>
+                                        <?php else: ?>
+                                            <div class="sr-hint"><?= sprintf(__('employees_left_to_evaluate', '%d employee(s) left to evaluate this month.'), count($dept_employees)) ?></div>
+                                        <?php endif; ?>
+                                        <div class="ev-emp" id="evEmp" style="display: none;">
+                                            <span class="sr-avatar" id="evEmpAvatar"></span>
+                                            <div style="min-width: 0;">
+                                                <b id="evEmpName"></b>
+                                                <small><i class="mdi mdi-briefcase"></i> <span id="evEmpPos"></span> &middot; <span class="sr-mono" id="evEmpId"></span></small>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
 
-                                        <!-- Total Score Display -->
-                                        <div class="row mt-4">
-                                            <div class="col-md-12">
-                                                <div class="alert alert-info">
-                                                    <h5 class="mb-0">
-                                                        Total Score (مجموع النقاط): 
-                                                        <strong id="totalScore">100</strong> / 100
-                                                        <span id="scorePercentage" class="ml-3">(100%)</span>
-                                                    </h5>
-                                                </div>
+                                <!-- Criteria -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-star"></i> <?= __('evaluation_criteria_scale', 'Evaluation criteria (1-10)') ?></h5>
+                                        <span class="sr-card-sub"><?= __('default') ?>: 10</span>
+                                    </div>
+                                    <?php $n = 0; foreach ($criteria as $key => $c): $n++;
+                                        $val = (int)($posted[$key] ?? 10);
+                                        if ($val < 1 || $val > 10) $val = 10;
+                                    ?>
+                                        <div class="ev-crit" data-key="<?= $key ?>">
+                                            <span class="ev-crit-no"><i class="mdi <?= $c[2] ?>"></i></span>
+                                            <div class="ev-crit-text">
+                                                <b><?= $n ?>. <?= $h($c[0]) ?></b>
+                                                <small dir="rtl" style="text-align: start;"><?= $h($c[1]) ?></small>
+                                            </div>
+                                            <div class="ev-scale" role="radiogroup" aria-label="<?= $h($c[0]) ?>">
+                                                <?php for ($i = 1; $i <= 10; $i++): ?>
+                                                    <label><input type="radio" name="<?= $key ?>" value="<?= $i ?>" class="evaluation-score" <?= $i === $val ? 'checked' : '' ?>><span><?= $i ?></span></label>
+                                                <?php endfor; ?>
                                             </div>
                                         </div>
+                                    <?php endforeach; ?>
+                                </div>
 
-                                        <!-- Submit Button -->
-                                        <div class="row mt-4">
-                                            <div class="col-md-12">
-                                                <div class="btn-group" role="group">
-                                                    <button type="submit" name="submit_evaluation" class="btn btn-primary btn-lg">
-                                                        <i class="fa fa-check"></i> <?=__('submit_evaluation') ?>
-                                                    </button>
-                                                    <a href="dashboard.php" class="btn btn-secondary btn-lg">
-                                                        <i class="fa fa-times"></i> <?=__('cancel') ?>
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                    </form>
+                                <!-- Remarks -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head"><h5 class="sr-card-title"><i class="mdi mdi-comment-text"></i> <?= __('remarks_observations', 'Remarks / observations') ?></h5></div>
+                                    <div class="sr-card-body">
+                                        <textarea class="form-control" id="observation" name="observation" rows="4" placeholder="<?= $h(__('enter_any_additional_remarks_or_observations_about_the_employees_performance')) ?>"><?= $h($posted['observation'] ?? '') ?></textarea>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- Previous Evaluations Section -->
-                    <div class="row" id="previousEvaluationsSection" style="display: none;">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h4 class="header-title mb-4">Previous Evaluations for <span id="prevEvalEmployeeName"></span></h4>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered table-hover" id="previousEvaluationsTable">
-                                            <thead class="thead-light">
-                                                <tr>
-                                                    <th>Date</th>
-                                                    <th>Manager</th>
-                                                    <th>Total Score</th>
-                                                    <th>Percentage</th>
-                                                    <th>Remarks</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="previousEvaluationsBody">
-                                                <!-- Populated via AJAX -->
-                                            </tbody>
-                                        </table>
+                            <!-- Score summary -->
+                            <div class="col-xl-4">
+                                <div class="sr-sticky">
+                                    <div class="sr-card sr-action-card">
+                                        <div class="sr-card-head"><h5 class="sr-card-title"><i class="mdi mdi-chart-donut"></i> <?= __('total_score', 'Total score') ?> <small class="text-muted">(مجموع النقاط)</small></h5></div>
+                                        <div class="sr-card-body">
+                                            <div class="ev-ring">
+                                                <svg width="150" height="150" viewBox="0 0 150 150"><circle class="bg" cx="75" cy="75" r="62"></circle><circle class="fg" id="evRing" cx="75" cy="75" r="62"></circle></svg>
+                                                <div class="ev-ring-val"><b id="totalScore">100</b><span>/ 100 &middot; <span id="scorePercentage">100%</span></span></div>
+                                            </div>
+                                            <div class="ev-grade"><span class="sr-pill sr-pill-lg tone-green" id="evGrade"><span class="sr-dot"></span><span></span></span></div>
+                                            <div class="ev-quick">
+                                                <?php foreach ([10, 8, 6] as $q): ?>
+                                                    <button type="button" class="sr-btn sr-btn-sm js-all" data-v="<?= $q ?>"><?= __('set_all', 'All') ?> <?= $q ?></button>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <dl class="sr-kv">
+                                                <div class="row-kv"><dt><?= __('lowest_score', 'Lowest') ?></dt><dd id="evLow">10</dd></div>
+                                                <div class="row-kv"><dt><?= __('average', 'Average') ?></dt><dd id="evAvg">10.0</dd></div>
+                                                <div class="row-kv"><dt><?= __('below_6', 'Criteria below 6') ?></dt><dd id="evWeak">0</dd></div>
+                                            </dl>
+                                            <button type="submit" class="sr-btn sr-btn-primary sr-btn-block mt-3" id="evSubmit" <?= empty($dept_employees) ? 'disabled' : '' ?>><i class="mdi mdi-check"></i> <?= __('submit_evaluation', 'Submit evaluation') ?></button>
+                                            <a href="dashboard.php" class="sr-btn sr-btn-ghost sr-btn-block mt-2"><?= __('cancel') ?></a>
+                                        </div>
+                                    </div>
+
+                                    <!-- Previous evaluations -->
+                                    <div class="sr-card" id="previousEvaluationsSection" style="display: none;">
+                                        <div class="sr-card-head"><h5 class="sr-card-title"><i class="mdi mdi-history"></i> <?= __('previous_evaluations', 'Previous evaluations') ?></h5></div>
+                                        <div class="sr-card-body" style="padding-top: 6px;">
+                                            <dl class="sr-kv" id="previousEvaluationsBody"></dl>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </form>
 
-                </div> <!-- container -->
-
-            </div> <!-- content -->
+                </div>
+            </div>
 
             <footer class="footer">
-                <?=$site_footer?>
+                <?= $site_footer ?>
             </footer>
-
         </div>
-        <!-- ============================================================== -->
-        <!-- End Right content here -->
-        <!-- ============================================================== -->
-
     </div>
-    <!-- END wrapper -->
 
-    <!-- jQuery  -->
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-
-    <!-- Select2 -->
     <script src="./plugins/select2/js/select2.min.js"></script>
-
-    <!-- App js -->
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
-    <!-- JavaScript -->
     <script>
     $(document).ready(function() {
-        
-        // Initialize Select2
-        $('.select2').select2({
-            placeholder: "-- Select Employee --",
-            allowClear: true
-        });
+        const esc = s => $('<div>').text(s == null ? '' : String(s)).html();
+        const T = {
+            selectEmployee: <?= json_encode(__('select_employee')) ?>,
+            excellent: <?= json_encode(__('excellent', 'Excellent')) ?>,
+            good: <?= json_encode(__('good', 'Good')) ?>,
+            fair: <?= json_encode(__('fair', 'Needs improvement')) ?>,
+            poor: <?= json_encode(__('poor', 'Poor')) ?>,
+            confirmTitle: <?= json_encode(__('submit_evaluation', 'Submit evaluation')) ?>,
+            confirmText: <?= json_encode(__('evaluation_confirm_text', 'Submit this evaluation for %s with a total of %d / 100? It cannot be edited afterwards.')) ?>,
+            yes: <?= json_encode(__('yes_submit', 'Yes, submit')) ?>,
+            cancel: <?= json_encode(__('cancel')) ?>,
+            none: <?= json_encode(__('no_previous_evaluations', 'No previous evaluations.')) ?>
+        };
+        const RING = 2 * Math.PI * 62;
+        $('#evRing').attr({ 'stroke-dasharray': RING, 'stroke-dashoffset': 0 });
 
-        // Update employee name and position when selection changes
-        $('#employee_emp_id').on('change', function() {
-            var selectedOption = $(this).find('option:selected');
-            var employeeName = selectedOption.data('name') || '';
-            var position = selectedOption.data('position') || 'N/A';
-            
-            $('#employee_name').val(employeeName);
-            $('#employee_position').val(position);
+        $('#employee_emp_id').select2({ placeholder: T.selectEmployee, allowClear: true, width: '100%' });
 
-            // Load previous evaluations if employee selected
-            if ($(this).val()) {
-                loadPreviousEvaluations($(this).val(), employeeName);
-            } else {
-                $('#previousEvaluationsSection').hide();
-            }
-        });
+        function scores() { return $('.ev-crit').map(function() { return parseInt($(this).find('input:checked').val(), 10) || 0; }).get(); }
 
-        // Calculate total score on any score change
-        $('.evaluation-score').on('change', function() {
-            calculateTotalScore();
-        });
-
-        // Function to calculate total score
-        function calculateTotalScore() {
-            var total = 0;
-            $('.evaluation-score').each(function() {
-                total += parseInt($(this).val()) || 0;
+        function paint() {
+            $('.ev-crit').each(function() {
+                const v = parseInt($(this).find('input:checked').val(), 10) || 0;
+                $(this).attr('data-tone', v <= 4 ? 'red' : (v <= 6 ? 'amber' : ''));
+                $(this).find('label').each(function(i) { $(this).toggleClass('in', i + 1 < v); });
             });
-            
+            const s = scores(), total = s.reduce((a, b) => a + b, 0);
             $('#totalScore').text(total);
-            
-            var percentage = (total / 100 * 100).toFixed(0);
-            $('#scorePercentage').text('(' + percentage + '%)');
-            
-            // Update alert color based on score
-            var alertBox = $('#totalScore').closest('.alert');
-            alertBox.removeClass('alert-success alert-warning alert-danger alert-info');
-            
-            if (total >= 90) {
-                alertBox.addClass('alert-success');
-            } else if (total >= 70) {
-                alertBox.addClass('alert-info');
-            } else if (total >= 50) {
-                alertBox.addClass('alert-warning');
-            } else {
-                alertBox.addClass('alert-danger');
-            }
+            $('#scorePercentage').text(total + '%');
+            $('#evRing').attr('stroke-dashoffset', RING * (1 - total / 100));
+            let tone = 'green', label = T.excellent, color = '#22c55e';
+            if (total < 50) { tone = 'red'; label = T.poor; color = '#ef4444'; }
+            else if (total < 70) { tone = 'amber'; label = T.fair; color = '#f59e0b'; }
+            else if (total < 90) { tone = 'indigo'; label = T.good; color = '#6366f1'; }
+            $('#evRing').css('stroke', color);
+            $('#evGrade').attr('class', 'sr-pill sr-pill-lg tone-' + tone).find('span:last').text(label);
+            $('#evLow').text(Math.min.apply(null, s));
+            $('#evAvg').text((total / s.length).toFixed(1));
+            $('#evWeak').text(s.filter(v => v < 6).length);
+        }
+        $(document).on('change', '.evaluation-score', paint);
+        $('.js-all').on('click', function() {
+            const v = $(this).data('v');
+            $('.ev-crit').each(function() { $(this).find('input[value="' + v + '"]').prop('checked', true); });
+            paint();
+        });
+
+        function loadPrevious(empId) {
+            const $box = $('#previousEvaluationsSection'), $body = $('#previousEvaluationsBody');
+            $.post('includes/ajaxFile/ajaxEvaluation.php', { action: 'get_previous_evaluations', employee_emp_id: empId }, null, 'json')
+                .done(function(res) {
+                    const rows = (res && res.status === 'success' && res.data) || [];
+                    $body.html(rows.length ? rows.map(function(ev) {
+                        const sc = parseInt(ev.total_score, 10) || 0;
+                        const tone = sc >= 90 ? 'green' : sc >= 70 ? 'indigo' : sc >= 50 ? 'amber' : 'red';
+                        return `<div class="row-kv"><dt>${esc(ev.created_at)}<br><small>${esc(ev.manager_name || '')}</small>${ev.observation ? `<br><small title="${esc(ev.observation)}">${esc(ev.observation.length > 50 ? ev.observation.slice(0, 50) + '…' : ev.observation)}</small>` : ''}</dt>
+                            <dd><span class="sr-pill sr-pill-xs tone-${tone} ev-prev-score">${sc}/100</span></dd></div>`;
+                    }).join('') : `<div class="sr-hint">${esc(T.none)}</div>`);
+                    $box.show();
+                })
+                .fail(function() { $box.hide(); });
         }
 
-        // Function to load previous evaluations
-        function loadPreviousEvaluations(empId, empName) {
-            $.ajax({
-                url: 'includes/ajaxFile/ajaxEvaluation.php',
-                method: 'POST',
-                data: { 
-                    action: 'get_previous_evaluations', 
-                    employee_emp_id: empId 
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success' && response.data.length > 0) {
-                        var tbody = $('#previousEvaluationsBody');
-                        tbody.empty();
-                        
-                        $('#prevEvalEmployeeName').text(empName);
-                        
-                        $.each(response.data, function(index, eval) {
-                            var percentage = (eval.total_score / 100 * 100).toFixed(0);
-                            var badgeClass = eval.total_score >= 90 ? 'success' : 
-                                           eval.total_score >= 70 ? 'info' : 
-                                           eval.total_score >= 50 ? 'warning' : 'danger';
-                            
-                            var row = '<tr>' +
-                                '<td>' + eval.created_at + '</td>' +
-                                '<td>' + eval.manager_name + '</td>' +
-                                '<td><span class="badge badge-' + badgeClass + ' badge-pill">' + eval.total_score + '/100</span></td>' +
-                                '<td>' + percentage + '%</td>' +
-                                '<td>' + (eval.observation || 'N/A') + '</td>' +
-                                '</tr>';
-                            
-                            tbody.append(row);
-                        });
-                        
-                        $('#previousEvaluationsSection').show();
-                    } else {
-                        $('#previousEvaluationsSection').hide();
-                    }
-                },
-                error: function() {
-                    console.log('Error loading previous evaluations');
-                }
+        $('#employee_emp_id').on('change', function() {
+            const $o = $(this).find('option:selected'), id = $(this).val();
+            if (!id) { $('#evEmp, #previousEvaluationsSection').hide(); return; }
+            const name = String($o.data('name') || '');
+            $('#evEmpAvatar').text(name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase());
+            $('#evEmpName').text(name);
+            $('#evEmpPos').text($o.data('position') || 'N/A');
+            $('#evEmpId').text(id);
+            $('#evEmp').show();
+            $(this).next('.select2-container').find('.select2-selection').css('border-color', '');
+            loadPrevious(id);
+        }).trigger('change');
+
+        $('#evaluationForm').on('submit', function(e) {
+            const form = this, $sel = $('#employee_emp_id');
+            if (form.dataset.ok) return true;
+            e.preventDefault();
+            if (!$sel.val()) {
+                $sel.next('.select2-container').find('.select2-selection').css('border-color', '#dc2626');
+                $sel.select2('open');
+                return false;
+            }
+            const total = scores().reduce((a, b) => a + b, 0);
+            Swal.fire({
+                title: T.confirmTitle,
+                text: T.confirmText.replace('%s', $sel.find('option:selected').data('name')).replace('%d', total),
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: T.yes,
+                cancelButtonText: T.cancel,
+                confirmButtonColor: window.APP_COLORS && APP_COLORS.primary,
+                cancelButtonColor: window.APP_COLORS && APP_COLORS.danger_dark,
+                allowOutsideClick: false
+            }).then(function(r) {
+                if (!r.isConfirmed) return;
+                form.dataset.ok = '1';
+                $('#evSubmit').prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin"></i>');
+                form.submit();
             });
-        }
+        });
 
-        // Initial calculation
-        calculateTotalScore();
-        
-        // Check for SweetAlert message from session (after page load)
-        <?php if (isset($_SESSION['swal_alert'])): ?>
-        // Wait for SweetAlert2 to be loaded
+        paint();
+
+        <?php if ($swal): ?>
         setTimeout(function() {
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    title: '<?= addslashes($_SESSION['swal_alert']['title']) ?>',
-                    text: '<?= addslashes($_SESSION['swal_alert']['message']) ?>',
-                    icon: '<?= $_SESSION['swal_alert']['type'] ?>',
-                    confirmButtonText: '<?= __("ok") ?>',
-                    customClass: {
-                        confirmButton: 'btn btn-primary'
-                    },
-                    buttonsStyling: false,
-                    allowOutsideClick: false
-                });
-            }
+            if (typeof Swal === 'undefined') return;
+            Swal.fire({
+                title: <?= json_encode((string)$swal['title']) ?>,
+                text: <?= json_encode((string)$swal['message']) ?>,
+                icon: <?= json_encode((string)$swal['type']) ?>,
+                confirmButtonText: <?= json_encode(__('ok')) ?>,
+                allowOutsideClick: false
+            });
         }, 500);
-        <?php unset($_SESSION['swal_alert']); ?>
         <?php endif; ?>
     });
-
     </script>
-
 </body>
 </html>

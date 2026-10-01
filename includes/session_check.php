@@ -558,7 +558,15 @@ $isDeptFinance = ($user_dept == 2); // Anyone in Finance Department
 
 // Department & Management Roles
 $isDeptManager = ($user_type === 'dept_user' || $user_role === 'DPT_Manager' || $emp_type === 'Manager');
-$isSupervisor = (isset($emprow['supervisor_id']) && $emprow['supervisor_id'] !== '' && $emprow['supervisor_id'] !== null); // Has subordinates
+// Has subordinates: at least one active employee names this user as direct supervisor
+$isSupervisor = false;
+if (!empty($empid) && ($stmt_sup = mysqli_prepare($conDB, "SELECT 1 FROM employees WHERE supervisor_id = ? AND status = 1 AND emp_id != ? LIMIT 1"))) {
+    mysqli_stmt_bind_param($stmt_sup, 'ss', $empid, $empid);
+    mysqli_stmt_execute($stmt_sup);
+    mysqli_stmt_store_result($stmt_sup);
+    $isSupervisor = mysqli_stmt_num_rows($stmt_sup) > 0;
+    mysqli_stmt_close($stmt_sup);
+}
 
 // Other Specific Roles
 $isGR_Officer = ($user_type === 'gr_officer');
