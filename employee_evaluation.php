@@ -582,12 +582,14 @@ try {
                                         <!-- Submit Button -->
                                         <div class="row mt-4">
                                             <div class="col-md-12">
-                                                <button type="submit" name="submit_evaluation" class="btn btn-primary btn-lg">
-                                                    <i class="fa fa-check"></i> <?=__('submit_evaluation') ?>
-                                                </button>
-                                                <a href="dashboard.php" class="btn btn-secondary btn-lg ml-2">
-                                                    <i class="fa fa-times"></i> <?=__('cancel') ?>
-                                                </a>
+                                                <div class="btn-group" role="group">
+                                                    <button type="submit" name="submit_evaluation" class="btn btn-primary btn-lg">
+                                                        <i class="fa fa-check"></i> <?=__('submit_evaluation') ?>
+                                                    </button>
+                                                    <a href="dashboard.php" class="btn btn-secondary btn-lg">
+                                                        <i class="fa fa-times"></i> <?=__('cancel') ?>
+                                                    </a>
+                                                </div>
                                             </div>
                                         </div>
 

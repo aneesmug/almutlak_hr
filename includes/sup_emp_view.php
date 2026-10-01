@@ -99,8 +99,10 @@
 				<h4><strong style="font-size: 30px; "><?=$name ?></strong> Employee</h4>
 			</div>
 			<div class="modal-footer">
-				<button type="button" class="btn btn-light waves-effect" data-dismiss="modal">Close</button>
-				<a href="./includes/delete_emp.php?id=<?=$id ?>" class="btn btn-danger waves-effect waves-light"><i class="icon-close"></i> Delete</a>
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-light waves-effect" data-dismiss="modal">Close</button>
+					<a href="./includes/delete_emp.php?id=<?=$id ?>" class="btn btn-danger waves-effect waves-light"><i class="icon-close"></i> Delete</a>
+				</div>
 			</div>
 		</div><!-- /.modal-content -->
 	</div><!-- /.modal-dialog -->

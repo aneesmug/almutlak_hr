@@ -2459,15 +2459,17 @@ RTL Support
                                 <div class="viewer-header">
                                     <h5 class="viewer-title"><i class="fa fa-file"></i> <span id="viewer-doc-name-profile"><?= __('select_document') ?></span></h5>
                                     <div class="viewer-actions">
-                                        <button class="btn btn-sm btn-light" id="viewer-fullscreen-profile" title="<?= __('fullscreen') ?>">
-                                            <i class="fa fa-expand"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-light" id="viewer-download-profile" title="<?= __('download') ?>" style="display:none;">
-                                            <i class="fa fa-download"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-light" id="viewer-clear-profile" title="<?= __('close') ?>">
-                                            <i class="fa fa-times"></i>
-                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-sm btn-light" id="viewer-fullscreen-profile" title="<?= __('fullscreen') ?>">
+                                                <i class="fa fa-expand"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-light" id="viewer-download-profile" title="<?= __('download') ?>" style="display:none;">
+                                                <i class="fa fa-download"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-light" id="viewer-clear-profile" title="<?= __('close') ?>">
+                                                <i class="fa fa-times"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="viewer-body" id="document-viewer-profile">

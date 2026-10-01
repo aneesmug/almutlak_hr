@@ -244,9 +244,11 @@ if ($preselectEmpId !== '') {
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <button type="button" class="btn btn-light mr-2" id="memoNew"><i class="fa fa-file mr-1"></i><?= __('new_memo', 'New Memo') ?></button>
-                                    <button type="button" class="btn btn-secondary mr-2" id="memoSaveDraft"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_draft', 'Save Draft') ?></button>
-                                    <button type="button" class="btn btn-primary" id="memoSend"><i class="fa fa-paper-plane mr-1"></i><?= __('send_memo', 'Send Memo') ?></button>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-light" id="memoNew"><i class="fa fa-file mr-1"></i><?= __('new_memo', 'New Memo') ?></button>
+                                        <button type="button" class="btn btn-secondary" id="memoSaveDraft"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_draft', 'Save Draft') ?></button>
+                                        <button type="button" class="btn btn-primary" id="memoSend"><i class="fa fa-paper-plane mr-1"></i><?= __('send_memo', 'Send Memo') ?></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -351,8 +353,10 @@ if ($preselectEmpId !== '') {
                     </div>
                     <div class="modal-footer">
                         <div id="memoTplEditButtons" style="display:none">
-                            <button type="button" class="btn btn-light" id="memoTplBack"><i class="fa fa-arrow-left mr-1"></i><?= __('back', 'Back') ?></button>
-                            <button type="button" class="btn btn-primary" id="memoTplSave"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_template', 'Save Template') ?></button>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-light" id="memoTplBack"><i class="fa fa-arrow-left mr-1"></i><?= __('back', 'Back') ?></button>
+                                <button type="button" class="btn btn-primary" id="memoTplSave"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_template', 'Save Template') ?></button>
+                            </div>
                         </div>
                         <button type="button" class="btn btn-secondary" data-dismiss="modal" id="memoTplClose"><?= __('close', 'Close') ?></button>
                     </div>

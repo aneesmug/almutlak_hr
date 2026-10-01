@@ -700,12 +700,14 @@ if (mysqli_num_rows($query) == 1) {
                                                         </select>
                                                     </div>
                                                     <div>
-                                                        <button type="button" class="btn btn-sm btn-info mr-2" id="selectAllColumnsBtn">
-                                                            <i class="mdi mdi-check-all mr-1"></i><?= __('select_all') ?>
-                                                        </button>
-                                                        <button type="button" class="btn btn-sm btn-warning" id="deselectAllColumnsBtn">
-                                                            <i class="mdi mdi-close-circle mr-1"></i><?= __('deselect_all') ?>
-                                                        </button>
+                                                        <div class="btn-group" role="group">
+                                                            <button type="button" class="btn btn-sm btn-info" id="selectAllColumnsBtn">
+                                                                <i class="mdi mdi-check-all mr-1"></i><?= __('select_all') ?>
+                                                            </button>
+                                                            <button type="button" class="btn btn-sm btn-warning" id="deselectAllColumnsBtn">
+                                                                <i class="mdi mdi-close-circle mr-1"></i><?= __('deselect_all') ?>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>

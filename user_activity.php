@@ -473,12 +473,14 @@ if (mysqli_num_rows($query) == 1) {
                             render: function(data, type, row, meta) {
                                 var statusClass = row[11] === 'active' ? 'btn-danger' : 'btn-secondary disabled';
                                 var isActive = row[11] === 'active';
-                                return `<button class="btn btn-sm btn-info view-details" data-id="${row[0]}" title="View Details">
-                                    <i class="mdi mdi-eye"></i> Details
-                                </button>
-                                <button class="btn btn-sm ${statusClass} signout-user ${isActive ? '' : 'disabled'}" data-id="${row[0]}" data-username="${row[1]}" ${!isActive ? 'disabled' : ''} title="Sign Out User">
-                                    <i class="mdi mdi-logout-variant"></i> Sign Out
-                                </button>`;
+                                return `<div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-info view-details" data-id="${row[0]}" title="View Details">
+                                        <i class="mdi mdi-eye"></i> Details
+                                    </button>
+                                    <button class="btn btn-sm ${statusClass} signout-user ${isActive ? '' : 'disabled'}" data-id="${row[0]}" data-username="${row[1]}" ${!isActive ? 'disabled' : ''} title="Sign Out User">
+                                        <i class="mdi mdi-logout-variant"></i> Sign Out
+                                    </button>
+                                </div>`;
                             }
                         }
                     ],

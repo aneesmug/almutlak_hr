@@ -268,8 +268,10 @@ if (mysqli_num_rows($query) == 1) {
                 <div class="content">
                     <div class="container-fluid">
                         <div class="text-right no-print mb-3">
-                            <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> <?= __('print_report') ?></a>
-                            <a href="all_resignations.php" class="btn btn-secondary waves-effect waves-light"><i class="fa fa-arrow-left mr-1"></i> <?= __('back') ?></a>
+                            <div class="btn-group" role="group">
+                                <a href="javascript:void(0);" onclick="window.print()" class="btn btn-primary waves-effect waves-light"><i class="fa fa-print mr-1"></i> <?= __('print_report') ?></a>
+                                <a href="all_resignations.php" class="btn btn-secondary waves-effect waves-light"><i class="fa fa-arrow-left mr-1"></i> <?= __('back') ?></a>
+                            </div>
                         </div>
                         
                         <div class="report-wrapper">

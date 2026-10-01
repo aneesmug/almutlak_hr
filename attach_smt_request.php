@@ -329,8 +329,10 @@ require_once __DIR__ . '/includes/db.php';
                                             </form>
                                         </div>
                                         <div class="modal-footer">
-                                            <button type="button" class="btn btn-danger waves-effect" onclick="window.history.go(-1); return false;">Close</button>
-                                            <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-danger waves-effect" onclick="window.history.go(-1); return false;">Close</button>
+                                                <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

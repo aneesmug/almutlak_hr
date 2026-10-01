@@ -331,11 +331,13 @@
                         <div class="asset-detail-section" id="asset-detail-actions">
                             <h6><i class="mdi mdi-link-variant mr-1"></i>${__('actions', 'Actions')}</h6>
                             <div class="d-flex flex-wrap" style="gap:8px;">
-                                ${isAssigned ? `<button type="button" class="btn btn-info btn-sm print-asset-report" data-id="${it.id}"><i class="fa fa-print mr-1"></i>${__('print_report', 'Print Report')}</button>` : ''}
-                                ${isAssigned ? `<button type="button" class="btn btn-warning btn-sm btn-unassign" data-id="${it.id}" data-tracking="${it.tracking_id || ''}"><i class="fa fa-unlink mr-1"></i>${__('unassign', 'Unassign')}</button>` : ''}
-                                ${(!isAssigned && it.asset_name !== 'Car') ? `<button type="button" class="btn btn-primary btn-sm btn-assign" data-id="${it.id}"><i class="fa fa-link mr-1"></i>${__('assign', 'Assign')}</button>` : ''}
-                                ${(!isAssigned && userRole.canEdit) ? `<button type="button" class="btn btn-light btn-sm editAssetBtn" data-id="${it.id}" data-asset_id="${it.asset_id || ''}" data-asset_name="${it.asset_name || ''}" data-tracking="${it.tracking_id || ''}" data-serial="${it.serial_number || ''}" data-description="${(it.description || '').replace(/"/g, '&quot;')}" data-status="${it.status}"><i class="fa fa-edit mr-1"></i>${__('edit', 'Edit')}</button>` : ''}
-                                ${(!isAssigned && userRole.canDelete) ? `<button type="button" class="btn btn-outline-danger btn-sm deleteAjax" data-tbl="asset_items" data-file="0" data-id="${it.id}"><i class="fa fa-trash mr-1"></i>${__('delete', 'Delete')}</button>` : ''}
+                                <div class="btn-group flex-wrap" role="group">
+                                    ${isAssigned ? `<button type="button" class="btn btn-info btn-sm print-asset-report" data-id="${it.id}"><i class="fa fa-print mr-1"></i>${__('print_report', 'Print Report')}</button>` : ''}
+                                    ${isAssigned ? `<button type="button" class="btn btn-warning btn-sm btn-unassign" data-id="${it.id}" data-tracking="${it.tracking_id || ''}"><i class="fa fa-unlink mr-1"></i>${__('unassign', 'Unassign')}</button>` : ''}
+                                    ${(!isAssigned && it.asset_name !== 'Car') ? `<button type="button" class="btn btn-primary btn-sm btn-assign" data-id="${it.id}"><i class="fa fa-link mr-1"></i>${__('assign', 'Assign')}</button>` : ''}
+                                    ${(!isAssigned && userRole.canEdit) ? `<button type="button" class="btn btn-light btn-sm editAssetBtn" data-id="${it.id}" data-asset_id="${it.asset_id || ''}" data-asset_name="${it.asset_name || ''}" data-tracking="${it.tracking_id || ''}" data-serial="${it.serial_number || ''}" data-description="${(it.description || '').replace(/"/g, '&quot;')}" data-status="${it.status}"><i class="fa fa-edit mr-1"></i>${__('edit', 'Edit')}</button>` : ''}
+                                    ${(!isAssigned && userRole.canDelete) ? `<button type="button" class="btn btn-outline-danger btn-sm deleteAjax" data-tbl="asset_items" data-file="0" data-id="${it.id}"><i class="fa fa-trash mr-1"></i>${__('delete', 'Delete')}</button>` : ''}
+                                </div>
                             </div>
                         </div>
                     `;

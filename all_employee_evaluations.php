@@ -219,12 +219,14 @@ try {
                                     
                                     <div class="row">
                                         <div class="col-12">
-                                            <button type="button" class="btn btn-primary" id="applyFilters">
-                                                <i class="mdi mdi-filter"></i> Apply Filters
-                                            </button>
-                                            <button type="button" class="btn btn-secondary" id="resetFilters">
-                                                <i class="mdi mdi-refresh"></i> Reset
-                                            </button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-primary" id="applyFilters">
+                                                    <i class="mdi mdi-filter"></i> Apply Filters
+                                                </button>
+                                                <button type="button" class="btn btn-secondary" id="resetFilters">
+                                                    <i class="mdi mdi-refresh"></i> Reset
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -692,12 +692,14 @@ $sections = ['vacations', 'loans', 'excuse', 'resignation', 'rejoin'];
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary btn-lg">
-                        <i class="fa fa-cloud-upload"></i> Upload Screenshot
-                    </button>
-                    <button type="reset" class="btn btn-secondary btn-lg">
-                        <i class="fa fa-redo"></i> Reset Form
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fa fa-cloud-upload"></i> Upload Screenshot
+                        </button>
+                        <button type="reset" class="btn btn-secondary btn-lg">
+                            <i class="fa fa-redo"></i> Reset Form
+                        </button>
+                    </div>
                 </div>
             </form>
 

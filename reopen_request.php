@@ -554,8 +554,10 @@ $applist = implode(",",$applst);
                     </div>
                     <div class="modal-footer">
                         <input type="hidden" id="itemid" name="itemid">
-                        <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
-                        <button type="submit" name="submit_edit" class="btn btn-info">Update Details</button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                            <button type="submit" name="submit_edit" class="btn btn-info">Update Details</button>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -600,8 +602,10 @@ $applist = implode(",",$applst);
 <!---->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                </div>
             </div>
         </div><!-- /.modal-content -->
     </div><!-- /.modal-dialog -->

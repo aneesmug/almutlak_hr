@@ -570,9 +570,11 @@ if ($handle = opendir("./file_manager")) {
 
                             <!-- <input type="hidden" id="idmud" name="id"> -->
 
-                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
 
-                            <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                                <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
+                            </div>
 
                         </div>
 

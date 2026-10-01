@@ -232,8 +232,10 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                     </div>
                         <div id="response"></div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-info" onclick="printdiv('printBody')" class="printbtn" data-dismiss="modal">Print</button>
-                        <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-info" onclick="printdiv('printBody')" class="printbtn" data-dismiss="modal">Print</button>
+                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -292,8 +294,10 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                         <div id="response"></div>
                     <div class="modal-footer">
                         <!-- <input type="hidden" id="idmud" name="id"> -->
-                        <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
-                        <button type="button" name="submit_register" class="btn btn-info" id="submitForm">Add Customer</button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                            <button type="button" name="submit_register" class="btn btn-info" id="submitForm">Add Customer</button>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -381,8 +385,10 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                     <input type="hidden" id="cstid" name="id">
                     <!-- <input type="hidden" id="injazatno" name="injazatno"> -->
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
-                        <button type="button" id="submitAddVip" class="btn btn-primary">Register VIP</button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                            <button type="button" id="submitAddVip" class="btn btn-primary">Register VIP</button>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -425,8 +431,10 @@ while ($rec = mysqli_fetch_array($query_loc)) {
                     <input type="hidden" id="updcstid" name="id">
                     <!-- <input type="hidden" id="injazatno" name="injazatno"> -->
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
-                        <button type="button" id="submitUpdVip" class="btn btn-primary">Update Card</button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-danger" data-dismiss="modal">Close</button>
+                            <button type="button" id="submitUpdVip" class="btn btn-primary">Update Card</button>
+                        </div>
                     </div>
                 </form>
             </section>

@@ -249,12 +249,14 @@ if (!isset($_GET['id'])) {
                                     <!-- Action Buttons -->
                                     <div class="row">
                                         <div class="col-12 text-right">
-                                            <button type="button" class="btn btn-secondary mr-2" onclick="window.location.href='all_general_requests.php'">
-                                                <i class="mdi mdi-close"></i> <?=__('cancel')?>
-                                            </button>
-                                            <button type="submit" class="btn btn-primary" id="submitBtn">
-                                                <i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>
-                                            </button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-secondary" onclick="window.location.href='all_general_requests.php'">
+                                                    <i class="mdi mdi-close"></i> <?=__('cancel')?>
+                                                </button>
+                                                <button type="submit" class="btn btn-primary" id="submitBtn">
+                                                    <i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </form>

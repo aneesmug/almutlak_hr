@@ -66,8 +66,10 @@
                     </div>
                     <div class="form-group row">
                         <div class="col-sm-12">
-                            <button type="submit" class="btn btn-primary">Calcuclate</button>
-                            <button type="submit" class="btn btn-danger btn-reset">Reset</button>
+                            <div class="btn-group" role="group">
+                                <button type="submit" class="btn btn-primary">Calcuclate</button>
+                                <button type="submit" class="btn btn-danger btn-reset">Reset</button>
+                            </div>
                         </div>
                     </div>                            
                 </form>

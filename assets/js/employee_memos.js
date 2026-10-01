@@ -243,10 +243,10 @@
             { data: null, orderable: false, render: function (r) {
                 var html = '<button type="button" class="btn btn-sm btn-outline-primary memo-view-btn" data-id="' + r.id + '" title="' + esc(t('view', 'View')) + '"><i class="fa fa-eye"></i></button>';
                 if (r.status === 'draft') {
-                    html += ' <button type="button" class="btn btn-sm btn-outline-warning memo-open-draft-btn" data-id="' + r.id + '" title="' + esc(t('open_draft', 'Open Draft')) + '"><i class="fa fa-pen"></i></button>'
-                        + ' <button type="button" class="btn btn-sm btn-outline-danger memo-delete-draft-btn" data-id="' + r.id + '" title="' + esc(t('delete_draft', 'Delete Draft')) + '"><i class="fa fa-trash"></i></button>';
+                    html += '<button type="button" class="btn btn-sm btn-outline-warning memo-open-draft-btn" data-id="' + r.id + '" title="' + esc(t('open_draft', 'Open Draft')) + '"><i class="fa fa-pen"></i></button>'
+                        + '<button type="button" class="btn btn-sm btn-outline-danger memo-delete-draft-btn" data-id="' + r.id + '" title="' + esc(t('delete_draft', 'Delete Draft')) + '"><i class="fa fa-trash"></i></button>';
                 }
-                return '<span class="text-nowrap">' + html + '</span>';
+                return '<div class="btn-group text-nowrap" role="group">' + html + '</div>';
             } }
         );
         var table = $(selector).DataTable({

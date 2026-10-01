@@ -419,12 +419,14 @@ if (($current_filter !== 'none' || !empty($search_term)) && $total_items > 0) {
                                 <?php if ($req['approval_status'] == 'pending' && $user_role == 'HR_Assistant' ||
                                           $req['approval_status'] == 'hr_assistant_approved' && $user_role == 'HR_Manager' ||
                                           $req['approval_status'] == 'hr_manager_approved' && $user_role == 'GM'): ?>
-                                    <button class="btn btn-danger" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
-                                        <i class="fas fa-times"></i> Reject
-                                    </button>
-                                    <button class="btn btn-success" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
-                                        <i class="fas fa-check"></i> Approve
-                                    </button>
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-danger" onclick="rejectVacationRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
+                                            <i class="fas fa-times"></i> Reject
+                                        </button>
+                                        <button class="btn btn-success" onclick="approveRequest(<?=$req['id']; ?>, '<?=$user_role; ?>')">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                         </div>

@@ -2624,12 +2624,14 @@ async function openAssignPayrollSupervisorModal() {
                         </div>
                     </div>
                     <div class="small text-muted mb-2"><?= __('effective_from_month_hint', 'Once assigned, a supervisor carries forward automatically to every future month - you only need this when a new employee needs assigning, or an existing one needs to change starting a specific month.') ?></div>
-                    <button type="button" id="viewPayrollSupervisorAssignmentsBtn" class="btn btn-outline-primary btn-sm mt-1">
-                        <i class="fa fa-solid fa-list"></i> <?= __('view_payroll_supervisor_assignments_button', 'View Assignments') ?>
-                    </button>
-                    <button type="button" id="downloadPayrollSupervisorAssignmentsBtn" class="btn btn-outline-secondary btn-sm mt-1">
-                        <i class="fa fa-solid fa-file-arrow-down"></i> <?= __('download_payroll_supervisor_assignments_button', 'Download Supervisor Assignments') ?>
-                    </button>
+                    <div class="btn-group mt-1" role="group">
+                        <button type="button" id="viewPayrollSupervisorAssignmentsBtn" class="btn btn-outline-primary btn-sm">
+                            <i class="fa fa-solid fa-list"></i> <?= __('view_payroll_supervisor_assignments_button', 'View Assignments') ?>
+                        </button>
+                        <button type="button" id="downloadPayrollSupervisorAssignmentsBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-solid fa-file-arrow-down"></i> <?= __('download_payroll_supervisor_assignments_button', 'Download Supervisor Assignments') ?>
+                        </button>
+                    </div>
                 </div>
             `,
             showCancelButton: true,
@@ -2947,12 +2949,14 @@ async function viewPayrollSupervisorAssignments(effectiveMonth) {
                             &middot; <span class="badge badge-secondary">${group.employees.length}</span>
                         </div>
                         <div>
-                            <button type="button" class="btn btn-sm btn-outline-primary psa-edit-group-btn" data-group-index="${groupIndex}">
-                                <i class="fa fa-solid fa-pen"></i> <span class="psa-edit-btn-label"><?= __('edit', 'Edit') ?></span>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger psa-delete-group-btn" data-group-index="${groupIndex}">
-                                <i class="fa fa-solid fa-trash"></i> <?= __('delete', 'Delete') ?>
-                            </button>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-primary psa-edit-group-btn" data-group-index="${groupIndex}">
+                                    <i class="fa fa-solid fa-pen"></i> <span class="psa-edit-btn-label"><?= __('edit', 'Edit') ?></span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger psa-delete-group-btn" data-group-index="${groupIndex}">
+                                    <i class="fa fa-solid fa-trash"></i> <?= __('delete', 'Delete') ?>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="psa-group-employees mt-2 d-none" data-group-index="${groupIndex}">
@@ -6814,11 +6818,13 @@ function openPayslipsFile(base, data) {
                     <div id="payrollReportModal" class="text-left">
                         <h2 class="text-2xl font-bold mb-4 text-center">${__('payroll_report_for_month_title')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
                         <div class="mb-4 text-center">
-                            <button id="markAsPaidBtn" class="btn btn-custom" style="display:${allAlreadyPaid ? 'none' : 'inline-block'};"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
-                            <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
-                            <button id="exportExcelBtn" class="btn btn-success" style="display:${showBankExcelButton ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
-                            <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
-                            <button id="printReportBtn" class="btn btn-secondary"><i class="fas fa-print"></i> Print</button>
+                            <div class="btn-group flex-wrap" role="group">
+                                <button id="markAsPaidBtn" class="btn btn-custom" style="display:${allAlreadyPaid ? 'none' : 'inline-block'};"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
+                                <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
+                                <button id="exportExcelBtn" class="btn btn-success" style="display:${showBankExcelButton ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
+                                <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
+                                <button id="printReportBtn" class="btn btn-secondary"><i class="fas fa-print"></i> Print</button>
+                            </div>
                             <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${showBankExcelButton ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
                                 Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.
                             </div>

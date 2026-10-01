@@ -592,12 +592,14 @@ $status_classes = [
                                     <form method="POST" id="approvalActionForm" action="">
                                         <input type="hidden" name="inv_no" value="<?= htmlspecialchars($inv_no) ?>">
                                         <div class="action-buttons">
-                                            <button type="button" id="approveBtn" class="btn btn-action" style="background: #1abc9c; color: white;">
-                                                <i class="mdi mdi-check-circle"></i> <?= __('approve', 'Approve') ?>
-                                            </button>
-                                            <button type="button" id="rejectBtn" class="btn btn-action" style="background: #f1556c; color: white;">
-                                                <i class="mdi mdi-close-circle"></i> <?= __('reject', 'Reject') ?>
-                                            </button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" id="approveBtn" class="btn btn-action" style="background: #1abc9c; color: white;">
+                                                    <i class="mdi mdi-check-circle"></i> <?= __('approve', 'Approve') ?>
+                                                </button>
+                                                <button type="button" id="rejectBtn" class="btn btn-action" style="background: #f1556c; color: white;">
+                                                    <i class="mdi mdi-close-circle"></i> <?= __('reject', 'Reject') ?>
+                                                </button>
+                                            </div>
                                         </div>
                                         <input type="hidden" name="note" id="approvalNote" value="">
                                         <input type="hidden" name="status" id="statusInput" value="">

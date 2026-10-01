@@ -446,9 +446,11 @@
 </div>
 			</div>
 			<div class="modal-footer">
-				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-				<button type="button" id="terminat_emp" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-off"></i> Not Approve</button>
-				<a href="./includes/vac_app_emp.php?id=<?=$_GET['id'] ?>&status=approve&empidnoapp=<?=$emprow['empid'] ?>&reviewnoapp=<?=$review_vac_get ?>" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
+					<button type="button" id="terminat_emp" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-off"></i> Not Approve</button>
+					<a href="./includes/vac_app_emp.php?id=<?=$_GET['id'] ?>&status=approve&empidnoapp=<?=$emprow['empid'] ?>&reviewnoapp=<?=$review_vac_get ?>" class="btn btn-success waves-effect waves-light"><i class="mdi mdi-account-star"></i> Approved</a>			
+				</div>
 				
 			</div>
 		</div><!-- /.modal-content -->

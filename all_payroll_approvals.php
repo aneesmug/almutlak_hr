@@ -1939,8 +1939,10 @@ async function openFinanceVerificationSetupModal(requestInvNo, payrollMonth) {
         const financeHistoryTabsHtml = `
             <div class="mb-3" style="border:1px solid #dbe6ef;border-radius:8px;background:#f8fbff;overflow:hidden;">
                 <div style="display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #dbe6ef;background:#eef5fb;">
-                    <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="assigned"><?= __('assigned', 'Assigned') ?> (${Math.max(assignedHistoryItems.length, assignedCompanyDetails.length)})</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="approved"><?= __('approved', 'Approved') ?> (${approvedHistoryItems.length})</button>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="assigned"><?= __('assigned', 'Assigned') ?> (${Math.max(assignedHistoryItems.length, assignedCompanyDetails.length)})</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary finance-history-tab-btn" data-target="approved"><?= __('approved', 'Approved') ?> (${approvedHistoryItems.length})</button>
+                    </div>
                 </div>
                 <div id="financeHistoryTabHint" style="padding:10px 12px;color:#607080;font-size:13px;">
                     <?= __('click_tab_to_view_data', 'Click Assigned or Approved tab to view data.') ?>

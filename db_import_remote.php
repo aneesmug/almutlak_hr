@@ -107,9 +107,11 @@ if (!($is_system_admin ?? false)) {
                                         </div>
                                         <div class="col-md-6 text-md-end">
                                             <input type="text" class="form-control form-control-sm d-inline-block" style="max-width:200px;" id="tableFilter" placeholder="Filter tables...">
-                                            <button type="button" class="btn btn-link btn-sm" id="selectAllBtn">Select All</button>
-                                            <button type="button" class="btn btn-link btn-sm" id="selectNoneBtn">Select None</button>
-                                            <button type="button" class="btn btn-link btn-sm" id="selectDiffBtn">Select Diff Only</button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-link btn-sm" id="selectAllBtn">Select All</button>
+                                                <button type="button" class="btn btn-link btn-sm" id="selectNoneBtn">Select None</button>
+                                                <button type="button" class="btn btn-link btn-sm" id="selectDiffBtn">Select Diff Only</button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div id="tableListWrap"></div>
@@ -132,12 +134,14 @@ if (!($is_system_admin ?? false)) {
                                         </small>
                                     </div>
 
-                                    <button type="button" class="btn btn-outline-secondary waves-effect waves-light mt-2" id="checkSchemaBtn">
-                                        <i class="fa fa-list-alt"></i> Check Schema Differences
-                                    </button>
-                                    <button type="button" class="btn btn-primary waves-effect waves-light mt-2" id="importBtn">
-                                        <i class="fa fa-download"></i> Import Selected Into Local DB
-                                    </button>
+                                    <div class="btn-group mt-2" role="group">
+                                        <button type="button" class="btn btn-outline-secondary waves-effect waves-light" id="checkSchemaBtn">
+                                            <i class="fa fa-list-alt"></i> Check Schema Differences
+                                        </button>
+                                        <button type="button" class="btn btn-primary waves-effect waves-light" id="importBtn">
+                                            <i class="fa fa-download"></i> Import Selected Into Local DB
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -641,8 +645,10 @@ if (!($is_system_admin ?? false)) {
                 html: '<div style="max-height:350px; overflow-y:auto; text-align:left;">' + tableBlocks + '</div>' +
                     (res.any_mismatch ? (
                         '<div class="mt-3 text-left">' +
-                        '<button type="button" class="btn btn-sm btn-primary" id="genAlterBtn">Generate ALTER SQL</button> ' +
+                        '<div class="btn-group" role="group">' +
+                        '<button type="button" class="btn btn-sm btn-primary" id="genAlterBtn">Generate ALTER SQL</button>' +
                         '<button type="button" class="btn btn-sm btn-secondary" id="copyAlterBtn" style="display:none;">Copy</button>' +
+                        '</div>' +
                         '<textarea id="alterSqlOut" class="form-control mt-2" rows="8" readonly style="display:none; font-family:monospace; font-size:12px;"></textarea>' +
                         '<small class="form-text text-muted">Output is split into LOCAL and LIVE sections based on your selections above - run each on the matching server.</small>' +
                         '</div>'

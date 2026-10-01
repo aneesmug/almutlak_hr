@@ -277,8 +277,10 @@ $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNL
                                 <p class="text-muted mb-0">Audit trail across all modules</p>
                             </div>
                             <div class="col-auto">
-                                <a href="dashboard.php" class="btn btn-secondary">← Back to Dashboard</a>
-                                <a href="?export=csv" class="btn btn-success">📥 Export CSV</a>
+                                <div class="btn-group" role="group">
+                                    <a href="dashboard.php" class="btn btn-secondary">← Back to Dashboard</a>
+                                    <a href="?export=csv" class="btn btn-success">📥 Export CSV</a>
+                                </div>
                             </div>
                         </div>
 
@@ -434,8 +436,10 @@ $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNL
                                         </select>
                                     </div>
                                     <div class="col-12">
-                                        <button type="submit" class="btn btn-primary">Apply Filters</button>
-                                        <a href="view_activity_logs.php" class="btn btn-light">Clear Filters</a>
+                                        <div class="btn-group" role="group">
+                                            <button type="submit" class="btn btn-primary">Apply Filters</button>
+                                            <a href="view_activity_logs.php" class="btn btn-light">Clear Filters</a>
+                                        </div>
                                     </div>
                                 </form>
                             </div>

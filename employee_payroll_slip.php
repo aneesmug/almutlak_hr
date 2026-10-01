@@ -262,12 +262,14 @@ $all_payrolls = $stmt->get_result();
                                     <p class="text-muted"><?= __('employee_id', 'Employee ID') ?>: <?= htmlspecialchars($emprow['emp_id']) ?></p>
                                 </div>
                                 <div class="col-sm-4 text-<?= $is_rtl ? 'left' : 'right' ?>">
-                                    <a href="profile.php" class="btn btn-sm btn-secondary">
-                                        <i class="fa fa-arrow-<?= $is_rtl ? 'right' : 'left' ?>"></i> <?= __('back', 'Back') ?>
-                                    </a>
-                                    <a href="generate_payroll_pdf.php?emp_id=<?= $emp_id ?>&month=<?= $month ?>&year=<?= $year ?>" class="btn btn-sm btn-info">
-                                        <i class="fa fa-download"></i> <?= __('download_pdf', 'Download PDF') ?>
-                                    </a>
+                                    <div class="btn-group" role="group">
+                                        <a href="profile.php" class="btn btn-sm btn-secondary">
+                                            <i class="fa fa-arrow-<?= $is_rtl ? 'right' : 'left' ?>"></i> <?= __('back', 'Back') ?>
+                                        </a>
+                                        <a href="generate_payroll_pdf.php?emp_id=<?= $emp_id ?>&month=<?= $month ?>&year=<?= $year ?>" class="btn btn-sm btn-info">
+                                            <i class="fa fa-download"></i> <?= __('download_pdf', 'Download PDF') ?>
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
 

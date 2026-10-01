@@ -216,8 +216,10 @@ function openSalaryIncrementApplyModal(empid, iqama, name, deptName, joiningDate
                 '<div class="alert alert-warning" style="padding:6px 10px;margin-bottom:6px;">' +
                 __('no_current_year_evaluation_hint', 'No current-year evaluation found for this employee. Please evaluate them first.') +
                 '</div>' +
-                '<button type="button" id="si_goto_evaluation_btn" class="btn btn-info btn-sm"><i class="fa fa-clipboard-check"></i> ' + __('go_to_evaluation_page', 'Go to Evaluation Page') + '</button> ' +
-                '<button type="button" id="si_recheck_evaluation_btn" class="btn btn-outline-secondary btn-sm"><i class="fa fa-rotate"></i> ' + __('recheck', 'Recheck') + '</button>'
+                '<div class="btn-group" role="group">' +
+                '<button type="button" id="si_goto_evaluation_btn" class="btn btn-info btn-sm"><i class="fa fa-clipboard-check"></i> ' + __('go_to_evaluation_page', 'Go to Evaluation Page') + '</button>' +
+                '<button type="button" id="si_recheck_evaluation_btn" class="btn btn-outline-secondary btn-sm"><i class="fa fa-rotate"></i> ' + __('recheck', 'Recheck') + '</button>' +
+                '</div>'
             );
         }
         updateSubmitState();

@@ -1336,25 +1336,27 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                                             <div class="hidden-print mt-4 mb-4">
                                                 <div class="text-right">
                                                     <!-- REMOVED: Generic submit button. Specific buttons are now in the conditional blocks -->
-                                                    <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
-                                                        <a href="add_line_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" class="btn btn-success btn-sm bbtn" title="Add field"><?=__('add_line')?> <i class="mdi mdi-database-plus"></i></a>
-                                                        <a href="javascript:void(0);" class="btn btn-warning waves-effect waves-light editReqAttr"
-                                                           data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
-                                                           data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
-                                                           data-remarks="<?= htmlspecialchars($remarks_get) ?>"
-                                                                              data-request_date="<?= $created_at_get ? htmlspecialchars(date('Y-m-d', strtotime($created_at_get))) : '' ?>"
-                                                           data-id="<?= htmlspecialchars($invnoget) ?>"><i class="fa fa-pencil m-r-5"></i> <?=__('edit_request_details')?></a>
-                                                    <?php endif; ?>
-                                                    <a href="./all_requests.php" class="btn btn-dark waves-effect waves-light"><i class="fa fa-angle-double-left"></i> <?=__('back_button')?></a>
-                                                    <a href="smt_print.php?id=<?= htmlspecialchars($invnoget) ?>" class="btn btn-primary waves-effect waves-light" target="_blank"><i class="fa fa-print m-r-5"></i> <?=__('print')?></a>
-                                                    <?php
-                                                        // Show Process Payment button only if:
-                                                        // 1. Request is Approved
-                                                        // 2. The logged-in user IS the assigned payer
-                                                        if ($show_process_payment_button) {
-                                                    ?>
-                                                        <button type="button" class="btn btn-danger waves-effect waves-light" id="processPaymentBtn"><i class="fa fa-money-bill-wave m-r-5"></i> <?=__('process_payment')?></button>
-                                                    <?php } ?>
+                                                    <div class="btn-group" role="group">
+                                                        <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
+                                                            <a href="add_line_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" class="btn btn-success btn-sm bbtn" title="Add field"><?=__('add_line')?> <i class="mdi mdi-database-plus"></i></a>
+                                                            <a href="javascript:void(0);" class="btn btn-warning waves-effect waves-light editReqAttr"
+                                                               data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
+                                                               data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
+                                                               data-remarks="<?= htmlspecialchars($remarks_get) ?>"
+                                                                                  data-request_date="<?= $created_at_get ? htmlspecialchars(date('Y-m-d', strtotime($created_at_get))) : '' ?>"
+                                                               data-id="<?= htmlspecialchars($invnoget) ?>"><i class="fa fa-pencil m-r-5"></i> <?=__('edit_request_details')?></a>
+                                                        <?php endif; ?>
+                                                        <a href="./all_requests.php" class="btn btn-dark waves-effect waves-light"><i class="fa fa-angle-double-left"></i> <?=__('back_button')?></a>
+                                                        <a href="smt_print.php?id=<?= htmlspecialchars($invnoget) ?>" class="btn btn-primary waves-effect waves-light" target="_blank"><i class="fa fa-print m-r-5"></i> <?=__('print')?></a>
+                                                        <?php
+                                                            // Show Process Payment button only if:
+                                                            // 1. Request is Approved
+                                                            // 2. The logged-in user IS the assigned payer
+                                                            if ($show_process_payment_button) {
+                                                        ?>
+                                                            <button type="button" class="btn btn-danger waves-effect waves-light" id="processPaymentBtn"><i class="fa fa-money-bill-wave m-r-5"></i> <?=__('process_payment')?></button>
+                                                        <?php } ?>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

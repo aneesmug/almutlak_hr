@@ -1330,54 +1330,56 @@ foreach ($employees as $employee) {
             <h3><i class="fas fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Checklist Report') ?></h3>
             <p class="mb-0"><?= __('payroll_checklist_subtitle', 'Detailed payroll calculation review for approvers') ?>: <?= htmlspecialchars($monthTitle) ?></p>
             <div class="toolbar">
-                <?php if (!$isFinanceOfficerChecklistUser): ?>
-                    <a href="all_payroll_approvals.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back_to_payroll_approvals', 'Back to Payroll Approvals') ?></a>
-                <?php else: ?>
-                    <a href="dashboard.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back', 'Back') ?></a>
-                <?php endif; ?>
-                <?php if ($requestInvNo !== ''): ?>
-                    <a href="payroll_status_history.php?inv_no=<?= urlencode($requestInvNo) ?>" target="_blank" class="btn btn-outline-light"><i class="fas fa-history"></i> <?= __('history') ?></a>
-                <?php endif; ?>
-                <?php if ($assignedScopeToggleUrl !== ''): ?>
-                    <a href="<?= htmlspecialchars($assignedScopeToggleUrl) ?>" class="btn <?= $assignedScopeOnly ? 'btn-warning' : 'btn-info' ?>">
-                        <i class="fas fa-filter"></i>
-                        <?= $assignedScopeOnly
-                            ? __('show_all_employees', 'Show All Employees')
-                            : __('show_my_assigned_companies_only', 'Show My Assigned Companies Only') ?>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canFinanceOfficerApproveHere): ?>
-                    <?php if ($financeOfficerAlreadyApproved): ?>
-                        <button type="button" class="btn btn-success" disabled>
-                            <i class="fas fa-check-circle"></i> <?= __('finance_officer_approved', 'Finance Officer Approved') ?>
-                        </button>
+                <div class="btn-group flex-wrap" role="group">
+                    <?php if (!$isFinanceOfficerChecklistUser): ?>
+                        <a href="all_payroll_approvals.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back_to_payroll_approvals', 'Back to Payroll Approvals') ?></a>
                     <?php else: ?>
-                        <button type="button" id="financeOfficerApproveBtn" class="btn btn-primary" onclick="approveFinanceOfficerVerification()" <?= $financeOfficerCanApproveNow ? '' : 'disabled' ?>>
-                            <i class="fas fa-user-check"></i> <?= __('approve_finance_verification', 'Approve Finance Verification') ?>
+                        <a href="dashboard.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back', 'Back') ?></a>
+                    <?php endif; ?>
+                    <?php if ($requestInvNo !== ''): ?>
+                        <a href="payroll_status_history.php?inv_no=<?= urlencode($requestInvNo) ?>" target="_blank" class="btn btn-outline-light"><i class="fas fa-history"></i> <?= __('history') ?></a>
+                    <?php endif; ?>
+                    <?php if ($assignedScopeToggleUrl !== ''): ?>
+                        <a href="<?= htmlspecialchars($assignedScopeToggleUrl) ?>" class="btn <?= $assignedScopeOnly ? 'btn-warning' : 'btn-info' ?>">
+                            <i class="fas fa-filter"></i>
+                            <?= $assignedScopeOnly
+                                ? __('show_all_employees', 'Show All Employees')
+                                : __('show_my_assigned_companies_only', 'Show My Assigned Companies Only') ?>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($canFinanceOfficerApproveHere): ?>
+                        <?php if ($financeOfficerAlreadyApproved): ?>
+                            <button type="button" class="btn btn-success" disabled>
+                                <i class="fas fa-check-circle"></i> <?= __('finance_officer_approved', 'Finance Officer Approved') ?>
+                            </button>
+                        <?php else: ?>
+                            <button type="button" id="financeOfficerApproveBtn" class="btn btn-primary" onclick="approveFinanceOfficerVerification()" <?= $financeOfficerCanApproveNow ? '' : 'disabled' ?>>
+                                <i class="fas fa-user-check"></i> <?= __('approve_finance_verification', 'Approve Finance Verification') ?>
+                            </button>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    <?php if ($requestInvNo !== ''): ?>
+                        <button type="button" id="feedbackFollowupBtn" class="btn btn-warning" onclick="notifyPayrollGeneratorFeedback()" style="display: <?= $showFeedbackFollowupButton ? 'inline-flex' : 'none' ?>; align-items:center; gap:6px;">
+                            <i class="fas fa-paper-plane"></i> <?= __('send_feedback_followup', 'Send Feedback Follow-up') ?>
+                            <span class="badge badge-light ml-1" id="feedbackFollowupCountBadge"><?= (int)$feedbackTotals['pending_followup_count'] ?></span>
                         </button>
                     <?php endif; ?>
-                <?php endif; ?>
-                <?php if ($requestInvNo !== ''): ?>
-                    <button type="button" id="feedbackFollowupBtn" class="btn btn-warning" onclick="notifyPayrollGeneratorFeedback()" style="display: <?= $showFeedbackFollowupButton ? 'inline-flex' : 'none' ?>; align-items:center; gap:6px;">
-                        <i class="fas fa-paper-plane"></i> <?= __('send_feedback_followup', 'Send Feedback Follow-up') ?>
-                        <span class="badge badge-light ml-1" id="feedbackFollowupCountBadge"><?= (int)$feedbackTotals['pending_followup_count'] ?></span>
-                    </button>
-                <?php endif; ?>
-                <?php if ($canUploadManagerPayrollExcel): ?>
-                    <button type="button" class="btn btn-info" onclick="openManagerPayrollUploadModal()">
-                        <i class="fas fa-file-upload"></i> <?= __('upload_payroll_excel', 'Upload Payroll Excel') ?>
-                    </button>
-                <?php endif; ?>
-                <?php if ($canReviewManagerUploadedPayrollExcel): ?>
-                    <button type="button" id="managerReviewImportBtn" class="btn btn-primary" onclick="reviewManagerUploadedPayrollExcel()" style="display:inline-flex; align-items:center; gap:6px;">
-                        <i class="fas fa-file-import"></i> <?= __('review_import_manager_file', 'Review Manager File & Import') ?>
-                        <span class="badge badge-light ml-1" id="managerPendingReviewCountBadge" style="display:none;">0</span>
-                    </button>
-                <?php endif; ?>
-                <?php if ($canExportChecklistExcel): ?>
-                    <button type="button" class="btn btn-success" onclick="exportChecklistExcel()"><i class="fas fa-file-excel"></i> <?= __('export_excel', 'Export Excel') ?></button>
-                <?php endif; ?>
-                <button type="button" class="btn btn-outline-light" onclick="printFullChecklistTable()"><i class="fas fa-print"></i> <?= __('print', 'Print') ?></button>
+                    <?php if ($canUploadManagerPayrollExcel): ?>
+                        <button type="button" class="btn btn-info" onclick="openManagerPayrollUploadModal()">
+                            <i class="fas fa-file-upload"></i> <?= __('upload_payroll_excel', 'Upload Payroll Excel') ?>
+                        </button>
+                    <?php endif; ?>
+                    <?php if ($canReviewManagerUploadedPayrollExcel): ?>
+                        <button type="button" id="managerReviewImportBtn" class="btn btn-primary" onclick="reviewManagerUploadedPayrollExcel()" style="display:inline-flex; align-items:center; gap:6px;">
+                            <i class="fas fa-file-import"></i> <?= __('review_import_manager_file', 'Review Manager File & Import') ?>
+                            <span class="badge badge-light ml-1" id="managerPendingReviewCountBadge" style="display:none;">0</span>
+                        </button>
+                    <?php endif; ?>
+                    <?php if ($canExportChecklistExcel): ?>
+                        <button type="button" class="btn btn-success" onclick="exportChecklistExcel()"><i class="fas fa-file-excel"></i> <?= __('export_excel', 'Export Excel') ?></button>
+                    <?php endif; ?>
+                    <button type="button" class="btn btn-outline-light" onclick="printFullChecklistTable()"><i class="fas fa-print"></i> <?= __('print', 'Print') ?></button>
+                </div>
             </div>
         </div>
     </div>

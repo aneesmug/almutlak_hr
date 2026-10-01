@@ -200,8 +200,10 @@ if (mysqli_num_rows($query) == 1) {
                                 </div>
                                 <div class="di-cols-tools">
                                     <input type="text" id="colSearch" class="form-control form-control-sm" placeholder="Search columns...">
-                                    <button type="button" class="btn btn-sm btn-light" id="colAll">Select all</button>
-                                    <button type="button" class="btn btn-sm btn-light" id="colNone">Clear</button>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-light" id="colAll">Select all</button>
+                                        <button type="button" class="btn btn-sm btn-light" id="colNone">Clear</button>
+                                    </div>
                                 </div>
                                 <div class="di-cols-wrap">
                                     <table class="table table-sm mb-0" id="colTable">
@@ -256,8 +258,10 @@ if (mysqli_num_rows($query) == 1) {
                     <div class="di-actions">
                         <span class="di-hint" id="actionSummary"></span>
                         <span>
-                            <button class="btn btn-outline-primary" id="dryBtn"><i class="fa fa-circle-check"></i> Dry run</button>
-                            <button class="btn btn-success ml-1" id="importBtn"><i class="fa fa-database"></i> <span id="importBtnLbl">Update records</span></button>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-primary" id="dryBtn"><i class="fa fa-circle-check"></i> Dry run</button>
+                                <button class="btn btn-success" id="importBtn"><i class="fa fa-database"></i> <span id="importBtnLbl">Update records</span></button>
+                            </div>
                         </span>
                     </div>
                 </div>

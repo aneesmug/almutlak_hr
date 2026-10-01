@@ -536,8 +536,10 @@ WHERE `section`.`id` ='" . $_GET['id'] . "' GROUP BY `section`.`id`");
 <!---->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-danger waves-effect" data-dismiss="modal"><?=__('close')?></button>
-                <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> <?=__('upload_button')?></button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-danger waves-effect" data-dismiss="modal"><?=__('close')?></button>
+                    <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> <?=__('upload_button')?></button>
+                </div>
             </div>
         </div><!-- /.modal-content -->
     </div><!-- /.modal-dialog -->

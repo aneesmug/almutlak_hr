@@ -315,9 +315,11 @@ $u = "UPDATE `emp_vacation` SET `name`='".$name_emp_up."', `emp_id`='".$emp_id_u
 </div>
 			</div>
 			<div class="modal-footer">
-				<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
-				<a href="./includes/terminat_emp.php?id=<?=$id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
-				<button type="button" id="terminat_emp" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Terminat</button>			
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-dark waves-effect" data-dismiss="modal">Close</button>
+					<a href="./includes/terminat_emp.php?id=<?=$id_get ?>&note=expired" class="btn btn-light waves-effect waves-light"><i class="mdi mdi-account-star"></i> Expired</a>
+					<button type="button" id="terminat_emp" class="btn btn-danger waves-effect waves-light"><i class="mdi mdi-account-off"></i> Terminat</button>			
+				</div>
 				
 			</div>
 		</div><!-- /.modal-content -->

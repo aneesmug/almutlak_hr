@@ -592,8 +592,10 @@ if ($vacation['fly_type'] === 'annual') {
                 </div>
             <?php endif; ?>
             <div class="text-center mt-4">
-                <a href="all_applied_vac.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_vacations') ?></a>
-                <a href="vacation_report_details.php?id=<?= (int)$vacation['id'] ?>&emp_id=<?= urlencode($vacation['emp_id']) ?>" target="_blank" class="btn btn-back ml-2"><i class="fas fa-file-pdf"></i> <?= __('view_report') ?></a>
+                <div class="btn-group" role="group">
+                    <a href="all_applied_vac.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_vacations') ?></a>
+                    <a href="vacation_report_details.php?id=<?= (int)$vacation['id'] ?>&emp_id=<?= urlencode($vacation['emp_id']) ?>" target="_blank" class="btn btn-back"><i class="fas fa-file-pdf"></i> <?= __('view_report') ?></a>
+                </div>
             </div>
         </div>
     </div>

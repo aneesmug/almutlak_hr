@@ -12188,18 +12188,20 @@ function renderAttachmentsModal(attachments, title) {
                     ${__('document')} ${index+1} ${__('of')} ${attachments.length}
                 </div>
                 <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-                    <button type="button" id="att-back-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
-                        <i class="fa fa-arrow-left"></i> Back to Grid
-                    </button>
-                    <button type="button" id="att-prev-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
-                        <i class="fa fa-chevron-left"></i> Previous
-                    </button>
-                    <button type="button" id="att-next-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
-                        Next <i class="fa fa-chevron-right"></i>
-                    </button>
-                    <button type="button" id="att-open-fullscreen-btn" class="btn btn-sm btn-info" style="padding:8px 16px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
-                        <i class="fa fa-expand"></i> Fullscreen
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button type="button" id="att-back-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                            <i class="fa fa-arrow-left"></i> Back to Grid
+                        </button>
+                        <button type="button" id="att-prev-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                            <i class="fa fa-chevron-left"></i> Previous
+                        </button>
+                        <button type="button" id="att-next-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                            Next <i class="fa fa-chevron-right"></i>
+                        </button>
+                        <button type="button" id="att-open-fullscreen-btn" class="btn btn-sm btn-info" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                            <i class="fa fa-expand"></i> Fullscreen
+                        </button>
+                    </div>
                 </div>
             </div>
         `;
@@ -12307,18 +12309,22 @@ function viewFileInPopup(fileUrl, fileName) {
                     <span style="font-weight:bold;min-width:80px;text-align:center;font-size:14px;">
                         <span id="zoom-level-${zoomKey}">100</span>%
                     </span>
-                    <button type="button" class="btn btn-sm btn-info" id="zoom-in-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
-                        <i class="fa fa-search-plus"></i> Zoom In
-                    </button>
-                    <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#ffc107;color:black;border:none;">
-                        <i class="fa fa-undo"></i> Reset
-                    </button>
-                    <button type="button" class="btn btn-sm btn-success" id="rotate-ltr-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#28a745;color:white;border:none;">
-                        <i class="fa fa-rotate-left"></i> Rotate LTR
-                    </button>
-                    <button type="button" class="btn btn-sm btn-success" id="rotate-rtl-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#28a745;color:white;border:none;">
-                        <i class="fa fa-rotate-right"></i> Rotate RTL
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-info" id="zoom-in-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                            <i class="fa fa-search-plus"></i> Zoom In
+                        </button>
+                        <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#ffc107;color:black;border:none;">
+                            <i class="fa fa-undo"></i> Reset
+                        </button>
+                    </div>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-success" id="rotate-ltr-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#28a745;color:white;border:none;">
+                            <i class="fa fa-rotate-left"></i> Rotate LTR
+                        </button>
+                        <button type="button" class="btn btn-sm btn-success" id="rotate-rtl-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#28a745;color:white;border:none;">
+                            <i class="fa fa-rotate-right"></i> Rotate RTL
+                        </button>
+                    </div>
                 </div>
                 <div id="img-container-${zoomKey}" style="width:100%;max-height:60vh;overflow:auto;display:flex;justify-content:center;align-items:flex-start;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;cursor:grab;">
                     <img id="zoom-img-${zoomKey}" src="${fileUrl}" alt="${imageName}" style="border-radius:8px;transition:transform 0.2s ease;transform:scale(1);user-select:none;max-width:100%;max-height:100%;object-fit:contain;">
@@ -12606,15 +12612,17 @@ function displayPdfPopup(pdfUrl, fileName) {
                 <button type="button" class="btn btn-sm btn-secondary" id="next-btn-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
                     Next <i class="fa fa-chevron-right"></i>
                 </button>
-                <button type="button" class="btn btn-sm btn-info" id="zoom-out-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
-                    <i class="fa fa-search-minus"></i> Zoom Out
-                </button>
-                <button type="button" class="btn btn-sm btn-info" id="zoom-in-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
-                    <i class="fa fa-search-plus"></i> Zoom In
-                </button>
-                <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#ffc107;color:black;border:none;">
-                    <i class="fa fa-undo"></i> Reset
-                </button>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-sm btn-info" id="zoom-out-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                        <i class="fa fa-search-minus"></i> Zoom Out
+                    </button>
+                    <button type="button" class="btn btn-sm btn-info" id="zoom-in-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                        <i class="fa fa-search-plus"></i> Zoom In
+                    </button>
+                    <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#ffc107;color:black;border:none;">
+                        <i class="fa fa-undo"></i> Reset
+                    </button>
+                </div>
             </div>
             <div style="width:100%;display:flex;justify-content:center;max-height:60vh;overflow-y:auto;overflow-x:auto;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;padding:10px;">
                 <canvas id="pdf-viewer-canvas-${viewerKey}" style="display:block;margin:auto;"></canvas>

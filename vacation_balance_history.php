@@ -250,12 +250,14 @@ mysqli_stmt_close($stats_stmt);
                     </div>
                 </div>
                 <div class="filter-buttons">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Filter
-                    </button>
-                    <a href="vacation_balance_history.php" class="btn btn-secondary">
-                        <i class="fas fa-redo"></i> Reset
-                    </a>
+                    <div class="btn-group" role="group">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Filter
+                        </button>
+                        <a href="vacation_balance_history.php" class="btn btn-secondary">
+                            <i class="fas fa-redo"></i> Reset
+                        </a>
+                    </div>
                     <label style="display: flex; align-items: center; gap: 8px; margin-left: auto; padding: 10px 0;">
                         <input type="checkbox" name="show_errors" value="1" <?php echo $show_errors ? 'checked' : ''; ?>> 
                         <span style="font-size: 13px;">Show Errors Only</span>

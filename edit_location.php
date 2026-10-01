@@ -403,8 +403,10 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 <!---->
 			</div>
 			<div class="modal-footer">
-				<button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
-				<button type="button" class="btn btn-success upload_result_in_img waves-effect waves-light"><i class="mdi mdi-backup-restore"></i> Upload Image</button>
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
+					<button type="button" class="btn btn-success upload_result_in_img waves-effect waves-light"><i class="mdi mdi-backup-restore"></i> Upload Image</button>
+				</div>
 			</div>
 		</div><!-- /.modal-content -->
 	</div><!-- /.modal-dialog -->
@@ -443,8 +445,10 @@ if($emp_avatar_get == "./assets/emp_pics/defult.png"){
 <!---->
 			</div>
 			<div class="modal-footer">
-				<button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
-				<button type="button" class="btn btn-success upload_result_out_img waves-effect waves-light"><i class="mdi mdi-backup-restore"></i> Upload Image</button>
+				<div class="btn-group" role="group">
+					<button type="button" class="btn btn-danger waves-effect" data-dismiss="modal">Close</button>
+					<button type="button" class="btn btn-success upload_result_out_img waves-effect waves-light"><i class="mdi mdi-backup-restore"></i> Upload Image</button>
+				</div>
 			</div>
 		</div><!-- /.modal-content -->
 	</div><!-- /.modal-dialog -->

@@ -130,12 +130,14 @@ if (isset($_GET['print_return_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_G
         </div>
     </div>
     <div class="btn-container no-print">
-        <button onclick="window.print()" class="btn btn-primary btn-lg">
-            <i class="fa fa-print"></i> Print Report
-        </button>
-        <button onclick="window.close()" class="btn btn-secondary btn-lg ms-2">
-            <i class="fa fa-times"></i> Close
-        </button>
+        <div class="btn-group" role="group">
+            <button onclick="window.print()" class="btn btn-primary btn-lg">
+                <i class="fa fa-print"></i> Print Report
+            </button>
+            <button onclick="window.close()" class="btn btn-secondary btn-lg">
+                <i class="fa fa-times"></i> Close
+            </button>
+        </div>
     </div>
 </body>
 </html>

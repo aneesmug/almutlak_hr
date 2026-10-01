@@ -1140,10 +1140,12 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
                                     </div>
 
                                     <div class="d-flex flex-wrap gap-2">
-                                        <button type="submit" class="btn btn-primary waves-effect waves-light mr-2">
-                                            <i class="mdi mdi-database-search"></i> Generate API Link
-                                        </button>
-                                        <a href="table_json_api.php" class="btn btn-outline-secondary waves-effect">Reset</a>
+                                        <div class="btn-group" role="group">
+                                            <button type="submit" class="btn btn-primary waves-effect waves-light">
+                                                <i class="mdi mdi-database-search"></i> Generate API Link
+                                            </button>
+                                            <a href="table_json_api.php" class="btn btn-outline-secondary waves-effect">Reset</a>
+                                        </div>
                                     </div>
                                 </form>
 
@@ -1175,12 +1177,14 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
                                             <label class="font-weight-bold">Excel CSV URL (best for direct columns)</label>
                                             <div id="csvUrlBox" class="api-url-box"><?= htmlspecialchars($generatedCsvUrl) ?></div>
                                             <div class="mt-2 mb-3">
-                                                <button type="button" class="btn btn-success btn-sm mr-2" onclick="copyTextFromElement('csvUrlBox')">
-                                                    <i class="mdi mdi-content-copy"></i> Copy CSV Link
-                                                </button>
-                                                <a href="<?= htmlspecialchars($generatedCsvUrl) ?>" target="_blank" class="btn btn-info btn-sm mr-2">
-                                                    <i class="mdi mdi-open-in-new"></i> Open CSV
-                                                </a>
+                                                <div class="btn-group" role="group">
+                                                    <button type="button" class="btn btn-success btn-sm" onclick="copyTextFromElement('csvUrlBox')">
+                                                        <i class="mdi mdi-content-copy"></i> Copy CSV Link
+                                                    </button>
+                                                    <a href="<?= htmlspecialchars($generatedCsvUrl) ?>" target="_blank" class="btn btn-info btn-sm">
+                                                        <i class="mdi mdi-open-in-new"></i> Open CSV
+                                                    </a>
+                                                </div>
                                             </div>
 
                                             <label class="font-weight-bold">Power Query Formula for JSON → Table</label>
@@ -1195,12 +1199,14 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
                                         <label class="font-weight-bold">JSON API URL</label>
                                         <div id="apiUrlBox" class="api-url-box"><?= htmlspecialchars($generatedApiUrl) ?></div>
                                         <div class="mt-2">
-                                            <button type="button" class="btn btn-success btn-sm mr-2" onclick="copyTextFromElement('apiUrlBox')">
-                                                <i class="mdi mdi-content-copy"></i> Copy JSON Link
-                                            </button>
-                                            <a href="<?= htmlspecialchars($generatedApiUrl) ?>" target="_blank" class="btn btn-info btn-sm mr-2">
-                                                <i class="mdi mdi-open-in-new"></i> Open JSON
-                                            </a>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-success btn-sm" onclick="copyTextFromElement('apiUrlBox')">
+                                                    <i class="mdi mdi-content-copy"></i> Copy JSON Link
+                                                </button>
+                                                <a href="<?= htmlspecialchars($generatedApiUrl) ?>" target="_blank" class="btn btn-info btn-sm">
+                                                    <i class="mdi mdi-open-in-new"></i> Open JSON
+                                                </a>
+                                            </div>
                                         </div>
 
                                         <?php if ($excelMode && $showSslNote): ?>

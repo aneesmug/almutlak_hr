@@ -259,8 +259,10 @@ if (mysqli_num_rows($query) == 1) {
                                 <?php if ($can_take_action): ?>
                                     <hr>
                                     <div class="d-flex justify-content-end" style="gap: .5rem;">
-                                        <button class="btn btn-danger" onclick="rejectBusinessTrip('<?= htmlspecialchars((string)$request['request_inv_no'], ENT_QUOTES); ?>')"><i class="fa fa-times"></i> <?= __('reject') ?></button>
-                                        <button class="btn btn-success" onclick="approveBusinessTrip('<?= htmlspecialchars((string)$request['request_inv_no'], ENT_QUOTES); ?>')"><i class="fa fa-check"></i> <?= __('approve') ?></button>
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-danger" onclick="rejectBusinessTrip('<?= htmlspecialchars((string)$request['request_inv_no'], ENT_QUOTES); ?>')"><i class="fa fa-times"></i> <?= __('reject') ?></button>
+                                            <button class="btn btn-success" onclick="approveBusinessTrip('<?= htmlspecialchars((string)$request['request_inv_no'], ENT_QUOTES); ?>')"><i class="fa fa-check"></i> <?= __('approve') ?></button>
+                                        </div>
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -481,8 +483,10 @@ function rejectBusinessTrip(tripId) {
                                 <?php if ($can_take_action): ?>
                                     <hr>
                                     <div class="d-flex justify-content-end" style="gap: .5rem;">
-                                        <button class="btn btn-danger" onclick="rejectBusinessTrip(<?= (int)$request['id'] ?>)"><i class="fa fa-times"></i> <?= __('reject') ?></button>
-                                        <button class="btn btn-success" onclick="approveBusinessTrip(<?= (int)$request['id'] ?>)"><i class="fa fa-check"></i> <?= __('approve') ?></button>
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-danger" onclick="rejectBusinessTrip(<?= (int)$request['id'] ?>)"><i class="fa fa-times"></i> <?= __('reject') ?></button>
+                                            <button class="btn btn-success" onclick="approveBusinessTrip(<?= (int)$request['id'] ?>)"><i class="fa fa-check"></i> <?= __('approve') ?></button>
+                                        </div>
                                     </div>
                                 <?php endif; ?>
                             </div>

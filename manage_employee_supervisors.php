@@ -355,12 +355,14 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
                                     </div>
 
                                     <div class="mt-4">
-                                        <button type="button" class="btn btn-info" id="change-supervisor-btn">
-                                            <i class="fa fa-edit"></i> <?= __('change_supervisor') ?>
-                                        </button>
-                                        <button type="button" class="btn btn-secondary" id="clear-selection-btn">
-                                            <i class="fa fa-times"></i> <?= __('clear') ?>
-                                        </button>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-info" id="change-supervisor-btn">
+                                                <i class="fa fa-edit"></i> <?= __('change_supervisor') ?>
+                                            </button>
+                                            <button type="button" class="btn btn-secondary" id="clear-selection-btn">
+                                                <i class="fa fa-times"></i> <?= __('clear') ?>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
