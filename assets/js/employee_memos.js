@@ -467,7 +467,8 @@
         });
 
         // Breadcrumb pills for a dropdown option: Company > City > Location (current one highlighted).
-        function optionTrail(o, fallback) {
+        // full: dropdown list row - also shows the letter sentence under a short name.
+        function optionTrail(o, fallback, full) {
             if (!o) return fallback;
             var segs = (o.path || []).map(function (p) {
                 var parts = p.en.split(', ');
@@ -477,7 +478,10 @@
             var name = o.name_en || o.en;
             var nameAr = o.name_ar || o.ar;
             segs.push('<span class="memo-crumb memo-crumb-current">' + esc(name) + (nameAr && nameAr !== name ? ' <span class="memo-crumb-ar">' + esc(nameAr) + '</span>' : '') + '</span>');
-            return $('<span class="memo-trail">' + segs.join('<i class="fa fa-angle-right memo-crumb-sep"></i>') + '</span>');
+            var desc = full && o.name_en && o.name_en !== o.en
+                ? '<div class="memo-option-desc">' + esc(o.en) + (o.ar && o.ar !== o.en ? '<div dir="rtl">' + esc(o.ar) + '</div>' : '') + '</div>'
+                : '';
+            return $('<span class="memo-trail">' + segs.join('<i class="fa fa-angle-right memo-crumb-sep"></i>') + '</span>' + desc);
         }
 
         function fieldInput(field, lang, value) {
@@ -546,7 +550,7 @@
                 opts.forEach(function (o) { byId[String(o.id)] = o; });
                 $(this).select2({
                     width: '100%', allowClear: true, placeholder: t('select', 'Select...'),
-                    templateResult: function (item) { return optionTrail(byId[String(item.id)], item.text); },
+                    templateResult: function (item) { return optionTrail(byId[String(item.id)], item.text, true); },
                     templateSelection: function (item) { return optionTrail(byId[String(item.id)], item.text); },
                     // Search also matches the company / city / parent names in the trail.
                     matcher: function (params, item) {

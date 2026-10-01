@@ -54,7 +54,7 @@ if (!function_exists('memo_user_can')) {
 
 // Bump when memo_default_templates() changes, so untouched built-ins get refreshed.
 if (!defined('MEMO_BUILTIN_VERSION')) {
-    define('MEMO_BUILTIN_VERSION', 5);
+    define('MEMO_BUILTIN_VERSION', 6);
 }
 
 /**
@@ -135,15 +135,25 @@ if (!function_exists('memo_lookup_sources')) {
             // Picked as Company > City > Location (three linked dropdowns), see memo_location_tree().
             'locations' => ['label' => 'Locations / branches (Company > City > Location)', 'sql' => "SELECT id, name_en AS en, name_ar AS ar FROM locations ORDER BY name_en"],
             'companies' => ['label' => 'Companies', 'sql' => "SELECT comp_id AS id, comp_name AS en, comp_name_ar AS ar FROM companies ORDER BY comp_name"],
+            // Same reasons as End of Service creation (emp_end_of_service.php), read from
+            // data/eos_reasons.json by memo_eos_reason_options() - not SQL.
+            'eos_reasons' => ['label' => 'End of service reasons (same list as EOS)', 'loader' => 'memo_eos_reason_options'],
+            // Fixed list: result sentence of the Contract Renewal memo ("your employment contract ...").
+            'contract_renewal_outcomes' => ['label' => 'Contract renewal results (renewed / not renewed)', 'sql' => "SELECT 'renewed' AS id, 'Renewed' AS name_en, 'تجديد العقد' AS name_ar,
+                    'has been renewed. The renewal takes effect from the date below, on the same terms unless stated otherwise' AS en,
+                    'قد تم تجديده، ويسري التجديد اعتباراً من التاريخ المذكور أدناه بنفس الشروط ما لم يذكر خلاف ذلك' AS ar
+                UNION ALL SELECT 'not_renewed', 'Not renewed - contract ends', 'عدم التجديد - انتهاء العقد',
+                    'will not be renewed and will end on the date below. Your end of service entitlements will be settled as per the Saudi Labor Law',
+                    'لن يتم تجديده وسينتهي في التاريخ المذكور أدناه، وستتم تسوية مستحقات نهاية الخدمة وفقاً لنظام العمل السعودي'"],
             // Fixed list (no table): the result sentence of the Probation Period Result memo,
             // read after "you have ..." / "نفيدكم بأنكم ...".
-            'probation_outcomes' => ['label' => 'Probation results (passed / extended / not passed)', 'sql' => "SELECT 'passed' AS id,
+            'probation_outcomes' => ['label' => 'Probation results (passed / extended / not passed)', 'sql' => "SELECT 'passed' AS id, 'Passed - employment confirmed' AS name_en, 'اجتاز - تثبيت في العمل' AS name_ar,
                     'successfully completed your probation period. We are pleased to confirm your employment with the company' AS en,
                     'أتممتم فترة التجربة بنجاح، ويسرنا تثبيتكم في العمل لدى الشركة' AS ar
-                UNION ALL SELECT 'extended',
+                UNION ALL SELECT 'extended', 'Probation extended', 'تمديد فترة التجربة',
                     'not yet fully met the requirements of the probation period. In accordance with Article 53 of the Saudi Labor Law, and subject to your written agreement, your probation period is extended until the date below',
                     'لم تستوفوا بعد متطلبات فترة التجربة بشكل كامل، ووفقاً للمادة (53) من نظام العمل السعودي وبموافقتكم الكتابية، تم تمديد فترة التجربة حتى التاريخ المذكور أدناه'
-                UNION ALL SELECT 'not_passed',
+                UNION ALL SELECT 'not_passed', 'Not passed - contract ends', 'لم يجتز - إنهاء العقد',
                     'not successfully completed your probation period. In accordance with Article 53 of the Saudi Labor Law, your employment contract will end on the date below',
                     'لم تجتازوا فترة التجربة بنجاح، ووفقاً للمادة (53) من نظام العمل السعودي سينتهي عقد عملكم في التاريخ المذكور أدناه'"],
         ];
@@ -155,6 +165,9 @@ if (!function_exists('memo_lookup_options')) {
         $sources = memo_lookup_sources();
         if (!isset($sources[$source])) {
             return [];
+        }
+        if (!empty($sources[$source]['loader'])) {
+            return call_user_func($sources[$source]['loader']);
         }
         $out = [];
         $res = $conDB->query($sources[$source]['sql']);
@@ -172,11 +185,40 @@ if (!function_exists('memo_lookup_options')) {
                 }
             }
             $opt = ['id' => (string) $r['id'], 'en' => $en, 'ar' => $ar, 'path' => $path];
+            // Optional short name for the dropdown when en/ar is a long sentence for the letter.
+            if (!empty($r['name_en'])) {
+                $opt['name_en'] = trim((string) $r['name_en']);
+                $opt['name_ar'] = trim((string) ($r['name_ar'] ?? '')) ?: $opt['name_en'];
+            }
             // Text that goes into the memo: add the parent (e.g. city) when set, so
             // "Filters, Jeddah" is not confused with "Filters, Riyadh".
             $out[] = $opt;
         }
         return $out;
+    }
+}
+
+/**
+ * End of service reasons from data/eos_reasons.json - the file End of Service creation
+ * uses (emp_end_of_service.php). The file lists each reason once per contract type, so
+ * they are merged by reason code.
+ */
+if (!function_exists('memo_eos_reason_options')) {
+    function memo_eos_reason_options() {
+        $path = __DIR__ . '/../data/eos_reasons.json';
+        $json = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
+        $list = $json['EndOfServiceRewardLookUpRs']['Body']['EndOfServiceRewardLookUp']['ContractEndReason'] ?? [];
+        $out = [];
+        foreach ((array) $list as $r) {
+            $code = (string) ($r['ContractEndReasonCode'] ?? '');
+            $en = trim(preg_replace('/\s+/', ' ', (string) ($r['EnDescription'] ?? '')));
+            if ($code === '' || $en === '' || isset($out[$code])) {
+                continue;
+            }
+            $out[$code] = ['id' => $code, 'en' => $en, 'ar' => trim((string) ($r['ArDescription'] ?? '')) ?: $en, 'path' => []];
+        }
+        ksort($out, SORT_NUMERIC);
+        return array_values($out);
     }
 }
 
@@ -458,7 +500,7 @@ if (!function_exists('memo_placeholder_list')) {
             'employee_name' => 'Employee name', 'emp_id' => 'Employee ID', 'iqama' => 'Iqama / ID No.',
             'job_title' => 'Job title', 'department' => 'Department', 'company' => 'Company',
             'nationality' => 'Nationality', 'location' => 'Location', 'joining_date' => 'Joining date',
-            'probation_period' => 'Probation period', 'probation_end_date' => 'Probation end date',
+            'probation_period' => 'Probation period', 'probation_end_date' => 'Probation end date', 'contract_end_date' => 'Contract end date',
             'basic_salary' => 'Basic salary', 'total_salary' => 'Total salary', 'salary_table' => 'Salary breakdown table',
             'today' => 'Today\'s date', 'reference_no' => 'Reference No.', 'sender_name' => 'Sender (you)',
             // Built from the template's own number fields whose key starts with sal_ (job offer).
@@ -607,9 +649,13 @@ if (!function_exists('memo_default_templates')) {
         $t['termination_notice'] = [
             'label' => 'Termination Notice', 'label_ar' => 'إشعار إنهاء خدمة', 'icon' => 'fa-user-xmark',
             'subject' => 'Termination Notice - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'إشعار إنهاء خدمة - {{employee_name}}',
-            'fields' => [$f('termination_date', 'Termination date', 'تاريخ إنهاء الخدمة', 'date'), $f('reason', 'Reason / Labor Law article', 'السبب / مادة نظام العمل', 'textarea', true)],
-            'body' => $head . $dear . '<p>We regret to inform you that your employment with {{company}} will be terminated effective <strong>{{f:termination_date}}</strong> for the following reason:</p><p>{{f:reason}}</p><p>Please return all company assets and complete the clearance process. Your final settlement will be processed as per the Saudi Labor Law.</p>' . $sign,
-            'body_ar' => $headAr . $dearAr . '<p>نأسف لإبلاغكم بأنه سيتم إنهاء خدمتكم لدى {{company}} اعتباراً من <strong>{{f:termination_date}}</strong> للسبب التالي:</p><p>{{f:reason}}</p><p>نرجو تسليم جميع عهد الشركة وإتمام إجراءات إخلاء الطرف، وستتم تسوية مستحقاتكم النهائية وفقاً لنظام العمل السعودي.</p>' . $signAr,
+            'fields' => [
+                $f('termination_date', 'Termination date', 'تاريخ إنهاء الخدمة', 'date'),
+                $sel('reason', 'Reason (End of Service list)', 'السبب (قائمة نهاية الخدمة)', 'eos_reasons'),
+                $f('details', 'Details', 'التفاصيل', 'textarea', true, false),
+            ],
+            'body' => $head . $dear . '<p>We regret to inform you that your employment with {{company}} will be terminated effective <strong>{{f:termination_date}}</strong> for the following reason:</p><p><strong>{{f:reason}}</strong></p><p>{{f:details}}</p><p>Please return all company assets and complete the clearance process. Your final settlement will be processed as per the Saudi Labor Law.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>نأسف لإبلاغكم بأنه سيتم إنهاء خدمتكم لدى {{company}} اعتباراً من <strong>{{f:termination_date}}</strong> للسبب التالي:</p><p><strong>{{f:reason}}</strong></p><p>{{f:details}}</p><p>نرجو تسليم جميع عهد الشركة وإتمام إجراءات إخلاء الطرف، وستتم تسوية مستحقاتكم النهائية وفقاً لنظام العمل السعودي.</p>' . $signAr,
         ];
         $t['final_settlement'] = [
             'label' => 'Final Settlement Document', 'label_ar' => 'مخالصة نهائية', 'icon' => 'fa-file-invoice-dollar',
@@ -731,6 +777,78 @@ if (!function_exists('memo_default_templates')) {
             'body_ar' => $headAr . $dearAr . '<p>بالإشارة إلى فترة التجربة الخاصة بكم ومدتها <strong>{{probation_period}}</strong>، والتي بدأت في <strong>{{joining_date}}</strong> وتنتهي في <strong>{{probation_end_date}}</strong>، وبناءً على تقييم أدائكم خلال هذه الفترة، نفيدكم بأنكم {{f:outcome}}.</p>'
                 . '<p><strong>تاريخ السريان:</strong> {{f:effective_date}}</p><p>{{f:remarks}}</p><p>لأي استفسار يرجى التواصل مع إدارة الموارد البشرية.</p>' . $signAr,
         ];
+        $t['contract_renewal'] = [
+            'label' => 'Contract Renewal / Non-Renewal', 'label_ar' => 'تجديد / عدم تجديد العقد', 'icon' => 'fa-file-contract',
+            'subject' => 'Employment Contract - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'عقد العمل - {{employee_name}}',
+            'fields' => [
+                $sel('outcome', 'Result', 'النتيجة', 'contract_renewal_outcomes'),
+                $f('effective_date', 'Effective date (renewal start / contract end)', 'تاريخ السريان (بداية التجديد / نهاية العقد)', 'date'),
+                $f('new_period', 'New contract period (if renewed)', 'مدة العقد الجديدة (عند التجديد)', 'text', true, false),
+                $f('remarks', 'Remarks', 'ملاحظات', 'textarea', true, false),
+            ],
+            'body' => $head . $dear . '<p>With reference to your employment contract ending on <strong>{{contract_end_date}}</strong>, we would like to inform you that your employment contract {{f:outcome}}.</p>'
+                . '<p><strong>Effective date:</strong> {{f:effective_date}}<br><strong>New contract period:</strong> {{f:new_period}}</p><p>{{f:remarks}}</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>بالإشارة إلى عقد عملكم المنتهي في <strong>{{contract_end_date}}</strong>، نفيدكم بأن عقد عملكم {{f:outcome}}.</p>'
+                . '<p><strong>تاريخ السريان:</strong> {{f:effective_date}}<br><strong>مدة العقد الجديدة:</strong> {{f:new_period}}</p><p>{{f:remarks}}</p>' . $signAr,
+        ];
+        $t['show_cause'] = [
+            'label' => 'Request for Explanation', 'label_ar' => 'طلب إفادة / توضيح', 'icon' => 'fa-circle-question',
+            'subject' => 'Request for Explanation - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'طلب إفادة - {{employee_name}}',
+            'fields' => [
+                $f('incident', 'Incident / observation', 'الواقعة / الملاحظة', 'textarea', true),
+                $f('incident_date', 'Incident date', 'تاريخ الواقعة', 'date'),
+                $f('reply_by', 'Reply by', 'موعد تقديم الإفادة', 'date'),
+            ],
+            'body' => $head . $dear . '<p>It has been reported that on <strong>{{f:incident_date}}</strong> the following took place:</p><p>{{f:incident}}</p>'
+                . '<p>Before any decision is taken, you are requested to submit your written explanation to the HR Department no later than <strong>{{f:reply_by}}</strong>. If no reply is received by that date, the matter will be decided based on the information available.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>أفيد بأنه بتاريخ <strong>{{f:incident_date}}</strong> حدث ما يلي:</p><p>{{f:incident}}</p>'
+                . '<p>وقبل اتخاذ أي قرار، نرجو تقديم إفادتكم الكتابية إلى إدارة الموارد البشرية في موعد أقصاه <strong>{{f:reply_by}}</strong>، وفي حال عدم ورود الإفادة في الموعد المحدد سيتم البت في الموضوع بناءً على المعلومات المتوفرة.</p>' . $signAr,
+        ];
+        $t['absence_notice'] = [
+            'label' => 'Absence Notice', 'label_ar' => 'إشعار غياب', 'icon' => 'fa-calendar-xmark',
+            'subject' => 'Absence Notice - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'إشعار غياب - {{employee_name}}',
+            'fields' => [
+                $f('absence_dates', 'Absence date(s) (e.g. 05/10/2026 - 08/10/2026)', 'تاريخ / تواريخ الغياب', 'text'),
+                $f('absence_days', 'Number of days', 'عدد الأيام', 'text'),
+                $f('remarks', 'Remarks', 'ملاحظات', 'textarea', true, false),
+            ],
+            'body' => $head . $dear . '<p>Our records show that you were absent from work without prior approval or an accepted excuse on <strong>{{f:absence_dates}}</strong> (<strong>{{f:absence_days}}</strong> day(s)).</p>'
+                . '<p>{{f:remarks}}</p><p>Please submit any valid justification to the HR Department within 3 working days. Unexcused absence is deducted from salary and repeated absence may lead to disciplinary action as per the company\'s work regulations and the Saudi Labor Law.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>تشير سجلاتنا إلى تغيبكم عن العمل دون موافقة مسبقة أو عذر مقبول بتاريخ <strong>{{f:absence_dates}}</strong> (<strong>{{f:absence_days}}</strong> يوم).</p>'
+                . '<p>{{f:remarks}}</p><p>نرجو تقديم أي مبرر مقبول إلى إدارة الموارد البشرية خلال 3 أيام عمل، علماً بأن الغياب بدون عذر يخصم من الراتب، وتكرار الغياب قد يعرضكم للإجراءات التأديبية وفقاً للائحة تنظيم العمل بالشركة ونظام العمل السعودي.</p>' . $signAr,
+        ];
+        $t['appreciation_letter'] = [
+            'label' => 'Appreciation Letter', 'label_ar' => 'خطاب شكر وتقدير', 'icon' => 'fa-medal',
+            'subject' => 'Letter of Appreciation - {{employee_name}}', 'subject_ar' => 'خطاب شكر وتقدير - {{employee_name}}',
+            'fields' => [$f('achievement', 'Reason for appreciation', 'سبب الشكر والتقدير', 'textarea', true)],
+            'body' => $head . $dear . '<p>On behalf of the management of {{company}}, we would like to express our sincere appreciation for:</p><p>{{f:achievement}}</p>'
+                . '<p>Your dedication and commitment are an example to your colleagues. We look forward to your continued success.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>بالنيابة عن إدارة {{company}}، نتقدم إليكم بخالص الشكر والتقدير على:</p><p>{{f:achievement}}</p>'
+                . '<p>إن تفانيكم والتزامكم مثال يحتذى به لزملائكم، ونتمنى لكم دوام التوفيق والنجاح.</p>' . $signAr,
+        ];
+        $t['noc_letter'] = [
+            'label' => 'No Objection Certificate (NOC)', 'label_ar' => 'خطاب عدم ممانعة', 'icon' => 'fa-stamp',
+            'subject' => 'No Objection Certificate - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'خطاب عدم ممانعة - {{employee_name}}',
+            'fields' => [$addressed, $f('purpose', 'Purpose (e.g. travel to UAE for tourism)', 'الغرض (مثال: السفر إلى الإمارات للسياحة)', 'textarea', true)],
+            'body' => $cert('No Objection Certificate') . '<p>This is to certify that <strong>{{employee_name}}</strong>, {{nationality}} national, holder of Iqama/ID No. <strong>{{iqama}}</strong>, is employed with <strong>{{company}}</strong> as <strong>{{job_title}}</strong> since <strong>{{joining_date}}</strong>.</p>'
+                . '<p>The company has no objection to the following: {{f:purpose}}</p><p>This certificate is issued upon the employee\'s request without any liability on the company.</p>' . $sign,
+            'body_ar' => $certAr('خطاب عدم ممانعة') . '<p>تشهد الشركة بأن السيد/ <strong>{{employee_name}}</strong>، {{nationality}} الجنسية، حامل إقامة/هوية رقم <strong>{{iqama}}</strong>، يعمل لدى <strong>{{company}}</strong> بوظيفة <strong>{{job_title}}</strong> منذ <strong>{{joining_date}}</strong>.</p>'
+                . '<p>ولا مانع لدى الشركة مما يلي: {{f:purpose}}</p><p>وقد أعطيت له هذه الشهادة بناءً على طلبه دون أدنى مسؤولية على الشركة.</p>' . $signAr,
+        ];
+        $t['document_reminder'] = [
+            'label' => 'Document Expiry Reminder', 'label_ar' => 'تذكير بانتهاء مستند', 'icon' => 'fa-passport',
+            'subject' => 'Document Expiry Reminder - {{employee_name}} ({{emp_id}})', 'subject_ar' => 'تذكير بانتهاء مستند - {{employee_name}}',
+            'fields' => [
+                $f('document', 'Document (e.g. Passport, Driving license)', 'المستند (مثال: جواز السفر، رخصة القيادة)', 'text', true),
+                $f('document_no', 'Document number', 'رقم المستند', 'text', false, false),
+                $f('expiry_date', 'Expiry date', 'تاريخ الانتهاء', 'date'),
+                $f('submit_by', 'Submit renewed copy by', 'موعد تقديم النسخة المجددة', 'date'),
+            ],
+            'body' => $head . $dear . '<p>This is a reminder that your <strong>{{f:document}}</strong> (No. {{f:document_no}}) expires on <strong>{{f:expiry_date}}</strong>.</p>'
+                . '<p>Please renew it and submit a copy of the renewed document to the HR Department no later than <strong>{{f:submit_by}}</strong>.</p>' . $sign,
+            'body_ar' => $headAr . $dearAr . '<p>نود تذكيركم بأن <strong>{{f:document}}</strong> (رقم {{f:document_no}}) الخاص بكم ينتهي بتاريخ <strong>{{f:expiry_date}}</strong>.</p>'
+                . '<p>نرجو تجديده وتقديم نسخة من المستند المجدد إلى إدارة الموارد البشرية في موعد أقصاه <strong>{{f:submit_by}}</strong>.</p>' . $signAr,
+        ];
         $t['other_custom'] = [
             'label' => 'Other / Custom Memo', 'label_ar' => 'مذكرة أخرى', 'icon' => 'fa-pen-to-square',
             'subject' => '{{f:topic}}', 'subject_ar' => '{{f:topic}}',
@@ -767,7 +885,7 @@ if (!function_exists('memo_employee_placeholders')) {
     function memo_employee_placeholders($conDB, $empId, $senderName = '', $referenceNo = '') {
         // Login email (admin_login) is the one kept up to date for every user; the
         // employee record's emails are only a fallback.
-        $sql = "SELECT e.emp_id, e.name, e.iqama, e.email, e.c_email, e.joining_date, e.probation,
+        $sql = "SELECT e.emp_id, e.name, e.iqama, e.email, e.c_email, e.joining_date, e.probation, e.contract_end_date,
                        (SELECT al.email FROM admin_login al
                         WHERE al.emp_id = e.emp_id AND al.email IS NOT NULL AND al.email <> ''
                         ORDER BY al.status DESC, al.id DESC LIMIT 1) AS login_email,
@@ -840,6 +958,7 @@ if (!function_exists('memo_employee_placeholders')) {
             'iqama' => $h($row['iqama']),
             'joining_date' => $h($joinText),
             'probation_end_date' => $probEnd,
+            'contract_end_date' => !empty($row['contract_end_date']) && strtotime($row['contract_end_date']) ? date('d/m/Y', strtotime($row['contract_end_date'])) : '-',
             'basic_salary' => memo_money($row['basic']),
             'total_salary' => memo_money($total),
             'today' => date('d/m/Y'),

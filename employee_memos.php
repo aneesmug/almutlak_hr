@@ -68,6 +68,22 @@ if ($preselectEmpId !== '') {
         .select2-results__option--highlighted .memo-crumb-current { background: #fff; color: #4e5ad6; }
         .select2-results__option--highlighted .memo-crumb-sep { color: #fff; }
         .select2-selection__rendered .memo-crumb { padding: 1px 8px; font-size: 11px; }
+        /* Long options (e.g. End of Service reasons) wrap in the open list instead of being cut off. */
+        .select2-results__option .memo-crumb { white-space: normal; border-radius: 12px; }
+        .memo-option-desc { margin-top: 4px; font-size: 12px; line-height: 1.45; color: #64748b; white-space: normal; }
+        .select2-results__option--highlighted .memo-option-desc { color: rgba(255, 255, 255, .88); }
+        /* Every select2 on this page (employee, dropdown fields, Company > City > Location,
+           asset search) shows its full text: open list rows wrap, and the chosen value grows
+           the box to more lines instead of being cut off with "...". */
+        .select2-results__option { white-space: normal; word-break: break-word; line-height: 1.45; }
+        .memo-form .select2-container .select2-selection--single { height: auto; min-height: 38px; }
+        .memo-form .select2-container .select2-selection--single .select2-selection__rendered {
+            white-space: normal; word-break: break-word; overflow: visible; text-overflow: clip;
+            line-height: 1.45; padding-top: 8px; padding-bottom: 8px;
+        }
+        .memo-form .select2-container .select2-selection--single .select2-selection__arrow { top: 50%; transform: translateY(-50%); }
+        .memo-form .select2-selection__rendered .memo-trail { display: flex; }
+        .memo-form .select2-selection__rendered .memo-crumb { white-space: normal; border-radius: 10px; }
         html.app-dark .memo-crumb { background: #26304a; color: #aab4ff; }
         html.app-dark .memo-crumb-current { background: #5b6ee1; color: #fff; }
         .memo-type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
