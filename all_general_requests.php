@@ -3,8 +3,9 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 
-// Restrict access to non-employee users only
-if ($user_type == 'employee') {
+// Restrict access to non-employee users only - unless the employee holds an explicit
+// 'Access Page: General Requests' Special Access grant.
+if ($user_type == 'employee' && !user_has_special_access($conDB, $empid ?? '', 'access_all_general_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header('Location: dashboard.php');
     exit;
 }

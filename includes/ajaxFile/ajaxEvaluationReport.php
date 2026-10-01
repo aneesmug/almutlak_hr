@@ -20,7 +20,9 @@ if (!isset($_SESSION['auth_user'])) {
 
 // Check access permissions
 $allowed_roles = ['hr_recruitment', 'hr_supervisor', 'hr_senior_bp', 'gm', 'administrator'];
-$has_access = in_array($user_role, $allowed_roles) || $user_type == 'gm' || $user_type == 'administrator';
+$has_access = in_array($user_role, $allowed_roles) || $user_type == 'gm' || $user_type == 'administrator'
+    // or an explicit 'Access Page: All Employee Evaluations' Special Access grant
+    || user_has_special_access($conDB, $empid ?? '', 'access_all_employee_evaluations', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
 if (!$has_access && !$isDeptManager) {
     echo json_encode(['status' => 'error', 'message' => 'Access denied']);

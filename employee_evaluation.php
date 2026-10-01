@@ -44,7 +44,8 @@ require_once __DIR__ . '/includes/helper_functions.php';
 // ================================================================
 // ACCESS CONTROL - Only Managers Allowed
 // ================================================================
-if (!$isDeptManager) {
+// (or an explicit 'Access Page: Employee Evaluation' Special Access grant)
+if (!$isDeptManager && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: ./dashboard.php");
     exit();
 }

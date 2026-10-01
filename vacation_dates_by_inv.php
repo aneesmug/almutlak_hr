@@ -3,7 +3,8 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 
 // Restrict access to privileged users only.
-if (!($is_system_admin || $isHR || $isFinance)) {
+// (or an explicit 'Access Page: Vacation Dates Editor' Special Access grant)
+if (!($is_system_admin || $isHR || $isFinance || user_has_special_access($conDB, $empid ?? '', 'access_vacation_dates_by_inv', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false))) {
     header('Location: ./dashboard.php');
     exit();
 }

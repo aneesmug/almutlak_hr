@@ -14,7 +14,8 @@
 
 	/****************Employee Allow Page*****************/
     // Only regular employees (not team members) should be redirected to profile
-    if ($user_role == 'Employee') {
+    // ...unless they hold an explicit 'Access Page: Dashboard' Special Access grant.
+    if ($user_role == 'Employee' && !user_has_special_access($conDB, $empid ?? '', 'access_dashboard', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
         header("Location: ./profile.php");
         exit();
     }

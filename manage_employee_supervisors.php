@@ -2,7 +2,8 @@
 require_once __DIR__ . '/includes/session_check.php';
 
 // Check authorization - only administrators and HR can access
-if ($user_type != 'administrator') {
+// (or an explicit 'Access Page: Manage Employee Supervisors' Special Access grant)
+if ($user_type != 'administrator' && !user_has_special_access($conDB, $empid ?? '', 'access_manage_employee_supervisors', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: dashboard.php");
     exit();
 }

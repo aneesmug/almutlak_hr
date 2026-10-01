@@ -22,7 +22,8 @@ $can_see_reports_page = [
 ];
 
 // Check authorization
-if (!in_array($user_role, $can_see_reports_page) && !$is_system_admin) {
+// (or an explicit 'Access Page: Reports' Special Access grant)
+if (!in_array($user_role, $can_see_reports_page) && !$is_system_admin && !user_has_special_access($conDB, $empid ?? '', 'access_reports', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: dashboard.php");
     exit();
 }

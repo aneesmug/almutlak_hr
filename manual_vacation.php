@@ -6,7 +6,8 @@
  * 3. JAVASCRIPT LOGIC: Contains all the client-side JavaScript to handle the multi-step popup process, fetch employee data, calculate vacation days, and submit the final data for saving.
  ****************************************************************/
 require_once __DIR__ . '/includes/session_check.php';
-if (!$is_system_admin && !$isHR && !$isDeptHr) {
+// Admin / HR, or an explicit 'Access Page: Import Vacation Balance' Special Access grant.
+if (!$is_system_admin && !$isHR && !$isDeptHr && !user_has_special_access($conDB, $empid ?? '', 'access_manual_vacation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: ./dashboard.php");
     exit;
 }

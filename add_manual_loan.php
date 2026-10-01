@@ -18,7 +18,8 @@ if (mysqli_num_rows($query) == 1) {
     include("./includes/avatar_select.php");
 
     // Only HR and Admins should access this page
-if (!$isHR && !$is_system_admin && !$isDeptHr) {
+// ...or an explicit 'Access Page: Add Manual Loan' Special Access grant.
+if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB, $empid ?? '', 'access_add_manual_loan', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     header("Location: ./dashboard.php");
     exit;
 }

@@ -5,7 +5,8 @@ require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 
 // Restrict access to HR and System Admin only
-if (!($isHR || $is_system_admin)) {
+// (or an explicit 'Access Page: Manage Holidays' Special Access grant)
+if (!($isHR || $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'access_manage_holidays', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false))) {
     header("Location: ./profile.php");
     exit();
 }

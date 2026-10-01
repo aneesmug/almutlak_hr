@@ -216,7 +216,9 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_new_employee_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employees_payroll_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_import_iqama_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page));
+                       !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page)) ||
+                       !empty(array_intersect([$user_role, $user_type], $page_roles['employee_memos.php'] ?? [])) ||
+                       !empty(array_intersect([$user_role, $user_type], $page_roles['manage_holidays.php'] ?? []));
 
 $show_approvals_menu = !empty($is_system_admin) ||
                        (!$isAllVacationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page))) ||
@@ -227,9 +229,19 @@ $show_approvals_menu = !empty($is_system_admin) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_payroll_approvals_page)) ||
                        (!$isResignationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page))) ||
                        (!$isRejoinMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page))) ||
+                       !empty(array_intersect([$user_role, $user_type], $can_see_employee_transfers_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
 
-$can_see_reports_menu = !$is_employee_user_type;
+$can_see_reports_menu = !$is_employee_user_type || in_array($user_role, $can_see_reports_page) || in_array($user_type, $can_see_reports_page);
+
+// Admin-only sidebar entries that a per-user Special Access grant ('access_<page>') can open up:
+// the grant loop above has already added this user's role to $page_roles for those pages.
+$can_see_locations_page = $page_roles['all_locations.php'] ?? [];
+$can_see_users_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['all_users.php'] ?? []));
+$can_see_activity_logs_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['view_activity_logs.php'] ?? []));
+$can_see_language_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['language.php'] ?? []));
+$can_see_diagnose_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['diagnose_double_deduction.php'] ?? []));
+$can_see_fix_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['fix_double_deduction.php'] ?? []));
 
 
 // =================================================================================
@@ -905,6 +917,8 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <!-- Admin Section -->
         <?php if ($is_admin || $is_system_admin  || in_array($user_role, $can_see_cars_management_page) ): ?>
             <li><a href="<?= $carsLink ?>" class="<?= all_cars($current_page) ?>"><i class="fa-duotone fa-cars" style="--fa-primary-color:#f472b6;--fa-secondary-color:#f472b6;--fa-secondary-opacity:.4"></i><span><?=__('cars') ?></span></a></li>
+        <?php endif; ?>
+        <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_locations_page)): ?>
             <li><a href="<?= $locationsLink ?>" class="<?= all_locations($current_page) ?>"><i class="fa-duotone fa-sitemap" style="--fa-primary-color:#2dd4bf;--fa-secondary-color:#2dd4bf;--fa-secondary-opacity:.4"></i><span><?=__('locations') ?></span></a></li>
         <?php endif; ?>
         <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
@@ -933,7 +947,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         // 'access_send_announcement' Special Access grant (see the bypass loop above).
         $can_see_announcement_tool = $is_system_admin || in_array($user_role, $can_see_announcement_page) || in_array($user_type, $can_see_announcement_page);
         ?>
-        <?php if ($is_system_admin || $can_see_announcement_tool || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+        <?php if ($is_system_admin || $can_see_announcement_tool || $can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa-duotone fa-toolbox" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
@@ -985,12 +999,20 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         <li><a href="<?= $dbImportRemoteLink ?>" target="_blank"><i class="fa-duotone fa-cloud-arrow-down" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('import_from_live_server', 'Import From Live Server') ?></span></a></li>
                     </ul>
                 </li>
+                <?php endif; ?>
+                <?php if ($can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-stethoscope" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnostics', 'Diagnostics') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
+                        <?php if ($is_system_admin): ?>
                         <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa-duotone fa-square-shekel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if ($can_see_diagnose_deduction_tool): ?>
                         <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-magnifying-glass-chart" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if ($can_see_fix_deduction_tool): ?>
                         <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-hammer" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                        <?php endif; ?>
                     </ul>
                 </li>
                 <?php endif; ?>
@@ -998,19 +1020,24 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         </li>
         <?php endif; ?>
 
-        <?php if ($is_system_admin): ?>
+        <?php if ($is_system_admin || $can_see_users_tool || $can_see_activity_logs_tool || $can_see_language_tool): ?>
         <li>
             <a href="javascript:void(0);"><i class="fa-duotone fa-gear-complex" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('settings') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="false">
                 <!-- User Management -->
+                <?php if ($can_see_users_tool): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-user-shield" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('user_management', 'Users') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
                         <li><a href="<?= $usersLink ?>"><i class="fa-duotone fa-user-gear" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('users') ?></span></a></li>
+                        <?php if ($is_system_admin): ?>
                         <li><a href="<?= $userActivityLink ?>"><i class="fa-duotone fa-history" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('user_activity') ?></span></a></li>
+                        <?php endif; ?>
                     </ul>
                 </li>
+                <?php endif; ?>
                 <!-- System Tools -->
+                <?php if ($is_system_admin): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-screwdriver-wrench" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('system_tools', 'System Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
@@ -1018,7 +1045,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         
                     </ul>
                 </li>
+                <?php endif; ?>
                 <!-- System Logs -->
+                <?php if ($can_see_activity_logs_tool): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-list-check" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('system_logs', 'System Logs') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
@@ -1026,8 +1055,11 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 
+                <?php endif; ?>
                 <!-- Language Settings -->
+                <?php if ($can_see_language_tool): ?>
                 <li><a href="<?= $languageLink ?>"><i class="fa-duotone fa-language" style="--fa-primary-color:#94a3b8;--fa-secondary-color:#94a3b8;--fa-secondary-opacity:.4"></i><span><?=__('language') ?></span></a></li>
+                <?php endif; ?>
             </ul>
         </li>
         <?php endif; ?>

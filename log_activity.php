@@ -5,8 +5,10 @@
 		if(mysqli_num_rows($query) == 1){
 		include("./includes/avatar_select.php");
 			
-			if($user_type !== $access1){
+			// Administrators, or an explicit 'Access Page: Activity Log (legacy)' Special Access grant.
+			if($user_type !== $access1 && !user_has_special_access($conDB, $empid ?? '', 'access_log_activity', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)){
 				header("Location: ./dashboard.php");
+				exit();
 			}
 	}
 ?>
