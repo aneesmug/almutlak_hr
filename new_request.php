@@ -19,6 +19,12 @@ MODIFICATION SUMMARY:
         if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
     }
+// The form now lives in a SweetAlert2 modal on all_requests.php (New Request). Plain visits
+// are sent there; the POST handler below stays for old forms that still post to this page.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: all_requests.php?new=1');
+    exit;
+}
 if(isset($_POST['submit'])){
 
     // Block-check: employee may be restricted from submitting this request type

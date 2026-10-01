@@ -16,7 +16,7 @@ if (isset($_POST['process_payment'])) {
     $target_dir = "assets/smt_payment_invoices/";
     $attachment_name = "";
     if (isset($_FILES["payment_invoice"]) && $_FILES["payment_invoice"]["error"] == 0) {
-        $file_ext = strtolower(pathinfo($_FILES["payment_invoice"]["name"], PATHINFO_EXTENSION));
+        $file_ext = strtolower(pathinfo($_FILES["payment_invoice"]["name"], PATHINFO_EXxTENSION));
         $attachment_name = $inv_no_pay . "_payment_" . time() . "." . $file_ext;
         $target_file = $target_dir . $attachment_name;
 
@@ -585,56 +585,105 @@ if (isset($_POST['submit']) || isset($_POST['assign_payer_submit'])) { // Combin
 
 
 // --- Status Display Logic ---
-$status_get = "";
+// Label + tone (tone-* classes in assets/css/smart_request.css) for the status pill.
+require_once __DIR__ . '/includes/helper_functions.php'; // get_approval_chain_status, get_current_approver, personnel lists
+$approval_chain = get_approval_chain_status($conDB, $invnoget, 'smart_request') ?: [];
+$status_label = '';
+$status_tone = 'tone-slate';
 $rejection_note = "";
+$rejected_by_name = '';
 switch ($current_status_get) {
     case "draft":
-        $status_get = "<input class='form-control bg-secondary border-secondary text-white' type='text' value='" . __('draft_not_submitted') . "' readonly />";
+        $status_label = __('draft_not_submitted');
+        $status_tone = 'tone-slate';
         break;
     case "pending_approval":
-        $status_get = "<input class='form-control bg-custom border-custom text-white' type='text' value='" . __('pending_approval_level') . " " . $current_approval_level_get . "' readonly />";
+        $status_label = __('pending_approval_level') . " " . $current_approval_level_get;
+        $status_tone = 'tone-amber';
         break;
     case "approved":
-        $status_text_approved = $assigned_payer_name ? __('approved_pending_payment') : __('approved_pending_assignment');
-        // --- MODIFIED: Changed from bg-success to bg-warning as requested ---
-        $status_get = "<input class='form-control bg-warning border-warning text-white' type='text' value='" . $status_text_approved . "' readonly />";
+        $status_label = $assigned_payer_name ? __('approved_pending_payment') : __('approved_pending_assignment');
+        $status_tone = 'tone-indigo';
         break;
     case "pending_payment":
-        // When payer is assigned, show this status
-        $status_get = "<input class='form-control bg-info border-info text-white' type='text' value='" . __('ready_for_payment', 'Ready for Payment') . "' readonly />";
+        $status_label = __('ready_for_payment', 'Ready for Payment');
+        $status_tone = 'tone-sky';
         break;
     case "rejected":
-        require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_approval_chain_status is loaded
-        $chain_status_for_reject = get_approval_chain_status($conDB, $invnoget, 'smart_request');
-        $rejected_by = __('rejected');
-        if($chain_status_for_reject){
-            foreach($chain_status_for_reject as $step) {
-                if ($step['status'] == 'rejected') {
-                    $rejected_by = __('rejected_by') . " " . parseName($step['approver_name']);
-                    $rejection_note = $step['note'];
-                    break;
-                }
+        $status_label = __('rejected');
+        foreach ($approval_chain as $step) {
+            if ($step['status'] == 'rejected') {
+                $rejected_by_name = parseName($step['approver_name']);
+                $status_label = __('rejected_by') . " " . $rejected_by_name;
+                $rejection_note = $step['note'];
+                break;
             }
         }
-        $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='$rejected_by' readonly />";
+        $status_tone = 'tone-red';
         break;
     case "paid":
-        // --- This is now the only 'bg-success' status ---
-        $status_get = "<input class='form-control bg-success border-success text-white' type='text' value='" . __('payment_paid') . "' readonly />";
+        $status_label = __('payment_paid');
+        $status_tone = 'tone-green';
+        break;
+    case "cancelled":
+        $status_label = __('cancelled', 'Cancelled');
+        $status_tone = 'tone-slate';
         break;
     // --- Fallback for Old Statuses ---
     case "pending_dept_manager_approval":
-        $status_get = "<input class='form-control bg-custom border-custom text-white' type='text' value='" . __('pending_department_manager_approval') . "' readonly />";
+        $status_label = __('pending_department_manager_approval');
+        $status_tone = 'tone-amber';
         break;
     case "pending_finance_approval":
-        $status_get = "<input class='form-control bg-warning border-warning text-white' type='text' value='" . __('pending_finance_approval') . "' readonly />";
+        $status_label = __('pending_finance_approval');
+        $status_tone = 'tone-amber';
         break;
     case "pending_gm_approval":
-        $status_get = "<input class='form-control bg-primary border-primary text-white' type='text' value='" . __('pending_general_manager_approval') . "' readonly />";
+        $status_label = __('pending_general_manager_approval');
+        $status_tone = 'tone-amber';
         break;
     default:
-        $status_get = "<input class='form-control bg-danger border-danger text-white' type='text' value='" . __('unknown_status') . ": " . htmlspecialchars($current_status_get) ."' readonly />";
+        $status_label = __('unknown_status') . ": " . $current_status_get;
+        $status_tone = 'tone-red';
 }
+
+// Progress stepper: Created > Approval > Approved > Payment assigned > Paid.
+// $steps_done = last completed index, $steps_current = active index, $steps_failed = rejected index.
+$steps_done = -1; $steps_current = -1; $steps_failed = -1;
+switch ($current_status_get) {
+    case 'draft':            $steps_current = 0; break;
+    case 'approved':         $steps_done = 2; $steps_current = 3; break;
+    case 'pending_payment':  $steps_done = 3; $steps_current = 4; break;
+    case 'paid':             $steps_done = 4; break;
+    case 'rejected':         $steps_done = 0; $steps_failed = 1; break;
+    case 'cancelled':        break;
+    default:                 $steps_done = 0; $steps_current = 1; // pending_approval + legacy pending statuses
+}
+$progress_steps = [
+    ['icon' => 'mdi mdi-file-document', 'label' => __('created', 'Created')],
+    ['icon' => 'mdi mdi-account-check',      'label' => $steps_failed === 1 ? __('rejected') : __('approval', 'Approval')],
+    ['icon' => 'mdi mdi-seal',     'label' => __('approved')],
+    ['icon' => 'mdi mdi-cash',       'label' => __('payment_assigned', 'Payment Assigned')],
+    ['icon' => 'mdi mdi-cash-usd',                 'label' => __('paid_status')],
+];
+
+// Who holds the request right now (pending approval only)
+$waiting_for_name = '';
+foreach ($approval_chain as $step) {
+    if ($step['status'] == 'pending') {
+        $waiting_for_name = parseName($step['approver_name']);
+        break;
+    }
+}
+
+// Initials for avatar circles
+$sr_initials = function ($name) {
+    $parts = preg_split('/\s+/', trim((string)$name), -1, PREG_SPLIT_NO_EMPTY);
+    if (!$parts) return '?';
+    $first = mb_substr($parts[0], 0, 1);
+    $second = isset($parts[1]) ? mb_substr($parts[1], 0, 1) : '';
+    return mb_strtoupper($first . $second);
+};
 
 // Get Payment Details if Paid
 $payment_details = null;
@@ -648,7 +697,6 @@ if ($current_status_get == 'paid') {
 // Check who is the current approver
 $current_pending_approver_id = null;
 if ($current_status_get == 'pending_approval') {
-     require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_current_approver is loaded
     $current_pending_approver_id = get_current_approver($conDB, $invnoget, 'smart_request');
 }
 
@@ -660,6 +708,56 @@ $finance_employees = getFinancePersonnel($conDB);
  require_once __DIR__ . '/includes/helper_functions.php'; // Ensure getHRPersonnel is loaded
 $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
+// Status history (smt_request_status)
+$history = [];
+$history_query = mysqli_query($conDB, "SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = '" . escape_string($invnoget) . "' ORDER BY created_at DESC");
+if ($history_query) {
+    while ($h_row = mysqli_fetch_assoc($history_query)) {
+        $history[] = $h_row;
+    }
+}
+
+// Line items
+$line_items = [];
+$getdataloop = mysqli_query($conDB, "SELECT * FROM `smart_request` WHERE `inv_no`='" . escape_string($_GET['id']) . "' ");
+if ($getdataloop) {
+    while ($rec = mysqli_fetch_assoc($getdataloop)) {
+        $line_items[] = $rec;
+    }
+}
+
+// Attachments
+$attachments = [];
+$queryempdocu = mysqli_query($conDB, "SELECT * FROM `smt_attachment` WHERE `inv_no`='" . escape_string($_GET['id']) . "' ");
+if ($queryempdocu) {
+    while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
+        $attachments[] = $recempdoc;
+    }
+}
+
+$is_draft_owner = ($current_status_get == "draft" && $empid == $emp_id_get);
+// Attachment upload choice: only the creator, in draft, while there is room (max 5 files)
+$can_add_attachment = $is_draft_owner && count($attachments) <= 5;
+
+// --- ACTION BOX LOGIC ---
+$show_submit_button = false; // Creator submits the draft and defines the approval chain
+$show_action_box = false; // Current approver approves / rejects
+$show_assign_payer_box = false; // Finance Manager assigns who pays
+$show_process_payment_button = false; // Assigned payer records the payment
+
+if ($is_draft_owner) {
+    $show_submit_button = true;
+} elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
+    $show_action_box = true;
+} elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
+    $show_assign_payer_box = true;
+} elseif (($current_status_get == 'approved' || $current_status_get == 'pending_payment') && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
+    $show_process_payment_button = true;
+}
+
+$riyal = '<i class="icon-saudi_riyal"></i>';
+$fmt = function ($n) { return number_format((float)$n, 2); };
+
 ?>
 
 <!doctype html>
@@ -667,7 +765,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
 
 <head>
     <meta charset="utf-8" />
-    <title><?= $site_title ?> - <?= htmlspecialchars($sub_title_get) ?></title> <!-- Added htmlspecialchars -->
+    <title><?= $site_title ?> - <?= htmlspecialchars($sub_title_get) ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -675,10 +773,7 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
     <!-- App favicon -->
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
-    <link href="./plugins/bootstrap-tagsinput/css/bootstrap-tagsinput.css" rel="stylesheet" />
-    <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="./plugins/switchery/switchery.min.css" />
 
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -687,184 +782,22 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/dropzone/dropzone.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <!-- Sweet Alert -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style type="text/css">
-        .noneDIV { display: none; }
-        .showDIV { display: block; }
         .swal-wide { width: 850px !important; }
-        .currencyicon { border: 1px solid #d9e3e9 !important; border-radius: 0 0.25rem 0.25rem 0 !important; border-left: 0px !important; }
-        .grandtotal, .discount, .total, .vat, .subtotal { border-right: 0px !important; }
-        .input-group-text { border: 1px solid #d9e3e9 !important; }
-        .approval-status { padding: 10px; margin-bottom: 10px; border-left: 4px solid #ccc; background-color: #f9f9f9; }
-        .approval-status.pending { border-color: #ffc107; background-color: #fffaf0; }
-        .approval-status.approved { border-color: #28a745; background-color: #f0fff4; }
-        .approval-status.rejected { border-color: #dc3545; background-color: #fff0f1; }
-        .approval-status.awaiting { border-color: #e0e0e0; background-color: #fafafa; }
         .customSweetAlertMLR { margin-left: auto; margin-right: auto; }
-        .radioalign { margin-right: 20px; }
-        .atch { cursor: pointer; }
-
-        /* NEW STYLES FOR DYNAMIC APPROVERS */
-        .approver-tag {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.375rem 0.75rem;
-            background-color: #f0f2f5;
-            border: 1px solid #ced4da;
-            border-radius: 0.25rem;
-            margin-bottom: 5px;
-        }
-        .approver-tag span {
-            font-weight: 500;
-        }
-        .approver-tag .remove-approver-btn {
-            font-size: 1.2rem;
-            font-weight: 700;
-            line-height: 1;
-            color: #dc3545;
-            text-shadow: 0 1px 0 #fff;
-            opacity: 0.75;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            padding: 0;
-        }
-        .approver-tag .remove-approver-btn:hover {
-            opacity: 1;
-        }
-        /* Fix for select2 width */
-        .select2-container { width: 100% !important; }
-
-        /* MODIFIED BADGE STYLES */
-        .user-type-badge {
-            font-size: 0.7em; /* Smaller font */
-            font-weight: 700;
-            padding: .2em .5em; /* Adjusted padding */
-            border-radius: 10rem;
-            color: #fff;
-            background-color: #6c757d; /* Default: secondary */
-            margin-left: 5px;
-            vertical-align: middle; /* Align badge vertically */
-            display: inline-block; /* Ensure it behaves like an inline element with block properties */
-            line-height: 1.2; /* Adjust line height if necessary */
-            max-width: 90%; /* Prevent extremely long badges from breaking layout too much */
-            overflow: hidden; /* Hide overflow */
-            text-overflow: ellipsis; /* Add ellipsis for overflow */
-            white-space: nowrap; /* Prevent wrapping */
-        }
-        .user-type-badge.administrator { background-color: #dc3545; } /* Danger */
-        .user-type-badge.hr { background-color: #17a2b8; } /* Info */
-        .user-type-badge.gm { background-color: #007bff; } /* Primary */
-        .user-type-badge.dept_user { background-color: #ffc107; color: #212529; } /* Warning */
-        .user-type-badge.assistant { background-color: #28a745; } /* Success */
-
-        /* Right align badge within select2 RESULTS */
-         .select2-results__option .user-type-badge {
-            float: right;
-            margin-top: 3px;
-         }
-
-        /* NEW: Fix for missing Parsley icon */
-        #approver-error-container .parsley-errors-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        #approver-error-container .parsley-errors-list li {
-            font-weight: 500;
-            margin-top: 0.25rem;
-            font-size: 0.875rem;
-        }
-        #approver-error-container .parsley-errors-list li::before {
-            content: none !important; /* Remove any ::before pseudo-element icon */
-            display: none !important;
-        }
-         /* NEW: Style for HR CC Select2 box */
-        #cc_hr_select_div .select2-container--default .select2-selection--multiple {
-            border: 1px solid #ced4da;
-            border-radius: 0.25rem;
-        }
-
-        /* --- UPDATED CSS FOR SELECTED ITEM BADGE FIX V3 --- */
-        .select2-container--default .select2-selection--single .select2-selection__rendered {
-            display: flex !important; /* Ensure flex is applied */
-            justify-content: space-between !important;
-            align-items: center !important;
-            padding-right: 5px !important; /* Minimal padding */
-            line-height: inherit !important; /* Inherit from parent */
-            overflow: hidden; /* Prevent content overflow */
-        }
-
-        /* Target the span holding the name */
-        .select2-container--default .select2-selection--single .select2-selection__rendered .select2-selection-text {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            flex-grow: 1; /* Allow name to take space */
-            margin-right: 5px; /* Space before badge */
-        }
-
-        /* Target the badge itself */
-        .select2-container--default .select2-selection--single .select2-selection__rendered .select2-selection__rendered-badge {
-            display: inline-flex !important; /* Use inline-flex for better control */
-            align-items: center; /* Center text vertically within badge */
-            font-size: 0.6em !important; /* Even smaller font */
-            padding: 1px 4px !important; /* Minimal padding */
-            line-height: 1 !important; /* Compact line height */
-            margin-left: 5px !important;
-            flex-shrink: 0; /* Prevent badge shrinking */
-            max-width: 55%; /* Limit width slightly more */
-            vertical-align: middle; /* Try middle alignment */
-            /* Removed float, position, top */
-        }
-        /* --- END UPDATED BADGE FIX CSS V3 --- */
-
-        /* Modern Timeline Design for Request History */
-        .timeline { position: relative; padding: 10px 0; margin-top: 20px; }
-        .timeline:before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: #eaedf1; }
-        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
-        .timeline-item:last-child { margin-bottom: 0; }
-        .timeline-marker { 
-            position: absolute; left: 8px; top: 4px; width: 24px; height: 24px; 
-            border-radius: 50%; background: #fff; border: 2px solid #adb5bd; 
-            z-index: 1; display:flex; align-items:center; justify-content:center; 
-            font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
-        }
-        .timeline-item.approved .timeline-marker, .timeline-item.completed .timeline-marker, .timeline-item.paid .timeline-marker { 
-            border-color: #28a745; color: #28a745; background-color: #f6ffed; 
-        }
-        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background-color: #fff1f0; }
-        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #ffc107; background-color: #fffbe6; }
-        
-        .timeline-content { 
-            background: #fff; padding: 15px; border-radius: 8px; 
-            border: 1px solid #e3e8ee; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
-            position: relative; transition: all 0.2s ease-in-out;
-            text-align: left;
-        }
-        .timeline-content:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); }
-        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-
-        /* RTL Adjustments for Timeline */
-        [dir="rtl"] .timeline:before { left: auto; right: 19px; }
-        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 50px; }
-        [dir="rtl"] .timeline-marker { left: auto; right: 8px; }
-        [dir="rtl"] .timeline-content { text-align: right; }
-
     </style>
     <?php if ($is_rtl): ?>
-            <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
-        <?php endif; ?>
-		<script>
-            // --- NEW: Pass Department Map to JS ---
-            window.departmentMap = <?= json_encode($department_map ?? []) ?>;
-            // --- END NEW ---
-            window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
-            window.currentUserDept = <?= json_encode($user_dept) ?>; // Pass user dept to JS
-        </script>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
+    <script>
+        window.departmentMap = <?= json_encode($department_map ?? []) ?>;
+        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
+        window.currentUserDept = <?= json_encode($user_dept) ?>;
+    </script>
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -889,489 +822,510 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
         </div>
         <!-- Left Sidebar End -->
 
-        <!-- ============================================================== -->
-        <!-- Start right Content here -->
-        <!-- ============================================================== -->
         <div class="content-page">
             <!-- Top Bar Start -->
             <?php include("./includes/topbar.php"); ?>
             <!-- Top Bar End -->
 
             <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-md-12" id="DataContact">
-                            <!-- Make sure form ID is unique if needed, otherwise action should point correctly -->
-                            <form action="open_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" method="post" enctype="multipart/form-data">
-                                <div class="row">
-                                    <div class="col-md-12" id="main-content">
-                                        <div class="card-box">
+                    <form action="open_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" method="post" enctype="multipart/form-data" id="srRequestForm">
+                        <input type="hidden" name="inv_no" value="<?= htmlspecialchars($invnoget) ?>" />
 
-                                            <?= $msg ?? '' ?>
+                        <?= $msg ?? '' ?>
 
-                                            <?php if ($current_status_get == 'rejected' && !empty($rejection_note)): ?>
-                                                <div class="alert alert-danger bg-danger text-white border-0" role="alert" id="attachmentsSmt">
-                                                    <?=__('request_rejected_reason')?> <strong> "<?= htmlspecialchars($rejection_note) ?>" </strong>
-                                                </div>
-                                            <?php endif; ?>
-                                            <div class="row">
-                                                <div class="col-4 ">
-                                                    <div class="mt-3 float-left">
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('invoice_date')?>:</div></div>
-                                                            <input class="form-control" type='text' value="<?= $created_at_get ? date("d F Y", strtotime($created_at_get)) : '' ?>" readonly />
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('sub_type')?></div></div>
-                                                            <input class="form-control" type='text' value="<?= htmlspecialchars($sub_type_get) ?>" readonly />
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('sub_title')?></div></div>
-                                                            <input class="form-control" type='text' value="<?= htmlspecialchars($sub_title_get) ?>" readonly />
-                                                        </div>
-                                                        <?php
-                                                        $can_add_attachment = false;
-                                                        // Show attachment option only to the creator of the request in draft status
-                                                        if ($empid == $emp_id_get && $current_status_get == 'draft') {
-                                                            $can_add_attachment = true;
-                                                        }
-
-                                                        if ($can_add_attachment):
-                                                            $query_chkattach = mysqli_query($conDB, "SELECT * FROM `smt_attachment` WHERE `inv_no`='" . escape_string($_GET['id']) . "' ");
-                                                            if ($query_chkattach && mysqli_num_rows($query_chkattach) <= 5) { ?>
-                                                                <div class="input-group mb-2">
-                                                                    <label for="inlineRadio3" class="col-form-label radioalign"><?=__('attachment')?><span class="text-danger">*</span></label>
-                                                                    <div class="radio radio-info form-check-inline">
-                                                                        <input type="radio" id="inlineRadio3" value="yes" name="attach" onclick="showAttachment()" required>
-                                                                        <label for="inlineRadio3" class="atch"><i class="mdi mdi-paperclip"></i> <?=__('have_attachments')?></label>
-                                                                    </div>
-                                                                    <div class="radio radio-info form-check-inline">
-                                                                        <input type="radio" id="inlineRadio2" value="no" name="attach" onclick="hideAttachment()" required>
-                                                                        <label for="inlineRadio2" class="atch"><i class="mdi mdi-clippy"></i> <?=__('no_attachment')?></label>
-                                                                    </div>
-                                                                    <a href="javascript:void(0);" class="btn btn-sm btn-custom waves-effect waves-light noneDIV checkattach attachmentDIV smt_attachment" data-attach="ok" data-inv_no="<?= htmlspecialchars($invnoget) ?>">
-                                                                        <i class="mdi mdi-cloud-upload "></i> <?=__('upload_documents')?></a>
-                                                                    <input type="text" id="checkatt" class="noneDIV checkatt">
-                                                                </div>
-                                                            <?php }
-                                                        endif; ?>
-                                                        <?php if ($remarks_get): ?>
-                                                            <div class="input-group mb-2">
-                                                                <div class="input-group-prepend"><div class="input-group-text"><?=__('remarks')?></div></div>
-                                                                <input class="form-control" type='text' value="<?= htmlspecialchars($remarks_get) ?>" readonly />
-                                                            </div>
-                                                        <?php endif; ?>
-
-                                                        <!-- NEW Approval Status Trail -->
-                                                        <div class="mt-4">
-                                                            <h5><?=__('approval_status')?></h5>
-                                                            <?php
-                                                                require_once __DIR__ . '/includes/helper_functions.php'; // Ensure get_approval_chain_status is loaded
-                                                                // PASS $conDB
-                                                                $approval_chain = get_approval_chain_status($conDB, $invnoget, 'smart_request');
-                                                                if (empty($approval_chain) && $current_status_get == 'draft') {
-                                                                    echo "<div class='approval-status awaiting'><small>" . __('approval_chain_not_defined_yet') . "</small></div>";
-                                                                }
-                                                                foreach ($approval_chain as $step):
-                                                                    $status_class = $step['status']; // 'pending', 'approved', 'rejected', 'awaiting'
-                                                                    $status_text = __($step['status']);
-                                                                    $action_date = $step['action_date'] ? date('d M Y H:i', strtotime($step['action_date'])) : '';
-                                                            ?>
-                                                            <div class="approval-status <?= $status_class ?>">
-                                                                <strong><?=__('level')?> <?= $step['approval_level'] ?>: <?= parseName($step['approver_name']) ?></strong>
-                                                                <span class="float-right"><?= $status_text ?></span>
-                                                                <?php if($action_date): ?>
-                                                                    <br><small><?=__('on')?> <?= $action_date ?></small>
-                                                                <?php endif; ?>
-                                                                <?php if($step['note']): ?>
-                                                                    <br><small><em><?=__('note')?>: <?= htmlspecialchars($step['note']) ?></em></small>
-                                                                <?php endif; ?>
-                                                            </div>
-                                                            <?php endforeach; ?>
-                                                        </div>
-                                                        <!-- END NEW Approval Status Trail -->
-
-                                                        <!-- Status History Timeline -->
-                                                        <div class="mt-4">
-                                                            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline', 'Status History Timeline') ?></h5>
-                                                            <?php
-                                                                // Fetch History from smt_request_status
-                                                                $history = [];
-                                                                $history_query = mysqli_query($conDB, "SELECT status, note, emp_name, created_at FROM smt_request_status WHERE inv_no = '" . escape_string($invnoget) . "' ORDER BY created_at ASC");
-                                                                if ($history_query) {
-                                                                    while ($h_row = mysqli_fetch_assoc($history_query)) {
-                                                                        $history[] = $h_row;
-                                                                    }
-                                                                }
-
-                                                                if (empty($history)): ?>
-                                                                    <div class="alert alert-info"><small><?= __('no_history', 'No history recorded yet.') ?></small></div>
-                                                                <?php else: ?>
-                                                                    <div class="timeline">
-                                                                        <?php foreach ($history as $item): 
-                                                                            $status_clean = strtolower($item['status']);
-                                                                            $item_class = 'pending'; $icon = 'fa-clock'; $badge = 'warning';
-                                                                            if (strpos($status_clean, 'approved') !== false || strpos($status_clean, 'completed') !== false || strpos($status_clean, 'paid') !== false) {
-                                                                                $item_class = 'approved'; $icon = 'fa-check'; $badge = 'success';
-                                                                            } elseif (strpos($status_clean, 'rejected') !== false) {
-                                                                                $item_class = 'rejected'; $icon = 'fa-times'; $badge = 'danger';
-                                                                            }
-                                                                        ?>
-                                                                        <div class="timeline-item <?= $item_class ?>">
-                                                                            <div class="timeline-marker"><i class="fas <?= $icon ?>"></i></div>
-                                                                            <div class="timeline-content">
-                                                                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                                                                    <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
-                                                                                    <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></small>
-                                                                                </div>
-                                                                                <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName(($item['note']) ?? 'No notes'))) ?></strong></p>
-                                                                                <small class="text-muted"><i class="far fa-user"></i> <?= getDisplayName($item['emp_name']) ?></small>
-                                                                            </div>
-                                                                        </div>
-                                                                        <?php endforeach; ?>
-                                                                    </div>
-                                                                <?php endif; ?>
-                                                        </div>
-                                                        <!-- End Status History Timeline -->
-
-                                                        <!-- NEW: Show Assigned Payer on Left Side -->
-                                                         <?php if ($assigned_payer_name): ?>
-                                                         <div class="approval-status pending"> <!-- MODIFIED: Changed from approved to pending for warning color -->
-                                                            <strong><?=__('payable_assigned_to')?>: <?= parseName($assigned_payer_name) ?></strong>
-                                                            <!-- Optionally add assignment date here if you fetch it -->
-                                                         </div>
-                                                         <?php endif; ?>
-                                                    </div>
-                                                </div>
-                                                <div class="col-4">
-                                                    <div class="noneDIV attachmentDIV mt-3" id="">
-                                                        <img src="qrconfig_smartrequest.php?id=<?= htmlspecialchars($_GET['id']) ?>" />
-                                                        <p><?=__('scan_qr_for_attachments')?></p>
-                                                    </div>
-                                                </div>
-                                                <div class="col-4 ">
-                                                    <div class="mt-3 float-right">
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('invoice_no')?>:</div></div>
-                                                            <input class="form-control" type='text' name='inv_no' value="<?= htmlspecialchars($invnoget) ?>" readonly />
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('department')?>:</div></div>
-                                                            <input class="form-control" type='text' value="<?= htmlspecialchars($dep_nme_get) ?>" readonly />
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('prepared_by')?>:</div></div>
-                                                            <input class="form-control" type='text' value="<?= htmlspecialchars($prep_by_get) ?>" readonly />
-                                                        </div>
-
-                                                        <!-- Display Current Status -->
-                                                         <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('current_status_label')?>:</div></div>
-                                                            <?= $status_get ?>
-                                                         </div>
-
-                                                        <!-- REMOVED: Display Assigned Payer if set (moved to left side) -->
-
-
-                                                        <?php
-                                                        // --- NEW ACTION BOX LOGIC ---
-                                                        $show_submit_button = false; // For draft
-                                                        $show_action_box = false; // For approvers
-                                                        $show_assign_payer_box = false; // For Finance Manager to assign
-                                                        $show_process_payment_button = false; // For assigned payer
-
-                                                        if ($current_status_get == "draft" && $empid == $emp_id_get) {
-                                                            $show_submit_button = true;
-                                                        } elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
-                                                            $show_action_box = true;
-                                                        } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
-                                                            $show_assign_payer_box = true;
-                                                        } elseif (($current_status_get == 'approved' || $current_status_get == 'pending_payment') && $empid == $payable_by_emp_id_get) { // Only assigned user can pay
-                                                            $show_process_payment_button = true;
-                                                        }                                                        // This block is for creators to submit their draft and define the approval chain
-                                                        if ($show_submit_button): ?>
-
-                                                            <!-- NEW DYNAMIC APPROVER UI -->
-                                                            <div class="form-group mb-2">
-                                                                <label><?=__('select_approvers_in_order')?></label>
-                                                                <div class="input-group">
-                                                                    <select class="form-control" id="approver-select" data-placeholder="<?=__('select_approver')?>">
-                                                                        <option value=""></option> <!-- Empty for placeholder -->
-                                                                        <?php foreach($potential_approvers as $employee): ?>
-                                                                        <option value="<?= $employee['emp_id'] ?>" data-type="<?= htmlspecialchars($employee['user_type']) ?>" data-dept="<?= htmlspecialchars($employee['dept']) ?>">
-                                                                            <?= parseName($employee['name']) ?>
-                                                                        </option>
-                                                                        <?php endforeach; ?>
-                                                                    </select>
-                                                                    <div class="input-group-append">
-                                                                        <button class="btn btn-success" type="button" id="add-approver-btn"><i class="mdi mdi-plus"></i> <?=__('add')?></button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div id="approver-list-container">
-                                                                <!-- Approvers will be added here dynamically -->
-                                                            </div>
-                                                            <!-- Dummy input for parsley validation -->
-                                                            <input type="hidden" id="min-approver-check"
-                                                                   data-parsley-required="true"
-                                                                   data-parsley-error-message="<?=__('select_at_least_one_approver')?>"
-                                                                   data-parsley-errors-container="#approver-error-container">
-                                                            <div id="approver-error-container" class="text-danger"></div> <!-- Error container -->
-
-                                                            <button type="submit" name="submit" value="1" class="btn btn-info waves-effect waves-light mt-2"><?=__('submit_for_approval')?></button>
-                                                            <!-- END NEW DYNAMIC APPROVER UI -->
-
-                                                        <?php
-                                                        // This block is for approvers to take action
-                                                        elseif ($show_action_box): ?>
-                                                            <div class="input-group mb-2">
-                                                                <div class="input-group-prepend"><div class="input-group-text"><?=__('action')?><span class="text-danger ml-2">*</span></div></div>
-                                                                <select class="form-control" name="status" id="statlist" required>
-                                                                    <option value=""><?=__('select')?></option>
-                                                                    <option value="approve"><?=__('approve')?></option>
-                                                                    <option value="reject"><?=__('reject')?></option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="input-group mb-2" id="RejectDIV" style="display: none;">
-                                                                <div class="input-group-prepend"><div class="input-group-text"><?=__('rejection_note')?><span class="text-danger ml-2">*</span></div></div>
-                                                                <input type='text' class="form-control" name="note" id="RejectInput" />
-                                                            </div>
-                                                            <!-- NEW: HR CC Select Dropdown (hidden by default) -->
-                                                            <?php if ($user_dept == 5): // UPDATED: HR Dept ID is 5 ?>
-                                                            <div class="form-group mb-2" id="cc_hr_select_div" style="display: none;">
-                                                                <label for="cc_hr_select"><?=__('cc_hr_employees_optional')?></label>
-                                                                <select class="form-control" name="cc_hr_employees[]" id="cc_hr_select" multiple="multiple">
-                                                                    <?php foreach($hr_employees as $hr_emp): ?>
-                                                                        <?php if($hr_emp['emp_id'] == $empid) continue; // Skip self ?>
-                                                                        <option value="<?= $hr_emp['emp_id'] ?>">
-                                                                            <?= parseName($hr_emp['name']) ?>
-                                                                        </option>
-                                                                    <?php endforeach; ?>
-                                                                </select>
-                                                            </div>
-                                                            <?php endif; ?>
-
-                                                            <button type="submit" name="submit" value="1" class="btn btn-info waves-effect waves-light mt-2"><?= __('submit_action') ?></button>
-
-                                                        <?php
-                                                        // This block is for Finance Manager to select who pays
-                                                        elseif ($show_assign_payer_box): ?>
-                                                            <div class="form-group mb-2">
-                                                                <label for="payable_by_emp_id"><?=__('assign_payable_to')?> <span class="text-danger">*</span></label>
-                                                                <select class="form-control" name="payable_by_emp_id" id="payable_by_emp_id" required>
-                                                                    <option value=""><?=__('select_finance_employee')?></option>
-                                                                    <?php foreach($finance_employees as $fin_emp): ?>
-                                                                        <option value="<?= $fin_emp['emp_id'] ?>" <?= ($fin_emp['emp_id'] == $payable_by_emp_id_get) ? 'selected' : '' ?>>
-                                                                            <?= parseName($fin_emp['name']) ?>
-                                                                        </option>
-                                                                    <?php endforeach; ?>
-                                                                </select>
-                                                            </div>
-                                                            <button type="submit" name="assign_payer_submit" value="1" class="btn btn-info waves-effect waves-light mt-2"><?=__('assign_payer_button')?></button>
-                                                        <?php endif; ?>
-
-                                                        <!-- Old action box logic placeholder (kept for rule 2) -->
-                                                        <?php /* if (false): ?> ... <?php endif; */ ?>
-                                                    </div>
-
-                                                </div>
-                                            </div>
-
-                                            <?php if($payment_details): ?>
-                                            <div class="row mt-4">
-                                                <div class="col-md-12">
-                                                    <div class="alert alert-info">
-                                                        <h5 class="alert-heading"><?=__('payment_information')?></h5>
-                                                        <p><strong><?=__('paid_amount')?>:</strong> <?= number_format($payment_details['paid_amount'], 2) ?> SAR</p>
-                                                        <p><strong><?=__('paid_by')?>:</strong> <?= htmlspecialchars($payment_details['paid_by_name']) ?> <?=__('on')?> <?= date('d M Y H:i', strtotime($payment_details['created_at'])) ?></p>
-                                                         <?php if ($assigned_payer_name): ?>
-                                                            <p><strong><?=__('payable_assigned_to')?>:</strong> <?= htmlspecialchars($assigned_payer_name) ?></p>
-                                                         <?php endif; ?>
-                                                        <?php if($payment_details['note']): ?>
-                                                            <p><strong><?=__('note')?>:</strong> <?= htmlspecialchars($payment_details['note']) ?></p>
-                                                        <?php endif; ?>
-                                                        <hr>
-                                                        <a href="assets/smt_payment_invoices/<?= htmlspecialchars($payment_details['payment_invoice']) ?>" target="_blank" class="btn btn-sm btn-primary"><i class="mdi mdi-eye-outline"></i> <?=__('view_payment_invoice')?></a>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <?php endif; ?>
-
-                                            <div class="row">
-                                                <div class="col-md-12">
-                                                    <div class="table-responsive">
-                                                        <table class="table mt-4">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th width="70">#</th>
-                                                                    <th><?=__('description_item_name_invoice_num')?></th>
-                                                                    <th width="150"><?=__('reference', 'Reference')?></th>
-                                                                    <th width="160"><?=__('location')?></th>
-                                                                    <th width="80"><?=__('quantity')?></th>
-                                                                    <th width="120"><?=__('unit_cost')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <th width="130"><?=__('item_value')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <th width="70"><?=__('vat_percent')?></th>
-                                                                    <th width="100"><?=__('vat_val')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <th width="130"><?=__('amount')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <th width="100"><?=__('discount')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <th width="150" class="text-right"><?=__('total')?> <i class="icon-saudi_riyal" style="font-size: 13px !important;"></i></th>
-                                                                    <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
-                                                                        <th width="60" class="text-right"></th>
-                                                                    <?php endif ?>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <?php
-                                                                $x = 1;
-                                                                $getdataloop = mysqli_query($conDB, "SELECT * FROM `smart_request` WHERE `inv_no`='" . escape_string($_GET['id']) . "' ");
-                                                                if ($getdataloop) { // Check if query was successful
-                                                                    while ($rec = mysqli_fetch_assoc($getdataloop)) {
-                                                                ?>
-                                                                    <tr class="set">
-                                                                        <td><input type="text" class="form-control" readonly value="<?= $x++ ?>" id="row"></td>
-                                                                        <td><input type="text" name="item_name[]" readonly class="form-control" value="<?= htmlspecialchars($rec["item_name"]); ?>" /></td>
-                                                                        <td><input type="text" name="reference[]" readonly class="form-control" value="<?= htmlspecialchars($rec["reference"] ?? ''); ?>" /></td>
-                                                                        <td><input type="text" name="location[]" readonly class="form-control" value="<?= htmlspecialchars($rec["location"]); ?>" /></td>
-                                                                        <td><input class="form-control" readonly type='text' name='quantity[]' value="<?= $rec["quantity"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='product_price[]' readonly value="<?= $rec["product_price"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='itmvalue[]' readonly value="<?= $rec["itmvalue"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='vat_rate[]' readonly value="<?= $rec["vat_rate"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='vat_val[]' readonly value="<?= $rec["vat_val"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='amount[]' readonly value="<?= $rec["amount"]; ?>" /></td>
-                                                                        <td><input class="form-control" type='text' name='idiscount[]' readonly value="<?= $rec["idiscount"]; ?>" /></td>
-                                                                        <td class="text-right"><input class="form-control" type='text' name='total_cost[]' readonly value="<?= $rec["total_cost"]; ?>" /></td>
-                                                                        <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
-                                                                            <td class="text-right">
-                                                                                <div class="btn-group" role="group" aria-label="Edit Button">
-                                                                                    <a href="javascript:void(0);" class="btn btn-sm btn-primary waves-effect editItemLineAttr bbtn" data-id="<?= $rec['id'] ?>" data-i_item_name="<?= htmlspecialchars($rec['item_name']) ?>" data-i_reference="<?= htmlspecialchars($rec['reference'] ?? '') ?>" data-i_quantity="<?= $rec['quantity'] ?>" data-i_product_price="<?= $rec['product_price'] ?>" data-i_vat_rate="<?= $rec['vat_rate'] ?>" data-i_idiscount="<?= $rec['idiscount'] ?>" data-i_itmvalue="<?= $rec['itmvalue'] ?>" data-i_vat_val="<?= $rec['vat_val'] ?>" data-i_amount="<?= $rec['amount'] ?>" data-i_total_cost="<?= $rec['total_cost'] ?>" data-i_location="<?= htmlspecialchars($rec['location']) ?>">
-                                                                                        <i class="mdi mdi-table-edit"></i>
-                                                                                    </a>
-                                                                                    <a href="javascript:void(0);" class="btn_remove btn btn-danger btn-sm bbtn deleteAjax" data-id="<?= $rec["id"] ?>" data-tbl="smart_request" data-file="0">
-                                                                                        <i class="mdi mdi-database-minus"></i>
-                                                                                    </a>
-                                                                                </div>
-                                                                            </td>
-                                                                        <?php endif ?>
-                                                                    </tr>
-                                                                <?php } // end while
-                                                                  } // end if $getdataloop
-                                                                ?>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-9">
-                                                    <div class="row">
-                                                        <?php
-                                                        $queryempdocu = mysqli_query($conDB, "SELECT * FROM `smt_attachment` WHERE `inv_no`='" . escape_string($_GET['id']) . "' ");
-                                                        if($queryempdocu && mysqli_num_rows($queryempdocu) > 0) {
-                                                            echo '<div class="col-12"><h5 class="header-title m-t-0 m-b-30">'.__('existing_attachments').'</h5></div>';
-
-                                                            while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
-                                                                $id_empdoc_get = $recempdoc["id"];
-                                                                $attachment_get = $recempdoc["attachment"];
-                                                                $docu_ext_get = $recempdoc["docu_ext"];
-                                                                $doc_date_reg_get = date('d, M Y h:ia', strtotime($recempdoc["created_at"]));
-                                                                $fileIcon = ($docu_ext_get == "pdf" ? "pdf" : ($docu_ext_get == "xls" || $docu_ext_get == "xlsx" ? "excel" : ($docu_ext_get == "tif" ? "tif" : ($docu_ext_get == "doc" || $docu_ext_get == "docx" ? "word" : ""))));
-                                                        ?>
-                                                            <div class="col-lg-2 col-xl-2">
-                                                                <div class="file-man-box">
-                                                                    <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
-                                                                        <a href="javascript:void(0);" class="file-close deleteAjax" data-id="<?= $id_empdoc_get ?>" data-tbl="smt_attachment" data-file="1" data-column="attachment"><i class="mdi mdi-close-circle"></i></a>
-                                                                    <?php endif ?>
-                                                                    <div class="file-img-box showAttach" style="cursor: pointer;" data-target="#ShowModal" data-id="<?= $id_empdoc_get ?>" data-i_attachment="<?= htmlspecialchars($attachment_get) ?>">
-                                                                        <?php if (in_array($docu_ext_get, ["pdf", "xls", "xlsx", "doc", "docx", "tif"]) && $fileIcon): ?>
-                                                                            <img src="assets/images/file_icons/<?= $fileIcon ?>.svg" alt="file icon" />
-                                                                        <?php elseif (!in_array($docu_ext_get, ["pdf", "xls", "xlsx", "doc", "docx", "tif"])) : ?>
-                                                                            <img src="./assets/smt_attachment/<?= htmlspecialchars($attachment_get) ?>" alt="attachment image" style="max-height: 100px; object-fit: contain;"/>
-                                                                        <?php else: ?>
-                                                                             <img src="assets/images/file_icons/blank.svg" alt="file icon" />
-                                                                        <?php endif ?>
-                                                                    </div>
-                                                                    <a href="./downloadFile.php?file=./assets/smt_attachment/<?= urlencode($attachment_get) ?>" class="file-download"><i class="mdi mdi-download"></i></a> <!-- urlencode filename -->
-                                                                    <div class="file-man-title"><p class="mb-0"><small><?= $doc_date_reg_get ?></small></p></div>
-                                                                </div>
-                                                            </div>
-                                                        <?php } // end while $recempdoc
-                                                          } // end if $queryempdocu
-                                                        ?>
-                                                    </div>
-                                                </div>
-                                                <div class="col-3" id="gtotal">
-                                                    <div class="float-right">
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('net_total_without_vat')?></div></div>
-                                                            <input class="form-control subtotal" type='text' id='subtotal' name='subtotal' readonly value="<?= round($total_cost_get, 2); ?>" />
-                                                            <div class="input-group-prepend"><div class="input-group-text currencyicon"><i class="icon-saudi_riyal" style="font-size: 15px !important;"></i></div></div>
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('vat_15_percent')?></div></div>
-                                                            <input class="form-control vat" type='text' id='vat' name='vat' readonly value="<?= round($vat_get, 2); ?>" />
-                                                            <div class="input-group-prepend"><div class="input-group-text currencyicon"><i class="icon-saudi_riyal" style="font-size: 15px !important;"></i></div></div>
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('total_before_disc')?></div></div>
-                                                            <input class="form-control total" type='text' id='total' name='total' readonly value="<?= round($total, 2); ?>" />
-                                                            <div class="input-group-prepend"><div class="input-group-text currencyicon"><i class="icon-saudi_riyal" style="font-size: 15px !important;"></i></div></div>
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('discount')?></div></div>
-                                                            <input class="form-control discount" type='text' id='discount' name='discount' readonly value="<?= round($discount_get, 2); ?>" />
-                                                            <div class="input-group-prepend"><div class="input-group-text currencyicon"><i class="icon-saudi_riyal" style="font-size: 15px !important;"></i></div></div>
-                                                        </div>
-                                                        <div class="input-group mb-2">
-                                                            <div class="input-group-prepend"><div class="input-group-text"><?=__('grand_total')?></div></div>
-                                                            <input class="form-control grandtotal" type='text' id='grandtotal' name='grandtotal' readonly value="<?= round($gtotal, 2); ?>" />
-                                                            <div class="input-group-prepend"><div class="input-group-text currencyicon"><i class="icon-saudi_riyal" style="font-size: 15px !important;"></i></div></div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="clearfix"></div>
-                                                </div>
-                                            </div>
-
-                                            <div class="hidden-print mt-4 mb-4">
-                                                <div class="text-right">
-                                                    <!-- REMOVED: Generic submit button. Specific buttons are now in the conditional blocks -->
-                                                    <div class="btn-group" role="group">
-                                                        <?php if ($current_status_get == "draft" && $empid == $emp_id_get): ?>
-                                                            <a href="add_line_request.php?id=<?= htmlspecialchars($_GET['id']) ?>" class="btn btn-success btn-sm bbtn" title="Add field"><?=__('add_line')?> <i class="mdi mdi-database-plus"></i></a>
-                                                            <a href="javascript:void(0);" class="btn btn-warning waves-effect waves-light editReqAttr"
-                                                               data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
-                                                               data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
-                                                               data-remarks="<?= htmlspecialchars($remarks_get) ?>"
-                                                                                  data-request_date="<?= $created_at_get ? htmlspecialchars(date('Y-m-d', strtotime($created_at_get))) : '' ?>"
-                                                               data-id="<?= htmlspecialchars($invnoget) ?>"><i class="fa fa-pencil m-r-5"></i> <?=__('edit_request_details')?></a>
-                                                        <?php endif; ?>
-                                                        <a href="./all_requests.php" class="btn btn-dark waves-effect waves-light"><i class="fa fa-angle-double-left"></i> <?=__('back_button')?></a>
-                                                        <a href="smt_print.php?id=<?= htmlspecialchars($invnoget) ?>" class="btn btn-primary waves-effect waves-light" target="_blank"><i class="fa fa-print m-r-5"></i> <?=__('print')?></a>
-                                                        <?php
-                                                            // Show Process Payment button only if:
-                                                            // 1. Request is Approved
-                                                            // 2. The logged-in user IS the assigned payer
-                                                            if ($show_process_payment_button) {
-                                                        ?>
-                                                            <button type="button" class="btn btn-danger waves-effect waves-light" id="processPaymentBtn"><i class="fa fa-money-bill-wave m-r-5"></i> <?=__('process_payment')?></button>
-                                                        <?php } ?>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                        <!-- ===== Header ===== -->
+                        <div class="sr-card sr-hero">
+                            <a href="./all_requests.php" class="sr-back"><i class="mdi mdi-arrow-left"></i> <?= __('all_smart_requests_header') ?></a>
+                            <div class="sr-hero-top">
+                                <div style="min-width: 0; flex: 1 1 420px;">
+                                    <div class="sr-hero-tags">
+                                        <span class="sr-chip sr-mono"><i class="mdi mdi-pound"></i><?= htmlspecialchars($invnoget) ?></span>
+                                        <span class="sr-pill sr-pill-lg <?= $status_tone ?>"><span class="sr-dot"></span><?= htmlspecialchars($status_label) ?></span>
+                                        <?php if ($waiting_for_name && $current_status_get == 'pending_approval'): ?>
+                                            <span class="sr-card-sub"><i class="mdi mdi-timer-sand"></i> <?= __('waiting_for', 'Waiting for') ?> <strong><?= htmlspecialchars($waiting_for_name) ?></strong></span>
+                                        <?php endif; ?>
                                     </div>
-                                    <div class="col-md-4 preview" id="ShowModal" style="display: none;">
-                                        <div class="card-box project-box" style="height: 97% !important;">
-                                            <a class='btn btn-primary btn-sm zoomFile'><i class='fa fa-paperclip'></i> <?=__('make_it_zoom')?></a>
-                                            <div class="dropdown float-right"><a href="javascript:void(0);" class="" id="closeTab"><h3 class="m-0 text-muted"><i class="mdi mdi-close"></i></h3></a></div><hr>
-                                            <div class="previewImg"></div>
+                                    <h1 class="sr-hero-title"><?= htmlspecialchars($sub_title_get) ?></h1>
+                                </div>
+                                <div class="sr-hero-amount">
+                                    <div class="sr-amount-label"><?= __('grand_total') ?></div>
+                                    <div class="sr-amount-value"><?= $fmt($gtotal) ?> <?= $riyal ?></div>
+                                    <div class="sr-card-sub"><?= count($line_items) ?> <?= count($line_items) == 1 ? __('item', 'item') : __('items', 'items') ?></div>
+                                </div>
+                            </div>
+
+                            <div class="sr-meta">
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-calendar"></i> <?= __('invoice_date') ?></div>
+                                    <div class="sr-meta-value"><?= $created_at_get ? date("d M Y", strtotime($created_at_get)) : '-' ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-tag-outline"></i> <?= __('sub_type') ?></div>
+                                    <div class="sr-meta-value" title="<?= htmlspecialchars($sub_type_get) ?>"><?= htmlspecialchars($sub_type_get ?: '-') ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-domain"></i> <?= __('department') ?></div>
+                                    <div class="sr-meta-value" title="<?= htmlspecialchars($dep_nme_get) ?>"><?= htmlspecialchars($dep_nme_get ?: '-') ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-account-outline"></i> <?= __('prepared_by') ?></div>
+                                    <div class="sr-meta-value"><?= htmlspecialchars($prep_by_get ?: '-') ?></div>
+                                </div>
+                            </div>
+
+                            <?php if ($remarks_get): ?>
+                                <div class="sr-remarks"><strong><?= __('remarks') ?>:</strong> <?= nl2br(htmlspecialchars($remarks_get)) ?></div>
+                            <?php endif; ?>
+
+                            <!-- Progress -->
+                            <div class="sr-steps" aria-label="<?= __('status') ?>">
+                                <?php foreach ($progress_steps as $i => $ps):
+                                    $cls = '';
+                                    if ($i === $steps_failed) { $cls = 'failed'; }
+                                    elseif ($i <= $steps_done) { $cls = 'done'; }
+                                    elseif ($i === $steps_current) { $cls = 'current'; }
+                                ?>
+                                    <div class="sr-step <?= $cls ?>">
+                                        <div class="sr-step-dot">
+                                            <?php if ($cls === 'done'): ?><i class="mdi mdi-check"></i>
+                                            <?php elseif ($cls === 'failed'): ?><i class="mdi mdi-close"></i>
+                                            <?php else: ?><i class="<?= $ps['icon'] ?>"></i><?php endif; ?>
                                         </div>
+                                        <div class="sr-step-label"><?= htmlspecialchars($ps['label']) ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <div class="sr-hero-actions hidden-print">
+                                <?php if ($is_draft_owner): ?>
+                                    <button type="button" class="sr-btn sr-btn-sm addLineBtn"><i class="mdi mdi-plus"></i> <?= __('add_line') ?></button>
+                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm editReqAttr"
+                                       data-sub_type="<?= htmlspecialchars($sub_type_get) ?>"
+                                       data-sub_title="<?= htmlspecialchars($sub_title_get) ?>"
+                                       data-remarks="<?= htmlspecialchars($remarks_get) ?>"
+                                       data-request_date="<?= $created_at_get ? htmlspecialchars(date('Y-m-d', strtotime($created_at_get))) : '' ?>"
+                                       data-id="<?= htmlspecialchars($invnoget) ?>"><i class="mdi mdi-pencil"></i> <?= __('edit_request_details') ?></a>
+                                <?php endif; ?>
+                                <span class="sr-spacer"></span>
+                                <a href="smt_print.php?id=<?= htmlspecialchars($invnoget) ?>" class="sr-btn sr-btn-sm js-print-link" target="_blank"><i class="mdi mdi-printer"></i> <?= __('print') ?></a>
+                                <?php if ($show_process_payment_button): ?>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="processPaymentBtn"><i class="mdi mdi-cash-multiple"></i> <?= __('process_payment') ?></button>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <?php if ($current_status_get == 'rejected' && !empty($rejection_note)): ?>
+                            <div class="sr-notice tone-red" role="alert">
+                                <i class="mdi mdi-close-octagon-outline"></i>
+                                <div><?= __('request_rejected_reason') ?> <strong>"<?= htmlspecialchars($rejection_note) ?>"</strong><?php if ($rejected_by_name): ?> &mdash; <?= htmlspecialchars($rejected_by_name) ?><?php endif; ?></div>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="row">
+                            <!-- ===== Main column ===== -->
+                            <div class="col-xl-8">
+
+                                <!-- Line items -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-format-list-bulleted"></i> <?= __('items', 'Items') ?> <span class="sr-count"><?= count($line_items) ?></span></h5>
+                                        <?php if ($is_draft_owner): ?>
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost addLineBtn"><i class="mdi mdi-plus"></i> <?= __('add_line') ?></button>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="sr-lines">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width: 44px;">#</th>
+                                                    <th><?= __('description_item_name_invoice_num') ?></th>
+                                                    <th class="num"><?= __('quantity') ?></th>
+                                                    <th class="num"><?= __('unit_cost') ?></th>
+                                                    <th class="num"><?= __('item_value') ?></th>
+                                                    <th class="num"><?= __('vat_val') ?></th>
+                                                    <th class="num"><?= __('discount') ?></th>
+                                                    <th class="num"><?= __('total') ?></th>
+                                                    <?php if ($is_draft_owner): ?><th style="width: 80px;"></th><?php endif; ?>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php if (empty($line_items)): ?>
+                                                    <tr><td colspan="<?= $is_draft_owner ? 9 : 8 ?>" class="text-center text-muted py-4"><?= __('no_data_available_in_table') ?></td></tr>
+                                                <?php endif; ?>
+                                                <?php $x = 1; foreach ($line_items as $rec): ?>
+                                                    <tr>
+                                                        <td><span class="sr-line-no"><?= $x++ ?></span></td>
+                                                        <td>
+                                                            <div class="sr-line-name"><?= htmlspecialchars($rec["item_name"]) ?></div>
+                                                            <div class="sr-line-meta">
+                                                                <?php if (!empty($rec["reference"])): ?><span><i class="mdi mdi-pound"></i><?= htmlspecialchars($rec["reference"]) ?></span><?php endif; ?>
+                                                                <?php if (!empty($rec["location"])): ?><span><i class="mdi mdi-map-marker-outline"></i><?= htmlspecialchars($rec["location"]) ?></span><?php endif; ?>
+                                                            </div>
+                                                        </td>
+                                                        <td class="num"><?= htmlspecialchars($rec["quantity"]) ?></td>
+                                                        <td class="num"><?= $fmt($rec["product_price"]) ?></td>
+                                                        <td class="num"><?= $fmt($rec["itmvalue"]) ?></td>
+                                                        <td class="num"><?= $fmt($rec["vat_val"]) ?><div class="sr-card-sub"><?= htmlspecialchars($rec["vat_rate"]) ?>%</div></td>
+                                                        <td class="num"><?= (float)$rec["idiscount"] > 0 ? $fmt($rec["idiscount"]) : '<span class="text-muted">&ndash;</span>' ?></td>
+                                                        <td class="num"><span class="sr-money"><?= $fmt($rec["total_cost"]) ?></span></td>
+                                                        <?php if ($is_draft_owner): ?>
+                                                            <td class="num">
+                                                                <span class="sr-line-actions">
+                                                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-icon editItemLineAttr" title="<?= __('edit', 'Edit') ?>" data-id="<?= $rec['id'] ?>" data-i_item_name="<?= htmlspecialchars($rec['item_name']) ?>" data-i_reference="<?= htmlspecialchars($rec['reference'] ?? '') ?>" data-i_quantity="<?= $rec['quantity'] ?>" data-i_product_price="<?= $rec['product_price'] ?>" data-i_vat_rate="<?= $rec['vat_rate'] ?>" data-i_idiscount="<?= $rec['idiscount'] ?>" data-i_itmvalue="<?= $rec['itmvalue'] ?>" data-i_vat_val="<?= $rec['vat_val'] ?>" data-i_amount="<?= $rec['amount'] ?>" data-i_total_cost="<?= $rec['total_cost'] ?>" data-i_location="<?= htmlspecialchars($rec['location']) ?>">
+                                                                        <i class="mdi mdi-pencil"></i>
+                                                                    </a>
+                                                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-icon deleteAjax" title="<?= __('delete', 'Delete') ?>" data-id="<?= $rec["id"] ?>" data-tbl="smart_request" data-file="0">
+                                                                        <i class="mdi mdi-delete text-danger"></i>
+                                                                    </a>
+                                                                </span>
+                                                            </td>
+                                                        <?php endif; ?>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="sr-totals">
+                                        <dl>
+                                            <div class="row-t"><dt><?= __('net_total_without_vat') ?></dt><dd><?= $fmt($total_cost_get) ?> <?= $riyal ?></dd></div>
+                                            <div class="row-t"><dt><?= __('vat_15_percent') ?></dt><dd><?= $fmt($vat_get) ?> <?= $riyal ?></dd></div>
+                                            <div class="row-t"><dt><?= __('total_before_disc') ?></dt><dd><?= $fmt($total) ?> <?= $riyal ?></dd></div>
+                                            <?php if ((float)$discount_get > 0): ?>
+                                                <div class="row-t"><dt><?= __('discount') ?></dt><dd>&minus; <?= $fmt($discount_get) ?> <?= $riyal ?></dd></div>
+                                            <?php endif; ?>
+                                            <div class="row-t grand"><dt><?= __('grand_total') ?></dt><dd><?= $fmt($gtotal) ?> <?= $riyal ?></dd></div>
+                                            <!-- Opening cash: on-screen helper only (no name attribute, never saved);
+                                                 passed to smt_print.php in the URL so the printout can show it. -->
+                                            <div class="sr-cash">
+                                                <div class="row-t sr-cash-input">
+                                                    <dt><label for="srOpeningCash"><?= __('opening_cash', 'Opening Cash') ?></label></dt>
+                                                    <dd><input type="number" step="0.01" min="0" id="srOpeningCash" class="form-control" placeholder="0.00" inputmode="decimal" autocomplete="off"></dd>
+                                                </div>
+                                                <div class="row-t sr-cash-balance" id="srCashBalanceRow" style="display: none;">
+                                                    <dt><?= __('balance', 'Balance') ?></dt>
+                                                    <dd><span id="srCashBalance">0.00</span> <?= $riyal ?></dd>
+                                                </div>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                    <?php if ($gtotal > 0 && function_exists('getSaudiCurrency')): ?>
+                                        <div class="sr-amount-words"><?= htmlspecialchars(ucfirst(trim(getSaudiCurrency($gtotal)))) ?></div>
+                                    <?php endif; ?>
+                                </div>
+
+                                <!-- Attachments -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-paperclip"></i> <?= __('existing_attachments') ?> <span class="sr-count"><?= count($attachments) ?></span></h5>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <?php if ($can_add_attachment): ?>
+                                            <label class="sr-field-label"><?= __('attachment') ?> <span class="text-danger">*</span></label>
+                                            <div class="sr-attach-choice mb-3">
+                                                <label class="sr-choice">
+                                                    <input type="radio" id="inlineRadio3" value="yes" name="attach" onclick="showAttachment()" required data-parsley-errors-container="#attach-error-container">
+                                                    <span><i class="mdi mdi-paperclip"></i> <?= __('have_attachments') ?></span>
+                                                </label>
+                                                <label class="sr-choice">
+                                                    <input type="radio" id="inlineRadio2" value="no" name="attach" onclick="hideAttachment()">
+                                                    <span><i class="mdi mdi-clippy"></i> <?= __('no_attachment') ?></span>
+                                                </label>
+                                            </div>
+                                            <div id="attach-error-container" class="text-danger small mb-2"></div>
+                                            <div class="sr-qr attachmentDIV" style="display: none;">
+                                                <img src="qrconfig_smartrequest.php?id=<?= htmlspecialchars($_GET['id']) ?>" alt="QR" />
+                                                <div>
+                                                    <p><?= __('scan_qr_for_attachments') ?></p>
+                                                    <a href="javascript:void(0);" class="sr-btn sr-btn-sm sr-btn-primary smt_attachment" data-attach="ok" data-inv_no="<?= htmlspecialchars($invnoget) ?>">
+                                                        <i class="mdi mdi-cloud-upload"></i> <?= __('upload_documents') ?>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                            <?php if (!empty($attachments)): ?><div class="mb-3"></div><?php endif; ?>
+                                        <?php endif; ?>
+
+                                        <?php if (empty($attachments)): ?>
+                                            <div class="sr-empty-files"><i class="mdi mdi-file-hidden"></i> <?= __('no_attachment') ?></div>
+                                        <?php else: ?>
+                                            <div class="sr-files">
+                                                <?php foreach ($attachments as $recempdoc):
+                                                    $id_empdoc_get = $recempdoc["id"];
+                                                    $attachment_get = $recempdoc["attachment"];
+                                                    $docu_ext_get = strtolower((string)$recempdoc["docu_ext"]);
+                                                    $doc_date_reg_get = date('d M Y, h:ia', strtotime($recempdoc["created_at"]));
+                                                    $fileIcon = ($docu_ext_get == "pdf" ? "pdf" : ($docu_ext_get == "xls" || $docu_ext_get == "xlsx" ? "excel" : ($docu_ext_get == "tif" ? "tif" : ($docu_ext_get == "doc" || $docu_ext_get == "docx" ? "word" : ""))));
+                                                    $is_doc = in_array($docu_ext_get, ["pdf", "xls", "xlsx", "doc", "docx", "tif"]);
+                                                ?>
+                                                    <div class="sr-file">
+                                                        <?php if ($is_draft_owner): ?>
+                                                            <a href="javascript:void(0);" class="sr-file-del deleteAjax" title="<?= __('delete', 'Delete') ?>" data-id="<?= $id_empdoc_get ?>" data-tbl="smt_attachment" data-file="1" data-column="attachment"><i class="mdi mdi-close"></i></a>
+                                                        <?php endif; ?>
+                                                        <div class="sr-file-thumb showAttach" role="button" tabindex="0" data-id="<?= $id_empdoc_get ?>" data-i_attachment="<?= htmlspecialchars($attachment_get) ?>">
+                                                            <?php if ($is_doc): ?>
+                                                                <img class="sr-file-icon" src="assets/images/file_icons/<?= $fileIcon ?: 'blank' ?>.svg" alt="<?= htmlspecialchars($docu_ext_get) ?>" />
+                                                            <?php else: ?>
+                                                                <img src="./assets/smt_attachment/<?= htmlspecialchars($attachment_get) ?>" alt="<?= __('attachment') ?>" loading="lazy" />
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <div class="sr-file-foot">
+                                                            <div style="min-width: 0;">
+                                                                <div class="sr-file-name" title="<?= htmlspecialchars($attachment_get) ?>"><?= strtoupper(htmlspecialchars($docu_ext_get ?: 'file')) ?></div>
+                                                                <div class="sr-file-date"><?= $doc_date_reg_get ?></div>
+                                                            </div>
+                                                            <a href="./downloadFile.php?file=./assets/smt_attachment/<?= urlencode($attachment_get) ?>" class="sr-file-dl" title="<?= __('download', 'Download') ?>"><i class="mdi mdi-download"></i></a>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
-                            </form>
+
+                            </div>
+
+                            <!-- ===== Side column ===== -->
+                            <div class="col-xl-4">
+                                <div class="sr-sticky">
+
+                                <?php if ($show_submit_button): ?>
+                                    <!-- Creator: build the approval chain and submit -->
+                                    <div class="sr-card sr-action-card">
+                                        <div class="sr-card-head">
+                                            <h5 class="sr-card-title"><i class="mdi mdi-send"></i> <?= __('submit_for_approval') ?></h5>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <label class="sr-field-label" for="approver-select"><?= __('select_approvers_in_order') ?></label>
+                                            <div class="sr-add-row">
+                                                <select class="form-control" id="approver-select" data-placeholder="<?= __('select_approver') ?>">
+                                                    <option value=""></option>
+                                                    <?php foreach ($potential_approvers as $employee): ?>
+                                                        <option value="<?= $employee['emp_id'] ?>" data-type="<?= htmlspecialchars($employee['user_type']) ?>" data-dept="<?= htmlspecialchars($employee['dept']) ?>">
+                                                            <?= parseName($employee['name']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button class="sr-btn sr-btn-primary" type="button" id="add-approver-btn"><i class="mdi mdi-plus"></i> <?= __('add') ?></button>
+                                            </div>
+                                            <ol class="sr-approver-list" id="approver-list-container"></ol>
+                                            <div class="sr-approver-empty" id="approver-empty"><i class="mdi mdi-account-multiple-plus"></i> <?= __('approval_chain_not_defined_yet') ?></div>
+                                            <div id="approver-error-container" class="text-danger"></div>
+                                            <div class="sr-hint"><i class="mdi mdi-information-outline"></i> <?= __('approver_order_hint', 'Approvers act one after another, in this order. Use the arrows to reorder.') ?></div>
+                                            <button type="submit" name="submit" value="1" class="sr-btn sr-btn-primary sr-btn-block mt-3"><i class="mdi mdi-send"></i> <?= __('submit_for_approval') ?></button>
+                                        </div>
+                                    </div>
+
+                                <?php elseif ($show_action_box): ?>
+                                    <!-- Current approver: approve / reject -->
+                                    <div class="sr-card sr-action-card">
+                                        <div class="sr-card-head">
+                                            <h5 class="sr-card-title"><i class="mdi mdi-gavel"></i> <?= __('your_decision', 'Your decision') ?></h5>
+                                            <span class="sr-pill tone-amber"><?= __('level') ?> <?= (int)$current_approval_level_get ?></span>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <div class="sr-attach-choice">
+                                                <label class="sr-choice sr-choice-approve">
+                                                    <input type="radio" name="status" value="approve" class="sr-decision" required data-parsley-errors-container="#decision-error-container">
+                                                    <span><i class="mdi mdi-check-circle-outline"></i> <?= __('approve') ?></span>
+                                                </label>
+                                                <label class="sr-choice sr-choice-reject">
+                                                    <input type="radio" name="status" value="reject" class="sr-decision">
+                                                    <span><i class="mdi mdi-close-circle-outline"></i> <?= __('reject') ?></span>
+                                                </label>
+                                            </div>
+                                            <div id="decision-error-container" class="text-danger small mt-1"></div>
+
+                                            <div class="mt-3" id="RejectDIV">
+                                                <label class="sr-field-label" for="RejectInput">
+                                                    <span class="note-label-approve"><?= __('note_optional') ?></span>
+                                                    <span class="note-label-reject" style="display: none;"><?= __('rejection_note') ?> <span class="text-danger">*</span></span>
+                                                </label>
+                                                <textarea class="form-control" name="note" id="RejectInput" rows="3"></textarea>
+                                            </div>
+
+                                            <?php if ($user_dept == 5): // HR can CC colleagues on approval ?>
+                                                <div class="mt-3" id="cc_hr_select_div" style="display: none;">
+                                                    <label class="sr-field-label" for="cc_hr_select"><?= __('cc_hr_employees_optional') ?></label>
+                                                    <select class="form-control" name="cc_hr_employees[]" id="cc_hr_select" multiple="multiple">
+                                                        <?php foreach ($hr_employees as $hr_emp): ?>
+                                                            <?php if ($hr_emp['emp_id'] == $empid) continue; // Skip self ?>
+                                                            <option value="<?= $hr_emp['emp_id'] ?>"><?= parseName($hr_emp['name']) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <button type="submit" name="submit" value="1" class="sr-btn sr-btn-primary sr-btn-block mt-3" id="decisionSubmit"><i class="mdi mdi-check-all"></i> <?= __('submit_action') ?></button>
+                                        </div>
+                                    </div>
+
+                                <?php elseif ($show_assign_payer_box): ?>
+                                    <!-- Finance Manager: assign who pays -->
+                                    <div class="sr-card sr-action-card">
+                                        <div class="sr-card-head">
+                                            <h5 class="sr-card-title"><i class="mdi mdi-cash"></i> <?= __('assign_payable_to') ?></h5>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <label class="sr-field-label" for="payable_by_emp_id"><?= __('select_finance_employee') ?> <span class="text-danger">*</span></label>
+                                            <select class="form-control" name="payable_by_emp_id" id="payable_by_emp_id" required data-parsley-errors-container="#payer-error-container">
+                                                <option value=""><?= __('select_finance_employee') ?></option>
+                                                <?php foreach ($finance_employees as $fin_emp): ?>
+                                                    <option value="<?= $fin_emp['emp_id'] ?>" <?= ($fin_emp['emp_id'] == $payable_by_emp_id_get) ? 'selected' : '' ?>><?= parseName($fin_emp['name']) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <div id="payer-error-container" class="text-danger small mt-1"></div>
+                                            <button type="submit" name="assign_payer_submit" value="1" class="sr-btn sr-btn-primary sr-btn-block mt-3"><i class="mdi mdi-account-check"></i> <?= __('assign_payer_button') ?></button>
+                                        </div>
+                                    </div>
+
+                                <?php elseif ($show_process_payment_button): ?>
+                                    <!-- Assigned payer -->
+                                    <div class="sr-card sr-action-card">
+                                        <div class="sr-card-head">
+                                            <h5 class="sr-card-title"><i class="mdi mdi-cash-multiple"></i> <?= __('process_payment') ?></h5>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <p class="sr-card-sub mb-3"><?= __('payment_assigned_to_you', 'This request is assigned to you for payment. Upload the payment receipt to close it.') ?></p>
+                                            <button type="button" class="sr-btn sr-btn-success sr-btn-block" onclick="$('#processPaymentBtn').trigger('click');"><i class="mdi mdi-cash-usd"></i> <?= __('process_payment') ?> &middot; <?= $fmt($gtotal) ?> <?= $riyal ?></button>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if ($payment_details || $assigned_payer_name): ?>
+                                    <!-- Payment -->
+                                    <div class="sr-card">
+                                        <div class="sr-card-head">
+                                            <h5 class="sr-card-title"><i class="mdi mdi-credit-card"></i> <?= __('payment_information') ?></h5>
+                                            <?php if ($payment_details): ?><span class="sr-pill tone-green"><span class="sr-dot"></span><?= __('paid_status') ?></span><?php endif; ?>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <dl class="sr-kv">
+                                                <?php if ($assigned_payer_name): ?>
+                                                    <div class="row-kv"><dt><?= __('payable_assigned_to') ?></dt><dd><?= htmlspecialchars(parseName($assigned_payer_name)) ?></dd></div>
+                                                <?php endif; ?>
+                                                <?php if ($payment_details): ?>
+                                                    <div class="row-kv"><dt><?= __('paid_amount') ?></dt><dd><?= $fmt($payment_details['paid_amount']) ?> <?= $riyal ?></dd></div>
+                                                    <div class="row-kv"><dt><?= __('paid_by') ?></dt><dd><?= htmlspecialchars($payment_details['paid_by_name']) ?></dd></div>
+                                                    <div class="row-kv"><dt><?= __('on') ?></dt><dd><?= date('d M Y, H:i', strtotime($payment_details['created_at'])) ?></dd></div>
+                                                    <?php if ($payment_details['note']): ?>
+                                                        <div class="row-kv"><dt><?= __('note') ?></dt><dd><?= htmlspecialchars($payment_details['note']) ?></dd></div>
+                                                    <?php endif; ?>
+                                                <?php endif; ?>
+                                            </dl>
+                                            <?php if ($payment_details && !empty($payment_details['payment_invoice'])): ?>
+                                                <a href="assets/smt_payment_invoices/<?= htmlspecialchars($payment_details['payment_invoice']) ?>" target="_blank" class="sr-btn sr-btn-sm sr-btn-block mt-3"><i class="mdi mdi-eye-outline"></i> <?= __('view_payment_invoice') ?></a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Approval chain -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-account-multiple"></i> <?= __('approval_status') ?></h5>
+                                        <span class="sr-count"><?= count($approval_chain) ?></span>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <?php if (empty($approval_chain)): ?>
+                                            <div class="sr-empty-files"><?= __('approval_chain_not_defined_yet') ?></div>
+                                        <?php else: ?>
+                                            <ol class="sr-chain">
+                                                <?php foreach ($approval_chain as $step):
+                                                    $step_status = $step['status']; // pending | approved | rejected | awaiting
+                                                    $step_tone = ['approved' => 'tone-green', 'rejected' => 'tone-red', 'pending' => 'tone-amber'][$step_status] ?? 'tone-slate';
+                                                    $action_date = $step['action_date'] ? date('d M Y, H:i', strtotime($step['action_date'])) : '';
+                                                ?>
+                                                    <li class="sr-chain-item <?= htmlspecialchars($step_status) ?>">
+                                                        <span class="sr-chain-marker">
+                                                            <?php if ($step_status == 'approved'): ?><i class="mdi mdi-check"></i>
+                                                            <?php elseif ($step_status == 'rejected'): ?><i class="mdi mdi-close"></i>
+                                                            <?php else: ?><?= htmlspecialchars($sr_initials(parseName($step['approver_name']))) ?><?php endif; ?>
+                                                        </span>
+                                                        <div class="sr-chain-body">
+                                                            <div class="sr-chain-row">
+                                                                <span class="sr-chain-name"><?= parseName($step['approver_name']) ?></span>
+                                                                <span class="sr-pill <?= $step_tone ?>"><?= __($step_status) ?></span>
+                                                            </div>
+                                                            <div class="sr-chain-level"><?= __('level') ?> <?= (int)$step['approval_level'] ?><?php if ($action_date): ?> &middot; <?= $action_date ?><?php endif; ?></div>
+                                                            <?php if ($step['note']): ?>
+                                                                <div class="sr-chain-note"><?= htmlspecialchars($step['note']) ?></div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ol>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                <!-- Activity -->
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-history"></i> <?= __('status_history_timeline', 'Status History Timeline') ?></h5>
+                                        <span class="sr-count"><?= count($history) ?></span>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <?php if (empty($history)): ?>
+                                            <div class="sr-empty-files"><?= __('no_history', 'No history recorded yet.') ?></div>
+                                        <?php else: ?>
+                                            <ul class="sr-activity">
+                                                <?php foreach ($history as $item):
+                                                    $status_clean = strtolower($item['status']);
+                                                    $h_tone = 'tone-amber'; $h_icon = 'mdi-clock';
+                                                    if (strpos($status_clean, 'paid') !== false) {
+                                                        $h_tone = 'tone-green'; $h_icon = 'mdi-cash-usd';
+                                                    } elseif (strpos($status_clean, 'approved') !== false || strpos($status_clean, 'completed') !== false) {
+                                                        $h_tone = 'tone-green'; $h_icon = 'mdi-check';
+                                                    } elseif (strpos($status_clean, 'rejected') !== false || strpos($status_clean, 'cancel') !== false) {
+                                                        $h_tone = 'tone-red'; $h_icon = 'mdi-close';
+                                                    } elseif (strpos($status_clean, 'assigned') !== false) {
+                                                        $h_tone = 'tone-sky'; $h_icon = 'mdi-account-switch';
+                                                    } elseif (strpos($status_clean, 'draft') !== false || strpos($status_clean, 'created') !== false) {
+                                                        $h_tone = 'tone-slate'; $h_icon = 'mdi-file-document';
+                                                    }
+                                                ?>
+                                                    <li>
+                                                        <span class="sr-activity-icon <?= $h_tone ?>"><i class="mdi <?= $h_icon ?>"></i></span>
+                                                        <div class="sr-activity-body">
+                                                            <div class="sr-activity-title"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></div>
+                                                            <?php if (!empty($item['note'])): ?>
+                                                                <div class="sr-activity-note"><?= nl2br(htmlspecialchars(getDisplayName($item['note']))) ?></div>
+                                                            <?php endif; ?>
+                                                            <div class="sr-activity-meta">
+                                                                <span><i class="mdi mdi-account-outline"></i> <?= getDisplayName($item['emp_name']) ?></span>
+                                                                <span><i class="mdi mdi-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></span>
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Attachment preview -->
+                    <div class="modal fade" id="srPreviewModal" tabindex="-1" role="dialog" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title"><i class="mdi mdi-paperclip"></i> <?= __('attachment') ?></h5>
+                                    <div class="d-flex align-items-center" style="gap: 6px;">
+                                        <a class="sr-btn sr-btn-sm zoomFile" href="javascript:void(0);"><i class="mdi mdi-open-in-new"></i> <?= __('make_it_zoom') ?></a>
+                                        <a class="sr-btn sr-btn-sm sr-preview-dl" href="javascript:void(0);"><i class="mdi mdi-download"></i></a>
+                                        <button type="button" class="sr-btn sr-btn-sm sr-btn-icon sr-btn-ghost" data-dismiss="modal" aria-label="Close"><i class="mdi mdi-close"></i></button>
+                                    </div>
+                                </div>
+                                <div class="modal-body previewImg"></div>
+                            </div>
                         </div>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?></footer>
@@ -1390,225 +1344,188 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
     <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-    
+    <?php include __DIR__ . '/includes/smart_request_lines_js.php'; ?>
+
     <script>
-        // Function to display popup (ensure it's defined or included)
         function displayPopup(url) {
-           window.open(url, 'popupWindow', 'width=800,height=600,scrollbars=yes');
+           window.open(url, 'popupWindow', 'width=900,height=700,scrollbars=yes');
         }
 
         function showAttachment() {
-            $('.attachmentDIV').removeClass('noneDIV').addClass('showDIV');
+            $('.attachmentDIV').slideDown(150);
         }
         function hideAttachment() {
-            $('.attachmentDIV').removeClass('showDIV').addClass('noneDIV');
+            $('.attachmentDIV').slideUp(150);
         }
 
-        jQuery('.showAttach').on('click', function(event) {
+        // Attachment preview in a modal
+        $(document).on('click keydown', '.showAttach', function(event) {
+            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
             var img = $(this).data('i_attachment');
-            // Basic security check for filename
-             if (!img || typeof img !== 'string' || img.includes('..') || img.startsWith('/')) {
-                 console.error("Invalid attachment path");
-                 return;
-             }
-            $(".previewImg").empty().append("<iframe src='./assets/smt_attachment/" + encodeURIComponent(img) + "' frameborder='0' scrolling='yes' id='iFramePreview' style='width:100%; height: 500px;'></iframe>"); // Added style
-            $(".zoomFile").attr("href", "javascript:displayPopup('./assets/smt_attachment/" + encodeURIComponent(img) + "')");
-            jQuery('.preview').show('slow');
-            $("#main-content").addClass('col-md-8').removeClass('col-md-12');
+            if (!img || typeof img !== 'string' || img.includes('..') || img.startsWith('/')) {
+                console.error("Invalid attachment path");
+                return;
+            }
+            var src = './assets/smt_attachment/' + encodeURIComponent(img);
+            $(".previewImg").empty().append($('<iframe>', { src: src, id: 'iFramePreview' }));
+            $(".zoomFile").attr("href", "javascript:displayPopup('" + src + "')");
+            $(".sr-preview-dl").attr("href", "./downloadFile.php?file=./assets/smt_attachment/" + encodeURIComponent(img));
+            $('#srPreviewModal').modal('show');
         });
-        jQuery('#closeTab').on('click', function(event) {
-            jQuery('.preview').hide('slow');
-            $("#main-content").removeClass('col-md-8').addClass('col-md-12');
-             $(".previewImg").empty(); // Clear iframe content
+        $('#srPreviewModal').on('hidden.bs.modal', function () {
+            $(".previewImg").empty();
         });
 
         $(document).ready(function() {
-            // Initialize the form validation
-            $('form').parsley();
+            const $form = $('#srRequestForm');
+            $form.parsley();
 
-             // HR Department ID - UPDATED to 5
             const HR_DEPT_ID = 5;
 
-            $("#statlist").change(function() {
-                const selectedAction = $(this).val();
-                if (selectedAction === "reject") {
-                    $("#RejectDIV").show();
-                    $("#RejectInput").prop('required', true).parsley().validate();
-                    $("#cc_hr_select_div").hide(); // Hide CC on reject
-                } else {
-                    $("#RejectDIV").hide();
-                    $("#RejectInput").prop('required', false).parsley().validate();
-                     // Show CC only for HR users selecting 'approve'
-                    if (window.currentUserDept == HR_DEPT_ID && selectedAction === 'approve') {
-                        $("#cc_hr_select_div").show();
-                    } else {
-                         $("#cc_hr_select_div").hide();
-                    }
+            // Approve / reject: note is required only on reject; HR may CC colleagues on approve
+            $('.sr-decision').on('change', function() {
+                const selectedAction = $('.sr-decision:checked').val();
+                const isReject = selectedAction === 'reject';
+                $('#RejectInput').prop('required', isReject);
+                $('.note-label-reject').toggle(isReject);
+                $('.note-label-approve').toggle(!isReject);
+                $('#RejectInput').attr('placeholder', isReject ? <?= json_encode(__('rejection_note')) ?> : '');
+                if (isReject) {
+                    $('#RejectInput').trigger('focus');
                 }
-            }).change(); // Trigger change on load to set initial state
+                $('#cc_hr_select_div').toggle(window.currentUserDept == HR_DEPT_ID && selectedAction === 'approve');
+                $('#decisionSubmit')
+                    .toggleClass('sr-btn-primary', !selectedAction)
+                    .toggleClass('sr-btn-success', selectedAction === 'approve')
+                    .toggleClass('sr-btn-danger', isReject);
+            });
 
-
-            // NEW Select2 for dynamic approver list with BADGE and Department
-            // Helper function to capitalize first letter and handle role mapping
+            // Approver select2 with Department + Role badge
             function getRoleText(userType) {
-                 if (!userType) return '';
-                 let role = userType.toLowerCase(); // Work with lowercase
-                 switch (role) {
-                     case 'dept_user': return 'Manager'; // Explicitly map dept_user
-                     case 'assistant': return 'Assistant'; // Explicitly map assistant
-                     // Add other specific mappings if needed (e.g., 'gm' -> 'General Manager')
-                     case 'gm': return 'General Manager';
-                     case 'hr': return 'HR'; // Keep HR simple if desired, or map based on dept
-                     case 'administrator': return 'Admin'; // Shorten Admin
-                     // Default: Capitalize the first letter if no specific mapping
-                     default:
-                         return userType.charAt(0).toUpperCase() + userType.slice(1);
-                 }
+                if (!userType) return '';
+                switch (userType.toLowerCase()) {
+                    case 'dept_user': return 'Manager';
+                    case 'assistant': return 'Assistant';
+                    case 'gm': return 'General Manager';
+                    case 'hr': return 'HR';
+                    case 'administrator': return 'Admin';
+                    default: return userType.charAt(0).toUpperCase() + userType.slice(1);
+                }
             }
-
-
-            function formatApprover (approver) {
-                if (!approver.id) { return approver.text; }
+            function approverBadge(approver, extraClass) {
                 var $element = $(approver.element);
                 var userType = $element.data('type') || '';
-                var deptId = $element.data('dept') || '';
-                var deptName = window.departmentMap[deptId] || ''; // Get dept name from map
-
-                // Get role text based on userType
-                let roleText = getRoleText(userType); // Use helper function
-
-                // Construct badge text: Dept Name + Role Text (e.g., Finance Manager)
-                var badgeText = deptName ? `${deptName} ${roleText}` : roleText;
-                
-                var badgeHtml = badgeText ? '<span class="user-type-badge ' + userType + ' select2-results__option .user-type-badge">' + badgeText + '</span>' : '';
-
-                var $approver = $(
-                    // Wrap the main text in a span to allow flexbox to manage space
-                    '<span class="select2-option-text">' + approver.text + '</span>' + badgeHtml
-                );
-                return $approver;
-            };
-
-            function formatApproverSelection (approver) {
-                 if (!approver.id) { return approver.text; }
-                 var $element = $(approver.element);
-                 var userType = $element.data('type') || '';
-                 var deptId = $element.data('dept') || '';
-                 var deptName = window.departmentMap[deptId] || '';
-
-                 // Get role text based on userType
-                 let roleText = getRoleText(userType); // Use helper function
-
-                 // Construct badge text: Dept Name + Role Text
-                 var badgeText = deptName ? `${deptName} ${roleText}` : roleText;
-
-                 var badgeHtml = badgeText ? '<span class="user-type-badge ' + userType + ' select2-selection__rendered-badge">' + badgeText + '</span>' : ''; // Different class for selection
-                 
-                 // Return structure for flexbox alignment in the selection area
-                 var $approver = $(
-                     // Wrap the main text in a span
-                     '<span class="select2-selection-text">' + approver.text + '</span>' + badgeHtml
-                 );
-                 return $approver;
-            };
+                var deptName = window.departmentMap[$element.data('dept') || ''] || '';
+                var roleText = getRoleText(userType);
+                var badgeText = deptName ? (deptName + ' ' + roleText) : roleText;
+                if (!badgeText) return null;
+                return $('<span>', { 'class': 'user-type-badge ' + userType + ' ' + extraClass, text: badgeText });
+            }
+            function formatApprover(approver) {
+                if (!approver.id) { return approver.text; }
+                return $('<span class="d-flex align-items-center justify-content-between w-100">')
+                    .append($('<span class="select2-option-text">').text(approver.text))
+                    .append(approverBadge(approver, ''));
+            }
+            function formatApproverSelection(approver) {
+                if (!approver.id) { return approver.text; }
+                return $('<span class="d-flex align-items-center w-100">')
+                    .append($('<span class="select2-selection-text">').text(approver.text))
+                    .append(approverBadge(approver, 'select2-selection__rendered-badge'));
+            }
 
             $('#approver-select').select2({
-                placeholder: $(this).data('placeholder'),
+                placeholder: $('#approver-select').data('placeholder'),
                 allowClear: true,
-                templateResult: formatApprover, // Function to render dropdown options
-                templateSelection: formatApproverSelection // Function to render selected option
+                width: '100%',
+                templateResult: formatApprover,
+                templateSelection: formatApproverSelection
             });
-             // Also initialize the payable_by_emp_id dropdown if it exists
-             $('#payable_by_emp_id').select2({
-                 placeholder: '<?=__('select_finance_employee')?>',
-                 allowClear: true
-             });
+            $('#payable_by_emp_id').select2({
+                placeholder: <?= json_encode(__('select_finance_employee')) ?>,
+                allowClear: true,
+                width: '100%'
+            });
+            $('#cc_hr_select').select2({
+                placeholder: <?= json_encode(__('select_employees_to_cc_optional')) ?>,
+                allowClear: true,
+                width: '100%'
+            });
 
-             // NEW: Initialize HR CC Select2
-             $('#cc_hr_select').select2({
-                 placeholder: '<?=__('select_employees_to_cc_optional')?>',
-                 allowClear: true,
-                 width: '100%' // Ensure it takes full width
-             });
+            // Approval chain builder (order = approval level)
+            const $approverList = $('#approver-list-container');
 
-
-            // NEW Dynamic Approver List Logic
-            let approverCount = 0;
-
-            function updateValidation() {
-                 const parsleyInstance = $('#min-approver-check').parsley();
-                 if (!parsleyInstance) return; // Exit if parsley not initialized
-
-                if (approverCount > 0) {
-                    $('#min-approver-check').val('ok'); // Satisfy parsley
-                } else {
-                    $('#min-approver-check').val(''); // Fail parsley
+            function renumberApprovers() {
+                const $items = $approverList.children('.sr-approver-item');
+                $items.each(function(i) {
+                    $(this).find('.sr-level').text(i + 1);
+                    $(this).find('.move-up-btn').prop('disabled', i === 0);
+                    $(this).find('.move-down-btn').prop('disabled', i === $items.length - 1);
+                });
+                $('#approver-empty').toggle($items.length === 0);
+                if ($items.length > 0) {
+                    $('#approver-error-container').empty();
                 }
-                // Re-validate the dummy input using the instance
-                 parsleyInstance.validate();
             }
 
             $('#add-approver-btn').on('click', function() {
-                const selectedApprover = $('#approver-select').find('option:selected');
-                const approverId = selectedApprover.val();
-                const approverName = selectedApprover.text(); // Text without badge for display list
+                const $selected = $('#approver-select').find('option:selected');
+                const approverId = $selected.val();
+                const approverName = $.trim($selected.text());
 
                 if (!approverId) {
-                    Swal.fire('<?=__('error')?>', '<?=__('select_approver_from_list')?>', 'warning');
+                    Swal.fire(<?= json_encode(__('error')) ?>, <?= json_encode(__('select_approver_from_list')) ?>, 'warning');
+                    return;
+                }
+                if ($approverList.find('input[name="approvers[]"][value="' + approverId + '"]').length) {
+                    Swal.fire(<?= json_encode(__('error')) ?>, <?= json_encode(__('approver_already_added')) ?>, 'warning');
                     return;
                 }
 
-                // Check if already added
-                let alreadyAdded = false;
-                $('#approver-list-container').find('input[name="approvers[]"]').each(function() {
-                    if ($(this).val() == approverId) {
-                        alreadyAdded = true;
-                    }
-                });
+                const $item = $('<li class="sr-approver-item approver-tag">').attr('data-id', approverId)
+                    .append('<span class="sr-level"></span>')
+                    .append($('<span class="sr-approver-name">').text(approverName))
+                    .append($('<input type="hidden" name="approvers[]">').val(approverId))
+                    .append(
+                        '<span class="sr-approver-tools">' +
+                            '<button type="button" class="move-up-btn" title="<?= htmlspecialchars(__('move_up', 'Move up'), ENT_QUOTES) ?>"><i class="mdi mdi-chevron-up"></i></button>' +
+                            '<button type="button" class="move-down-btn" title="<?= htmlspecialchars(__('move_down', 'Move down'), ENT_QUOTES) ?>"><i class="mdi mdi-chevron-down"></i></button>' +
+                            '<button type="button" class="remove-approver-btn" aria-label="<?= htmlspecialchars(__('remove', 'Remove'), ENT_QUOTES) ?>"><i class="mdi mdi-close"></i></button>' +
+                        '</span>'
+                    );
+                $approverList.append($item);
 
-                if (alreadyAdded) {
-                    Swal.fire('<?=__('error')?>', '<?=__('approver_already_added')?>', 'warning');
-                    return;
-                }
-
-                // Add to list
-                approverCount++;
-                const approverLevel = approverCount;
-                const tagHtml = `
-                    <div class="approver-tag" data-id="${approverId}">
-                        <span>${approverLevel}. ${approverName}</span>
-                        <input type="hidden" name="approvers[]" value="${approverId}">
-                        <button type="button" class="remove-approver-btn" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-                `;
-                $('#approver-list-container').append(tagHtml);
-
-                // Reset select2
                 $('#approver-select').val(null).trigger('change');
-                updateValidation();
+                renumberApprovers();
             });
 
-            // Handle remove approver
-            $(document).on('click', '.remove-approver-btn', function() {
-                $(this).closest('.approver-tag').remove();
-
-                // Re-number list
-                approverCount = 0;
-                $('#approver-list-container').find('.approver-tag').each(function() {
-                    approverCount++;
-                    const currentSpan = $(this).find('span');
-                    const nameParts = currentSpan.text().split('. ');
-                    const approverName = nameParts.length > 1 ? nameParts.slice(1).join('. ') : currentSpan.text(); // Get name after number, handle names with '.'
-                    currentSpan.text(`${approverCount}. ${approverName}`);
-                });
-                updateValidation();
+            $approverList.on('click', '.remove-approver-btn', function() {
+                $(this).closest('.sr-approver-item').remove();
+                renumberApprovers();
+            });
+            $approverList.on('click', '.move-up-btn', function() {
+                const $item = $(this).closest('.sr-approver-item');
+                $item.prev('.sr-approver-item').before($item);
+                renumberApprovers();
+            });
+            $approverList.on('click', '.move-down-btn', function() {
+                const $item = $(this).closest('.sr-approver-item');
+                $item.next('.sr-approver-item').after($item);
+                renumberApprovers();
             });
 
-            // Initial validation check (call only if the element exists)
-            if ($('#min-approver-check').length) {
-                updateValidation();
+            // Draft submit needs at least one approver
+            $form.on('submit', function(e) {
+                if ($('#approver-select').length && $approverList.children('.sr-approver-item').length === 0) {
+                    e.preventDefault();
+                    $('#approver-error-container').html('<div class="small mt-2"><i class="mdi mdi-alert-circle-outline"></i> ' + <?= json_encode(__('select_at_least_one_approver')) ?> + '</div>');
+                    $('#approver-select').select2('open');
+                }
+            });
+
+            if ($approverList.length) {
+                renumberApprovers();
             }
         });
 
@@ -1685,6 +1602,120 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
             })
         });
 
+
+        // Opening cash -> balance (grand total deducted). Not saved; only carried to the print link.
+        (function() {
+            const grandTotal = <?= json_encode(round((float)$gtotal, 2)) ?>;
+            const printBase = 'smt_print.php?id=' + encodeURIComponent(<?= json_encode($invnoget) ?>);
+            $('#srOpeningCash').on('input change', function() {
+                const raw = $.trim($(this).val());
+                const opening = parseFloat(raw);
+                const hasValue = raw !== '' && !isNaN(opening);
+                $('#srCashBalanceRow').toggle(hasValue);
+                $('.js-print-link').attr('href', hasValue ? printBase + '&opening=' + encodeURIComponent(opening.toFixed(2)) : printBase);
+                if (!hasValue) return;
+                const balance = Math.round((opening - grandTotal) * 100) / 100;
+                $('#srCashBalance').text(balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                $('#srCashBalanceRow').toggleClass('is-negative', balance < 0);
+            });
+        })();
+
+        // SweetAlert2 for Adding Line Items (line editor: assets/js/smart_request_lines.js)
+        (function() {
+            const T = {
+                title: <?= json_encode(__('add_line')) ?>,
+                newTotal: <?= json_encode(__('new_lines_total', 'New lines total')) ?>,
+                requestTotal: <?= json_encode(__('request_total_after_save', 'Request total after save')) ?>,
+                more: <?= json_encode(__('more_details', 'More details (Tally / Injazat ID)')) ?>,
+                keep: <?= json_encode(__('leave_empty_to_keep', 'Leave empty to keep the current value')) ?>,
+                save: <?= json_encode(__('save_lines', 'Save Lines')) ?>,
+                cancel: <?= json_encode(__('cancel', 'Cancel')) ?>,
+                required: <?= json_encode(__('fill_required_fields_validation')) ?>,
+                failed: <?= json_encode(__('request_failed')) ?>
+            };
+            const currentTotal = <?= json_encode(round((float)$gtotal, 2)) ?>;
+
+            function modalHTML() {
+                const L = SRLines.label, E = SRLines.esc;
+                return `
+                <form id="srAddLineForm" class="sr-page text-left" autocomplete="off" novalidate>
+                    <div id="srAddLines" class="sr-addlines"></div>
+                    ${SRLines.addButtonHTML()}
+                    <details class="sr-addline-extra">
+                        <summary>${E(T.more)}</summary>
+                        <div class="sr-addline-grid mt-2">
+                            <div class="g-half"><label>Tally ID</label><input type="text" name="tally_id" class="form-control" placeholder="${E(T.keep)}"></div>
+                            <div class="g-half"><label>Injazat ID</label><input type="text" name="injazat_id" class="form-control" placeholder="${E(T.keep)}"></div>
+                        </div>
+                    </details>
+                    <div class="sr-addline-summary">
+                        <div><span>${L('net')}</span><b id="srAddNet">0.00</b></div>
+                        <div><span>${L('vat')}</span><b id="srAddVat">0.00</b></div>
+                        <div><span>${E(T.newTotal)}</span><b id="srAddTotal">0.00</b></div>
+                        <div class="accent"><span>${E(T.requestTotal)}</span><b id="srAddGrand">0.00</b></div>
+                    </div>
+                </form>`;
+            }
+
+            $(document).on('click', '.addLineBtn', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: T.title,
+                    html: modalHTML(),
+                    width: '1000px',
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="mdi mdi-content-save"></i> ' + SRLines.esc(T.save),
+                    cancelButtonText: T.cancel,
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger_dark,
+                    showLoaderOnConfirm: true,
+                    allowOutsideClick: () => !Swal.isLoading(),
+                    customClass: { popup: 'sr-addline-popup' },
+                    didOpen: () => {
+                        const editor = SRLines.bind($('#srAddLineForm'), $('#srAddLines'), function(sum) {
+                            $('#srAddNet').text(SRLines.money(sum.net));
+                            $('#srAddVat').text(SRLines.money(sum.vat));
+                            $('#srAddTotal').text(SRLines.money(sum.total));
+                            $('#srAddGrand').text(SRLines.money(currentTotal + sum.total));
+                        });
+                        SRLines.loadLocations().always(function() { editor.addLine(true); });
+                    },
+                    preConfirm: () => {
+                        const $form = $('#srAddLineForm');
+                        if (SRLines.validate($form)) {
+                            Swal.showValidationMessage(T.required);
+                            return false;
+                        }
+                        return $.ajax({
+                            url: './includes/ajaxFile/ajaxSmartRequest.php',
+                            type: 'POST', dataType: 'JSON',
+                            data: $form.serialize() + '&' + $.param({ ajaxType: 'request_line_add', inv_no: <?= json_encode($invnoget) ?> })
+                        }).then(response => {
+                            if (response.type !== 'success') {
+                                throw new Error(response.message || 'Save failed');
+                            }
+                            return response;
+                        }).catch(error => {
+                            Swal.showValidationMessage(T.failed + ': ' + (error.message || error.statusText || 'Error'));
+                        });
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed && result.value) {
+                        Swal.fire({ title: result.value.title, text: result.value.message, icon: result.value.type, timer: 1600, showConfirmButton: false })
+                            .then(() => location.reload());
+                    }
+                });
+            });
+
+            // Old add_line_request.php links redirect here with ?addline=1
+            $(function() {
+                if (new URLSearchParams(window.location.search).get('addline') === '1' && $('.addLineBtn').length) {
+                    const waitSwal = setInterval(function() {
+                        if (window.Swal) { clearInterval(waitSwal); $('.addLineBtn').first().trigger('click'); }
+                    }, 100);
+                }
+            });
+        })();
 
         // SweetAlert2 for Editing Request Details
         $(document).on('click', '.editReqAttr', function(e) {
@@ -2024,8 +2055,8 @@ $hr_employees = getHRPersonnel($conDB); // Dept ID 5 is now the default
                 </form>`;
             return strView;
         }
+
     </script>
-    <!-- Add this line RIGHT BEFORE the closing </body> tag if notifications.js is not already included -->
     <script src="assets/js/notifications.js"></script>
 </body>
 </html>

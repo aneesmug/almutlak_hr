@@ -59,10 +59,11 @@ $baseSql = "FROM `smart_request` `sr`
                 AND `ra_fin`.`approver_id` = ".(int)$emp_id." -- User-specific chain position
             WHERE 1 {$searchQuery} {$typeSearchQuery}";
 
-// UPDATED: Role-based filtering conditions
+// Role-based visibility rules. A function so the status counters (all_requests.php
+// summary tiles) can apply the same rules per status as the table itself.
+function smart_request_role_conditions($typeValue, $payerOnly, $user_type, $user_dept, $emptype, $emp_id) {
 $additionalConditions = ""; // Start empty
 
-// Role-based visibility rules
 // 1. Payer focused view
 if ($payerOnly === 1) {
     $additionalConditions = " AND `sr`.`current_status` = 'pending_payment' AND `sr`.`payable_by_emp_id` = ".(int)$emp_id;
@@ -106,8 +107,38 @@ elseif ($emptype == 'Manager') {
 else {
     $additionalConditions = " AND (
                                     `sr`.`emp_id` = " . (int)$emp_id . "
-                                    OR `ra_any`.`approver_id` = ".(int)$emp_id." 
+                                    OR `ra_any`.`approver_id` = ".(int)$emp_id."
                                 )";
+}
+return $additionalConditions;
+}
+
+$additionalConditions = smart_request_role_conditions($typeValue, $payerOnly, $user_type, $user_dept, $emptype, $emp_id);
+
+// Per-status counters for the summary tiles (same search + role rules as the table).
+// The "pending_payment" tile follows the assigned-payer view when the page asks for it.
+$isPayerView = isset($_POST['isPayer']) ? (int)$_POST['isPayer'] : 0;
+$statusCounts = [];
+if (!empty($_POST['withCounts'])) {
+    $countJoins = "FROM `smart_request` `sr`
+            LEFT JOIN `department` `dept` ON `dept`.`id` = `sr`.`department`
+            LEFT JOIN `request_approvers` `ra` ON `sr`.`inv_no` = `ra`.`request_inv_no`
+                AND `ra`.`request_type_id` = 1
+                AND `sr`.`current_approval_level` = `ra`.`approval_level`
+            LEFT JOIN `request_approvers` `ra_any` ON `sr`.`inv_no` = `ra_any`.`request_inv_no`
+                AND `ra_any`.`request_type_id` = 1
+            LEFT JOIN `request_approvers` `ra_fin` ON `sr`.`inv_no` = `ra_fin`.`request_inv_no`
+                AND `ra_fin`.`request_type_id` = 1
+                AND `ra_fin`.`approver_id` = ".(int)$emp_id."
+            WHERE 1 {$searchQuery}";
+    foreach (['', 'draft', 'pending_approval', 'approved', 'pending_payment', 'paid', 'rejected', 'cancelled'] as $countStatus) {
+        $countPayer = ($countStatus === 'pending_payment' && $isPayerView === 1) ? 1 : 0;
+        $countSql = "SELECT COUNT(DISTINCT `sr`.`inv_no`) AS cnt " . $countJoins
+            . ($countStatus !== '' ? " AND `sr`.`current_status` = '" . $countStatus . "'" : '')
+            . smart_request_role_conditions($countStatus, $countPayer, $user_type, $user_dept, $emptype, $emp_id);
+        $countRes = mysqli_query($conDB, $countSql);
+        $statusCounts[$countStatus === '' ? 'all' : $countStatus] = $countRes ? (int)(mysqli_fetch_assoc($countRes)['cnt'] ?? 0) : 0;
+    }
 }
 
 
@@ -125,7 +156,9 @@ $sql = "SELECT
             `sr`.`current_status` AS `status`,
             `sr`.`current_approval_level`,
             `ra_fin`.`approval_level` AS `user_approval_level`,
-            CASE WHEN `sr`.`current_approval_level` = `ra_fin`.`approval_level` THEN 1 ELSE 0 END AS `is_current_approver`
+            CASE WHEN `sr`.`current_approval_level` = `ra_fin`.`approval_level` THEN 1 ELSE 0 END AS `is_current_approver`,
+            ((SELECT COALESCE(SUM(`x`.`total_cost`), 0) FROM `smart_request` `x` WHERE `x`.`inv_no` = `sr`.`inv_no`) - COALESCE(`sr`.`discount`, 0)) AS `grand_total`,
+            (SELECT COUNT(*) FROM `smart_request` `y` WHERE `y`.`inv_no` = `sr`.`inv_no`) AS `line_count`
         " . $baseSql . $additionalConditions . "
         GROUP BY `sr`.`inv_no`
         ORDER BY `sr`.`id` DESC
@@ -146,6 +179,9 @@ if ($query) { // Check if query was successful before fetching
                 "department"      =>($is_rtl ?? false ? __($row['department_ar']) : $row['department']),
                 "prep_by"         =>$row["prep_by"],
                 "created_at"      =>date("Y-m-d",strtotime($row["created_at"])),
+                "created_ago"     =>(($current_lang ?? 'en') === 'ar' && function_exists('timeAgoAr')) ? timeAgoAr($row["created_at"]) : (function_exists('timeAgo') ? timeAgo($row["created_at"]) : ''),
+                "grand_total"     =>round((float)$row['grand_total'], 2),
+                "line_count"      =>(int)$row['line_count'],
                 "status"          =>$row["status"],
                 "current_approval_level" => $row["current_approval_level"],
                 "user_approval_level"    => $row['user_approval_level'] ?? null,
@@ -154,18 +190,22 @@ if ($query) { // Check if query was successful before fetching
                                 $canSelfCancel = in_array($row['status'], ['draft', 'pending_approval', 'approved'], true)
                                     && (int)$row['emp_id'] === (int)$emp_id;
                                 if (!$canCancelSmartRequests && !$canSelfCancel) {
-                                    return "<a href='open_request.php?id=$row[inv_no]' class='btn btn-dark btn-sm' ><i class='mdi mdi-eye-outline'></i></i> Open</a>";
+                                    return "<a href='open_request.php?id=$row[inv_no]' class='sr-open-btn' title='". __('open') ."'><i class='mdi mdi-eye-outline'></i> ". __('open') ."</a>";
                                 }
-                                $html = "<div class='btn-group dropdown'>
-                                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+                                $html = "<div class='sr-actions'>
+                                <a href='open_request.php?id=$row[inv_no]' class='sr-open-btn' title='". __('open') ."'><i class='mdi mdi-eye-outline'></i> ". __('open') ."</a>
+                                <div class='btn-group dropdown'>
+                                <a href='javascript: void(0);' class='sr-more-btn dropdown-toggle arrow-none' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-vertical'></i></a>
                                 <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end' >
-                                    <a href='open_request.php?id=$row[inv_no]' class='dropdown-item text-dark' ><i class='mdi mdi-eye-outline'></i></i> ". __('open') ."</a>";
+                                    <a href='open_request.php?id=$row[inv_no]' class='dropdown-item text-dark' ><i class='mdi mdi-eye-outline mr-2'></i>". __('open') ."</a>
+                                    <a href='smt_print.php?id=$row[inv_no]' target='_blank' class='dropdown-item text-dark' ><i class='fa fa-print mr-2'></i>". __('print') ."</a>
+                                    <div class='dropdown-divider'></div>";
                                 if ($canCancelSmartRequests) {
                                     $html .= "<a href='javascript:void(0);' class='dropdown-item  text-danger deleteSmt' data-id='$row[inv_no]' ><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>". __('cancel', 'Cancel') ."</a>";
                                 } elseif ($canSelfCancel) {
                                     $html .= "<a href='javascript:void(0);' class='dropdown-item  text-danger cancelSmartRequestSelf' data-id='$row[inv_no]' ><i class='fa fa-ban mr-2 font-18 vertical-middle'></i>". __('cancel_request', 'Cancel Request') ."</a>";
                                 }
-                                $html .= "</div></div>";
+                                $html .= "</div></div></div>";
                                 return $html;
                             })(),
             );
@@ -203,7 +243,8 @@ $response = array(
     "draw" => intval($draw),
     "recordsTotal" => intval($totalRecords),
     "recordsFiltered" => intval($filteredRecords),
-    "data" => $data
+    "data" => $data,
+    "counts" => $statusCounts
 );
 
 echo json_encode($response);
