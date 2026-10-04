@@ -27,10 +27,19 @@
         return (xhr && xhr.responseJSON && xhr.responseJSON.message) || fallback;
     }
 
-    function statusBadge(status) {
+    function statusBadge(status, sr) {
+        if (sr) {
+            var tone = status === 'sent' ? 'tone-green' : (status === 'draft' ? 'tone-amber' : 'tone-red');
+            var label = status === 'sent' ? t('sent', 'Sent') : (status === 'draft' ? t('draft', 'Draft') : t('failed', 'Failed'));
+            return '<span class="sr-pill ' + tone + '"><span class="sr-dot"></span>' + esc(label) + '</span>';
+        }
         if (status === 'sent') return '<span class="badge badge-success">' + esc(t('sent', 'Sent')) + '</span>';
         if (status === 'draft') return '<span class="badge badge-warning">' + esc(t('draft', 'Draft')) + '</span>';
         return '<span class="badge badge-danger">' + esc(t('failed', 'Failed')) + '</span>';
+    }
+
+    function initials(name) {
+        return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
     }
 
     // Summernote's own icon font doesn't load here (blank toolbar buttons) - use the
@@ -223,11 +232,20 @@
 
     function initHistoryTable(selector, empId) {
         var showEmployee = !empId;
+        // New GUI look (smart_request.css) when the table sits inside an .sr-page
+        var sr = $(selector).closest('.sr-page').length > 0;
         var columns = [
             { data: null, render: function (r) { return esc(r.updated_at || r.created_at); } }
         ];
         if (showEmployee) {
             columns.push({ data: null, render: function (r) {
+                if (sr) {
+                    var sub = r.emp_id ? esc(r.emp_id)
+                        : '<span class="sr-pill sr-pill-xs tone-sky">' + esc(t('candidate', 'Candidate')) + '</span>'
+                          + (r.viewed_at ? ' <i class="fa fa-eye text-success" title="' + esc(t('opened_by_candidate', 'Opened by candidate')) + ': ' + esc(r.viewed_at) + '"></i>' : '');
+                    return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + esc(initials(r.employee_name)) + '</span>'
+                        + '<div><span class="sr-person-name">' + esc(r.employee_name || '-') + '</span><span class="sr-cell-sub">' + sub + '</span></div></div>';
+                }
                 if (r.emp_id) return esc(r.employee_name) + ' <small class="text-muted">(' + esc(r.emp_id) + ')</small>';
                 // Candidate letter (job offer): no employee record; eye = the candidate opened the link.
                 return esc(r.employee_name || '-') + ' <span class="badge badge-info">' + esc(t('candidate', 'Candidate')) + '</span>'
@@ -238,9 +256,17 @@
             { data: 'memo_type_label', render: esc },
             { data: 'subject', render: esc },
             { data: 'reference_no', render: function (v) { return esc(v || '-'); } },
-            { data: 'status', render: statusBadge },
+            { data: 'status', render: function (v) { return statusBadge(v, sr); } },
             { data: 'sent_by_name', render: function (v) { return esc(v || '-'); } },
-            { data: null, orderable: false, render: function (r) {
+            { data: null, orderable: false, className: sr ? 'text-right' : '', render: function (r) {
+                if (sr) {
+                    var b = '<button type="button" class="sr-btn sr-btn-sm sr-btn-icon memo-view-btn" data-id="' + r.id + '" title="' + esc(t('view', 'View')) + '"><i class="fa fa-eye"></i></button>';
+                    if (r.status === 'draft') {
+                        b += '<button type="button" class="sr-btn sr-btn-sm sr-btn-icon memo-open-draft-btn" data-id="' + r.id + '" title="' + esc(t('open_draft', 'Open Draft')) + '"><i class="fa fa-pen"></i></button>'
+                            + '<button type="button" class="sr-btn sr-btn-sm sr-btn-icon text-danger memo-delete-draft-btn" data-id="' + r.id + '" title="' + esc(t('delete_draft', 'Delete Draft')) + '"><i class="fa fa-trash"></i></button>';
+                    }
+                    return '<div class="sr-actions">' + b + '</div>';
+                }
                 var html = '<button type="button" class="btn btn-sm btn-outline-primary memo-view-btn" data-id="' + r.id + '" title="' + esc(t('view', 'View')) + '"><i class="fa fa-eye"></i></button>';
                 if (r.status === 'draft') {
                     html += '<button type="button" class="btn btn-sm btn-outline-warning memo-open-draft-btn" data-id="' + r.id + '" title="' + esc(t('open_draft', 'Open Draft')) + '"><i class="fa fa-pen"></i></button>'
@@ -259,8 +285,15 @@
             order: [[0, 'desc']],
             responsive: true,
             pageLength: 10,
-            language: { emptyTable: t('no_memos_yet', 'No memos yet.') }
+            dom: sr ? 'rtip' : undefined,
+            language: sr ? {
+                emptyTable: '<div class="sr-empty"><i class="mdi mdi-email-outline"></i>' + esc(t('no_memos_yet', 'No memos yet.')) + '</div>',
+                zeroRecords: '<div class="sr-empty"><i class="mdi mdi-magnify"></i>' + esc(t('no_matching_records_found', 'No matching records found')) + '</div>',
+                paginate: { next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' }
+            } : { emptyTable: t('no_memos_yet', 'No memos yet.') }
         });
+        // A search box outside the table (data-dt-search="#tableId") drives it
+        $('[data-dt-search="' + selector + '"]').on('input', function () { table.search(this.value).draw(); });
         $(selector)
             .on('click', '.memo-view-btn', function () { view($(this).data('id')); })
             .on('click', '.memo-open-draft-btn', function () { openDraft($(this).data('id')); })

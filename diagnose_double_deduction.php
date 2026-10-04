@@ -14,26 +14,33 @@ header('Content-Type: text/html; charset=UTF-8');
 <head>
     <meta charset="UTF-8">
     <title>Double Deduction Diagnostic Report</title>
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <style>
-        body { font-family: monospace; background: #f5f5f5; padding: 20px; }
-        .container { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .separator { border-top: 2px solid #333; margin: 15px 0; }
-        .record { margin: 20px 0; padding: 15px; background: #fff9e6; border-left: 4px solid #ff9800; }
-        .record.critical { background: #ffebee; border-left-color: #d32f2f; }
-        .record.warning { background: #fff3e0; border-left-color: #ff9800; }
-        .found { color: #1976d2; font-weight: bold; margin-top: 10px; }
-        .bullet { margin-left: 20px; }
-        .success { color: #4CAF50; font-weight: bold; }
-        .warning-text { color: #ff9800; font-weight: bold; }
-        .error { color: #d32f2f; font-weight: bold; }
-        .summary { background: #f3e5f5; padding: 15px; border-radius: 5px; margin-top: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }
-        th { background: #f5f5f5; font-weight: bold; border-bottom: 2px solid #333; }
+        /* Report blocks echoed below, styled with the new GUI tokens */
+        .ddd-body { padding: 18px; font-size: 13px; line-height: 1.6; }
+        .ddd-body h2 { margin: 0 0 4px; font-size: 22px; font-weight: 700; color: var(--sr-text); }
+        .ddd-body h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--sr-text); }
+        .separator { border-top: 1px solid var(--sr-border); margin: 16px 0; }
+        .record { margin: 12px 0; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--sr-border); border-inline-start: 4px solid var(--tone-green-bd); background: var(--sr-surface-2); }
+        .record.warning { border-color: var(--tone-amber-bd); background: var(--tone-amber-bg); }
+        .record.critical { border-color: var(--tone-red-bd); background: var(--tone-red-bg); }
+        .found { color: var(--sr-accent-strong); font-weight: 700; margin-top: 10px; }
+        .bullet { margin-inline-start: 16px; color: var(--sr-text-2); }
+        .success { color: var(--tone-green-fg); font-weight: 700; }
+        .warning-text { color: var(--tone-amber-fg); font-weight: 700; }
+        .error { color: var(--tone-red-fg); font-weight: 700; }
+        .summary { margin-top: 16px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--tone-indigo-bd); background: var(--tone-indigo-bg); }
+        .ddd-body table { width: 100%; margin-top: 10px; border-collapse: separate; border-spacing: 0; border: 1px solid var(--sr-border); border-radius: 10px; overflow: hidden; background: var(--sr-surface); }
+        .ddd-body th { padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); background: var(--sr-surface-2); border-bottom: 1px solid var(--sr-border); text-align: start; }
+        .ddd-body td { padding: 10px 12px; border-bottom: 1px solid var(--sr-border); font-variant-numeric: tabular-nums; }
+        .ddd-body tr:last-child td { border-bottom: 0; }
     </style>
 </head>
-<body>
-<div class="container">
+<body class="sr-standalone">
+<div class="sr-page sr-standalone-wrap">
+<div class="sr-card">
+<div class="ddd-body">
 <?php
 
 require_once __DIR__ . '/./includes/db.php';
@@ -302,6 +309,8 @@ echo "<h3>✅ Diagnostic Complete</h3>";
 
 mysqli_close($conDB);
 ?>
+</div>
+</div>
 </div>
 </body>
 </html>

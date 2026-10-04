@@ -25,11 +25,7 @@
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
-    <style>
-        .sample-download a {
-            cursor: pointer;
-        }
-    </style>
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 </head>
 <body class="enlarged" data-keep-enlarged="true">
 
@@ -63,43 +59,68 @@
             <!-- Top Bar End -->
 
             <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="card-box">
-                                <h4 class="m-t-0 header-title">Import and Update Iqama Expiration Dates</h4>
-                                <p>Please upload an Excel or CSV file (<code>.xlsx</code>, <code>.xls</code>, <code>.csv</code>) with two columns in this order: <strong>iqama</strong> and <strong>iqama_exp</strong>.</p>
-                                <p>The first row should be a header and will be skipped.</p>
-                                <p class="text-muted">Note: The Gregorian date (<code>iqama_exp_g</code>) will be calculated automatically from the Hijri date and saved in <code>YYYY-MM-DD</code> format.</p>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Import Iqama Expiration</h1>
+                            <p>Bulk-update employee Iqama expiry dates from an Excel or CSV file.</p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <a href="#" id="downloadSampleLink" class="sr-btn"><i class="mdi mdi-download"></i> Download sample file</a>
+                        </div>
+                    </div>
 
-                                <div class="alert alert-info sample-download">
-                                    <p class="mb-1">Need a template? <a id="downloadSampleLink" class="font-weight-bold">Click here to download a sample file.</a></p>
-                                    <small>You can open this file in Excel, add your employee data, and then upload it using the form below.</small>
-                                </div>
-
-                                <?php if (isset($_GET['status'])): ?>
-                                    <?php if ($_GET['status'] == 'success'): ?>
-                                        <div class="alert alert-success">
-                                            <?=htmlspecialchars($_GET['updated_count']); ?> records updated successfully.
-                                            <?php if (isset($_GET['not_found_count']) && $_GET['not_found_count'] > 0): ?>
-                                                <br><?=htmlspecialchars($_GET['not_found_count']); ?> records failed because the Iqama number was not found.
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php elseif ($_GET['status'] == 'error'): ?>
-                                        <div class="alert alert-danger">
-                                            <strong>Error:</strong> <?=htmlspecialchars($_GET['message']); ?>
-                                        </div>
+                    <?php if (isset($_GET['status'])): ?>
+                        <?php if ($_GET['status'] == 'success'): ?>
+                            <div class="sr-notice tone-green">
+                                <i class="mdi mdi-check-circle-outline"></i>
+                                <div>
+                                    <strong><?=htmlspecialchars($_GET['updated_count'] ?? '0'); ?></strong> records updated successfully.
+                                    <?php if (isset($_GET['not_found_count']) && $_GET['not_found_count'] > 0): ?>
+                                        <br><strong><?=htmlspecialchars($_GET['not_found_count']); ?></strong> records failed because the Iqama number was not found.
                                     <?php endif; ?>
-                                <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php elseif ($_GET['status'] == 'error'): ?>
+                            <div class="sr-notice tone-red">
+                                <i class="mdi mdi-alert-circle-outline"></i>
+                                <div><strong>Error:</strong> <?=htmlspecialchars($_GET['message'] ?? ''); ?></div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
 
-                                <form action="./includes/process_iqama_import.php" method="post" enctype="multipart/form-data">
-                                    <div class="form-group">
-                                        <label for="employee_file">Select File:</label>
-                                        <input type="file" name="employee_file" id="employee_file" class="form-control-file" required accept=".xlsx, .xls, .csv">
+                    <div class="sr-import">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-account-card-details"></i> Upload file</h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <form id="iqamaImportForm" class="sr-form" action="./includes/process_iqama_import.php" method="post" enctype="multipart/form-data" novalidate>
+                                    <label class="sr-filepick is-lg" for="employee_file">
+                                        <input type="file" name="employee_file" id="employee_file" accept=".xlsx, .xls, .csv">
+                                        <i class="mdi mdi-cloud-upload"></i>
+                                        <span><b class="js-file-name">Choose a file or drop it here</b>
+                                        <small>Supported formats: .xlsx, .xls, .csv</small></span>
+                                    </label>
+                                    <div class="sr-import-actions">
+                                        <button type="submit" name="import" value="1" class="sr-btn sr-btn-primary"><i class="mdi mdi-upload"></i> Upload and Process</button>
                                     </div>
-                                    <button type="submit" name="import" class="btn btn-primary">Upload and Process</button>
                                 </form>
+                            </div>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-information-outline"></i> File format</h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <ol class="sr-guide">
+                                    <li>Use two columns in this order: <code>iqama</code> and <code>iqama_exp</code>.</li>
+                                    <li>The first row is a header and will be skipped.</li>
+                                    <li>Write the Hijri expiry date as <code>YYYY-MM-DD</code> (e.g. <code>1448-04-05</code>).</li>
+                                    <li>The Gregorian date (<code>iqama_exp_g</code>) is calculated automatically and saved as <code>YYYY-MM-DD</code>.</li>
+                                </ol>
                             </div>
                         </div>
                     </div>
@@ -124,10 +145,19 @@
     <script src="assets/js/jquery.slimscroll.js"></script>
 
     <!-- App js -->
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
+    SRForm.bindFilePicker($('#iqamaImportForm'));
+    $('#iqamaImportForm').on('submit', function(e) {
+        if (!$('#employee_file')[0].files.length) {
+            e.preventDefault();
+            $(this).find('.sr-filepick').addClass('is-invalid');
+        }
+    });
+
     document.getElementById('downloadSampleLink').addEventListener('click', function(event) {
         event.preventDefault(); // Prevent default link behavior
 

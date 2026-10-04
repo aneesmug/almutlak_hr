@@ -54,15 +54,12 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
 
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <style type="text/css">
-            tr.disableLoc {
-                background-color: #f1556c !important;
-                color: #fff;
-            }
-
-            tr.disableLoc:hover {
-                background-color: #ef3d58 !important;
-            }
+            .sr-page .sr-tiles.vou-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            @media (max-width: 575px) { .sr-page .sr-tiles.vou-tiles { grid-template-columns: 1fr; } }
+            .vou-tile-amt { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+            .vou-tile-amt .icon-saudi_riyal { font-size: .85em !important; }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -122,62 +119,63 @@ if (mysqli_num_rows($query) == 1) {
 
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <!-- <a href="add_location.php" class="btn btn-primary waves-effect"><i class="mdi mdi-settings"></i> Add New Location</a> -->
-                                    <h4 class="m-t-0 header-title"><?=__('all_registered_items_header')?></h4>
-                                    <div class="col-2 pull-right">
-                                        <div class="form-group">
-                                            <input type="search" name="search" class="form-control" placeholder="<?=__('search_placeholder')?>" id="search" autocomplete="off">
-                                        </div>
-                                    </div>
-                                    <div class="col-1 pull-right">
-                                        <div class="form-group" style="margin-bottom: 0 !important">
-                                            <select class="form-control" name="payment_type" id="paymenttype">
-                                                <option value=""><?=__('all_option')?></option>
-                                                <option value="receipt"><?=__('receipt_option')?></option>
-                                                <option value="payment"><?=__('payment_option')?></option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <table id="vouchers_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                        <thead>
-                                            <tr>
-                                                <th> </th>
-                                                <th><?=__('voucher_no_header')?></th>
-                                                <th><?=__('voucher_from_header')?></th>
-                                                <th><?=__('to_employee_header')?></th>
-                                                <th><?=__('voucher_type_header')?></th>
-                                                <th><?=__('amount_header')?></th>
-                                                <th><?=__('details_header')?></th>
-                                                <th><?=__('created_at_header')?></th>
-                                                <th width="60"><?=__('action')?></th>
-                                            </tr>
-                                        </thead>
-                                        <tfoot>
-                                            <tr>
-                                                <th> </th>
-                                                <th><?=__('voucher_no_header')?></th>
-                                                <th><?=__('voucher_from_header')?></th>
-                                                <th><?=__('to_employee_header')?></th>
-                                                <th><?=__('voucher_type_header')?></th>
-                                                <th><?=__('amount_header')?></th>
-                                                <th><?=__('details_header')?></th>
-                                                <th><?=__('created_at_header')?></th>
-                                                <th width="60"><?=__('action')?></th>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?=__('all_vouchers_title')?></h1>
+                                <p><?= __('vouchers_subtitle', 'Payment vouchers and receipts issued to employees.') ?></p>
+                            </div>
+                            <div class="sr-head-actions">
+                                <button type="button" class="sr-btn sr-btn-primary" id="addVoucherBtn"><i class="fa fa-plus"></i> <?=__('add_voucher_button')?></button>
                             </div>
                         </div>
 
+                        <!-- Type summary tiles (also act as the type filter) -->
+                        <div class="sr-tiles vou-tiles" id="srTiles" role="tablist">
+                            <?php foreach ([
+                                '' => [__('all_option'), 'dot-all'],
+                                'receipt' => [__('receipt_option'), 'dot-green'],
+                                'payment' => [__('payment_option'), 'dot-red'],
+                            ] as $tile_type => $tile): ?>
+                                <button type="button" class="sr-tile<?= $tile_type === '' ? ' active' : '' ?>" data-type="<?= $tile_type ?>" role="tab">
+                                    <span class="sr-tile-label"><span class="sr-dot <?= $tile[1] ?>"></span><?= htmlspecialchars($tile[0]) ?></span>
+                                    <span class="sr-tile-value" data-count="<?= $tile_type === '' ? 'all' : $tile_type ?>">&ndash;</span>
+                                    <span class="vou-tile-amt" data-amount="<?= $tile_type === '' ? 'all' : $tile_type ?>"></span>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
 
+                        <div class="sr-card">
+                            <div class="sr-toolbar">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" name="search" placeholder="<?=__('search_placeholder')?>" id="search" autocomplete="off" aria-label="<?=__('search')?>">
+                                </div>
+                                <div class="sr-toolbar-right">
+                                    <div id="srExportButtons"></div>
+                                </div>
+                                <input type="hidden" name="payment_type" id="paymenttype" value="">
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="vouchers_vac" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th> </th>
+                                            <th><?=__('voucher_no_header')?></th>
+                                            <th><?=__('voucher_from_header')?></th>
+                                            <th><?=__('to_employee_header')?></th>
+                                            <th><?=__('voucher_type_header')?></th>
+                                            <th class="text-right"><?=__('amount_header')?></th>
+                                            <th><?=__('details_header')?></th>
+                                            <th><?=__('created_at_header')?></th>
+                                            <th class="text-right"><?=__('action')?></th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                        </div>
                     </div> <!-- container -->
-
                 </div> <!-- content -->
 
                 <footer class="footer">
@@ -229,6 +227,7 @@ if (mysqli_num_rows($query) == 1) {
         <script src="./plugins/datatables/dataTables.select.min.js"></script>
 
         <!-- App js -->
+        <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
@@ -241,20 +240,10 @@ if (mysqli_num_rows($query) == 1) {
                         data.start = 0;
                         data.length = 2147483647;
                         dt.one('preDraw', function(e, settings) {
-                            if (button[0].className.indexOf('buttons-copy') >= 0) {
-                                $.fn.dataTable.ext.buttons.copyHtml5.action.call(self, e, dt, button, config);
-                            } else if (button[0].className.indexOf('buttons-excel') >= 0) {
-                                $.fn.dataTable.ext.buttons.excelHtml5.available(dt, config) ?
-                                    $.fn.dataTable.ext.buttons.excelHtml5.action.call(self, e, dt, button, config) :
-                                    $.fn.dataTable.ext.buttons.excelFlash.action.call(self, e, dt, button, config);
-                            } else if (button[0].className.indexOf('buttons-csv') >= 0) {
-                                $.fn.dataTable.ext.buttons.csvHtml5.available(dt, config) ?
-                                    $.fn.dataTable.ext.buttons.csvHtml5.action.call(self, e, dt, button, config) :
-                                    $.fn.dataTable.ext.buttons.csvFlash.action.call(self, e, dt, button, config);
+                            if (button[0].className.indexOf('buttons-excel') >= 0) {
+                                $.fn.dataTable.ext.buttons.excelHtml5.action.call(self, e, dt, button, config);
                             } else if (button[0].className.indexOf('buttons-pdf') >= 0) {
-                                $.fn.dataTable.ext.buttons.pdfHtml5.available(dt, config) ?
-                                    $.fn.dataTable.ext.buttons.pdfHtml5.action.call(self, e, dt, button, config) :
-                                    $.fn.dataTable.ext.buttons.pdfFlash.action.call(self, e, dt, button, config);
+                                $.fn.dataTable.ext.buttons.pdfHtml5.action.call(self, e, dt, button, config);
                             } else if (button[0].className.indexOf('buttons-print') >= 0) {
                                 $.fn.dataTable.ext.buttons.print.action(e, dt, button, config);
                             }
@@ -269,91 +258,45 @@ if (mysqli_num_rows($query) == 1) {
                     dt.ajax.reload();
                 };
 
-                var buttonConfig = [];
+                var esc = SRForm.esc;
+                function initials(name) {
+                    return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+                }
+                function money(v) {
+                    var n = parseFloat(v) || 0;
+                    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+                function person(name) {
+                    if (!name) return '<span class="text-muted">&ndash;</span>';
+                    return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + esc(initials(name)) + '</span><span class="sr-person-name">' + esc(name) + '</span></div>';
+                }
+
                 var exportTitle = "<?=__('all_vouchers_title')?>";
                 var columnNum = [1, 2, 3, 4, 5, 6, 7];
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: columnNum
-                    },
-                    title: exportTitle,
-                    className: 'btn-success',
-                    action: newexportaction
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: columnNum
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger',
-                    action: newexportaction
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: columnNum
-                    },
-                    title: exportTitle,
-                    className: 'btn-dark',
-                    action: newexportaction
-                });
-                buttonConfig.push({
-                    text: '<i class="fa fa-plus"></i> <?=__('add_voucher_button')?>',
-                    action: function(e, dt, button, config) {
-                        addVoucherFunc(<?= $empid ?>)
-                    },
-                    className: 'btn-info'
-                });
-
-                var statusObj = {
-                    'payment': {
-                        title: '<?=__('payment_option')?>',
-                        class: 'badge-border-danger',
-                        icon: '<i class="fa fa-up-right"></i>'
-                    },
-                    'receipt': {
-                        title: '<?=__('receipt_option')?>',
-                        class: 'badge-border-success',
-                        icon: '<i class="fa fa-down-left"></i>'
-                    },
+                var typeObj = {
+                    'payment': { title: '<?=__('payment_option')?>', tone: 'tone-red', icon: 'mdi-arrow-top-right' },
+                    'receipt': { title: '<?=__('receipt_option')?>', tone: 'tone-green', icon: 'mdi-arrow-bottom-left' }
                 };
-                var table = $('#vouchers_vac').DataTable({
 
-                    dom: "Bfrtip",
+                var table = $('#vouchers_vac').DataTable({
+                    dom: "Brtip",
                     serverSide: true,
                     lengthMenu: [
                         [10, 100, -1],
                         [10, 100, "All"]
                     ],
-                    buttons: buttonConfig,
+                    buttons: [
+                        { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle, action: newexportaction },
+                        { extend: 'pdf',   text: '<i class="mdi mdi-file-pdf"></i> PDF',     exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle, action: newexportaction },
+                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + <?= json_encode(__('print')) ?>, exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle, action: newexportaction }
+                    ],
                     order: [
                         [0, "desc"]
                     ],
-                    columnDefs: [{
-                            targets: [0, 1],
-                            visible: false,
-                            searchable: true
-                        },
-                        {
-                            targets: 4,
-                            render: function(data, type, row, meta) {
-                                return (`
-                                <span class="badge-border ${statusObj[data].class}" text-capitalized>
-                                    ${statusObj[data].icon}
-                                    ${statusObj[data].title}
-                                </span>
-                            `);
-                            }
-                        },
-                    ],
-                    // 'lengthChange': true,
                     processing: true,
                     serverMethod: 'post',
                     responsive: true,
                     paging: true,
-                    // 'pageLength': 10,
                     ajax: {
                         type: "POST",
                         url: './includes/ajaxFile/vouchersAjaxfile.php',
@@ -363,109 +306,141 @@ if (mysqli_num_rows($query) == 1) {
                             d.payment_type = $('#paymenttype').val();
                             d.search = $('#search').val();
                         },
+                        dataSrc: function(json) {
+                            var counts = json.counts || {};
+                            $('#srTiles [data-count]').each(function() {
+                                var c = counts[$(this).data('count')];
+                                $(this).text(c ? c.count : 0);
+                            });
+                            $('#srTiles [data-amount]').each(function() {
+                                var c = counts[$(this).data('amount')];
+                                $(this).html(money(c ? c.amount : 0) + ' <i class="icon-saudi_riyal"></i>');
+                            });
+                            return json.aaData;
+                        }
                     },
-                    columns: [{
-                            data: 'id'
+                    columns: [
+                        { data: 'id', visible: false, searchable: true },
+                        { data: 'voucher_no', render: function(data, type) { return type === 'display' ? '<span class="sr-chip sr-mono">' + esc(data) + '</span>' : data; } },
+                        { data: 'emp_from', render: function(data, type) { return type === 'display' ? person(data) : data; } },
+                        { data: 'name', render: function(data, type) { return type === 'display' ? person(data) : data; } },
+                        {
+                            data: 'voucher_type',
+                            render: function(data, type) {
+                                var o = typeObj[data] || { title: data, tone: 'tone-slate', icon: 'mdi-swap-horizontal' };
+                                if (type !== 'display') return o.title;
+                                return '<span class="sr-pill ' + o.tone + '"><i class="mdi ' + o.icon + '"></i>' + esc(o.title) + '</span>';
+                            }
                         },
                         {
-                            data: 'voucher_no'
+                            data: 'voucher_amount',
+                            className: 'text-right',
+                            render: function(data, type) {
+                                if (type !== 'display') return money(data);
+                                return '<span class="sr-money">' + money(data) + ' <i class="icon-saudi_riyal"></i></span>';
+                            }
                         },
-                        {
-                            data: 'emp_from'
-                        },
-                        {
-                            data: 'name'
-                        },
-                        {
-                            data: 'voucher_type'
-                        },
-                        {
-                            data: 'voucher_amount'
-                        },
-                        {
-                            data: 'details'
-                        },
-                        {
-                            data: 'created_at'
-                        },
-                        {
-                            data: 'action'
-                        },
+                        { data: 'details', render: function(data, type) { return type === 'display' ? '<span class="sr-cell-title" title="' + esc(data) + '">' + esc(data) + '</span>' : data; } },
+                        { data: 'created_at', render: function(data, type) { return type === 'display' ? '<span class="sr-date">' + esc(data) + '</span>' : data; } },
+                        { data: 'action', className: 'text-right', orderable: false, searchable: false },
                     ],
                     language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
                         lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                         info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
                         infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                        infoFiltered: '',
                         paginate: {
                             first: __('first'),
                             last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
+                            next: '<i class="mdi mdi-chevron-right"></i>',
+                            previous: '<i class="mdi mdi-chevron-left"></i>'
                         },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                        emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+                        zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+                        processing: `<div class="spinner-border text-primary" role="status"><span class="sr-only">${__('loading')}...</span></div>`
                     }
-
                 });
-                $('#paymenttype').change(function() {
+
+                table.buttons().container().appendTo('#srExportButtons');
+
+                // Whole row opens the print view (except clicks on links/buttons/dropdowns)
+                $('#vouchers_vac tbody').on('click', 'tr', function(e) {
+                    if ($(e.target).closest('a, button, .dropdown-menu, .dtr-control').length) return;
+                    if ($(this).hasClass('child')) return;
+                    var row = table.row(this).data();
+                    if (row && row.id) window.open('voucher_print.php?id=' + encodeURIComponent(row.id), '_blank');
+                });
+
+                $('#srTiles').on('click', '.sr-tile', function() {
+                    $('#srTiles .sr-tile').removeClass('active');
+                    $(this).addClass('active');
+                    $('#paymenttype').val($(this).data('type') + '');
                     table.draw();
                 });
-                $('#search').keyup(function() {
-                    table.search($(this).val()).draw();
+
+                var searchTimer = null;
+                $('#search').on('input', function() {
+                    clearTimeout(searchTimer);
+                    searchTimer = setTimeout(function() { table.draw(); }, 300);
                 });
 
-                $('#vouchers_vac_filter').remove();
-
-                /* buildSelect(table);
-                 table.on('draw', function() {
-                     buildSelect(table);
-                 });*/
-
+                $('#addVoucherBtn').on('click', function() { srAddVoucher(<?= json_encode((string)$empid) ?>); });
             });
 
+            // New voucher popup (posts the same fields as the old addVoucherFunc -> ajaxVoucher.php add_voucher)
+            function srAddVoucher(empid) {
+                var F = SRForm;
+                var html = '<form id="srVoucherForm" class="sr-form" autocomplete="off" novalidate>' +
+                    '<input type="hidden" name="empid" value="' + F.esc(empid) + '">' +
+                    F.section('mdi-account', <?= json_encode(__('select_employee')) ?>,
+                        F.field({ name: 'emp_v_user', label: <?= json_encode(__('select_employee')) ?>, req: true, col: 12,
+                            html: F.select({ name: 'emp_v_user', id: 'emp_v_user', req: true, msg: <?= json_encode(__('select_employee_validation')) ?> }) })) +
+                    F.section('mdi-receipt', <?= json_encode(__('voucher_type_header')) ?>,
+                        '<div class="sr-fcol c-12">' + F.choices('voucher_type', [
+                            { v: 'receipt', l: <?= json_encode(__('payment_receipt')) ?>, icon: 'mdi-arrow-bottom-left' },
+                            { v: 'payment', l: <?= json_encode(__('payment_voucher')) ?>, icon: 'mdi-arrow-top-right' }
+                        ], true, <?= json_encode(__('select_voucher_type_validation')) ?>) + '</div>' +
+                        F.field({ name: 'amount', label: <?= json_encode(__('amount')) ?>, req: true, col: 6, type: 'number', attrs: ' step="0.01" min="0"', msg: <?= json_encode(__('enter_voucher_amount_validation')) ?> }) +
+                        F.field({ name: 'details', label: <?= json_encode(__('details')) ?>, req: true, col: 6, msg: <?= json_encode(__('enter_voucher_details_validation')) ?> }) +
+                        F.field({ name: 'acc_no', label: <?= json_encode(__('account_no')) ?>, col: 6 }) +
+                        F.field({ name: 'chq_no', label: <?= json_encode(__('cheque_no')) ?>, col: 6 })) +
+                    F.section('mdi-paperclip', <?= json_encode(__('attachment')) ?>,
+                        '<div class="sr-fcol c-12">' + F.filePicker({ id: 'checkatt', name: 'file', accept: '.pdf,.jpg,.jpeg,.png', hint: 'PDF / JPG / PNG - max 8 MB' }) + '</div>') +
+                    '</form>';
 
-            jQuery(function($) {
-                $('.autonumber').autoNumeric('init');
-            });
-            jQuery.browser = {};
-            (function() {
-                jQuery.browser.msie = false;
-                jQuery.browser.version = 0;
-                if (navigator.userAgent.match(/MSIE ([0-9]+)\./)) {
-                    jQuery.browser.msie = true;
-                    jQuery.browser.version = RegExp.$1;
-                }
-            })();
-
-
-            function buildSelect(table) {
-                var counter = 0;
-                table.columns([0, 1, 2]).every(function() {
-                    var column = table.column(this, {
-                        search: 'applied'
-                    });
-                    counter++;
-                    var select = $('<select><option value=""></option></select>')
-                        .appendTo($('#dropdown' + counter).empty())
-                        .on('change', function() {
-                            var val = $.fn.dataTable.util.escapeRegex(
-                                $(this).val()
-                            );
-                            column
-                                .search(val ? '^' + val + '$' : '', true, false)
-                                .draw();
+                F.open({
+                    title: <?= json_encode(__('add_new_voucher_title')) ?>,
+                    html: html,
+                    confirm: <?= json_encode(__('yes_register')) ?>,
+                    didOpen: function() {
+                        var $form = $('#srVoucherForm');
+                        F.liveClear($form);
+                        F.bindFilePicker($form);
+                        var $sel = $('#emp_v_user');
+                        F.select2($sel);
+                        $.post('./includes/ajaxFile/hrHandler.php', { ajaxType: 'emp_search' }, null, 'json').done(function(res) {
+                            if (res && res.status == 200) {
+                                (res.data || []).forEach(function(e) {
+                                    var n = String(e.name || '').split(' ').slice(0, 2).join(' ');
+                                    $sel.append(new Option(n + ' (' + e.emp_id + ')', e.emp_id));
+                                });
+                            }
                         });
-                    column.data().unique().sort().each(function(d, j) {
-                        select.append('<option value="' + d + '">' + d + '</option>');
-                    });
-                    var currSearch = column.search();
-                    if (currSearch) {
-                        select.val(column.data().unique().toArray().find((e) => e.match(new RegExp(currSearch))));
+                    },
+                    preConfirm: function() {
+                        var $form = $('#srVoucherForm');
+                        var file = $('#checkatt')[0];
+                        var msg = F.validate($form, function() {
+                            var err = F.checkFile(file, ['pdf', 'jpg', 'jpeg', 'png'], 8);
+                            return err ? { el: $form.find('.sr-filepick')[0], msg: err } : null;
+                        });
+                        if (msg) { Swal.showValidationMessage(msg); return false; }
+                        var fd = new FormData($form[0]);
+                        fd.append('ajaxType', 'add_voucher');
+                        return F.post('./includes/ajaxFile/ajaxVoucher.php', fd, true);
                     }
+                }).then(function(result) {
+                    F.done(result, function() { $('#vouchers_vac').DataTable().ajax.reload(); });
                 });
             }
         </script>
@@ -474,4 +449,3 @@ if (mysqli_num_rows($query) == 1) {
 
     </html>
 <?php } ?>
-x

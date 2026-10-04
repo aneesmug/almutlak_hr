@@ -989,6 +989,7 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
         .api-card {
@@ -1046,6 +1047,15 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
         .manual-query-panel.is-visible {
             display: block;
         }
+        /* ---------- New GUI ---------- */
+        .sr-page .manual-query-panel { padding: 0; border-style: solid; border-color: var(--sr-border); border-radius: 12px; background: var(--sr-surface); }
+        .sr-page .api-url-box, .sr-page .json-preview-box { border-radius: 10px; }
+        .sr-page .json-preview-box { max-height: 520px; overflow: auto; }
+        .tja-switches { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
+        .tja-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+        .tja-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 991px) { .tja-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .tja-stats .sr-stat { background: var(--sr-surface); }
     </style>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
@@ -1066,200 +1076,192 @@ $siteTitle = get_setting($conDB, 'site_title') ?: 'Al-Mutlak WMS';
         <div class="content-page">
             <?php include './includes/topbar.php'; ?>
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box api-card">
-                                <h4 class="m-t-0 header-title">Table JSON API Export</h4>
-                                <p class="text-muted mb-3">
-                                    Enter a table name and the system will automatically join common related tables when possible. Use Custom Joins only for special cases.
-                                </p>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Table JSON API Export</h1>
+                            <p>Enter a table name and the system will automatically join common related tables when possible. Use Custom Joins only for special cases.</p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <span class="sr-chip"><i class="mdi mdi-file-excel"></i> Excel Ready</span>
+                            <span class="sr-chip"><i class="mdi mdi-code-braces"></i> JSON Response</span>
+                            <span class="sr-chip"><i class="mdi mdi-link-variant"></i> Auto Join</span>
+                        </div>
+                    </div>
 
-                                <div class="mb-3">
-                                    <span class="help-chip">Excel Ready</span>
-                                    <span class="help-chip">JSON Response</span>
-                                    <span class="help-chip">Auto Join Related Tables</span>
+                    <form method="post" class="sr-form">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <div>
+                                    <h2 class="sr-card-title"><i class="mdi mdi-database"></i> Report Source</h2>
+                                    <span class="sr-card-sub">Use normal table mode for quick exports, or enable advanced SQL for custom reports.</span>
+                                </div>
+                                <label class="sr-check"><input type="checkbox" id="use_manual_query" name="use_manual_query" value="1" <?= $customQueryText !== '' ? 'checked' : '' ?>> Use advanced SQL query</label>
+                            </div>
+                            <div class="sr-card-body">
+                                <div class="sr-fsec">
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-5">
+                                            <label for="table">Table Name</label>
+                                            <input type="text" class="form-control" id="table" name="table" value="<?= htmlspecialchars($tableName) ?>" placeholder="Example: employees" <?= $customQueryText !== '' ? 'disabled' : '' ?>>
+                                        </div>
+                                        <div class="sr-fcol c-2">
+                                            <label for="limit">Row Limit</label>
+                                            <input type="number" class="form-control" id="limit" name="limit" min="1" max="10000" value="<?= (int) $limit ?>">
+                                        </div>
+                                        <div class="sr-fcol c-5 tja-switches">
+                                            <label class="sr-check"><input type="checkbox" id="auto_join" name="auto_join" value="1" <?= $autoJoin ? 'checked' : '' ?> <?= $customQueryText !== '' ? 'disabled' : '' ?>> Auto join related tables</label>
+                                            <label class="sr-check"><input type="checkbox" id="only_data" name="only_data" value="1" <?= $onlyData ? 'checked' : '' ?>> Only return data array</label>
+                                            <label class="sr-check"><input type="checkbox" id="excel_mode" name="excel_mode" value="1" <?= $excelMode ? 'checked' : '' ?>> Fetch data into Excel</label>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <form method="post" class="mb-4">
-                                    <div class="api-option-card">
-                                        <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
-                                            <div>
-                                                <div class="api-option-title">Report Source</div>
-                                                <p class="api-option-subtitle">Use normal table mode for quick exports, or enable advanced SQL for custom reports.</p>
-                                            </div>
-                                            <div class="custom-control custom-switch mt-2 mt-md-0">
-                                                <input type="checkbox" class="custom-control-input" id="use_manual_query" name="use_manual_query" value="1" <?= $customQueryText !== '' ? 'checked' : '' ?>>
-                                                <label class="custom-control-label font-weight-bold" for="use_manual_query">Use advanced SQL query</label>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-row">
-                                            <div class="form-group col-md-4">
-                                                <label for="table">Table Name</label>
-                                                <input type="text" class="form-control" id="table" name="table" value="<?= htmlspecialchars($tableName) ?>" placeholder="Example: employees" <?= $customQueryText !== '' ? 'disabled' : '' ?>>
-                                            </div>
-                                            <div class="form-group col-md-2">
-                                                <label for="limit">Row Limit</label>
-                                                <input type="number" class="form-control" id="limit" name="limit" min="1" max="10000" value="<?= (int) $limit ?>">
-                                            </div>
-                                            <div class="form-group col-md-3 d-flex align-items-end">
-                                                <div class="custom-control custom-switch mr-3">
-                                                    <input type="checkbox" class="custom-control-input" id="auto_join" name="auto_join" value="1" <?= $autoJoin ? 'checked' : '' ?> <?= $customQueryText !== '' ? 'disabled' : '' ?>>
-                                                    <label class="custom-control-label" for="auto_join">Auto join related tables</label>
-                                                </div>
-                                            </div>
-                                            <div class="form-group col-md-2 d-flex align-items-end">
-                                                <div class="custom-control custom-switch">
-                                                    <input type="checkbox" class="custom-control-input" id="only_data" name="only_data" value="1" <?= $onlyData ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="only_data">Only return data array</label>
-                                                </div>
-                                            </div>
-                                            <div class="form-group col-md-3 d-flex align-items-end">
-                                                <div class="custom-control custom-switch">
-                                                    <input type="checkbox" class="custom-control-input" id="excel_mode" name="excel_mode" value="1" <?= $excelMode ? 'checked' : '' ?>>
-                                                    <label class="custom-control-label" for="excel_mode">Fetch data into Excel</label>
-                                                </div>
-                                            </div>
+                                <div id="manualQueryPanel" class="sr-fsec manual-query-panel <?= $customQueryText !== '' ? 'is-visible' : '' ?>">
+                                    <div class="sr-fsec-head"><span><i class="mdi mdi-code-tags"></i> Manual SQL Query (SELECT only)</span></div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <textarea class="form-control sr-mono" id="custom_query" name="custom_query" rows="10" placeholder="SELECT employees.emp_id, employees.name FROM employees LIMIT 10"><?= htmlspecialchars($customQueryText) ?></textarea>
+                                            <span class="sr-fhint">Advanced mode: if you fill this box, it will override Table Name and Custom Joins in the generated API.</span>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div id="manualQueryPanel" class="manual-query-panel <?= $customQueryText !== '' ? 'is-visible' : '' ?>">
-                                        <div class="form-group mb-0">
-                                            <label for="custom_query">Manual SQL Query <small class="text-muted">(`SELECT` only)</small></label>
-                                            <textarea class="form-control" id="custom_query" name="custom_query" rows="10" placeholder="SELECT employees.emp_id, employees.name FROM employees LIMIT 10"><?= htmlspecialchars($customQueryText) ?></textarea>
-                                            <small class="form-text text-muted">Advanced mode: if you fill this box, it will override Table Name and Custom Joins in the generated API.</small>
+                                <div class="sr-fsec mb-0">
+                                    <div class="sr-fsec-head"><span><i class="mdi mdi-link-variant"></i> Optional Custom Joins</span></div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <textarea class="form-control sr-mono" id="joins" name="joins" rows="4" placeholder="department|dept|id|dep_nme&#10;employees|emp_id|emp_id|name" <?= $customQueryText !== '' ? 'disabled' : '' ?>><?= htmlspecialchars($joinsText) ?></textarea>
+                                            <span class="sr-fhint">Special cases only - one per line: <code>join_table|local_column|foreign_column|optional_column_name</code>. Keep empty for automatic joins. Example: <code>department|dept|id|dep_nme</code></span>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div class="form-group">
-                                        <label for="joins">Optional Custom Joins <small class="text-muted">(special cases only: <code>join_table|local_column|foreign_column|optional_column_name</code>)</small></label>
-                                        <textarea class="form-control" id="joins" name="joins" rows="4" placeholder="department|dept|id|dep_nme&#10;employees|emp_id|emp_id|name" <?= $customQueryText !== '' ? 'disabled' : '' ?>><?= htmlspecialchars($joinsText) ?></textarea>
-                                        <small class="form-text text-muted">Keep this empty for automatic joins. Example: <code>department|dept|id|dep_nme</code></small>
-                                    </div>
+                                <div class="sr-import-actions">
+                                    <button type="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-database"></i> Generate API Link</button>
+                                    <a href="table_json_api.php" class="sr-btn sr-btn-ghost"><i class="mdi mdi-refresh"></i> Reset</a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
 
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <div class="btn-group" role="group">
-                                            <button type="submit" class="btn btn-primary waves-effect waves-light">
-                                                <i class="mdi mdi-database-search"></i> Generate API Link
-                                            </button>
-                                            <a href="table_json_api.php" class="btn btn-outline-secondary waves-effect">Reset</a>
-                                        </div>
-                                    </div>
-                                </form>
+                    <?php if ($excelMode): ?>
+                        <div class="sr-notice tone-sky">
+                            <i class="mdi mdi-information-outline"></i>
+                            <div><strong>Excel steps:</strong> Excel → <strong>Data</strong> → <strong>Get Data</strong> → <strong>From Web</strong> → paste the generated CSV or JSON URL below.</div>
+                        </div>
+                    <?php endif; ?>
 
+                    <?php if ($previewError !== ''): ?>
+                        <div class="sr-notice tone-red"><i class="mdi mdi-alert-circle-outline"></i><div><?= htmlspecialchars($previewError) ?></div></div>
+                    <?php endif; ?>
+
+                    <?php if ($generatedApiUrl !== ''): ?>
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-link"></i> Generated Links</h2>
+                            </div>
+                            <div class="sr-card-body">
                                 <?php if ($excelMode): ?>
-                                    <div class="alert alert-info mb-4">
-                                        <strong>Excel steps:</strong> Excel → <strong>Data</strong> → <strong>Get Data</strong> → <strong>From Web</strong> → paste the generated CSV or JSON URL below.
+                                    <?php if ($showSslNote): ?>
+                                        <div class="sr-notice tone-amber">
+                                            <i class="mdi mdi-alert"></i>
+                                            <div><strong>Excel SSL note:</strong> your local XAMPP <code>https://</code> certificate is not trusted by Excel.
+                                            Use the <code>http://</code> link below for Excel import, or install a trusted SSL certificate on Windows.</div>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <div class="sr-notice tone-sky">
+                                        <i class="mdi mdi-information-outline"></i>
+                                        <div><strong>Why Excel shows only <code>Record</code>:</strong> this is normal for JSON lists.
+                                        Use the <strong>CSV link</strong> below for direct columns, or paste the <strong>Power Query formula</strong> to auto-expand JSON into a table.</div>
+                                    </div>
+
+                                    <div class="sr-field-label">Excel CSV URL (best for direct columns)</div>
+                                    <div id="csvUrlBox" class="api-url-box"><?= htmlspecialchars($generatedCsvUrl) ?></div>
+                                    <div class="tja-btns">
+                                        <button type="button" class="sr-btn sr-btn-sm sr-btn-success" onclick="copyTextFromElement('csvUrlBox')"><i class="mdi mdi-content-copy"></i> Copy CSV Link</button>
+                                        <a href="<?= htmlspecialchars($generatedCsvUrl) ?>" target="_blank" class="sr-btn sr-btn-sm"><i class="mdi mdi-open-in-new"></i> Open CSV</a>
+                                    </div>
+
+                                    <div class="sr-field-label">Power Query Formula for JSON → Table</div>
+                                    <div id="excelFormulaBox" class="api-url-box"><?= htmlspecialchars($generatedExcelFormula) ?></div>
+                                    <div class="tja-btns">
+                                        <button type="button" class="sr-btn sr-btn-sm sr-btn-primary" onclick="copyTextFromElement('excelFormulaBox')"><i class="mdi mdi-content-copy"></i> Copy Power Query Formula</button>
                                     </div>
                                 <?php endif; ?>
 
-                                <?php if ($previewError !== ''): ?>
-                                    <div class="alert alert-danger"><?= htmlspecialchars($previewError) ?></div>
-                                <?php endif; ?>
+                                <div class="sr-field-label">JSON API URL</div>
+                                <div id="apiUrlBox" class="api-url-box"><?= htmlspecialchars($generatedApiUrl) ?></div>
+                                <div class="tja-btns mb-0">
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-success" onclick="copyTextFromElement('apiUrlBox')"><i class="mdi mdi-content-copy"></i> Copy JSON Link</button>
+                                    <a href="<?= htmlspecialchars($generatedApiUrl) ?>" target="_blank" class="sr-btn sr-btn-sm"><i class="mdi mdi-open-in-new"></i> Open JSON</a>
+                                </div>
 
-                                <?php if ($generatedApiUrl !== ''): ?>
-                                    <div class="mb-4">
-                                        <?php if ($excelMode): ?>
-                                            <?php if ($showSslNote): ?>
-                                                <div class="alert alert-warning">
-                                                    <strong>Excel SSL note:</strong> your local XAMPP `https://` certificate is not trusted by Excel.
-                                                    Use the `http://` link below for Excel import, or install a trusted SSL certificate on Windows.
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <div class="alert alert-info">
-                                                <strong>Why Excel shows only `Record`:</strong> this is normal for JSON lists.
-                                                Use the <strong>CSV link</strong> below for direct columns, or paste the <strong>Power Query formula</strong> to auto-expand JSON into a table.
-                                            </div>
-
-                                            <label class="font-weight-bold">Excel CSV URL (best for direct columns)</label>
-                                            <div id="csvUrlBox" class="api-url-box"><?= htmlspecialchars($generatedCsvUrl) ?></div>
-                                            <div class="mt-2 mb-3">
-                                                <div class="btn-group" role="group">
-                                                    <button type="button" class="btn btn-success btn-sm" onclick="copyTextFromElement('csvUrlBox')">
-                                                        <i class="mdi mdi-content-copy"></i> Copy CSV Link
-                                                    </button>
-                                                    <a href="<?= htmlspecialchars($generatedCsvUrl) ?>" target="_blank" class="btn btn-info btn-sm">
-                                                        <i class="mdi mdi-open-in-new"></i> Open CSV
-                                                    </a>
-                                                </div>
-                                            </div>
-
-                                            <label class="font-weight-bold">Power Query Formula for JSON → Table</label>
-                                            <div id="excelFormulaBox" class="api-url-box"><?= htmlspecialchars($generatedExcelFormula) ?></div>
-                                            <div class="mt-2 mb-3">
-                                                <button type="button" class="btn btn-primary btn-sm mr-2" onclick="copyTextFromElement('excelFormulaBox')">
-                                                    <i class="mdi mdi-content-copy"></i> Copy Power Query Formula
-                                                </button>
-                                            </div>
-                                        <?php endif; ?>
-
-                                        <label class="font-weight-bold">JSON API URL</label>
-                                        <div id="apiUrlBox" class="api-url-box"><?= htmlspecialchars($generatedApiUrl) ?></div>
-                                        <div class="mt-2">
-                                            <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-success btn-sm" onclick="copyTextFromElement('apiUrlBox')">
-                                                    <i class="mdi mdi-content-copy"></i> Copy JSON Link
-                                                </button>
-                                                <a href="<?= htmlspecialchars($generatedApiUrl) ?>" target="_blank" class="btn btn-info btn-sm">
-                                                    <i class="mdi mdi-open-in-new"></i> Open JSON
-                                                </a>
-                                            </div>
-                                        </div>
-
-                                        <?php if ($excelMode && $showSslNote): ?>
-                                            <div class="mt-3">
-                                                <label class="font-weight-bold">Current browser URL</label>
-                                                <div class="api-url-box"><?= htmlspecialchars($generatedBrowserUrl) ?></div>
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endif; ?>
-
-                                <?php if (is_array($previewPayload)): ?>
-                                    <div class="row">
-                                        <div class="col-lg-6 mb-3">
-                                            <div class="border rounded p-3 h-100">
-                                                <h5 class="mb-3">Preview Summary</h5>
-                                                <ul class="mb-0 pl-3">
-                                                    <li><strong>Table:</strong> <?= htmlspecialchars($previewPayload['table']) ?></li>
-                                                    <li><strong>Preview Rows:</strong> <?= (int) $previewPayload['rows_returned'] ?></li>
-                                                    <li><strong>Total Rows in Table:</strong> <?= (int) $previewPayload['total_rows_in_table'] ?></li>
-                                                    <li><strong>Joins Applied:</strong> <?= count($previewPayload['joins_applied']) ?></li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        <div class="col-lg-6 mb-3">
-                                            <div class="border rounded p-3 h-100">
-                                                <h5 class="mb-3">Applied Joins</h5>
-                                                <?php if (!empty($previewPayload['joins_applied'])): ?>
-                                                    <ul class="mb-0 pl-3">
-                                                        <?php foreach ($previewPayload['joins_applied'] as $join): ?>
-                                                            <li>
-                                                                <code><?= htmlspecialchars($join['join_table']) ?></code>
-                                                                on <code><?= htmlspecialchars($join['local_column']) ?></code>
-                                                                = <code><?= htmlspecialchars($join['foreign_column']) ?></code>
-                                                                <span class="badge badge-light"><?= htmlspecialchars($join['source']) ?></span>
-                                                            </li>
-                                                        <?php endforeach; ?>
-                                                    </ul>
-                                                <?php else: ?>
-                                                    <p class="text-muted mb-0">No joins were applied. The API will return the main table only.</p>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="font-weight-bold">JSON Preview (first 20 rows max)</label>
-                                        <div class="json-preview-box"><?= htmlspecialchars(json_encode($previewPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></div>
-                                    </div>
+                                <?php if ($excelMode && $showSslNote): ?>
+                                    <div class="sr-field-label mt-3">Current browser URL</div>
+                                    <div class="api-url-box"><?= htmlspecialchars($generatedBrowserUrl) ?></div>
                                 <?php endif; ?>
                             </div>
                         </div>
-                    </div>
+                    <?php endif; ?>
+
+                    <?php if (is_array($previewPayload)): ?>
+                        <div class="tja-stats">
+                            <div class="sr-stat is-sky">
+                                <div class="sr-stat-label">Table <i class="mdi mdi-table"></i></div>
+                                <div class="sr-stat-value sr-mono"><?= htmlspecialchars($previewPayload['table']) ?></div>
+                            </div>
+                            <div class="sr-stat">
+                                <div class="sr-stat-label">Preview Rows <i class="mdi mdi-format-list-bulleted"></i></div>
+                                <div class="sr-stat-value"><?= (int) $previewPayload['rows_returned'] ?></div>
+                            </div>
+                            <div class="sr-stat is-green">
+                                <div class="sr-stat-label">Total Rows in Table <i class="mdi mdi-database"></i></div>
+                                <div class="sr-stat-value"><?= (int) $previewPayload['total_rows_in_table'] ?></div>
+                            </div>
+                            <div class="sr-stat is-amber">
+                                <div class="sr-stat-label">Joins Applied <i class="mdi mdi-link-variant"></i></div>
+                                <div class="sr-stat-value"><?= count($previewPayload['joins_applied']) ?></div>
+                            </div>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-link-variant"></i> Applied Joins</h2>
+                            </div>
+                            <?php if (!empty($previewPayload['joins_applied'])): ?>
+                                <div class="sr-table-wrap sr-table-scroll">
+                                    <table class="sr-table">
+                                        <thead><tr><th>Join table</th><th>Local column</th><th>Foreign column</th><th>Source</th></tr></thead>
+                                        <tbody>
+                                            <?php foreach ($previewPayload['joins_applied'] as $join): ?>
+                                                <tr>
+                                                    <td><code><?= htmlspecialchars($join['join_table']) ?></code></td>
+                                                    <td><code><?= htmlspecialchars($join['local_column']) ?></code></td>
+                                                    <td><code><?= htmlspecialchars($join['foreign_column']) ?></code></td>
+                                                    <td><span class="sr-pill sr-pill-xs tone-slate"><?= htmlspecialchars($join['source']) ?></span></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php else: ?>
+                                <div class="sr-empty"><i class="mdi mdi-link-variant-off"></i>No joins were applied. The API will return the main table only.</div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-code-braces"></i> JSON Preview</h2>
+                                <span class="sr-card-sub">first 20 rows max</span>
+                            </div>
+                            <div class="sr-card-body">
+                                <div class="json-preview-box"><?= htmlspecialchars(json_encode($previewPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

@@ -875,3 +875,49 @@ html.app-dark .sr-page.sr-emp-card:hover { box-shadow: 0 10px 28px rgba(0, 0, 0,
 .sr-emp-view:hover i { transform: translateX(3px); }
 [dir="rtl"] .sr-emp-view i { transform: scaleX(-1); }
 [dir="rtl"] .sr-emp-view:hover i { transform: scaleX(-1) translateX(3px); }
+
+/* ---------- Import / upload pages (import_*.php) ---------- */
+.sr-import { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; align-items: start; }
+@media (max-width: 1199px) { .sr-import { grid-template-columns: 1fr; } }
+.sr-form .sr-filepick.is-lg { flex-direction: column; justify-content: center; text-align: center; gap: 10px; min-height: 170px; padding: 26px 18px; }
+.sr-form .sr-filepick.is-lg > i { font-size: 40px; }
+.sr-form .sr-filepick.is-lg b { font-size: 14px; }
+.sr-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.sr-guide { margin: 0; padding: 0; list-style: none; counter-reset: srguide; }
+.sr-guide li { position: relative; padding: 0 0 14px 38px; font-size: 13px; color: var(--sr-text-2); line-height: 1.5; counter-increment: srguide; }
+.sr-guide li:last-child { padding-bottom: 0; }
+.sr-guide li::before {
+    content: counter(srguide); position: absolute; top: -1px; inset-inline-start: 0; width: 26px; height: 26px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    background: var(--sr-accent-soft); color: var(--sr-accent-strong);
+}
+[dir="rtl"] .sr-guide li { padding: 0 38px 14px 0; }
+.sr-guide b { color: var(--sr-text); }
+.sr-guide code, .sr-page .sr-table code { padding: 1px 6px; border-radius: 6px; font-size: 12px; color: var(--sr-accent-strong); background: var(--sr-accent-soft); }
+.sr-result { margin-top: 18px; }
+.sr-result .sr-stats { margin-top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sr-result .sr-table-wrap { max-height: 320px; overflow-y: auto; margin-top: 14px; border: 1px solid var(--sr-border); border-radius: 12px; }
+.sr-page .sr-table td.is-bad { color: var(--tone-red-fg); font-weight: 600; }
+
+/* ---------- Standalone tool pages (opened in a new tab, no sidebar) ----------
+   vacation_balance_history.php, loan_rejection_report.php, diagnose/fix_double_deduction.php ... */
+body.sr-standalone { margin: 0; min-height: 100vh; background: #f1f5f9; font-family: inherit; }
+html.app-dark body.sr-standalone { background: #0f1420; }
+.sr-standalone-wrap { max-width: 1440px; margin: 0 auto; padding: 24px 20px 40px; }
+.sr-standalone-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; color: var(--sr-muted); font-size: 12px; font-weight: 600; }
+.sr-standalone-brand img { height: 26px; }
+.sr-standalone-brand a { color: inherit; text-decoration: none; }
+.sr-standalone-brand a:hover { color: var(--sr-accent-strong); }
+.sr-num { font-variant-numeric: tabular-nums; text-align: end; white-space: nowrap; }
+.sr-num.is-up { color: var(--tone-green-fg); font-weight: 600; }
+.sr-num.is-down, .sr-num.is-bad { color: var(--tone-red-fg); font-weight: 600; }
+.sr-num.is-muted { color: var(--sr-muted); }
+.sr-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; align-items: end; padding: 16px 18px; }
+.sr-filter-grid label { display: block; margin: 0 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+.sr-filter-grid .form-control { height: 38px; border-radius: 9px; border-color: var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text); font-size: 13px; }
+.sr-filter-grid .form-control:focus { background: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+.sr-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sr-check { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--sr-text-2); cursor: pointer; }
+.sr-check input { width: 16px; height: 16px; accent-color: var(--sr-accent); }
+.sr-page .sr-table-scroll { overflow-x: auto; }
+.sr-page .sr-table-scroll table.sr-table tbody tr { cursor: default; }

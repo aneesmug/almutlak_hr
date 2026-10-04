@@ -250,44 +250,27 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
     <?php endif; ?>
     
     <script src="assets/js/modernizr.min.js"></script>
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <style>
-        .supervisor-info-box {
-            background: #f8f9fa;
-            border-left: 4px solid #007bff;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 15px;
+        .sr-page .mes-search { max-width: none; }
+        .sr-page .search-results { margin-top: 10px; max-height: 340px; overflow-y: auto; border: 1px solid var(--sr-border); border-radius: 12px; }
+        .sr-page .search-results:empty { display: none !important; }
+        .mes-emp, .supervisor-item {
+            display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; text-align: start; cursor: pointer;
+            border: 0; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface); color: var(--sr-text-2); transition: background .15s;
         }
-        .supervisor-item {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        .supervisor-item:hover {
-            background-color: #e7f3ff;
-            border-color: #007bff;
-        }
-        .supervisor-item.current {
-            background-color: #d4edda;
-            border-color: #28a745;
-        }
-        .supervisor-item.selected {
-            background-color: #007bff;
-            border-color: #007bff;
-            color: white;
-        }
-        .supervisor-item.selected strong {
-            color: white;
-        }
-        .supervisor-item.selected small {
-            color: rgba(255, 255, 255, 0.8);
-        }
-        .search-results {
-            max-height: 200px;
-            overflow-y: auto;
-        }
+        .mes-emp:last-child { border-bottom: 0; }
+        .mes-emp:hover, .supervisor-item:hover { background: var(--sr-accent-soft); }
+        .mes-emp .sr-cell-title { max-width: none; }
+        .mes-empty { padding: 14px; font-size: 13px; color: var(--sr-muted); }
+        .mes-current { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface-2); }
+        .mes-list { max-height: 380px; overflow-y: auto; border: 1px solid var(--sr-border); border-radius: 12px; }
+        .supervisor-item { border-radius: 0; }
+        .supervisor-item:last-child { border-bottom: 0; }
+        .supervisor-item.current { background: var(--tone-green-bg); }
+        .supervisor-item.selected { background: var(--sr-accent); color: #fff; }
+        .supervisor-item.selected .sr-cell-title, .supervisor-item.selected .sr-cell-sub { color: #fff; }
+        .supervisor-item.selected .sr-avatar { background: rgba(255, 255, 255, .2); color: #fff; }
     </style>
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
@@ -313,56 +296,53 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
 
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="card-title mb-4">
-                                    <i class="fa fa-users-gear"></i> <?= __('manage_employee_supervisors') ?>
-                                </h4>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('manage_employee_supervisors') ?></h1>
+                            <p><?= __('manage_employee_supervisors_sub', 'Change who approves the pending vacation requests of an employee.') ?></p>
+                        </div>
+                    </div>
 
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="employee-search" class="font-weight-bold">
-                                                <?= __('search_employees_placeholder') ?> <span class="text-danger">*</span>
-                                            </label>
-                                            <input type="text" id="employee-search" class="form-control" 
-                                                   placeholder="<?= __('enter_employee_name_or_id') ?>"
-                                                   autocomplete="off" />
-                                            <div id="search-results" class="search-results" style="display: none; margin-top: 10px;"></div>
-                                        </div>
-                                    </div>
+                    <div class="sr-import">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-account-search"></i> <?= __('search_employees_placeholder') ?> <span class="text-danger">*</span></h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <div class="sr-search mes-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="employee-search" placeholder="<?= __('enter_employee_name_or_id') ?>" autocomplete="off" />
                                 </div>
+                                <div id="search-results" class="search-results" style="display: none;"></div>
+                                <p class="sr-hint mb-0"><?= __('mes_search_hint', 'Only employees with pending vacation requests are listed.') ?></p>
+                            </div>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-account-card-details"></i> <?= __('selected_employee') ?></h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <div id="employee-empty" class="sr-card-sub"><?= __('enter_employee_name_or_id') ?></div>
 
                                 <!-- Selected Employee Info -->
                                 <div id="employee-info" style="display: none;">
-                                    <div class="supervisor-info-box">
-                                        <h5><?= __('selected_employee') ?>:</h5>
-                                        <p class="mb-0">
-                                            <strong id="selected-emp-name"></strong> 
-                                            <small class="text-muted">(ID: <span id="selected-emp-id"></span>)</small>
-                                        </p>
-                                        <p class="mb-2 text-muted">
-                                            <small><?= __('designation') ?>: <span id="selected-emp-designation"></span></small>
-                                        </p>
-                                    </div>
-
-                                    <div class="supervisor-info-box mt-3">
-                                        <h5><?= __('current_vacation_approver') ?>:</h5>
-                                        <p id="current-supervisor-info" class="mb-0"></p>
-                                    </div>
-
-                                    <div class="mt-4">
-                                        <div class="btn-group" role="group">
-                                            <button type="button" class="btn btn-info" id="change-supervisor-btn">
-                                                <i class="fa fa-edit"></i> <?= __('change_supervisor') ?>
-                                            </button>
-                                            <button type="button" class="btn btn-secondary" id="clear-selection-btn">
-                                                <i class="fa fa-times"></i> <?= __('clear') ?>
-                                            </button>
+                                    <div class="sr-person mb-3">
+                                        <span class="sr-avatar" id="selected-emp-avatar"></span>
+                                        <div>
+                                            <div class="sr-cell-title" id="selected-emp-name"></div>
+                                            <div class="sr-cell-sub">ID: <span id="selected-emp-id"></span> &middot; <span id="selected-emp-designation"></span></div>
                                         </div>
+                                    </div>
+
+                                    <div class="sr-field-label"><?= __('current_vacation_approver') ?></div>
+                                    <div class="mes-current" id="current-supervisor-info"></div>
+
+                                    <div class="sr-import-actions">
+                                        <button type="button" class="sr-btn sr-btn-primary" id="change-supervisor-btn"><i class="mdi mdi-account-switch"></i> <?= __('change_supervisor') ?></button>
+                                        <button type="button" class="sr-btn sr-btn-ghost" id="clear-selection-btn"><i class="mdi mdi-close"></i> <?= __('clear') ?></button>
                                     </div>
                                 </div>
 
@@ -390,42 +370,49 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
+        function mesEsc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+        function mesInitials(name) {
+            return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+        }
+
         // Employee Search
-        $('#employee-search').on('keyup', function() {
+        var mesTimer = null;
+        $('#employee-search').on('input', function() {
             const term = $(this).val().trim();
-            
+            clearTimeout(mesTimer);
+
             if (term.length < 2) {
-                $('#search-results').hide();
+                $('#search-results').hide().empty();
                 return;
             }
 
-            $.ajax({
-                url: 'manage_employee_supervisors.php',
-                type: 'POST',
-                dataType: 'json',
-                data: {
-                    action: 'search_employees',
-                    term: term
-                },
-                success: function(response) {
-                    if (response.success && response.employees.length > 0) {
-                        let html = '<div class="list-group">';
-                        response.employees.forEach(emp => {
-                            html += `<button type="button" class="list-group-item list-group-item-action employee-item" 
-                                            data-emp-id="${emp.id}" data-emp-name="${emp.name}" 
-                                            data-emp-designation="${emp.designation}">
-                                        <strong>${emp.name}</strong><br>
-                                        <small class="text-muted">ID: ${emp.emp_id} - ${emp.designation}</small>
-                                        <small class="badge badge-info ml-2">Pending Vacation Requests: ${emp.vacation_count}</small>
-                                    </button>`;
-                        });
-                        html += '</div>';
-                        $('#search-results').html(html).show();
-                    } else {
-                        $('#search-results').html('<p class="text-muted">'+ __('no_employees_with_active_vacation_requests_found') +'</p>').show();
+            mesTimer = setTimeout(function() {
+                $.ajax({
+                    url: 'manage_employee_supervisors.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'search_employees',
+                        term: term
+                    },
+                    success: function(response) {
+                        if (response.success && response.employees.length > 0) {
+                            let html = '';
+                            response.employees.forEach(emp => {
+                                html += '<button type="button" class="mes-emp employee-item" data-emp-id="' + mesEsc(emp.id) + '" data-emp-name="' + mesEsc(emp.name) + '" data-emp-designation="' + mesEsc(emp.designation) + '">'
+                                    + '<span class="sr-avatar sr-avatar-sm">' + mesEsc(mesInitials(emp.name)) + '</span>'
+                                    + '<span class="flex-grow-1" style="min-width:0;"><span class="sr-cell-title">' + mesEsc(emp.name) + '</span>'
+                                    + '<span class="sr-cell-sub">ID: ' + mesEsc(emp.emp_id) + ' &middot; ' + mesEsc(emp.designation) + '</span></span>'
+                                    + '<span class="sr-pill sr-pill-xs tone-amber" title="Pending Vacation Requests"><i class="mdi mdi-calendar-clock"></i>' + mesEsc(emp.vacation_count) + '</span>'
+                                    + '</button>';
+                            });
+                            $('#search-results').html(html).show();
+                        } else {
+                            $('#search-results').html('<div class="mes-empty">' + mesEsc(__('no_employees_with_active_vacation_requests_found')) + '</div>').show();
+                        }
                     }
-                }
-            });
+                });
+            }, 250);
         });
 
         // Select employee from search results
@@ -435,20 +422,23 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
             const empDesignation = $(this).data('emp-designation');
 
             $('#employee-search').val('');
-            $('#search-results').hide();
+            $('#search-results').hide().empty();
             $('#selected-emp-id-value').val(empId);
             $('#selected-emp-name').text(empName);
+            $('#selected-emp-avatar').text(mesInitials(empName));
             $('#selected-emp-id').text(empId);
             $('#selected-emp-designation').text(empDesignation);
 
             // Fetch current supervisor
             fetchCurrentSupervisor(empId);
 
+            $('#employee-empty').hide();
             $('#employee-info').show();
         });
 
         // Fetch current supervisor
         function fetchCurrentSupervisor(empId) {
+            $('#current-supervisor-info').html('<i class="mdi mdi-spin mdi-loading"></i>');
             $.ajax({
                 url: 'manage_employee_supervisors.php',
                 type: 'POST',
@@ -463,11 +453,12 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
                         const currentSup = response.supervisors.find(s => s.is_current);
                         if (currentSup) {
                             $('#current-supervisor-info').html(
-                                `<strong>${currentSup.name}</strong><br>
-                                <small class="text-muted">${currentSup.designation} (${currentSup.user_type})</small>`
+                                '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + mesEsc(mesInitials(currentSup.name)) + '</span>'
+                                + '<div><div class="sr-cell-title">' + mesEsc(currentSup.name) + '</div>'
+                                + '<div class="sr-cell-sub">' + mesEsc(currentSup.designation) + ' (' + mesEsc(currentSup.user_type) + ')</div></div></div>'
                             );
                         } else {
-                            $('#current-supervisor-info').html('<em class="text-danger"><?= __("no_supervisor_assigned_to_this_employee") ?></em>');
+                            $('#current-supervisor-info').html('<span class="sr-pill tone-red"><i class="mdi mdi-alert-circle-outline"></i><?= __("no_supervisor_assigned_to_this_employee") ?></span>');
                         }
                     }
                 }
@@ -496,69 +487,59 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
             });
         });
 
-        // Show supervisor selector modal
+        // Show supervisor selector popup
         function showSupervisorSelector(supervisors, currentSupervisorId) {
-            let supervisorHtml = '<div style="text-align: left;">';
-            supervisorHtml += '<p class="mb-3"><?= __("select_new_vacation_approver") ?>:</p>';
-            supervisorHtml += '<div class="form-group mb-3">';
-            supervisorHtml += '<input type="text" id="supervisor-search-input" class="form-control" placeholder="Search by ID or Name..." style="margin-bottom: 10px;">';
-            supervisorHtml += '</div>';
-            supervisorHtml += '<div style="max-height: 400px; overflow-y: auto;" id="supervisor-list-container">';
-
+            let list = '';
             supervisors.forEach(sup => {
                 const isCurrent = sup.id == currentSupervisorId;
-                supervisorHtml += `
-                    <div class="supervisor-item ${isCurrent ? 'current' : ''}" data-sup-id="${sup.id}" data-sup-name="${sup.name}" data-sup-id-text="${sup.id}">
-                        <strong>${sup.name}</strong>
-                        <br><small class="text-muted">ID: ${sup.id} - ${sup.designation} (${sup.user_type})</small>
-                        ${isCurrent ? '<br><small class="text-success">✓ <?= __("current") ?></small>' : ''}
-                    </div>
-                `;
+                list += '<div class="supervisor-item' + (isCurrent ? ' current' : '') + '" data-sup-id="' + mesEsc(sup.id) + '" data-sup-name="' + mesEsc(sup.name) + '" data-sup-id-text="' + mesEsc(sup.id) + '">'
+                    + '<span class="sr-avatar sr-avatar-sm">' + mesEsc(mesInitials(sup.name)) + '</span>'
+                    + '<div class="flex-grow-1" style="min-width:0;"><div class="sr-cell-title">' + mesEsc(sup.name) + '</div>'
+                    + '<div class="sr-cell-sub">ID: ' + mesEsc(sup.id) + ' &middot; ' + mesEsc(sup.designation) + ' (' + mesEsc(sup.user_type) + ')</div></div>'
+                    + (isCurrent ? '<span class="sr-pill sr-pill-xs tone-green"><i class="mdi mdi-check"></i><?= __("current") ?></span>' : '')
+                    + '</div>';
             });
 
-            supervisorHtml += '</div>';
-            supervisorHtml += '<div class="custom-control custom-checkbox mt-3">';
-            supervisorHtml += '<input type="checkbox" class="custom-control-input" id="update-employee-supervisor" />';
-            supervisorHtml += '<label class="custom-control-label" for="update-employee-supervisor">';
-            supervisorHtml += '<?= __("update_employee_supervisor") ?>';
-            supervisorHtml += '</label>';
-            supervisorHtml += '</div></div>';
+            const html = '<div class="sr-page sr-form text-left">'
+                + '<div class="sr-fsec"><div class="sr-fsec-head"><span><i class="mdi mdi-account-switch"></i> <?= __("select_new_vacation_approver") ?></span></div>'
+                + '<div class="p-3"><div class="sr-search mb-2" style="max-width:none;"><i class="mdi mdi-magnify"></i>'
+                + '<input type="search" id="supervisor-search-input" placeholder="Search by ID or Name..." autocomplete="off"></div>'
+                + '<div class="mes-list" id="supervisor-list-container">' + list + '</div></div></div>'
+                + '<label class="sr-check"><input type="checkbox" id="update-employee-supervisor"> <?= __("update_employee_supervisor") ?></label>'
+                + '</div>';
 
             Swal.fire({
                 title: '<?= __("select_supervisor") ?>',
-                html: supervisorHtml,
-                icon: 'question',
+                html: html,
                 showCancelButton: true,
-                confirmButtonText: '<?= __("confirm") ?>',
+                confirmButtonText: '<i class="mdi mdi-check"></i> <?= __("confirm") ?>',
                 cancelButtonText: '<?= __("cancel") ?>',
-                width: '500px',
+                confirmButtonColor: APP_COLORS.primary,
+                cancelButtonColor: APP_COLORS.danger_dark,
+                width: '620px',
+                allowOutsideClick: false,
+                customClass: { popup: 'sr-addline-popup' },
                 didOpen: () => {
                     // Add click handler to supervisor items
                     document.querySelectorAll('.supervisor-item').forEach(item => {
                         item.addEventListener('click', function() {
                             document.querySelectorAll('.supervisor-item').forEach(i => i.classList.remove('selected'));
                             this.classList.add('selected');
-                            this.dataset.selected = 'true';
+                            Swal.resetValidationMessage();
                         });
                     });
 
                     // Add search functionality
                     const searchInput = document.getElementById('supervisor-search-input');
-                    searchInput.addEventListener('keyup', function() {
+                    searchInput.addEventListener('input', function() {
                         const searchTerm = this.value.toLowerCase().trim();
-                        const supervisorItems = document.querySelectorAll('.supervisor-item');
-                        
-                        supervisorItems.forEach(item => {
+                        document.querySelectorAll('.supervisor-item').forEach(item => {
                             const name = item.dataset.supName.toLowerCase();
                             const id = item.dataset.supIdText.toLowerCase();
-                            
-                            if (searchTerm === '' || name.includes(searchTerm) || id.includes(searchTerm)) {
-                                item.style.display = 'block';
-                            } else {
-                                item.style.display = 'none';
-                            }
+                            item.style.display = (searchTerm === '' || name.includes(searchTerm) || id.includes(searchTerm)) ? '' : 'none';
                         });
                     });
+                    searchInput.focus();
                 },
                 preConfirm: () => {
                     const selected = document.querySelector('.supervisor-item.selected');
@@ -604,11 +585,7 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
                 },
                 success: function(response) {
                     if (response.success) {
-                        Swal.fire(
-                            '<?= __("success") ?>',
-                            response.message,
-                            'success'
-                        ).then(() => {
+                        Swal.fire({ title: '<?= __("success") ?>', text: response.message, icon: 'success', allowOutsideClick: false }).then(() => {
                             fetchCurrentSupervisor(empId);
                         });
                     } else {
@@ -624,8 +601,9 @@ if (isset($_POST['action']) && $_POST['action'] == 'update_supervisor') {
         // Clear selection
         $('#clear-selection-btn').on('click', function() {
             $('#employee-search').val('');
-            $('#search-results').hide();
+            $('#search-results').hide().empty();
             $('#employee-info').hide();
+            $('#employee-empty').show();
             $('#selected-emp-id-value').val('');
         });
     </script>

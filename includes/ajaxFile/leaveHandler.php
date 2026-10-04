@@ -428,6 +428,16 @@ elseif ($ajaxType == 'applyVacation') {
             send_supervisor_validation_error($supervisor_check['message']);
         }
         $first_approver_id = (int)($_POST['first_approver_id'] ?? 0);
+        // Fallback: client-side supervisor lookup can fail (session/timeout); resolve it here
+        if ($first_approver_id <= 0) {
+            $emp_id_sup = (int)$emp_id;
+            $res_sup = mysqli_query($conDB, "SELECT `supervisor_id` FROM `employees` WHERE `emp_id` = {$emp_id_sup} LIMIT 1");
+            if ($res_sup) {
+                $row_sup = mysqli_fetch_assoc($res_sup);
+                mysqli_free_result($res_sup);
+                $first_approver_id = (int)($row_sup['supervisor_id'] ?? 0);
+            }
+        }
         // Normalize replacement_per BEFORE escaping: treat placeholder text and indicators as no replacement
         $replacement_per_raw = trim($_POST['replacement_per'] ?? '');
         

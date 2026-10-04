@@ -49,6 +49,8 @@ function get_section_screenshots($section, $step) {
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
@@ -656,10 +658,38 @@ function get_section_screenshots($section, $step) {
                 right: 10px;
             }
         }
+
+        /* ---------- New GUI (sr-* design system) overrides ---------- */
+        body.sr-standalone { background: #f1f5f9; }
+        .sr-page.guide-container { --primary: var(--sr-accent); --info: #0ea5e9; --success: #16a34a; --warning: #f59e0b; --danger: #dc2626; --light: var(--sr-surface-2); --dark: var(--sr-text); padding-top: 24px; }
+        .sr-page .back-button a { border-radius: 10px; color: var(--sr-text-2); background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: none; }
+        .sr-page .back-button a:hover { color: var(--sr-accent-strong); border-color: var(--sr-accent); background: var(--sr-surface); }
+        .sr-page .guide-header {
+            text-align: start; padding: 28px 30px; margin-bottom: 20px; border-radius: var(--sr-radius); box-shadow: var(--sr-shadow);
+            background: radial-gradient(circle at 90% -30%, rgba(255, 255, 255, .25) 0, rgba(255, 255, 255, 0) 55%), linear-gradient(135deg, #4f46e5, #0ea5e9);
+        }
+        .sr-page .guide-header h1 { font-size: 26px; display: flex; align-items: center; gap: 10px; }
+        .sr-page .nav-tabs-guide { padding: 6px; gap: 4px; border-radius: var(--sr-radius); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow); margin-bottom: 20px; }
+        .sr-page .nav-tabs-guide .nav-link { min-width: 160px; border-radius: 10px; border-bottom: 0; color: var(--sr-muted); font-size: 13px; padding: 11px 14px; }
+        .sr-page .nav-tabs-guide .nav-link:hover { background: var(--sr-surface-3); color: var(--sr-text); }
+        .sr-page .nav-tabs-guide .nav-link.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+        .sr-page .tab-content-guide { border-radius: var(--sr-radius); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow); padding: 30px; }
+        .sr-page .guide-title { color: var(--sr-text); border-bottom-color: var(--sr-border); }
+        .sr-page .guide-title i { color: var(--sr-accent); }
+        .sr-page .step-container { border-radius: 12px; border-color: var(--sr-border); background: var(--sr-surface-2); box-shadow: none; }
+        .sr-page .step-number { background: var(--sr-accent); }
+        .sr-page .step-title { color: var(--sr-text); }
+        .sr-page .step-description, .sr-page .step-details { color: var(--sr-text-2); }
+        .sr-page .info-box { background: var(--tone-sky-bg); color: var(--tone-sky-fg); border: 1px solid var(--tone-sky-bd); border-inline-start-width: 4px; border-radius: 12px; }
+        .sr-page .warning-box { background: var(--tone-amber-bg); color: var(--tone-amber-fg); border: 1px solid var(--tone-amber-bd); border-inline-start-width: 4px; border-radius: 12px; }
+        .sr-page .success-box { background: var(--tone-green-bg); color: var(--tone-green-fg); border: 1px solid var(--tone-green-bd); border-inline-start-width: 4px; border-radius: 12px; }
+        .sr-page .feature-card, .sr-page .gallery-item, .sr-page .screenshot-container { border-radius: 12px; border-color: var(--sr-border); box-shadow: none; }
+        .sr-page .feature-card:hover, .sr-page .gallery-item:hover { border-color: var(--sr-accent); box-shadow: var(--sr-shadow); }
+        .sr-page .feature-card i { color: var(--sr-accent); }
     </style>
 </head>
-<body dir="<?= ($is_rtl ?? false) ? 'rtl' : 'ltr' ?>">
-    <div class="guide-container">
+<body class="sr-standalone" dir="<?= ($is_rtl ?? false) ? 'rtl' : 'ltr' ?>">
+    <div class="guide-container sr-page">
         <!-- Back Button -->
         <div class="back-button" style="display: flex; justify-content: space-between; align-items: center;">
             <a href="profile.php">

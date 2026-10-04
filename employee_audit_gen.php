@@ -11,7 +11,7 @@ if (mysqli_num_rows($query) == 1) {
 
     <head>
         <meta charset="utf-8" />
-        <title><?= $site_title ?> - All Employees Bank Details</title>
+        <title><?= $site_title ?> - <?=__('employees_bank_details') ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
@@ -45,6 +45,12 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+        <style>
+            .eag-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+            @media (max-width: 767px) { .eag-stats { grid-template-columns: 1fr; } }
+            .eag-stats .sr-stat { background: var(--sr-surface); }
+        </style>
         <script src="assets/js/modernizr.min.js"></script>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -102,95 +108,106 @@ if (mysqli_num_rows($query) == 1) {
 
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <h4 class="m-t-0 header-title"><?=__('employees_bank_details') ?></h4>
-                                    <!-- <table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"> -->
-                                    <?php
+                        <?php
+                        // Add company, department, and employee filters based on user's access
+                        $company_filter = getCompanyFilterSQL('e.comp_no', true);
+                        $department_filter = getDepartmentFilterSQL('e.dept', true);
+                        $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
 
-                                    // Add company, department, and employee filters based on user's access
-                                    $company_filter = getCompanyFilterSQL('e.comp_no', true);
-                                    $department_filter = getDepartmentFilterSQL('e.dept', true);
-                                    $employee_filter = getEmployeeFilterSQL('e.emp_id', true);
-
-                                    $sql = "SELECT
-                                        e.emp_id,
-                                        e.name,
-                                        e.iban,
-                                        bl.name AS bank_name,
-                                        bl.bank_name_ar AS bank_name_ar,
-                                        bl.bank_name_s,
-                                        d.dep_nme,
-                                        d.dep_nme_ar,
-                                        c.comp_name,
-                                        e.comp_no
-                                    FROM employees AS e
-                                    JOIN bank_list AS bl ON e.bank_name = bl.bnk_id
-                                    JOIN companies AS c ON e.comp_no = c.comp_id
-                                    JOIN department AS d ON e.dept = d.id
-                                    WHERE 1=1".$company_filter.$department_filter.$employee_filter;
-                                    $query = mysqli_query($conDB, $sql);
-                                    $company_query = mysqli_query($conDB, "SELECT * FROM companies ORDER BY comp_name ASC");
-
-                                    ?>
-
-                                    <table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                        <thead>
-                                            <tr>
-                                                <th><?=__('employee_id') ?></th>
-                                                <th><?=__('name') ?></th>
-                                                <th><?=__('iban') ?></th>
-                                                <th><?=__('bank_name') ?></th>
-                                                <th><?=__('bank_swift_code') ?></th>
-                                                <th><?=__('department') ?></th>
-                                                <th><?=__('company') ?></th>
-                                            </tr>
-                                        </thead>
-                                        <tfoot>
-                                            <tr>
-                                                <!-- These footer columns will be replaced by dropdown filters -->
-                                                <th></th>
-                                                <th></th>
-                                                <th></th>
-                                                <th><?=__('bank_name') ?></th>
-                                                <th></th>
-                                                <th><?=__('department') ?></th>
-                                                <th><?=__('company') ?></th>
-                                            </tr>
-                                        </tfoot>
-                                        <tbody>
-                                            <?php
-                                            if (mysqli_num_rows($query) > 0) {
-                                                while ($row = mysqli_fetch_assoc($query)) {
-                                            ?>
-                                                    <tr>
-                                                        <td><?=$row['emp_id']; ?></td>
-                                                        <td><?=$row['name']; ?></td>
-                                                        <td><?=$row['iban']; ?></td>
-                                                        <td><?=($is_rtl ?? false ? $row['bank_name_ar'] : $row['bank_name'])?></td>
-                                                        <td><?=$row['bank_name_s']; ?></td>
-                                                        <td><?=($is_rtl ?? false ? $row['dep_nme_ar'] : $row['dep_nme'])?></td>
-                                                        <td><?=$row['comp_name']; ?></td>
-                                                    </tr>
-                                            <?php
-                                                }
-                                            } else {
-                                                echo "<tr><td colspan='7'>No employees found</td></tr>";
-                                            }
-                                            ?>
-                                        </tbody>
-                                    </table>
-
-                                </div>
+                        $sql = "SELECT
+                            e.emp_id,
+                            e.name,
+                            e.iban,
+                            bl.name AS bank_name,
+                            bl.bank_name_ar AS bank_name_ar,
+                            bl.bank_name_s,
+                            d.dep_nme,
+                            d.dep_nme_ar,
+                            c.comp_name,
+                            e.comp_no
+                        FROM employees AS e
+                        JOIN bank_list AS bl ON e.bank_name = bl.bnk_id
+                        JOIN companies AS c ON e.comp_no = c.comp_id
+                        JOIN department AS d ON e.dept = d.id
+                        WHERE 1=1".$company_filter.$department_filter.$employee_filter;
+                        $query = mysqli_query($conDB, $sql);
+                        $eag_rows = [];
+                        $eag_banks = [];
+                        while ($query && ($row = mysqli_fetch_assoc($query))) {
+                            $eag_rows[] = $row;
+                            $eag_banks[$row['bank_name']] = true;
+                        }
+                        $eag_missing_iban = count(array_filter($eag_rows, function ($r) { return trim((string)$r['iban']) === ''; }));
+                        ?>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?=__('employees_bank_details') ?></h1>
+                                <p><?= __('employees_bank_details_sub', 'IBAN and bank of every employee, ready for payroll transfer files.') ?></p>
                             </div>
                         </div>
 
+                        <div class="eag-stats">
+                            <div class="sr-stat is-sky">
+                                <div class="sr-stat-label"><?= __('employees', 'Employees') ?> <i class="mdi mdi-account-multiple"></i></div>
+                                <div class="sr-stat-value"><?= number_format(count($eag_rows)) ?></div>
+                            </div>
+                            <div class="sr-stat is-green">
+                                <div class="sr-stat-label"><?= __('banks', 'Banks') ?> <i class="mdi mdi-bank"></i></div>
+                                <div class="sr-stat-value"><?= number_format(count($eag_banks)) ?></div>
+                            </div>
+                            <div class="sr-stat <?= $eag_missing_iban ? 'is-red' : '' ?>">
+                                <div class="sr-stat-label"><?= __('missing_iban', 'Missing IBAN') ?> <i class="mdi mdi-alert-circle-outline"></i></div>
+                                <div class="sr-stat-value"><?= number_format($eag_missing_iban) ?></div>
+                            </div>
+                        </div>
 
+                        <div class="sr-card">
+                            <div class="sr-filter-grid" id="eagFilters" style="border-bottom: 1px solid var(--sr-border);">
+                                <div><label><?=__('bank_name') ?></label><div data-col="3"></div></div>
+                                <div><label><?=__('department') ?></label><div data-col="5"></div></div>
+                                <div><label><?=__('company') ?></label><div data-col="6"></div></div>
+                            </div>
+                            <div class="sr-toolbar">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="eagSearch" placeholder="<?= __('search_placeholder') ?>" autocomplete="off">
+                                </div>
+                                <div class="sr-toolbar-right">
+                                    <div id="srExportButtons"></div>
+                                </div>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="employee_vac" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?=__('employee_id') ?></th>
+                                            <th><?=__('name') ?></th>
+                                            <th><?=__('iban') ?></th>
+                                            <th><?=__('bank_name') ?></th>
+                                            <th><?=__('bank_swift_code') ?></th>
+                                            <th><?=__('department') ?></th>
+                                            <th><?=__('company') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($eag_rows as $row): ?>
+                                            <tr>
+                                                <td><span class="sr-chip sr-mono"><?= htmlspecialchars($row['emp_id']); ?></span></td>
+                                                <td><span class="sr-person-name"><?= htmlspecialchars($row['name']); ?></span></td>
+                                                <td><?php if (trim((string)$row['iban']) !== ''): ?><span class="sr-mono copyToClipboard" title="Copy"><?= htmlspecialchars($row['iban']); ?></span><?php else: ?><span class="sr-pill sr-pill-xs tone-red"><?= __('missing_iban', 'Missing IBAN') ?></span><?php endif; ?></td>
+                                                <td><?= htmlspecialchars(($is_rtl ?? false) ? $row['bank_name_ar'] : $row['bank_name']) ?></td>
+                                                <td><span class="sr-mono"><?= htmlspecialchars($row['bank_name_s']); ?></span></td>
+                                                <td><?= htmlspecialchars(($is_rtl ?? false) ? $row['dep_nme_ar'] : $row['dep_nme']) ?></td>
+                                                <td><?= htmlspecialchars($row['comp_name']); ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div> <!-- container -->
-
                 </div> <!-- content -->
 
                 <footer class="footer">
@@ -261,91 +278,54 @@ if (mysqli_num_rows($query) == 1) {
 
         <script type="text/javascript">
             $(document).ready(function() {
-                var buttonConfig = [];
                 var exportTitle = "Generated for All Employees Bank Details - " + new Date().toLocaleDateString();
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-success',
-                    footer: true
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger',
-                    footer: true
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6]
-                    },
-                    title: exportTitle,
-                    className: 'btn-dark',
-                    footer: true
-                });
+                var cols = [1, 2, 3, 4, 5, 6];
+                function txt(html) { return $('<div>').html(html).text(); }
 
-                //Buttons examples
                 var table = $('#employee_vac').DataTable({
+                    dom: 'Brtip',
                     lengthChange: false,
-                    buttons: buttonConfig,
+                    pageLength: 25,
+                    responsive: true,
+                    buttons: [
+                        { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: { columns: cols }, title: exportTitle },
+                        { extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', exportOptions: { columns: cols }, title: exportTitle },
+                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + __('print'), exportOptions: { columns: cols }, title: exportTitle }
+                    ],
                     order: [[1, 'asc']], // Order by Employee Name
                     initComplete: function() {
-                        // This function adds the dropdown filters to the footer
-                        this.api().columns([3, 5, 6]).every(function() { // Target Bank, Dept, Company columns
+                        // Dropdown filters for Bank, Dept, Company columns
+                        this.api().columns([3, 5, 6]).every(function() {
                             var column = this;
-                            // Create a select dropdown
-                            var select = $('<select class="form-control form-control-sm"><option value="">All</option></select>')
-                                .appendTo($(column.footer()).empty()) // Append it to the column footer
+                            var select = $('<select class="form-control"><option value="">All</option></select>')
+                                .appendTo($('#eagFilters [data-col="' + column.index() + '"]').empty())
                                 .on('change', function() {
-                                    // On change, perform the search
                                     var val = $.fn.dataTable.util.escapeRegex($(this).val());
-                                    // Perform a "contains" (LIKE) search using regex.
                                     column.search(val, true, false).draw();
                                 });
-                            // Populate the dropdown with unique values from the column
-                            column.data().unique().sort().each(function(d, j) {
-                                if(d) { // Ensure empty values aren't added
-                                    // Removed the .substr(0, 30) to show the full text
-                                    select.append('<option value="' + d + '">' + d + '</option>')
-                                }
+                            column.data().unique().sort().each(function(d) {
+                                if (d) select.append($('<option>').val(txt(d)).text(txt(d)));
                             });
-                            // --- Initialize Select2 ---
-                            $(select).select2({
-                                // placeholder: 'Select an option',
-                                allowClear: false
-                            });
-                            // --- End Select2 Initialization ---
+                            $(select).select2({ allowClear: false, width: '100%' });
                         });
                     },
                     language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                         info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
                         infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                        infoFiltered: '',
                         paginate: {
                             first: __('first'),
                             last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
+                            next: '<i class="mdi mdi-chevron-right"></i>',
+                            previous: '<i class="mdi mdi-chevron-left"></i>'
                         },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                        emptyTable: `<div class="sr-empty"><i class="mdi mdi-bank"></i>No employees found</div>`,
+                        zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
                     }
                 });
 
-                table.buttons().container()
-                    .appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
-
+                table.buttons().container().appendTo('#srExportButtons');
+                $('#eagSearch').on('input', function() { table.search(this.value).draw(); });
             });
         </script>
 

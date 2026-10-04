@@ -5897,7 +5897,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     type: 'POST',
                     dataType: 'JSON',
                     data: { ajaxType: 'get_direct_supervisor', emp_id: empid },
-                }).done(function(res) {
+                }).always(function(res) {
+                    // Lookup failure is non-blocking: leaveHandler resolves the supervisor server-side
                     if (res && res.supervisor_id) {
                         formData.append('first_approver_id', res.supervisor_id);
                     }
@@ -5952,14 +5953,6 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         ,allowOutsideClick:false});
                         reject(errorMsg);
                     });
-                }).fail(function() {
-                    Swal.fire({
-                        title: __('error'),
-                        text: __('could_not_find_supervisor'),
-                        icon: 'error',
-                        allowOutsideClick: false
-                    });
-                    reject(__('could_not_find_supervisor'));
                 });
             });
         }

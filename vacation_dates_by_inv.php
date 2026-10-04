@@ -145,20 +145,7 @@ if ($search_emp_id !== '') {
     <?php endif; ?>
     <script src="assets/js/modernizr.min.js"></script>
 
-    <style>
-        .date-editor-card {
-            border-radius: 12px;
-            border: 1px solid #e8ecf3;
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.05);
-        }
-
-        .request-meta {
-            background: #f8f9fc;
-            border: 1px solid #edf0f5;
-            border-radius: 10px;
-            padding: 1rem;
-        }
-    </style>
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 </head>
 
 <body class="enlarged" data-keep-enlarged="true">
@@ -179,95 +166,97 @@ if ($search_emp_id !== '') {
     <div class="content-page">
         <?php include('./includes/topbar.php'); ?>
 
-        <div class="content">
+        <div class="content sr-page">
             <div class="container-fluid">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card-box date-editor-card">
-                            <h4 class="m-t-0 header-title mb-3">Edit Vacation Dates By Employee ID</h4>
-
-                            <?php if ($message !== ''): ?>
-                                <div class="alert alert-<?= htmlspecialchars($message_type) ?>" role="alert">
-                                    <?= htmlspecialchars($message) ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <form method="get" action="vacation_dates_by_inv.php" class="mb-4">
-                                <div class="form-row align-items-end">
-                                    <div class="form-group col-md-8">
-                                        <label for="emp_id" class="font-weight-bold"><?= __('emp_id') ?></label>
-                                        <input
-                                            type="text"
-                                            class="form-control"
-                                            id="emp_id"
-                                            name="emp_id"
-                                            value="<?= htmlspecialchars($search_emp_id) ?>"
-                                            placeholder="Example: 10045"
-                                            required
-                                        >
-                                    </div>
-                                    <div class="form-group col-md-4">
-                                        <button type="submit" class="btn btn-primary btn-block">Load Requests</button>
-                                    </div>
-                                </div>
-                            </form>
-
-                            <?php if (!empty($requests)): ?>
-                                <div class="request-meta mb-3">
-                                    <div><strong>Employee:</strong> <?= htmlspecialchars($employee_name !== '' ? $employee_name : '-') ?></div>
-                                    <div><strong>Employee ID:</strong> <?= htmlspecialchars($search_emp_id) ?></div>
-                                    <div><strong>Total Active Applied Requests:</strong> <?= count($requests) ?></div>
-                                </div>
-
-                                <div class="table-responsive">
-                                    <table class="table table-bordered table-striped mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>Request ID</th>
-                                                <th>Type</th>
-                                                <th>Status</th>
-                                                <th>Start Date</th>
-                                                <th>Arrival Date</th>
-                                                <th>Return Date</th>
-                                                <th>Days</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                        <?php foreach ($requests as $req): ?>
-                                            <tr>
-                                                <td><?= htmlspecialchars((string)$req['request_inv_no']) ?></td>
-                                                <td>
-                                                    <?= htmlspecialchars((string)($req['vac_type'] ?? '-')) ?>
-                                                    <?php if (!empty($req['fly_type'])): ?>
-                                                        | <?= htmlspecialchars((string)$req['fly_type']) ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td><?= htmlspecialchars((string)($req['current_status'] ?? '-')) ?></td>
-                                                <td><?= htmlspecialchars((string)($req['start_date'] ?? '-')) ?></td>
-                                                <td><?= htmlspecialchars((string)($req['arrival_date'] ?? '-')) ?></td>
-                                                <td><?= htmlspecialchars((string)($req['return_date'] ?? '-')) ?></td>
-                                                <td><?= htmlspecialchars((string)($req['vacdays'] ?? '-')) ?></td>
-                                                <td>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-sm btn-success btn-edit-dates"
-                                                        data-request-inv="<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES) ?>"
-                                                        data-start-date="<?= htmlspecialchars((string)($req['start_date'] ?? ''), ENT_QUOTES) ?>"
-                                                        data-arrival-date="<?= htmlspecialchars((string)($req['arrival_date'] ?? ''), ENT_QUOTES) ?>"
-                                                        data-return-date="<?= htmlspecialchars((string)($req['return_date'] ?? ''), ENT_QUOTES) ?>"
-                                                    >
-                                                        Modify Dates
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php endif; ?>
-                        </div>
+                <div class="sr-head">
+                    <div>
+                        <h1>Edit Vacation Dates</h1>
+                        <p>Load an employee's active applied vacation requests and correct their start / arrival dates.</p>
                     </div>
+                </div>
+
+                <?php if ($message !== ''): ?>
+                    <?php $vdi_tone = ['danger' => 'tone-red', 'warning' => 'tone-amber', 'success' => 'tone-green'][$message_type] ?? 'tone-sky'; ?>
+                    <div class="sr-notice <?= $vdi_tone ?>" role="alert">
+                        <i class="mdi mdi-information-outline"></i>
+                        <div><?= htmlspecialchars($message) ?></div>
+                    </div>
+                <?php endif; ?>
+
+                <div class="sr-card">
+                    <form method="get" action="vacation_dates_by_inv.php" class="sr-toolbar">
+                        <div class="sr-search">
+                            <i class="mdi mdi-account-search"></i>
+                            <input type="search" id="emp_id" name="emp_id" value="<?= htmlspecialchars($search_emp_id) ?>" placeholder="<?= __('emp_id') ?> - Example: 10045" required autocomplete="off">
+                        </div>
+                        <div class="sr-toolbar-right">
+                            <button type="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-magnify"></i> Load Requests</button>
+                        </div>
+                    </form>
+
+                    <?php if (!empty($requests)):
+                        $vdi_initials = strtoupper(implode('', array_map(function ($w) { return mb_substr($w, 0, 1); }, array_slice(preg_split('/\s+/', trim($employee_name)), 0, 2))));
+                    ?>
+                        <div class="sr-card-head">
+                            <div class="sr-person">
+                                <span class="sr-avatar"><?= htmlspecialchars($vdi_initials) ?></span>
+                                <div>
+                                    <div class="sr-cell-title"><?= htmlspecialchars($employee_name !== '' ? $employee_name : '-') ?></div>
+                                    <div class="sr-cell-sub"><?= __('emp_id') ?>: <?= htmlspecialchars($search_emp_id) ?></div>
+                                </div>
+                            </div>
+                            <span class="sr-chip"><i class="mdi mdi-calendar-check"></i> Active applied requests: <?= count($requests) ?></span>
+                        </div>
+
+                        <div class="sr-table-wrap sr-table-scroll">
+                            <table class="sr-table">
+                                <thead>
+                                    <tr>
+                                        <th>Request ID</th>
+                                        <th>Type</th>
+                                        <th>Status</th>
+                                        <th>Start Date</th>
+                                        <th>Arrival Date</th>
+                                        <th>Return Date</th>
+                                        <th class="text-center">Days</th>
+                                        <th class="text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                <?php foreach ($requests as $req): ?>
+                                    <tr>
+                                        <td><span class="sr-chip sr-mono"><?= htmlspecialchars((string)$req['request_inv_no']) ?></span></td>
+                                        <td>
+                                            <span class="sr-cell-title"><?= htmlspecialchars((string)($req['vac_type'] ?? '-')) ?></span>
+                                            <?php if (!empty($req['fly_type'])): ?>
+                                                <span class="sr-cell-sub"><?= htmlspecialchars((string)$req['fly_type']) ?></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><span class="sr-pill sr-pill-xs tone-slate"><?= htmlspecialchars(ucwords(str_replace('_', ' ', (string)($req['current_status'] ?? '-')))) ?></span></td>
+                                        <td class="sr-date"><?= htmlspecialchars((string)($req['start_date'] ?? '-')) ?></td>
+                                        <td class="sr-date"><?= htmlspecialchars((string)($req['arrival_date'] ?? '-')) ?></td>
+                                        <td class="sr-date"><?= htmlspecialchars((string)($req['return_date'] ?? '-')) ?></td>
+                                        <td class="text-center"><span class="sr-chip"><?= htmlspecialchars((string)($req['vacdays'] ?? '-')) ?></span></td>
+                                        <td class="text-right">
+                                            <button
+                                                type="button"
+                                                class="sr-open-btn border-0 btn-edit-dates"
+                                                data-request-inv="<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES) ?>"
+                                                data-start-date="<?= htmlspecialchars((string)($req['start_date'] ?? ''), ENT_QUOTES) ?>"
+                                                data-arrival-date="<?= htmlspecialchars((string)($req['arrival_date'] ?? ''), ENT_QUOTES) ?>"
+                                                data-return-date="<?= htmlspecialchars((string)($req['return_date'] ?? ''), ENT_QUOTES) ?>"
+                                            ><i class="mdi mdi-pencil"></i> Modify Dates</button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php elseif ($search_emp_id === ''): ?>
+                        <div class="sr-empty"><i class="mdi mdi-account-search"></i>Enter an employee ID to load the requests.</div>
+                    <?php else: ?>
+                        <div class="sr-empty"><i class="mdi mdi-inbox"></i>No active applied requests found.</div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -307,24 +296,23 @@ if ($search_emp_id !== '') {
             Swal.fire({
                 title: 'Modify Vacation Dates',
                 html: '' +
-                    '<div class="text-left">' +
-                    '  <div class="mb-2"><strong><?= __('request_id') ?>:</strong> ' + $('<div>').text(requestInvNo).html() + '</div>' +
-                    '  <div class="form-group mb-3">' +
-                    '      <label for="swal_start_date" class="font-weight-bold d-block"><?= __('start_date') ?></label>' +
-                    '      <input type="text" id="swal_start_date" class="form-control" placeholder="YYYY-MM-DD" readonly style="background:#fff;cursor:pointer;">' +
+                    '<form class="sr-page sr-form" onsubmit="return false;">' +
+                    '  <div class="sr-fsec mb-0">' +
+                    '    <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-range"></i> <?= __('request_id') ?>: ' + $('<div>').text(requestInvNo).html() + '</span></div>' +
+                    '    <div class="sr-fgrid">' +
+                    '      <div class="sr-fcol c-6"><label for="swal_start_date"><?= __('start_date') ?></label>' +
+                    '        <input type="text" id="swal_start_date" class="form-control" placeholder="YYYY-MM-DD" readonly style="cursor:pointer;"></div>' +
+                    '      <div class="sr-fcol c-6"><label for="swal_arrival_date"><?= __('arrival_date') ?></label>' +
+                    '        <input type="text" id="swal_arrival_date" class="form-control" placeholder="YYYY-MM-DD" readonly style="cursor:pointer;"></div>' +
+                    '      <div class="sr-fcol c-12"><div class="sr-ftotal"><span><?= __('difference_days') ?></span><b id="swal_days_diff">-</b></div></div>' +
+                    '    </div>' +
                     '  </div>' +
-                    '  <div class="form-group mb-0">' +
-                    '      <label for="swal_arrival_date" class="font-weight-bold d-block"><?= __('arrival_date') ?></label>' +
-                    '      <input type="text" id="swal_arrival_date" class="form-control" placeholder="YYYY-MM-DD" readonly style="background:#fff;cursor:pointer;">' +
-                    '  </div>' +
-                    '  <div class="mt-3 p-2" style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:6px;">' +
-                    '      <div class="small text-muted"><?= __('difference_days') ?></div>' +
-                    '      <div id="swal_days_diff" style="font-weight:700;color:#007bff;">-</div>' +
-                    '  </div>' +
-                    '</div>',
+                    '</form>',
                 showCancelButton: true,
-                confirmButtonText: 'Update Dates',
-                confirmButtonColor: '#28a745',
+                confirmButtonText: '<i class="mdi mdi-content-save"></i> Update Dates',
+                confirmButtonColor: APP_COLORS.primary,
+                cancelButtonColor: APP_COLORS.danger_dark,
+                customClass: { popup: 'sr-addline-popup' },
                 cancelButtonText: 'Cancel',
                 allowOutsideClick: false,
                 didOpen: function () {
@@ -354,24 +342,24 @@ if ($search_emp_id !== '') {
                         var a = $swArrival.val();
 
                         if (!s || !a) {
-                            $swDaysDiff.text('-').css('color', '#6c757d');
+                            $swDaysDiff.text('-').css('color', '');
                             return;
                         }
 
                         var sd = parseDateSafe(s);
                         var ad = parseDateSafe(a);
                         if (!sd || !ad) {
-                            $swDaysDiff.text('Invalid date').css('color', '#dc3545');
+                            $swDaysDiff.text('Invalid date').css('color', 'var(--tone-red-fg)');
                             return;
                         }
 
                         var days = Math.floor((ad.getTime() - sd.getTime()) / 86400000) + 1;
                         if (days <= 0) {
-                            $swDaysDiff.text('Invalid range').css('color', '#dc3545');
+                            $swDaysDiff.text('Invalid range').css('color', 'var(--tone-red-fg)');
                             return;
                         }
 
-                        $swDaysDiff.text(days + ' day(s)').css('color', '#007bff');
+                        $swDaysDiff.text(days + ' day(s)').css('color', '');
                     }
 
                     $swStart.datepicker({

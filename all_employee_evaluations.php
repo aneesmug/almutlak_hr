@@ -93,17 +93,14 @@ try {
     <script src="assets/js/modernizr.min.js"></script>
     <script>window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <style>
-        .score-badge {
-            font-size: 14px;
-            padding: 6px 12px;
-        }
-        .filter-section {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
+        .aee-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 1199px) { .aee-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 575px) { .aee-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .aee-stats .sr-stat { background: var(--sr-surface); }
+        .aee-bar { height: 6px; border-radius: 6px; background: var(--sr-surface-3); overflow: hidden; }
+        .aee-bar span { display: block; height: 100%; border-radius: 6px; background: var(--sr-accent); }
     </style>
 </head>
 
@@ -146,126 +143,109 @@ try {
             <!-- Top Bar End -->
 
             <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    
-                    <!-- Page Title -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="page-title-box">
-                                <h4 class="page-title">Employee Performance Evaluations Report</h4>
-                                <ol class="breadcrumb p-0 m-0">
-                                    <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
-                                    <li class="breadcrumb-item active">Employee Evaluations Report</li>
-                                </ol>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Employee Performance Evaluations</h1>
+                            <p>Every evaluation submitted by managers, with score breakdown.</p>
                         </div>
                     </div>
 
-                    <!-- Filters Section -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-body filter-section">
-                                    <div class="row">
-                                        <div class="col-md-3">
-                                            <div class="form-group">
-                                                <label for="filterDepartment">Department</label>
-                                                <select class="form-control select2" id="filterDepartment">
-                                                    <option value="">All Departments</option>
-                                                    <?php foreach ($departments as $dept): ?>
-                                                        <option value="<?= $dept['id'] ?>">
-                                                            <?= htmlspecialchars($dept['dep_nme']) ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-3">
-                                            <div class="form-group">
-                                                <label for="filterEmployee">Employee</label>
-                                                <input type="text" class="form-control" id="filterEmployee" placeholder="Search by name or ID">
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-2">
-                                            <div class="form-group">
-                                                <label for="filterFromDate">From Date</label>
-                                                <input type="date" class="form-control" id="filterFromDate">
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-2">
-                                            <div class="form-group">
-                                                <label for="filterToDate">To Date</label>
-                                                <input type="date" class="form-control" id="filterToDate">
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-2">
-                                            <div class="form-group">
-                                                <label for="filterScore">Min Score</label>
-                                                <select class="form-control" id="filterScore">
-                                                    <option value="">All Scores</option>
-                                                    <option value="90">90+ (Excellent)</option>
-                                                    <option value="70">70+ (Good)</option>
-                                                    <option value="50">50+ (Average)</option>
-                                                    <option value="0">Below 50 (Poor)</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="row">
-                                        <div class="col-12">
-                                            <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-primary" id="applyFilters">
-                                                    <i class="mdi mdi-filter"></i> Apply Filters
-                                                </button>
-                                                <button type="button" class="btn btn-secondary" id="resetFilters">
-                                                    <i class="mdi mdi-refresh"></i> Reset
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <div class="aee-stats">
+                        <div class="sr-stat">
+                            <div class="sr-stat-label">Evaluations <i class="mdi mdi-clipboard-text"></i></div>
+                            <div class="sr-stat-value" data-aee="all">&ndash;</div>
+                            <div class="sr-stat-sub">Average score: <b data-aee="avg">&ndash;</b></div>
+                        </div>
+                        <div class="sr-stat is-green">
+                            <div class="sr-stat-label">Excellent (90+) <i class="mdi mdi-star"></i></div>
+                            <div class="sr-stat-value" data-aee="excellent">&ndash;</div>
+                        </div>
+                        <div class="sr-stat is-sky">
+                            <div class="sr-stat-label">Good (70-89) <i class="mdi mdi-thumb-up-outline"></i></div>
+                            <div class="sr-stat-value" data-aee="good">&ndash;</div>
+                        </div>
+                        <div class="sr-stat is-amber">
+                            <div class="sr-stat-label">Average (50-69) <i class="mdi mdi-minus-circle-outline"></i></div>
+                            <div class="sr-stat-value" data-aee="average">&ndash;</div>
+                        </div>
+                        <div class="sr-stat is-red">
+                            <div class="sr-stat-label">Poor (&lt;50) <i class="mdi mdi-alert-circle-outline"></i></div>
+                            <div class="sr-stat-value" data-aee="poor">&ndash;</div>
                         </div>
                     </div>
 
-                    <!-- Evaluations Table -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h4 class="header-title mb-4">All Employee Evaluations</h4>
-                                    
-                                    <table id="evaluationsTable" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Employee ID</th>
-                                                <th>Employee Name</th>
-                                                <th>Department</th>
-                                                <th>Position</th>
-                                                <th>Evaluated By</th>
-                                                <th>Total Score</th>
-                                                <th>Evaluation Date</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <!-- Data loaded via AJAX -->
-                                        </tbody>
-                                    </table>
-                                </div>
+                    <div class="sr-card">
+                        <!-- Filters -->
+                        <div class="sr-filter-grid" style="border-bottom: 1px solid var(--sr-border);">
+                            <div>
+                                <label for="filterDepartment">Department</label>
+                                <select class="form-control select2" id="filterDepartment">
+                                    <option value="">All Departments</option>
+                                    <?php foreach ($departments as $dept): ?>
+                                        <option value="<?= $dept['id'] ?>"><?= htmlspecialchars($dept['dep_nme']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="filterEmployee">Employee</label>
+                                <input type="text" class="form-control" id="filterEmployee" placeholder="Search by name or ID">
+                            </div>
+                            <div>
+                                <label for="filterFromDate">From Date</label>
+                                <input type="date" class="form-control" id="filterFromDate">
+                            </div>
+                            <div>
+                                <label for="filterToDate">To Date</label>
+                                <input type="date" class="form-control" id="filterToDate">
+                            </div>
+                            <div>
+                                <label for="filterScore">Min Score</label>
+                                <select class="form-control" id="filterScore">
+                                    <option value="">All Scores</option>
+                                    <option value="90">90+ (Excellent)</option>
+                                    <option value="70">70+ (Good)</option>
+                                    <option value="50">50+ (Average)</option>
+                                    <option value="0">Below 50 (Poor)</option>
+                                </select>
+                            </div>
+                            <div class="sr-filter-actions">
+                                <button type="button" class="sr-btn sr-btn-primary" id="applyFilters"><i class="mdi mdi-filter-variant"></i> Apply</button>
+                                <button type="button" class="sr-btn" id="resetFilters"><i class="mdi mdi-refresh"></i> Reset</button>
                             </div>
                         </div>
-                    </div>
 
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="aeeSearch" placeholder="Search..." autocomplete="off">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <div id="srExportButtons"></div>
+                            </div>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table id="evaluationsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Employee ID</th>
+                                        <th>Employee Name</th>
+                                        <th>Department</th>
+                                        <th>Position</th>
+                                        <th>Evaluated By</th>
+                                        <th>Total Score</th>
+                                        <th>Evaluation Date</th>
+                                        <th class="text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div> <!-- container -->
-
             </div> <!-- content -->
 
             <footer class="footer">
@@ -279,30 +259,6 @@ try {
 
     </div>
     <!-- END wrapper -->
-
-    <!-- Evaluation Details Modal -->
-    <div class="modal fade" id="evaluationModal" tabindex="-1" role="dialog" aria-labelledby="evaluationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="evaluationModalLabel">Evaluation Details</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body" id="evaluationModalBody">
-                    <div class="text-center">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="sr-only">Loading...</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- jQuery  -->
     <script src="assets/js/jquery.min.js"></script>
@@ -335,44 +291,43 @@ try {
 
     <script>
     $(document).ready(function() {
-        
+
+        function esc(s) {
+            return String(s === null || s === undefined ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function initials(name) {
+            return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+        }
+        function scoreTone(score) {
+            score = parseFloat(score) || 0;
+            if (score < 50) return 'tone-red';
+            if (score < 70) return 'tone-amber';
+            if (score < 90) return 'tone-sky';
+            return 'tone-green';
+        }
+
         // Initialize Select2
         $('.select2').select2({
             placeholder: "Select an option",
-            allowClear: true
+            allowClear: true,
+            width: '100%'
         });
+
+        var exportCols = [1, 2, 3, 4, 5, 6, 7];
 
         // Initialize DataTable
         var table = $('#evaluationsTable').DataTable({
-            dom: "Bfrtip",
+            dom: "Brtip",
             buttons: [
-                {
-                    extend: 'excel',
-                    title: 'Employee Evaluations Report',
-                    className: 'btn-success',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'pdf',
-                    title: 'Employee Evaluations Report',
-                    className: 'btn-danger',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6, 7]
-                    }
-                },
-                {
-                    extend: 'print',
-                    title: 'Employee Evaluations Report',
-                    className: 'btn-dark',
-                    exportOptions: {
-                        columns: [1, 2, 3, 4, 5, 6, 7]
-                    }
-                }
+                { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', title: 'Employee Evaluations Report', exportOptions: { columns: exportCols, orthogonal: 'export' } },
+                { extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', title: 'Employee Evaluations Report', exportOptions: { columns: exportCols, orthogonal: 'export' } },
+                { extend: 'print', text: '<i class="mdi mdi-printer"></i> Print', title: 'Employee Evaluations Report', exportOptions: { columns: exportCols, orthogonal: 'export' } }
             ],
             processing: true,
             serverSide: false,
+            responsive: true,
             ajax: {
                 url: './includes/ajaxFile/ajaxEvaluationReport.php',
                 type: 'POST',
@@ -384,47 +339,69 @@ try {
                     d.to_date = $('#filterToDate').val();
                     d.min_score = $('#filterScore').val();
                     d.is_dept_restricted = <?= $is_dept_restricted ? 'true' : 'false' ?>;
-                    d.user_dept = <?= $user_dept ?>;
+                    d.user_dept = <?= (int)$user_dept ?>;
+                },
+                dataSrc: function(json) {
+                    var rows = (json && json.data) || [];
+                    var c = { all: rows.length, excellent: 0, good: 0, average: 0, poor: 0 }, sum = 0;
+                    rows.forEach(function(r) {
+                        var s = parseFloat(r.total_score) || 0;
+                        sum += s;
+                        if (s >= 90) c.excellent++; else if (s >= 70) c.good++; else if (s >= 50) c.average++; else c.poor++;
+                    });
+                    $.each(c, function(k, v) { $('[data-aee="' + k + '"]').text(v); });
+                    $('[data-aee="avg"]').text(rows.length ? (sum / rows.length).toFixed(1) : '0');
+                    return rows;
                 }
             },
             columns: [
                 { data: 'id' },
-                { data: 'employee_emp_id' },
-                { data: 'employee_name' },
-                { data: 'dept_name' },
-                { data: 'employee_position' },
-                { data: 'manager_name' },
-                { 
-                    data: 'total_score',
+                { data: 'employee_emp_id', visible: false },
+                {
+                    data: 'employee_name',
                     render: function(data, type, row) {
-                        var badgeClass = 'success';
-                        if (data < 50) badgeClass = 'danger';
-                        else if (data < 70) badgeClass = 'warning';
-                        else if (data < 90) badgeClass = 'info';
-                        
-                        return '<span class="badge badge-' + badgeClass + ' score-badge">' + data + '/100</span>';
+                        if (type !== 'display') return data;
+                        return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + esc(initials(data)) + '</span>'
+                            + '<div><span class="sr-person-name">' + esc(data) + '</span><span class="sr-cell-sub">' + esc(row.employee_emp_id) + '</span></div></div>';
                     }
                 },
-                { data: 'created_at' },
+                { data: 'dept_name', render: function(data, type) { return type === 'display' ? esc(data) : data; } },
+                { data: 'employee_position', render: function(data, type) { return type === 'display' ? esc(data) : data; } },
+                { data: 'manager_name', render: function(data, type) { return type === 'display' ? esc(data || 'N/A') : data; } },
+                {
+                    data: 'total_score',
+                    render: function(data, type) {
+                        if (type !== 'display') return data;
+                        return '<span class="sr-pill ' + scoreTone(data) + '"><span class="sr-dot"></span>' + esc(data) + '/100</span>';
+                    }
+                },
+                { data: 'created_at', render: function(data, type) { return type === 'display' ? '<span class="sr-date">' + esc(data) + '</span>' : data; } },
                 {
                     data: null,
                     orderable: false,
+                    className: 'text-right',
                     render: function(data, type, row) {
-                        return '<button class="btn btn-sm btn-primary view-eval-details" data-id="' + row.id + '" data-toggle="modal" data-target="#evaluationModal"><i class="mdi mdi-eye"></i> View</button>';
+                        return '<button type="button" class="sr-open-btn border-0 view-eval-details" data-id="' + esc(row.id) + '"><i class="mdi mdi-eye-outline"></i> View</button>';
                     }
                 }
             ],
             order: [[0, 'desc']],
             columnDefs: [
-                {
-                    targets: [0],
-                    visible: false
-                }
+                { targets: [0], visible: false }
             ],
             language: {
+                info: 'Showing _START_ to _END_ of _TOTAL_ evaluations',
+                infoEmpty: 'No evaluations',
+                infoFiltered: '',
+                emptyTable: '<div class="sr-empty"><i class="mdi mdi-clipboard-text"></i>No evaluations found</div>',
+                zeroRecords: '<div class="sr-empty"><i class="mdi mdi-magnify"></i>No matching evaluations</div>',
+                paginate: { next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
                 processing: '<div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div>'
             }
         });
+
+        table.buttons().container().appendTo('#srExportButtons');
+        $('#aeeSearch').on('input', function() { table.search(this.value).draw(); });
 
         // Apply filters
         $('#applyFilters').on('click', function() {
@@ -441,73 +418,80 @@ try {
             table.ajax.reload();
         });
 
-        // Load evaluation details when view button is clicked
+        // Whole row opens the details (except clicks on buttons)
+        $('#evaluationsTable tbody').on('click', 'tr', function(e) {
+            if ($(e.target).closest('a, button, .dtr-control').length || $(this).hasClass('child')) return;
+            var row = table.row(this).data();
+            if (row && row.id) showEvaluation(row.id);
+        });
         $(document).on('click', '.view-eval-details', function() {
-            var evalId = $(this).data('id');
-            
-            $('#evaluationModalBody').html('<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>');
-            
-            $.ajax({
-                url: 'includes/ajaxFile/ajaxEvaluation.php',
-                method: 'POST',
-                data: { 
-                    action: 'get_evaluation_details', 
-                    evaluation_id: evalId 
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        var data = response.data;
-                        var html = `
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <p><strong>Employee Name:</strong> ${data.employee_name}</p>
-                                    <p><strong>Employee ID:</strong> ${data.employee_emp_id}</p>
-                                    <p><strong>Department:</strong> ${data.dept_name}</p>
-                                    <p><strong>Position:</strong> ${data.employee_position}</p>
-                                </div>
-                                <div class="col-md-6">
-                                    <p><strong>Evaluated By:</strong> ${data.manager_name || 'N/A'}</p>
-                                    <p><strong>Evaluation Date:</strong> ${data.created_at}</p>
-                                    <p><strong>Total Score:</strong> <span class="badge badge-success score-badge">${data.total_score}/100</span></p>
-                                </div>
-                            </div>
-                            <hr>
-                            <h5>Evaluation Criteria</h5>
-                            <table class="table table-bordered table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Criteria</th>
-                                        <th width="100">Score</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td>Punctuality Attendance</td><td class="text-center"><span class="badge badge-primary">${data.punctuality}/10</span></td></tr>
-                                    <tr><td>Achieving at the specified time</td><td class="text-center"><span class="badge badge-primary">${data.achieving_time}/10</span></td></tr>
-                                    <tr><td>Knowledge of job</td><td class="text-center"><span class="badge badge-primary">${data.job_knowledge}/10</span></td></tr>
-                                    <tr><td>The Ability to solve problems</td><td class="text-center"><span class="badge badge-primary">${data.problem_solving}/10</span></td></tr>
-                                    <tr><td>Receptiveness to Feedback and Instructions</td><td class="text-center"><span class="badge badge-primary">${data.feedback_receptiveness}/10</span></td></tr>
-                                    <tr><td>Self & Professional Development</td><td class="text-center"><span class="badge badge-primary">${data.self_development}/10</span></td></tr>
-                                    <tr><td>Work under pressure</td><td class="text-center"><span class="badge badge-primary">${data.work_under_pressure}/10</span></td></tr>
-                                    <tr><td>Communication skills and Teamwork</td><td class="text-center"><span class="badge badge-primary">${data.communication_teamwork}/10</span></td></tr>
-                                    <tr><td>Creativity and speed of response</td><td class="text-center"><span class="badge badge-primary">${data.creativity_response}/10</span></td></tr>
-                                    <tr><td>Initiative and cooperation</td><td class="text-center"><span class="badge badge-primary">${data.initiative_cooperation}/10</span></td></tr>
-                                </tbody>
-                            </table>
-                            <hr>
-                            <h5>Observation/Remarks</h5>
-                            <p>${data.observation || 'No observation provided.'}</p>
-                        `;
-                        $('#evaluationModalBody').html(html);
-                    } else {
-                        $('#evaluationModalBody').html('<div class="alert alert-danger">Failed to load evaluation details.</div>');
-                    }
-                },
-                error: function() {
-                    $('#evaluationModalBody').html('<div class="alert alert-danger">An error occurred while loading the evaluation details.</div>');
+            showEvaluation($(this).data('id'));
+        });
+
+        // Evaluation details popup
+        var criteria = [
+            ['punctuality', 'Punctuality Attendance'],
+            ['achieving_time', 'Achieving at the specified time'],
+            ['job_knowledge', 'Knowledge of job'],
+            ['problem_solving', 'The Ability to solve problems'],
+            ['feedback_receptiveness', 'Receptiveness to Feedback and Instructions'],
+            ['self_development', 'Self & Professional Development'],
+            ['work_under_pressure', 'Work under pressure'],
+            ['communication_teamwork', 'Communication skills and Teamwork'],
+            ['creativity_response', 'Creativity and speed of response'],
+            ['initiative_cooperation', 'Initiative and cooperation']
+        ];
+
+        function showEvaluation(evalId) {
+            Swal.fire({
+                title: 'Evaluation Details',
+                html: '<div class="py-4"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>',
+                width: '820px',
+                showCloseButton: true,
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                customClass: { popup: 'sr-addline-popup' },
+                didOpen: function() {
+                    $.ajax({
+                        url: 'includes/ajaxFile/ajaxEvaluation.php',
+                        method: 'POST',
+                        data: { action: 'get_evaluation_details', evaluation_id: evalId },
+                        dataType: 'json'
+                    }).done(function(response) {
+                        if (!response || response.status !== 'success') {
+                            Swal.update({ html: '<div class="sr-page"><div class="sr-notice tone-red mb-0"><i class="mdi mdi-alert-circle-outline"></i><div>Failed to load evaluation details.</div></div></div>' });
+                            return;
+                        }
+                        var d = response.data;
+                        var kv = function(label, value) {
+                            return '<div class="row-kv"><dt>' + esc(label) + '</dt><dd>' + value + '</dd></div>';
+                        };
+                        var rows = criteria.map(function(c) {
+                            var v = parseFloat(d[c[0]]) || 0;
+                            return '<tr><td>' + esc(c[1]) + '</td>'
+                                + '<td style="width: 38%;"><div class="aee-bar"><span style="width:' + Math.max(0, Math.min(100, v * 10)) + '%"></span></div></td>'
+                                + '<td class="text-right"><span class="sr-pill sr-pill-xs ' + scoreTone(v * 10) + '">' + esc(d[c[0]]) + '/10</span></td></tr>';
+                        }).join('');
+                        var html = '<div class="sr-page text-left">'
+                            + '<div class="row"><div class="col-md-6"><dl class="sr-kv">'
+                            + kv('Employee Name', esc(d.employee_name)) + kv('Employee ID', esc(d.employee_emp_id))
+                            + kv('Department', esc(d.dept_name)) + kv('Position', esc(d.employee_position))
+                            + '</dl></div><div class="col-md-6"><dl class="sr-kv">'
+                            + kv('Evaluated By', esc(d.manager_name || 'N/A')) + kv('Evaluation Date', esc(d.created_at))
+                            + kv('Total Score', '<span class="sr-pill ' + scoreTone(d.total_score) + '">' + esc(d.total_score) + '/100</span>')
+                            + '</dl></div></div>'
+                            + '<div class="sr-fsec mt-3"><div class="sr-fsec-head"><span><i class="mdi mdi-format-list-checks"></i> Evaluation Criteria</span></div>'
+                            + '<table class="sr-lines"><tbody>' + rows + '</tbody></table></div>'
+                            + '<div class="sr-fsec mb-0"><div class="sr-fsec-head"><span><i class="mdi mdi-comment-text-outline"></i> Observation/Remarks</span></div>'
+                            + '<div class="p-3" style="white-space: pre-wrap;">' + esc(d.observation || 'No observation provided.') + '</div></div>'
+                            + '</div>';
+                        Swal.update({ html: html });
+                    }).fail(function() {
+                        Swal.update({ html: '<div class="sr-page"><div class="sr-notice tone-red mb-0"><i class="mdi mdi-alert-circle-outline"></i><div>An error occurred while loading the evaluation details.</div></div></div>' });
+                    });
                 }
             });
-        });
+        }
     });
     </script>
 

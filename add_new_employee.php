@@ -44,7 +44,7 @@ if($user_type == "dept_user"){
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
     <head>
         <meta charset="utf-8" />
-        <title><?=$site_title ?> - Dashboard</title>
+        <title><?=$site_title ?> - <?= __('add_new_employee', 'Add new employee') ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
         <meta content="Anees Afzal" name="author" />
@@ -59,6 +59,28 @@ if($user_type == "dept_user"){
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+        <style>
+            .ne-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+            @media (max-width: 767px) { .ne-choices { grid-template-columns: 1fr; } }
+            .ne-choice {
+                --ne: #3b82f6; --ne-soft: rgba(59, 130, 246, .12);
+                position: relative; display: flex; align-items: center; gap: 18px; padding: 26px 24px; overflow: hidden;
+                border-radius: var(--sr-radius); background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow);
+                color: var(--sr-text-2) !important; text-decoration: none !important; transition: transform .15s, border-color .15s, box-shadow .15s;
+            }
+            .ne-choice::before { content: ''; position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 4px; background: var(--ne); }
+            .ne-choice.is-violet { --ne: #8b5cf6; --ne-soft: rgba(139, 92, 246, .12); }
+            .ne-choice:hover { transform: translateY(-3px); border-color: var(--ne); box-shadow: 0 10px 28px rgba(15, 23, 42, .10); }
+            .ne-icon { flex: 0 0 auto; width: 64px; height: 64px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 26px; color: var(--ne); background: var(--ne-soft); }
+            .ne-text { flex: 1 1 auto; min-width: 0; }
+            .ne-text b { display: block; font-size: 17px; color: var(--sr-text); }
+            .ne-text small { display: block; margin-top: 4px; font-size: 13px; color: var(--sr-muted); line-height: 1.5; }
+            .ne-go { flex: 0 0 auto; color: var(--sr-muted); transition: transform .15s, color .15s; }
+            .ne-choice:hover .ne-go { color: var(--ne); transform: translateX(4px); }
+            [dir="rtl"] .ne-go { transform: scaleX(-1); }
+            [dir="rtl"] .ne-choice:hover .ne-go { transform: scaleX(-1) translateX(4px); }
+        </style>
         <script src="assets/js/modernizr.min.js"></script>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -115,28 +137,39 @@ if($user_type == "dept_user"){
 
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-
-                        <div class="row text-center">
-                            <div class="col-sm-6 col-xl-6" onclick="window.location.href='new_comp_employee.php'" style="cursor: pointer;">
-                                <div class="card-box widget-flat border-custom bg-custom text-white">
-                                    <i class="fa fa-house-chimney-user"></i>
-									<br><h3 class="m-b-10"><?=__('almutlak_co_employee') ?></h3><br>
-                                </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('add_new_employee', 'Add new employee') ?></h1>
+                                <p><?= __('choose_employee_type', 'Choose the type of employee you want to register') ?></p>
                             </div>
-                            <div class="col-sm-6 col-xl-6" onclick="window.location.href='new_mnpow_employee.php'" style="cursor: pointer;" >
-                                <div class="card-box bg-purple widget-flat border-purple text-white">
-                                    <i class="fa fa-users-rays"></i>
-                                    <br><h3 class="m-b-10"><?=__('manpower_employee')?></h3><br>
-                                </div>
+                            <div class="sr-head-actions">
+                                <span class="sr-chip"><i class="fa fa-users"></i> <?= __('total', 'Total') ?>: <?= (int)$status_cont_tot ?></span>
+                                <span class="sr-chip"><i class="fa fa-user-check"></i> <?= __('active', 'Active') ?>: <?= (int)$status_cont_active ?></span>
                             </div>
                         </div>
-                        
+
+                        <div class="ne-choices">
+                            <a href="new_comp_employee.php" class="ne-choice is-blue">
+                                <span class="ne-icon"><i class="fa fa-house-chimney-user"></i></span>
+                                <span class="ne-text">
+                                    <b><?= __('almutlak_co_employee') ?></b>
+                                    <small><?= __('company_employee_desc', 'Direct company employee with full contract, payroll and vacation details') ?></small>
+                                </span>
+                                <i class="fa fa-arrow-right ne-go"></i>
+                            </a>
+                            <a href="new_mnpow_employee.php" class="ne-choice is-violet">
+                                <span class="ne-icon"><i class="fa fa-users-rays"></i></span>
+                                <span class="ne-text">
+                                    <b><?= __('manpower_employee') ?></b>
+                                    <small><?= __('manpower_employee_desc', 'Employee supplied by a manpower agency') ?></small>
+                                </span>
+                                <i class="fa fa-arrow-right ne-go"></i>
+                            </a>
+                        </div>
                     </div> <!-- container -->
-
                 </div> <!-- content -->
-
                 <footer class="footer">
                     <?=$site_footer ?>
                 </footer>

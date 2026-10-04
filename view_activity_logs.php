@@ -125,6 +125,11 @@ $unique_modules = mysqli_fetch_all(mysqli_query($conDB, "SELECT DISTINCT module 
 $unique_pages = mysqli_fetch_all(mysqli_query($conDB, "SELECT DISTINCT page FROM activity_log ORDER BY page"), MYSQLI_ASSOC);
 
 $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNLOAD', 'UPLOAD', 'APPROVE', 'REJECT', 'SUBMIT', 'EXPORT', 'IMPORT', 'OTHER'];
+$val_action_tones = [
+    'CREATE' => 'tone-green', 'APPROVE' => 'tone-green', 'UPDATE' => 'tone-sky', 'SUBMIT' => 'tone-sky',
+    'DELETE' => 'tone-red', 'REJECT' => 'tone-red', 'VIEW' => 'tone-amber', 'EXPORT' => 'tone-indigo',
+    'IMPORT' => 'tone-indigo', 'UPLOAD' => 'tone-indigo', 'DOWNLOAD' => 'tone-indigo',
+];
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -155,81 +160,15 @@ $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNL
 
     <script src="assets/js/modernizr.min.js"></script>
 
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <style>
-        /* Match dashboard stats cards */
-        .stats-card {
-            border-radius: 16px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            padding: 24px 20px;
-            margin-bottom: 20px;
-            transition: box-shadow 0.2s, transform 0.2s;
-            border: none;
-            position: relative;
-            min-height: 160px;
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            background: var(--card-gradient, linear-gradient(90deg,#556ee6 0%,#50a5f1 100%));
-            color: #fff;
-            overflow: hidden;
-        }
-        .stats-card[data-color="primary"] { --card-gradient: linear-gradient(90deg,#556ee6 0%,#50a5f1 100%); }
-        .stats-card[data-color="success"] { --card-gradient: linear-gradient(90deg,#34c38f 0%,#43e97b 100%); }
-        .stats-card[data-color="info"]    { --card-gradient: linear-gradient(90deg,#50a5f1 0%,#2196f3 100%); }
-        .stats-card[data-color="danger"]  { --card-gradient: linear-gradient(90deg,#f46a6a 0%,#ff6a88 100%); }
-        .stats-card[data-color="warning"] { --card-gradient: linear-gradient(90deg,#f1b44c 0%,#ffde7d 100%); }
-        .stats-card[data-color="secondary"] { --card-gradient: linear-gradient(90deg,#6c757d 0%,#343a40 100%); }
-        .stats-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.18); transform: translateY(-4px) scale(1.01); }
-        .stats-card-icon {
-            background: rgba(255,255,255,0.18);
-            border-radius: 50%;
-            width: 72px;
-            height: 72px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 32px;
-            margin-right: 18px;
-            box-shadow: 0 2px 16px rgba(0,0,0,0.12);
-            position: relative;
-            flex-direction: column;
-        }
-        .stats-card-count-circle {
-            background: #fff;
-            color: #2196f3;
-            border-radius: 50%;
-            width: 38px;
-            height: 38px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-        }
-        .stats-card-content { flex: 1; display: flex; flex-direction: column; }
-        .stats-card-label { font-size: 16px; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.4px; }
-        .stats-card-value { font-size: 26px; font-weight: 700; margin: 0; }
-        .action-badge {
-            padding: 5px 10px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .badge-create { background: #28a745; color: #fff; }
-        .badge-update { background: #17a2b8; color: #fff; }
-        .badge-delete { background: #dc3545; color: #fff; }
-        .badge-login { background: #6c757d; color: #fff; }
-        .badge-logout { background: #6c757d; color: #fff; }
-        .badge-view { background: #ffc107; color: #000; }
-        .badge-approve { background: #28a745; color: #fff; }
-        .badge-reject { background: #dc3545; color: #fff; }
-        .badge-export { background: #6f42c1; color: #fff; }
-        .badge-import { background: #fd7e14; color: #fff; }
-        .filters-card label { font-weight: 600; }
-        .table td { vertical-align: middle; }
+        .val-stats { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 1399px) { .val-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        @media (max-width: 767px) { .val-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .val-stats .sr-stat { background: var(--sr-surface); }
+        .sr-page .val-desc { max-width: 280px; font-weight: 500; }
+        .val-pre { margin: 6px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 12px; text-align: start; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; border: 1px solid; }
+        .val-h { margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; text-align: start; }
     </style>
 </head>
 
@@ -267,240 +206,160 @@ $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNL
             <?php include("./includes/topbar.php"); ?>
             <!-- Top Bar End -->
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="card-box">
-
-                        <div class="row align-items-center mb-3">
-                            <div class="col">
-                                <h4 class="header-title mb-1">📊 Activity Logs</h4>
-                                <p class="text-muted mb-0">Audit trail across all modules</p>
-                            </div>
-                            <div class="col-auto">
-                                <div class="btn-group" role="group">
-                                    <a href="dashboard.php" class="btn btn-secondary">← Back to Dashboard</a>
-                                    <a href="?export=csv" class="btn btn-success">📥 Export CSV</a>
-                                </div>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Activity Logs</h1>
+                            <p>Audit trail across all modules</p>
                         </div>
-
-                        <!-- Statistics Cards -->
-                        <div class="row m-b-20">
-                            <div class="col-md-3 m-b-10">
-                                <div class="stats-card" data-color="primary">
-                                    <div class="stats-card-icon" data-color="primary">
-                                        <div class="stats-card-count-circle"><i class="fa fa-list"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Total Logs</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['total_logs'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 m-b-10">
-                                <div class="stats-card" data-color="success">
-                                    <div class="stats-card-icon" data-color="success">
-                                        <div class="stats-card-count-circle"><i class="fa fa-plus"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Creates</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['creates'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 m-b-10">
-                                <div class="stats-card" data-color="info">
-                                    <div class="stats-card-icon" data-color="info">
-                                        <div class="stats-card-count-circle"><i class="fa fa-pen"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Updates</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['updates'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 m-b-10">
-                                <div class="stats-card" data-color="danger">
-                                    <div class="stats-card-icon" data-color="danger">
-                                        <div class="stats-card-count-circle"><i class="fa fa-trash"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Deletes</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['deletes'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="sr-head-actions">
+                            <a href="dashboard.php" class="sr-btn"><i class="mdi mdi-arrow-left"></i> Dashboard</a>
+                            <a href="?export=csv" class="sr-btn sr-btn-success"><i class="mdi mdi-file-excel"></i> Export CSV</a>
                         </div>
+                    </div>
 
-                        <div class="row m-b-20">
-                            <div class="col-md-4 m-b-10">
-                                <div class="stats-card" data-color="secondary">
-                                    <div class="stats-card-icon" data-color="secondary">
-                                        <div class="stats-card-count-circle"><i class="fa fa-bolt"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Today's Actions</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['today_actions'] ?? 0) ?></p>
-                                    </div>
-                                </div>
+                    <!-- Statistics -->
+                    <div class="val-stats">
+                        <?php foreach ([
+                            ['Total Logs', $stats['total_logs'] ?? 0, 'mdi-format-list-bulleted', 'is-sky'],
+                            ['Creates', $stats['creates'] ?? 0, 'mdi-plus-circle-outline', 'is-green'],
+                            ['Updates', $stats['updates'] ?? 0, 'mdi-pencil', 'is-sky'],
+                            ['Deletes', $stats['deletes'] ?? 0, 'mdi-delete', 'is-red'],
+                            ["Today's Actions", $stats['today_actions'] ?? 0, 'mdi-flash', 'is-amber'],
+                            ['Active Users', $stats['unique_users'] ?? 0, 'mdi-account-multiple', 'is-sky'],
+                            ['Modules Tracked', $stats['unique_modules'] ?? 0, 'mdi-view-module', 'is-green'],
+                        ] as $st): ?>
+                            <div class="sr-stat <?= $st[3] ?>">
+                                <div class="sr-stat-label"><?= htmlspecialchars($st[0]) ?> <i class="mdi <?= $st[2] ?>"></i></div>
+                                <div class="sr-stat-value"><?= number_format((float)$st[1]) ?></div>
                             </div>
-                            <div class="col-md-4 m-b-10">
-                                <div class="stats-card" data-color="primary">
-                                    <div class="stats-card-icon" data-color="primary">
-                                        <div class="stats-card-count-circle"><i class="fa fa-users"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Active Users</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['unique_users'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4 m-b-10">
-                                <div class="stats-card" data-color="success">
-                                    <div class="stats-card-icon" data-color="success">
-                                        <div class="stats-card-count-circle"><i class="fa fa-cubes"></i></div>
-                                    </div>
-                                    <div class="stats-card-content">
-                                        <div class="stats-card-label">Modules Tracked</div>
-                                        <p class="stats-card-value mb-0"><?= number_format($stats['unique_modules'] ?? 0) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php endforeach; ?>
+                    </div>
 
+                    <div class="sr-card">
                         <!-- Filters -->
-                        <div class="card m-b-20">
-                            <div class="card-body filters-card">
-                                <h5 class="card-title mb-3">🔍 Filters</h5>
-                                <form method="GET" class="row g-3">
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">User</label>
-                                        <select name="user" class="form-control">
-                                            <option value="">All Users</option>
-                                            <?php foreach ($unique_users as $user): ?>
-                                                <option value="<?= htmlspecialchars($user['user_id']) ?>" <?= $filter_user == $user['user_id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($user['user_id']) ?>
-                                                    <?php if (!empty($user['user_name'])): ?>
-                                                        - <?= htmlspecialchars($user['user_name']) ?>
-                                                    <?php endif; ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">Module</label>
-                                        <select name="module" class="form-control">
-                                            <option value="">All Modules</option>
-                                            <?php foreach ($unique_modules as $mod): ?>
-                                                <option value="<?= htmlspecialchars($mod['module']) ?>" <?= $filter_module == $mod['module'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($mod['module']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">Page</label>
-                                        <select name="page_name" class="form-control">
-                                            <option value="">All Pages</option>
-                                            <?php foreach ($unique_pages as $page): ?>
-                                                <option value="<?= htmlspecialchars($page['page']) ?>" <?= $filter_page == $page['page'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($page['page']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">Action</label>
-                                        <select name="action_type" class="form-control">
-                                            <option value="">All Actions</option>
-                                            <?php foreach ($action_types as $action): ?>
-                                                <option value="<?= $action ?>" <?= $filter_action == $action ? 'selected' : '' ?>><?= $action ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">From Date</label>
-                                        <input type="date" name="date_from" class="form-control" value="<?= $filter_date_from ?>">
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">To Date</label>
-                                        <input type="date" name="date_to" class="form-control" value="<?= $filter_date_to ?>">
-                                    </div>
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label">Limit</label>
-                                        <select name="limit" class="form-control">
-                                            <option value="50" <?= $limit == 50 ? 'selected' : '' ?>>50</option>
-                                            <option value="100" <?= $limit == 100 ? 'selected' : '' ?>>100</option>
-                                            <option value="500" <?= $limit == 500 ? 'selected' : '' ?>>500</option>
-                                            <option value="1000" <?= $limit == 1000 ? 'selected' : '' ?>>1000</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="btn-group" role="group">
-                                            <button type="submit" class="btn btn-primary">Apply Filters</button>
-                                            <a href="view_activity_logs.php" class="btn btn-light">Clear Filters</a>
-                                        </div>
-                                    </div>
-                                </form>
+                        <form method="GET" class="sr-filter-grid" style="border-bottom: 1px solid var(--sr-border);">
+                            <div>
+                                <label>User</label>
+                                <select name="user" class="form-control">
+                                    <option value="">All Users</option>
+                                    <?php foreach ($unique_users as $user): ?>
+                                        <option value="<?= htmlspecialchars($user['user_id']) ?>" <?= $filter_user == $user['user_id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($user['user_id']) ?><?php if (!empty($user['user_name'])): ?> - <?= htmlspecialchars($user['user_name']) ?><?php endif; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Module</label>
+                                <select name="module" class="form-control">
+                                    <option value="">All Modules</option>
+                                    <?php foreach ($unique_modules as $mod): ?>
+                                        <option value="<?= htmlspecialchars($mod['module']) ?>" <?= $filter_module == $mod['module'] ? 'selected' : '' ?>><?= htmlspecialchars($mod['module']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Page</label>
+                                <select name="page_name" class="form-control">
+                                    <option value="">All Pages</option>
+                                    <?php foreach ($unique_pages as $page): ?>
+                                        <option value="<?= htmlspecialchars($page['page']) ?>" <?= $filter_page == $page['page'] ? 'selected' : '' ?>><?= htmlspecialchars($page['page']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Action</label>
+                                <select name="action_type" class="form-control">
+                                    <option value="">All Actions</option>
+                                    <?php foreach ($action_types as $action): ?>
+                                        <option value="<?= $action ?>" <?= $filter_action == $action ? 'selected' : '' ?>><?= $action ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label>From Date</label>
+                                <input type="date" name="date_from" class="form-control" value="<?= htmlspecialchars($filter_date_from) ?>">
+                            </div>
+                            <div>
+                                <label>To Date</label>
+                                <input type="date" name="date_to" class="form-control" value="<?= htmlspecialchars($filter_date_to) ?>">
+                            </div>
+                            <div>
+                                <label>Limit</label>
+                                <select name="limit" class="form-control">
+                                    <?php foreach ([50, 100, 500, 1000] as $lim): ?>
+                                        <option value="<?= $lim ?>" <?= $limit == $lim ? 'selected' : '' ?>><?= $lim ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="sr-filter-actions">
+                                <button type="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-filter-variant"></i> Apply</button>
+                                <a href="view_activity_logs.php" class="sr-btn"><i class="mdi mdi-refresh"></i> Clear</a>
+                            </div>
+                        </form>
+
+                        <div class="sr-toolbar">
+                            <h2 class="sr-card-title" style="margin-inline-end: auto;"><i class="mdi mdi-history"></i> Activity Logs <span class="sr-count"><?= count($logs) ?></span></h2>
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="logsSearch" placeholder="Search logs..." autocomplete="off">
                             </div>
                         </div>
 
-                        <!-- Activity Logs Table -->
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center justify-content-between mb-3">
-                                    <h5 class="card-title mb-0">Activity Logs <span class="badge badge-primary"><?= count($logs) ?> records</span></h5>
-                                </div>
-
-                                <div class="table-responsive">
-                                    <table id="logsTable" class="table table-striped table-bordered">
-                                        <thead>
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Date/Time</th>
-                                                <th>User</th>
-                                                <th>Module</th>
-                                                <th>Action</th>
-                                                <th>Page</th>
-                                                <th>Description</th>
-                                                <th>Details</th>
-                                                <th>IP Address</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($logs as $log): ?>
-                                                <tr>
-                                                    <td><?= $log['id'] ?></td>
-                                                    <td><small><?= date('Y-m-d H:i:s', strtotime($log['created_at'])) ?></small></td>
-                                                    <td>
-                                                        <strong><?= htmlspecialchars($log['user_id']) ?></strong>
-                                                        <?php if (!empty($log['user_name'])): ?>
-                                                            <br><small class="text-muted"><?= htmlspecialchars($log['user_name']) ?></small>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td><span class="badge badge-secondary"><?= htmlspecialchars($log['module']) ?></span></td>
-                                                    <td>
-                                                        <span class="action-badge badge-<?= strtolower($log['action_type']) ?>"><?= $log['action_type'] ?></span>
-                                                    </td>
-                                                    <td><code><?= htmlspecialchars($log['page']) ?></code></td>
-                                                    <td><?= htmlspecialchars($log['description'] ?? '-') ?></td>
-                                                    <td>
-                                                        <?php if ($log['old_values'] || $log['new_values']): ?>
-                                                            <button class="btn btn-sm btn-info" onclick="showDetails(<?= $log['id'] ?>, '<?= htmlspecialchars($log['old_values'] ?? '', ENT_QUOTES) ?>', '<?= htmlspecialchars($log['new_values'] ?? '', ENT_QUOTES) ?>')">View</button>
-                                                        <?php else: ?>
-                                                            <small class="text-muted">-</small>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td><small><?= htmlspecialchars($log['ip_address'] ?? '-') ?></small></td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                        <div class="sr-table-wrap">
+                            <table id="logsTable" class="table sr-table dt-responsive nowrap" style="width:100%">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Date/Time</th>
+                                        <th>User</th>
+                                        <th>Module</th>
+                                        <th>Action</th>
+                                        <th>Page</th>
+                                        <th>Description</th>
+                                        <th>Details</th>
+                                        <th>IP Address</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($logs as $log):
+                                        $act = strtoupper((string)$log['action_type']);
+                                        $actTone = $val_action_tones[$act] ?? 'tone-slate';
+                                    ?>
+                                        <tr>
+                                            <td><span class="sr-chip sr-mono"><?= (int)$log['id'] ?></span></td>
+                                            <td data-order="<?= htmlspecialchars($log['created_at']) ?>">
+                                                <div class="sr-date"><?= date('Y-m-d', strtotime($log['created_at'])) ?><small><?= date('H:i:s', strtotime($log['created_at'])) ?></small></div>
+                                            </td>
+                                            <td>
+                                                <span class="sr-cell-title"><?= htmlspecialchars($log['user_id']) ?></span>
+                                                <?php if (!empty($log['user_name'])): ?>
+                                                    <span class="sr-cell-sub"><?= htmlspecialchars($log['user_name']) ?></span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><span class="sr-chip"><?= htmlspecialchars($log['module']) ?></span></td>
+                                            <td><span class="sr-pill sr-pill-xs <?= $actTone ?>"><?= htmlspecialchars($act) ?></span></td>
+                                            <td><code><?= htmlspecialchars($log['page']) ?></code></td>
+                                            <td><span class="sr-cell-title val-desc" title="<?= htmlspecialchars($log['description'] ?? '') ?>"><?= htmlspecialchars($log['description'] ?? '-') ?></span></td>
+                                            <td>
+                                                <?php if ($log['old_values'] || $log['new_values']): ?>
+                                                    <button type="button" class="sr-open-btn border-0 val-details"
+                                                        data-id="<?= (int)$log['id'] ?>"
+                                                        data-old="<?= htmlspecialchars($log['old_values'] ?? '', ENT_QUOTES) ?>"
+                                                        data-new="<?= htmlspecialchars($log['new_values'] ?? '', ENT_QUOTES) ?>"><i class="mdi mdi-eye-outline"></i> View</button>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><span class="sr-mono"><?= htmlspecialchars($log['ip_address'] ?? '-') ?></span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
                         </div>
-
-                    </div> <!-- card-box -->
+                    </div>
                 </div> <!-- container-fluid -->
             </div> <!-- content -->
 
@@ -535,35 +394,42 @@ $action_types = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'VIEW', 'DOWNL
             if ($.fn.DataTable.isDataTable('#logsTable')) {
                 $('#logsTable').DataTable().destroy();
             }
-            $('#logsTable').DataTable({
+            var logsTable = $('#logsTable').DataTable({
+                dom: 'rtip',
                 order: [[0, 'desc']],
                 pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
                 responsive: true,
                 language: {
-                    search: "Search logs:",
-                    lengthMenu: "Show _MENU_ logs per page",
                     info: "Showing _START_ to _END_ of _TOTAL_ logs",
                     infoEmpty: "No logs found",
-                    infoFiltered: "(filtered from _MAX_ total logs)"
+                    infoFiltered: "",
+                    emptyTable: '<div class="sr-empty"><i class="mdi mdi-history"></i>No logs found</div>',
+                    zeroRecords: '<div class="sr-empty"><i class="mdi mdi-magnify"></i>No matching logs</div>',
+                    paginate: { next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' }
                 }
+            });
+            $('#logsSearch').on('input', function() { logsTable.search(this.value).draw(); });
+
+            $('#logsTable').on('click', '.val-details', function() {
+                showDetails($(this).data('id'), $(this).attr('data-old'), $(this).attr('data-new'));
             });
         });
 
         function showDetails(id, oldVal, newVal) {
+            var box = function(label, val, tone) {
+                return $('<div class="mt-2">')
+                    .append($('<h6 class="val-h">').css('color', 'var(--tone-' + tone + '-fg)').text(label))
+                    .append($('<pre class="val-pre">').css({ background: 'var(--tone-' + tone + '-bg)', borderColor: 'var(--tone-' + tone + '-bd)', color: 'var(--sr-text)' }).text(val || '(empty)'));
+            };
+            var $html = $('<div class="sr-page">').append(box('Old Value', oldVal, 'red'), box('New Value', newVal, 'green'));
             Swal.fire({
                 title: 'Change Details - Log #' + id,
-                html: `
-                    <div style="text-align: left;">
-                        <h6 style="color: #dc3545;">Old Value:</h6>
-                        <pre style="background: #f8d7da; padding: 10px; border-radius: 4px; font-size: 12px;">${oldVal || '(empty)'}</pre>
-                        <h6 style="color: #28a745; margin-top: 15px;">New Value:</h6>
-                        <pre style="background: #d4edda; padding: 10px; border-radius: 4px; font-size: 12px;">${newVal || '(empty)'}</pre>
-                    </div>
-                `,
-                width: 600,
+                html: $html[0],
+                width: 640,
                 showCloseButton: true,
-                showConfirmButton: false
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                customClass: { popup: 'sr-addline-popup' }
             });
         }
     </script>

@@ -29,6 +29,7 @@ if (mysqli_num_rows($query) == 1) {
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
         .di { --di-line: rgba(128,138,150,.28); --di-soft: rgba(128,138,150,.10); --di-accent: #2f6fed; --di-ok: #1fa971; --di-warn: #e6a100; --di-bad: #e04b4b; }
@@ -124,6 +125,39 @@ if (mysqli_num_rows($query) == 1) {
         .select2-dropdown .select2-results__option--selected { background: #2f6fed; color: #fff; font-weight: 600; }
         .di .select2-container { width: 100% !important; }
         .di-hide { display: none; }
+
+        /* ---------- New GUI: map the wizard onto the sr-* design tokens ---------- */
+        .sr-page .di { --di-line: var(--sr-border); --di-soft: var(--sr-surface-2); --di-accent: var(--sr-accent); --di-ok: #16a34a; --di-warn: #f59e0b; --di-bad: #dc2626; --di-bg: var(--sr-surface); }
+        .sr-page .di .di-card { background: var(--sr-surface); border-radius: var(--sr-radius); box-shadow: var(--sr-shadow); margin-bottom: 20px; }
+        .sr-page .di .di-card-head { padding: 14px 18px; }
+        .sr-page .di .di-card-head h5 { font-size: 14px; font-weight: 700; color: var(--sr-text); }
+        .sr-page .di .di-label { font-size: 11px; font-weight: 700; letter-spacing: .4px; color: var(--sr-muted); opacity: 1; }
+        .sr-page .di .di-hint { color: var(--sr-muted); opacity: 1; }
+        .sr-page .di-stepper .st { background: var(--sr-surface); color: var(--sr-muted); opacity: 1; font-weight: 600; }
+        .sr-page .di-stepper .st.active { color: var(--sr-accent-strong); background: var(--sr-accent-soft); }
+        .sr-page .di-stepper .st.done { color: var(--tone-green-fg); }
+        .sr-page .di-mode { border-radius: 10px; background: var(--sr-surface); }
+        .sr-page .di-mode.on { background: var(--sr-accent-soft); }
+        .sr-page .di-mode input { accent-color: var(--sr-accent); }
+        .sr-page .di .form-control { height: 38px; border-radius: 9px; border-color: var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text); font-size: 13px; }
+        .sr-page .di .form-control:focus { background: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+        .sr-page .di table.table thead th { color: var(--sr-muted); font-weight: 700; }
+        .sr-page .di table.table td { color: var(--sr-text-2); }
+        .sr-page .di-cols-wrap, .sr-page .di-map-wrap, .sr-page .di-preview, .sr-page .di-errs { border-radius: 12px; }
+        .sr-page .di-drop { border-radius: 12px; background: var(--sr-surface-2); }
+        .sr-page .di-drop:hover, .sr-page .di-drop.over { background: var(--sr-accent-soft); }
+        .sr-page .di-tile { border-radius: 12px; background: var(--sr-surface-2); }
+        .sr-page .di-tile .l { color: var(--sr-muted); opacity: 1; font-weight: 700; font-size: 11px; }
+        .sr-page .di-tile .v { color: var(--sr-text); }
+        .sr-page .di-tile.ok .v { color: var(--tone-green-fg); } .sr-page .di-tile.bad .v { color: var(--tone-red-fg); }
+        .sr-page .di-banner { border-radius: 12px; }
+        .sr-page .di-banner.dry { background: var(--tone-indigo-bg); border-color: var(--tone-indigo-bd); color: var(--tone-indigo-fg); }
+        .sr-page .di-banner.done { background: var(--tone-green-bg); border-color: var(--tone-green-bd); color: var(--tone-green-fg); }
+        .sr-page .di-banner.err { background: var(--tone-red-bg); border-color: var(--tone-red-bd); color: var(--tone-red-fg); }
+        .sr-page .di-warn { background: var(--tone-amber-bg); color: var(--tone-amber-fg); border-radius: 10px; }
+        .sr-page .di-tag.pk { background: var(--sr-accent-soft); border-color: var(--tone-indigo-bd); color: var(--sr-accent-strong); }
+        .sr-page .di-actions { padding: 14px 18px; }
+        .sr-page .di-cols-tools .sr-btn { height: 32px; }
     </style>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
@@ -143,12 +177,14 @@ if (mysqli_num_rows($query) == 1) {
 
     <div class="content-page">
         <?php include("./includes/topbar.php"); ?>
-        <div class="content">
+        <div class="content sr-page">
             <div class="container-fluid di" id="di">
 
-                <div class="mb-3">
-                    <h4 class="mb-1 header-title">Dynamic Excel Import</h4>
-                    <span class="di-hint">Import or update data in any table from an Excel / CSV file. First row = column headers &middot; max 10 MB / 50,000 rows.</span>
+                <div class="sr-head">
+                    <div>
+                        <h1>Dynamic Excel Import</h1>
+                        <p>Import or update data in any table from an Excel / CSV file. First row = column headers &middot; max 10 MB / 50,000 rows.</p>
+                    </div>
                 </div>
 
                 <div class="di-stepper" id="stepper">
@@ -158,7 +194,7 @@ if (mysqli_num_rows($query) == 1) {
                     <div class="st" data-s="4"><span class="n">4</span><span class="t">Result</span></div>
                 </div>
 
-                <div class="di-card card-box">
+                <div class="di-card">
                     <div class="di-card-head"><span class="di-num">1</span><h5>Table &amp; options</h5></div>
                     <div class="di-card-body">
                         <div class="row">
@@ -196,14 +232,12 @@ if (mysqli_num_rows($query) == 1) {
                                         <label class="di-label mb-0">Columns to import</label>
                                         <span class="di-count" id="colCount"></span>
                                     </div>
-                                    <a href="#" id="dlTemplate" class="btn btn-sm btn-outline-primary"><i class="fa fa-download"></i> Download template</a>
+                                    <a href="#" id="dlTemplate" class="sr-btn sr-btn-sm"><i class="fa fa-download"></i> Download template</a>
                                 </div>
                                 <div class="di-cols-tools">
                                     <input type="text" id="colSearch" class="form-control form-control-sm" placeholder="Search columns...">
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-sm btn-light" id="colAll">Select all</button>
-                                        <button type="button" class="btn btn-sm btn-light" id="colNone">Clear</button>
-                                    </div>
+                                    <button type="button" class="sr-btn sr-btn-sm" id="colAll">Select all</button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="colNone">Clear</button>
                                 </div>
                                 <div class="di-cols-wrap">
                                     <table class="table table-sm mb-0" id="colTable">
@@ -217,7 +251,7 @@ if (mysqli_num_rows($query) == 1) {
                     </div>
                 </div>
 
-                <div class="di-card card-box di-hide" id="step2">
+                <div class="di-card di-hide" id="step2">
                     <div class="di-card-head"><span class="di-num">2</span><h5>Upload file</h5></div>
                     <div class="di-card-body">
                         <div class="di-drop" id="drop">
@@ -226,11 +260,11 @@ if (mysqli_num_rows($query) == 1) {
                             <div class="di-hint">or click to browse &middot; .xlsx, .xls, .csv</div>
                         </div>
                         <input type="file" id="fileInput" class="di-hide" accept=".xlsx,.xls,.csv">
-                        <div class="di-file" id="fileBox"><i class="fa fa-file-excel"></i><div class="flex-grow-1"><div id="fileName" class="font-weight-bold"></div><div id="fileMeta" class="di-hint"></div></div><button type="button" class="btn btn-sm btn-light" id="fileClear">Remove</button></div>
+                        <div class="di-file" id="fileBox"><i class="fa fa-file-excel"></i><div class="flex-grow-1"><div id="fileName" class="font-weight-bold"></div><div id="fileMeta" class="di-hint"></div></div><button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="fileClear"><i class="fa fa-xmark"></i> Remove</button></div>
                     </div>
                 </div>
 
-                <div class="di-card card-box di-hide" id="step3">
+                <div class="di-card di-hide" id="step3">
                     <div class="di-card-head"><span class="di-num">3</span><h5>Map columns &amp; review</h5></div>
                     <div class="di-card-body">
                         <div class="row">
@@ -258,15 +292,15 @@ if (mysqli_num_rows($query) == 1) {
                     <div class="di-actions">
                         <span class="di-hint" id="actionSummary"></span>
                         <span>
-                            <div class="btn-group" role="group">
-                                <button class="btn btn-outline-primary" id="dryBtn"><i class="fa fa-circle-check"></i> Dry run</button>
-                                <button class="btn btn-success" id="importBtn"><i class="fa fa-database"></i> <span id="importBtnLbl">Update records</span></button>
+                            <div class="d-flex" style="gap: 8px;">
+                                <button class="sr-btn" id="dryBtn"><i class="fa fa-circle-check"></i> Dry run</button>
+                                <button class="sr-btn sr-btn-success" id="importBtn"><i class="fa fa-database"></i> <span id="importBtnLbl">Update records</span></button>
                             </div>
                         </span>
                     </div>
                 </div>
 
-                <div class="di-card card-box di-hide" id="resultBox">
+                <div class="di-card di-hide" id="resultBox">
                     <div class="di-card-head"><span class="di-num">4</span><h5>Result</h5></div>
                     <div class="di-card-body">
                         <div id="resultBanner"></div>

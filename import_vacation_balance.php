@@ -42,6 +42,8 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
     <link href="assets/css/metisMenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <?php if ($is_rtl) : ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -71,64 +73,96 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
             <!-- Top Bar End -->
 
             <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="header-title mb-4">Import Opening Vacation Balance</h4>
-                                <p class="text-muted font-14">
-                                    Use this form to enter the final vacation balance from the old system for an employee. This will serve as the starting point for all future calculations in the new system.
-                                </p>
-                                <form id="importBalanceForm" class="mt-4">
-                                    <div class="form-group col-lg-6 col-md-12 px-0">
-                                        <label for="employee_search">Select Employee</label>
-                                        <select id="employee_search" class="form-control" name="emp_id" required></select>
-                                    </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Import Opening Vacation Balance</h1>
+                            <p>Enter the final vacation balance from the old system - it becomes the starting point for every future calculation.</p>
+                        </div>
+                    </div>
 
-                                    <div id="employee_details" class="alert alert-info" style="display:none;"></div>
+                    <div class="sr-import">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-calendar-check"></i> Opening balance</h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <form id="importBalanceForm" class="sr-form" autocomplete="off">
+                                    <div class="sr-fsec">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-account"></i>Employee</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-12">
+                                                <label for="employee_search">Select Employee</label>
+                                                <select id="employee_search" class="form-control" name="emp_id" required></select>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     <fieldset id="balance_details_fieldset" disabled>
                                         <input type="hidden" name="ajaxType" value="addManualHistory">
                                         <input type="hidden" name="contract_id" id="contract_id">
                                         <input type="hidden" name="name" id="employee_name">
 
-                                        <div class="form-row">
-                                            <div class="form-group col-md-6">
-                                                <label>Period Start Date (From Old System)</label>
-                                                <input type="text" class="form-control datepicker" name="period_start" placeholder="YYYY-MM-DD" required autocomplete="off">
-                                            </div>
-                                            <div class="form-group col-md-6">
-                                                <label>Period End Date (Date of Old System Balance)</label>
-                                                <input type="text" class="form-control datepicker" name="period_end" placeholder="YYYY-MM-DD" required autocomplete="off">
-                                            </div>
-                                        </div>
-                                        <div class="form-row">
-                                            <div class="form-group col-md-4">
-                                                <label>Total Earned Days (From Old System)</label>
-                                                <input type="number" step="0.01" class="form-control" name="total_days" id="total_days" placeholder="e.g., 49.62" required>
-                                            </div>
-                                            <div class="form-group col-md-4">
-                                                <label>Total Used Days (From Old System)</label>
-                                                <input type="number" step="0.01" class="form-control" name="used_days" id="used_days" placeholder="e.g., 32.00" required>
-                                            </div>
-                                            <div class="form-group col-md-4">
-                                                <label>Opening Balance (Historical)</label>
-                                                <input type="number" step="0.01" class="form-control" name="remaining_balance" id="opening_balance" readonly>
-                                                <small class="form-text text-muted">This is the balance as of the 'Period End Date'.</small>
+                                        <div class="sr-fsec">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-range"></i>Old system period</span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-6">
+                                                    <label>Period Start Date (From Old System)</label>
+                                                    <input type="text" class="form-control datepicker" name="period_start" placeholder="YYYY-MM-DD" required autocomplete="off">
+                                                </div>
+                                                <div class="sr-fcol c-6">
+                                                    <label>Period End Date (Date of Old System Balance)</label>
+                                                    <input type="text" class="form-control datepicker" name="period_end" placeholder="YYYY-MM-DD" required autocomplete="off">
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div class="alert alert-success mt-3" role="alert">
-                                            <h5 class="alert-heading">Projected Balance for Today</h5>
-                                            <p>Based on the data above, the employee's projected vacation balance as of today is: <strong id="projected_balance_display" class="font-20">0.00</strong> days.</p>
-                                            <hr>
-                                            <p class="mb-0 small">This is for your information only. The system will save the historical opening balance and will always calculate the current balance dynamically elsewhere.</p>
+                                        <div class="sr-fsec">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-calculator"></i>Days</span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-4">
+                                                    <label>Total Earned Days (From Old System)</label>
+                                                    <input type="number" step="0.01" class="form-control" name="total_days" id="total_days" placeholder="e.g., 49.62" required>
+                                                </div>
+                                                <div class="sr-fcol c-4">
+                                                    <label>Total Used Days (From Old System)</label>
+                                                    <input type="number" step="0.01" class="form-control" name="used_days" id="used_days" placeholder="e.g., 32.00" required>
+                                                </div>
+                                                <div class="sr-fcol c-4">
+                                                    <label>Opening Balance (Historical)</label>
+                                                    <input type="number" step="0.01" class="form-control" name="remaining_balance" id="opening_balance" readonly>
+                                                    <span class="sr-fhint">This is the balance as of the 'Period End Date'.</span>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <button type="submit" class="btn btn-primary waves-effect waves-light mt-3">Save Manual History</button>
+                                        <div class="sr-import-actions">
+                                            <button type="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-content-save"></i> Save Manual History</button>
+                                        </div>
                                     </fieldset>
                                 </form>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h2 class="sr-card-title"><i class="mdi mdi-account-card-details"></i> Selected employee</h2>
+                                </div>
+                                <div class="sr-card-body">
+                                    <div id="employee_empty" class="sr-card-sub">Search and select an employee to start.</div>
+                                    <dl id="employee_details" class="sr-kv" style="display:none;"></dl>
+                                </div>
+                            </div>
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h2 class="sr-card-title"><i class="mdi mdi-chart-line"></i> Projected Balance for Today</h2>
+                                </div>
+                                <div class="sr-card-body">
+                                    <div class="sr-ftotal"><span>Projected balance</span><span><b id="projected_balance_display">0.00</b> days</span></div>
+                                    <p class="sr-hint mb-0">This is for your information only. The system will save the historical opening balance and will always calculate the current balance dynamically elsewhere.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -171,6 +205,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
             // Initialize Select2
             $('#employee_search').select2({
                 placeholder: 'Search for an employee by name or ID...',
+                width: '100%',
                 allowClear: true,
                 minimumInputLength: 2,
                 ajax: {
@@ -207,10 +242,13 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                     success: function(response) {
                         if (response.status === 200) {
                             const data = response.data;
+                            const esc = v => $('<div>').text(v == null ? '' : String(v)).html();
                             $('#employee_details').html(
-                                `<strong>Employee:</strong> ${data.name} <br>` +
-                                `<strong>Contract:</strong> ${data.vac_period_days} days per period`
+                                `<div class="row-kv"><dt>Employee</dt><dd>${esc(data.name)}</dd></div>` +
+                                `<div class="row-kv"><dt>Employee ID</dt><dd>${esc(empid)}</dd></div>` +
+                                `<div class="row-kv"><dt>Contract</dt><dd>${esc(data.vac_period_days)} days per period</dd></div>`
                             ).show();
+                            $('#employee_empty').hide();
                             $('#contract_id').val(data.vac_period_id);
                             $('#employee_name').val(data.name);
 
@@ -220,7 +258,8 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                             updateCalculations();
 
                         } else {
-                            $('#employee_details').text('Error: ' + response.message).show();
+                            $('#employee_details').hide();
+                            $('#employee_empty').html('<span class="sr-pill tone-red"></span>').find('.sr-pill').text('Error: ' + response.message).end().show();
                             annualVacationDays = 0; // Reset on error
                             $('#balance_details_fieldset').prop('disabled', true); // Keep form disabled
                         }
@@ -233,6 +272,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                 $('#importBalanceForm')[0].reset(); // Reset all form fields
                 $('#balance_details_fieldset').prop('disabled', true); // Disable the fieldset
                 $('#employee_details').hide(); // Hide details box
+                $('#employee_empty').text('Search and select an employee to start.').show();
                 annualVacationDays = 0; // Reset annual days
                 updateCalculations(); // Recalculate to show zeros
             });
@@ -298,6 +338,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
                                 $('#importBalanceForm')[0].reset();
                                 $('#balance_details_fieldset').prop('disabled', true);
                                 $('#employee_details').hide();
+                                $('#employee_empty').text('Search and select an employee to start.').show();
                                 annualVacationDays = 0; // Reset
                                 updateCalculations(); // Reset display fields
                             }

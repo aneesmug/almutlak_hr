@@ -41,23 +41,23 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <style>
-            .employee-search-results {
-                position: absolute;
-                width: 100%;
-                background: #fff;
-                border: 1px solid #ddd;
-                z-index: 1000;
-                max-height: 200px;
-                overflow-y: auto;
+            .sr-page .ml-search { position: relative; }
+            .sr-page .employee-search-results {
+                position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; margin-top: 4px; max-height: 240px; overflow-y: auto;
+                background: var(--sr-surface); border-radius: 10px; box-shadow: 0 10px 28px rgba(15, 23, 42, .12);
             }
-
-            .employee-search-results .list-group-item {
-                cursor: pointer;
+            .sr-page .employee-search-results:empty { display: none; }
+            .sr-page .employee-search-results .list-group { border: 1px solid var(--sr-border); border-radius: 10px; overflow: hidden; }
+            .sr-page .employee-search-results .list-group-item {
+                display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 12px; font-size: 13px;
+                border: 0; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface); color: var(--sr-text-2);
             }
-            .employee-search-results .list-group-item:hover {
-                background-color: #f0f0f0;
-            }
+            .sr-page .employee-search-results .list-group-item:last-child { border-bottom: 0; }
+            .sr-page .employee-search-results .list-group-item:hover { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+            .sr-page .employee-search-results p { margin: 0; border: 1px solid var(--sr-border); border-radius: 10px; color: var(--sr-muted); }
         </style>
         <?php if ($is_rtl) : ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -84,65 +84,86 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
 
             <div class="content-page">
                 <?php include("./includes/topbar.php"); ?>
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box">
-                                    <h4 class="header-title m-t-0 m-b-30"><?= __('add_manual_loan_history') ?></h4>
-                                    <form id="manualLoanForm" enctype="multipart/form-data">
-                                        <fieldset>
-                                            <!-- Step 1: Employee Selection -->
-                                            <h5 class="font-weight-bold"><?=__('select_employee')?></h5>
-                                            <p class="text-muted"><?=__('search_for_employee_by_name_or_id')?></p>
-                                            <div class="form-group col-md-6 px-0">
-                                                <input type="text" id="employeeSearch" class="form-control" placeholder="<?=__('start_typing_to_search')?>" autocomplete="off">
-                                                <div id="employeeSearchResults" class="employee-search-results"></div>
-                                                <input type="hidden" name="emp_id" id="emp_id" required>
-                                            </div>
-                                            <div id="selectedEmployee" class="alert alert-success" style="display: none;"></div>
-                                            <hr>
-
-                                            <!-- Step 2: Simplified Loan Details -->
-                                            <div id="simpleLoanFormSection" style="display:none;">
-                                                <h5 class="font-weight-bold mt-4"><?=__('loan_details')?></h5>
-                                                <div class="form-row">
-                                                    <div class="form-group col-md-3">
-                                                        <label><?=__('payment_date')?></label>
-                                                        <input type="text" name="start_date" class="form-control datepicker" required autocomplete="off">
-                                                    </div>
-                                                    <div class="form-group col-md-3">
-                                                        <label><?=__('total_payable')?></label>
-                                                        <input type="number" step="0.01" id="total_loan_amount" name="total_loan_amount" class="form-control" required>
-                                                    </div>
-                                                    <div class="form-group col-md-3">
-                                                        <label><?=__('total_paid')?></label>
-                                                        <input type="number" step="0.01" id="paid_amount" name="paid_amount" class="form-control" required>
-                                                    </div>
-                                                     <div class="form-group col-md-3">
-                                                        <label><?=__('remaining_balance')?></label>
-                                                        <input type="text" id="remaining_amount" class="form-control" readonly>
-                                                    </div>
-                                                </div>
-                                                <h5 class="font-weight-bold mt-4"><?=__('payment_details')?></h5>
-                                                <div class="form-row">
-                                                    <div class="form-group col-md-6">
-                                                        <label><?=__('receipt_id')?></label>
-                                                        <input type="text" name="payment_receipt_id" class="form-control" placeholder="<?=__('enter_receipt_id')?>">
-                                                    </div>
-                                                    <div class="form-group col-md-6">
-                                                        <label><?=__('attachment')?></label>
-                                                        <input type="file" name="payment_attachment" class="form-control">
-                                                    </div>
-                                                </div>
-                                                <hr>
-                                                <button type="submit" class="btn btn-success waves-effect waves-light"><?=__('save_loan_history')?></button>
-                                            </div>
-                                        </fieldset>
-                                    </form>
-                                </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('add_manual_loan_history') ?></h1>
+                                <p><?= __('search_for_employee_by_name_or_id') ?></p>
                             </div>
                         </div>
+
+                        <form id="manualLoanForm" class="sr-form" enctype="multipart/form-data" autocomplete="off">
+                            <div class="sr-import">
+                                <div class="sr-card">
+                                    <div class="sr-card-body">
+                                        <!-- Step 1: Employee Selection -->
+                                        <div class="sr-fsec">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-account-search"></i><?= __('select_employee') ?></span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-12 ml-search">
+                                                    <input type="text" id="employeeSearch" class="form-control" placeholder="<?= __('start_typing_to_search') ?>" autocomplete="off">
+                                                    <div id="employeeSearchResults" class="employee-search-results"></div>
+                                                    <input type="hidden" name="emp_id" id="emp_id" required>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Step 2: Simplified Loan Details -->
+                                        <div id="simpleLoanFormSection" style="display:none;">
+                                            <div class="sr-fsec">
+                                                <div class="sr-fsec-head"><span><i class="mdi mdi-cash-multiple"></i><?= __('loan_details') ?></span></div>
+                                                <div class="sr-fgrid">
+                                                    <div class="sr-fcol c-4">
+                                                        <label><?= __('payment_date') ?></label>
+                                                        <input type="text" name="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" required autocomplete="off">
+                                                    </div>
+                                                    <div class="sr-fcol c-4">
+                                                        <label><?= __('total_payable') ?></label>
+                                                        <input type="number" step="0.01" id="total_loan_amount" name="total_loan_amount" class="form-control" required>
+                                                    </div>
+                                                    <div class="sr-fcol c-4">
+                                                        <label><?= __('total_paid') ?></label>
+                                                        <input type="number" step="0.01" id="paid_amount" name="paid_amount" class="form-control" required>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="sr-fsec">
+                                                <div class="sr-fsec-head"><span><i class="mdi mdi-receipt"></i><?= __('payment_details') ?></span></div>
+                                                <div class="sr-fgrid">
+                                                    <div class="sr-fcol c-12">
+                                                        <label><?= __('receipt_id') ?></label>
+                                                        <input type="text" name="payment_receipt_id" class="form-control" placeholder="<?= __('enter_receipt_id') ?>">
+                                                    </div>
+                                                    <div class="sr-fcol c-12">
+                                                        <label><?= __('attachment') ?></label>
+                                                        <label class="sr-filepick" for="payment_attachment">
+                                                            <input type="file" name="payment_attachment" id="payment_attachment">
+                                                            <i class="mdi mdi-cloud-upload"></i>
+                                                            <span><b class="js-file-name"><?= __('choose_file', 'Choose a file or drop it here') ?></b><small></small></span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="sr-import-actions">
+                                                <button type="submit" class="sr-btn sr-btn-success"><i class="mdi mdi-content-save"></i> <?= __('save_loan_history') ?></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h2 class="sr-card-title"><i class="mdi mdi-account"></i> <?= __('select_employee') ?></h2>
+                                    </div>
+                                    <div class="sr-card-body">
+                                        <div id="selectedEmployeeEmpty" class="sr-card-sub"><?= __('search_for_employee_by_name_or_id') ?></div>
+                                        <div id="selectedEmployee" class="sr-person" style="display: none;"></div>
+                                        <div class="sr-ftotal mt-3"><span><?= __('remaining_balance') ?></span><b id="remaining_amount">0.00</b></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
                     </div>
                 </div>
                 <footer class="footer"><?= $site_footer ?></footer>
@@ -156,6 +177,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
         <script src="assets/js/jquery.slimscroll.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
+        <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
@@ -171,6 +193,11 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
                 }
 
                 initializeDatepicker('.datepicker');
+                SRForm.bindFilePicker($('#manualLoanForm'));
+
+                function initials(name) {
+                    return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+                }
 
                 // Employee search
                 $('#employeeSearch').on('keyup', function() {
@@ -190,11 +217,15 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
                                 if (response.status === 'success' && response.employees.length > 0) {
                                     let list = $('<ul class="list-group"></ul>');
                                     response.employees.forEach(function(emp) {
-                                        list.append(`<li class="list-group-item" data-id="${emp.emp_id}" data-name="${emp.name}">${emp.name} (${emp.emp_id})</li>`);
+                                        $('<li class="list-group-item"></li>')
+                                            .attr('data-id', emp.emp_id).attr('data-name', emp.name)
+                                            .append($('<span class="sr-avatar sr-avatar-sm"></span>').text(initials(emp.name)))
+                                            .append($('<span></span>').text(emp.name + ' (' + emp.emp_id + ')'))
+                                            .appendTo(list);
                                     });
                                     results.html(list);
                                 } else {
-                                    results.html('<p class="p-2 text-muted">No employees found.</p>');
+                                    results.html('<p class="p-2">No employees found.</p>');
                                 }
                             }
                         });
@@ -210,7 +241,13 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
 
                     $('#emp_id').val(empId);
                     $('#employeeSearch').val(empName);
-                    $('#selectedEmployee').html(`<strong>Selected:</strong> ${empName} (ID: ${empId})`).show();
+                    $('#selectedEmployee').empty()
+                        .append($('<span class="sr-avatar"></span>').text(initials(empName)))
+                        .append($('<div></div>')
+                            .append($('<div class="sr-cell-title"></div>').text(empName))
+                            .append($('<div class="sr-cell-sub"></div>').text('ID: ' + empId)))
+                        .show();
+                    $('#selectedEmployeeEmpty').hide();
                     $('#employeeSearchResults').empty();
                     $('#simpleLoanFormSection').slideDown();
                 });
@@ -220,7 +257,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
                     let total = parseFloat($('#total_loan_amount').val()) || 0;
                     let paid = parseFloat($('#paid_amount').val()) || 0;
                     let remaining = total - paid;
-                    $('#remaining_amount').val(remaining.toFixed(2));
+                    $('#remaining_amount').text(remaining.toFixed(2));
                 }
 
                 $('#total_loan_amount, #paid_amount').on('keyup change', calculateRemaining);

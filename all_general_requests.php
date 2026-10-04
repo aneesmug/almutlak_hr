@@ -21,6 +21,19 @@ if(mysqli_num_rows($query) == 1){
     include("./includes/avatar_select.php");
 }
 
+// Summary tiles: status value => [label, dot colour class]. '' = all statuses.
+$gr_status_tiles = [
+    ''                     => [__('all_statuses_option'), 'dot-all'],
+    'draft'                => [__('draft_status'), 'dot-slate'],
+    'pending_approval'     => [__('pending_approval'), 'dot-amber'],
+    'approved'             => [__('approved'), 'dot-indigo'],
+    'waiting_for_delivery' => [__('waiting_for_delivery', 'Waiting for Delivery'), 'dot-sky'],
+    'completed'            => [__('completed', 'Completed'), 'dot-green'],
+    'rejected'             => [__('rejected'), 'dot-red'],
+    'cancelled'            => [__('cancelled', 'Cancelled'), 'dot-slate'],
+];
+// Opens on "Pending approval" unless a link asks for another status (?status=...).
+$gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['status'], $gr_status_tiles)) ? (string)$_GET['status'] : 'pending_approval';
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -53,6 +66,7 @@ if(mysqli_num_rows($query) == 1){
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     
     <?php if ($is_rtl): ?>
@@ -81,63 +95,71 @@ if(mysqli_num_rows($query) == 1){
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
             
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
+                    <div class="sr-head">
+                        <div>
+                            <h1><?=__('all_general_requests', 'All General Requests')?></h1>
+                            <p><?= __('general_requests_subtitle', 'Requests sent to other departments, from approval to delivery.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <a href="new_general_request.php?id=<?= htmlspecialchars((string)($newinvgr ?? ''), ENT_QUOTES) ?>" class="sr-btn sr-btn-primary"><i class="fa fa-plus"></i> <?=__('new_request_button', 'New Request')?></a>
+                        </div>
+                    </div>
+
                     <?php if (isset($_GET['error']) && $_GET['error'] === 'request_not_found'): ?>
-                        <div class="alert alert-danger bg-danger text-white border-0" role="alert">
-                            <?= __('error_request_not_found', 'The requested item was not found or the link is invalid.') ?>
+                        <div class="sr-notice tone-red" role="alert">
+                            <i class="mdi mdi-alert-circle-outline"></i>
+                            <div><?= __('error_request_not_found', 'The requested item was not found or the link is invalid.') ?></div>
                         </div>
                     <?php endif; ?>
 
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box table-responsive">
-                                <h4 class="m-t-0 header-title">
-                                    <i class="mdi mdi-file-document-box-multiple-outline mr-2"></i>
-                                    <?=__('all_general_requests', 'All General Requests')?>
-                                </h4>
+                    <!-- Status summary tiles (also act as the status filter) -->
+                    <div class="sr-tiles" id="srTiles" role="tablist">
+                        <?php foreach ($gr_status_tiles as $tile_status => $tile): ?>
+                            <button type="button" class="sr-tile" data-status="<?= $tile_status ?>" role="tab">
+                                <span class="sr-tile-label"><span class="sr-dot <?= $tile[1] ?>"></span><?= htmlspecialchars($tile[0]) ?></span>
+                                <span class="sr-tile-value" data-count="<?= $tile_status === '' ? 'all' : $tile_status ?>">&ndash;</span>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
 
-                                <!-- Filters -->
-                                <div class="row mb-3">
-                                    <div class="col-md-2 offset-md-8">
-                                        <div class="form-group" style="margin-bottom: 0 !important">
-                                            <select class="form-control" name="status_filter" id="statusFilter">
-                                                <option value=""><?=__('all_statuses_option')?></option>
-                                                <option value="draft"><?=__('draft_status')?></option>
-                                                <option value="pending_approval" selected><?=__('pending_approval')?></option>
-                                                <option value="approved"><?=__('approved')?></option>
-                                                <option value="rejected"><?=__('rejected')?></option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <div class="form-group">
-                                            <input type="search" name="search" class="form-control" placeholder="<?=__('search_placeholder')?>" id="search" autocomplete="off">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- DataTable -->
-                                <table id="generalRequestsTbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                    <thead>
-                                        <tr>
-                                            <th><?=__('id')?></th>
-                                            <th><?=__('request_number', 'Request No.')?></th>
-                                            <th><?=__('request_title', 'Title')?></th>
-                                            <th><?=__('target_department', 'Target Dept.')?></th>
-                                            <th><?=__('category')?></th>
-                                            <th><?=__('priority')?></th>
-                                            <th><?=__('requester', 'Requester')?></th>
-                                            <th><?=__('created_at')?></th>
-                                            <th><?=__('status')?></th>
-                                            <th width="60"><?=__('action')?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Data will be loaded via AJAX -->
-                                    </tbody>
-                                </table>
+                    <div class="sr-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" name="search" placeholder="<?=__('search_placeholder')?>" id="search" autocomplete="off" aria-label="<?=__('search')?>">
                             </div>
+                            <div class="sr-toolbar-right">
+                                <span class="sr-active-filter" id="srActiveFilter"></span>
+                                <div id="srExportButtons"></div>
+                            </div>
+                            <!-- Kept as the single source of the status filter; the tiles drive it. -->
+                            <select class="d-none" name="status_filter" id="statusFilter" aria-hidden="true" tabindex="-1">
+                                <?php foreach ($gr_status_tiles as $tile_status => $tile): ?>
+                                    <option value="<?= $tile_status ?>"><?= htmlspecialchars($tile[0]) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table id="generalRequestsTbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?=__('id')?></th>
+                                        <th><?=__('request_number', 'Request No.')?></th>
+                                        <th><?=__('request_title', 'Title')?></th>
+                                        <th><?=__('target_department', 'Target Dept.')?></th>
+                                        <th><?=__('category')?></th>
+                                        <th><?=__('priority')?></th>
+                                        <th><?=__('requester', 'Requester')?></th>
+                                        <th><?=__('created_at')?></th>
+                                        <th><?=__('status')?></th>
+                                        <th class="text-right"><?=__('action')?></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -175,88 +197,56 @@ if(mysqli_num_rows($query) == 1){
     
     <script type="text/javascript">
         $(document).ready(function(){
-            var buttonConfig = [];
+            var table = null;
             var exportTitle = "<?=__('all_general_requests', 'All General Requests')?>";
             var columnNum = [ 1, 2, 3, 4, 5, 6, 7, 8 ];
-            
-            // Status object for badges
+
+            function esc(s) {
+                return String(s === null || s === undefined ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+            function initials(name) {
+                return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+            }
+
+            // Status / priority -> pill tone
             var statusObj = {
-                'draft':            { title: '<?=__('draft_status')?>', class: 'badge-secondary' },
-                'pending_approval': { title: '<?=__('pending_approval')?>', class: 'badge-warning' },
-                'approved':         { title: '<?=__('approved')?>', class: 'badge-success' },
-                'rejected':         { title: '<?=__('rejected')?>', class: 'badge-danger' }
+                'draft':                { title: '<?=__('draft_status')?>', tone: 'tone-slate' },
+                'pending_approval':     { title: '<?=__('pending_approval')?>', tone: 'tone-amber' },
+                'approved':             { title: '<?=__('approved')?>', tone: 'tone-indigo' },
+                'waiting_for_delivery': { title: '<?=__('waiting_for_delivery', 'Waiting for Delivery')?>', tone: 'tone-sky' },
+                'completed':            { title: '<?=__('completed', 'Completed')?>', tone: 'tone-green' },
+                'rejected':             { title: '<?=__('rejected')?>', tone: 'tone-red' },
+                'cancelled':            { title: '<?=__('cancelled', 'Cancelled')?>', tone: 'tone-slate' }
             };
-
-            // Priority object for badges
             var priorityObj = {
-                'low':    { title: '<?=__('low_priority', 'Low')?>', class: 'badge-info' },
-                'medium': { title: '<?=__('medium_priority', 'Medium')?>', class: 'badge-primary' },
-                'high':   { title: '<?=__('high_priority', 'High')?>', class: 'badge-warning' },
-                'urgent': { title: '<?=__('urgent_priority', 'Urgent')?>', class: 'badge-danger' }
+                'low':    { title: '<?=__('low_priority', 'Low')?>', tone: 'tone-sky' },
+                'medium': { title: '<?=__('medium_priority', 'Medium')?>', tone: 'tone-indigo' },
+                'high':   { title: '<?=__('high_priority', 'High')?>', tone: 'tone-amber' },
+                'urgent': { title: '<?=__('urgent_priority', 'Urgent')?>', tone: 'tone-red' }
             };
 
-            // Export buttons
-            buttonConfig.push({
-                extend: 'excel',
-                exportOptions: { columns: columnNum },
-                title: exportTitle,
-                className: 'btn-success'
-            });
-            buttonConfig.push({
-                extend: 'pdf',
-                exportOptions: { columns: columnNum },
-                title: exportTitle,
-                className: 'btn-danger'
-            });
-            buttonConfig.push({
-                extend: 'print',
-                exportOptions: { columns: columnNum },
-                title: exportTitle,
-                className: 'btn-dark'
-            });
-
-            // New Request button
-            buttonConfig.push({
-                text: '<i class="fa fa-plus"></i> <?=__('new_request_button', 'New Request')?>',
-                action: function ( e, dt, button, config ) {
-                    window.location = 'new_general_request.php?id=<?=$newinvgr ?>';
-                },
-                className: 'btn-info'
-            });
+            function setStatus(status, redraw) {
+                $('#statusFilter').val(status);
+                $('#srTiles .sr-tile').removeClass('active').attr('aria-selected', 'false')
+                    .filter('[data-status="' + status + '"]').addClass('active').attr('aria-selected', 'true');
+                var label = $('#statusFilter option:selected').text();
+                $('#srActiveFilter').html(status ? <?= json_encode(__('showing')) ?> + ': <strong>' + esc(label) + '</strong>' : '');
+                if (redraw !== false && table) table.draw();
+            }
+            setStatus(<?= json_encode($gr_default_status) ?>, false);
 
             // Initialize DataTable
-            var table = $('#generalRequestsTbl').DataTable({
-                dom: "Bfrtip",
+            table = $('#generalRequestsTbl').DataTable({
+                dom: "Brtip",
                 serverSide: true,
-                buttons: buttonConfig,
-                order: [[ 0, "desc" ]],
-                columnDefs: [
-                    {
-                        targets: [ 0 ],
-                        visible: false,
-                        searchable: false
-                    },
-                    {
-                        targets: 5, // Priority column
-                        render: function ( data, type, row, meta ) {
-                            let title = (data in priorityObj) ? priorityObj[data].title : data;
-                            let className = (data in priorityObj) ? priorityObj[data].class : 'badge-secondary';
-                            return `<span class="badge ${className}">${title}</span>`;
-                        }
-                    },
-                    {
-                        targets: 8, // Status column
-                        render: function ( data, type, row, meta ) {
-                            let title = (data in statusObj) ? statusObj[data].title : data;
-                            let className = (data in statusObj) ? statusObj[data].class : 'badge-secondary';
-                            
-                            if (data === 'pending_approval' && row.current_approval_level) {
-                                title = title + ' (L' + row.current_approval_level + ')';
-                            }
-                            
-                            return `<span class="badge ${className}" text-capitalized>${title}</span>`;
-                        }
-                    }
+                ordering: false, // server always lists newest first
+                pageLength: 15,
+                buttons: [
+                    { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle },
+                    { extend: 'pdf',   text: '<i class="mdi mdi-file-pdf"></i> PDF',     exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle },
+                    { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + <?= json_encode(__('print')) ?>, exportOptions: { columns: columnNum, orthogonal: 'export' }, title: exportTitle }
                 ],
                 processing: true,
                 responsive: true,
@@ -270,53 +260,106 @@ if(mysqli_num_rows($query) == 1){
                         d.emp_id    = '<?=$empid?>';
                         d.status    = $('#statusFilter').val();
                         d.search    = $('#search').val();
+                        d.withCounts = 1;
                     },
+                    dataSrc: function (json) {
+                        var counts = json.counts || {};
+                        $('#srTiles [data-count]').each(function () {
+                            var key = $(this).data('count');
+                            $(this).text(counts[key] !== undefined ? counts[key] : '0');
+                        });
+                        return json.data;
+                    }
                 },
                 columns: [
-                    { data: 'id' },
-                    { data: 'inv_no' },
-                    { data: 'request_title' },
-                    { data: 'department_to' },
-                    { data: 'request_category' },
-                    { data: 'priority' },
-                    { data: 'emp_name' },
-                    { data: 'created_at' },
-                    { data: 'current_status' },
-                    { data: 'action' },
+                    { data: 'id', visible: false, searchable: false },
+                    {
+                        data: 'inv_no',
+                        render: function (data, type) {
+                            if (type !== 'display') return data;
+                            return '<span class="sr-chip sr-mono">' + esc(data) + '</span>';
+                        }
+                    },
+                    {
+                        data: 'request_title',
+                        render: function (data, type, row) {
+                            if (type !== 'display') return data;
+                            return '<span class="sr-cell-title" title="' + esc(data) + '">' + esc(data) + '</span>'
+                                + (row.request_category ? '<span class="sr-cell-sub"><i class="mdi mdi-tag-outline"></i>' + esc(row.request_category) + '</span>' : '');
+                        }
+                    },
+                    { data: 'department_to', render: function (data, type) { return type === 'display' ? esc(data) : data; } },
+                    { data: 'request_category', visible: false },
+                    {
+                        data: 'priority',
+                        render: function (data, type) {
+                            var p = (data in priorityObj) ? priorityObj[data] : { title: data, tone: 'tone-slate' };
+                            if (type !== 'display') return p.title;
+                            return '<span class="sr-pill sr-pill-xs ' + p.tone + '">' + esc(p.title) + '</span>';
+                        }
+                    },
+                    {
+                        data: 'emp_name',
+                        render: function (data, type) {
+                            if (type !== 'display') return data;
+                            return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + esc(initials(data)) + '</span>'
+                                + '<span class="sr-person-name">' + esc(data) + '</span></div>';
+                        }
+                    },
+                    { data: 'created_at', render: function (data, type) { return type === 'display' ? '<span class="sr-date">' + esc(data) + '</span>' : data; } },
+                    {
+                        data: 'current_status',
+                        render: function (data, type, row) {
+                            var title = (data in statusObj) ? statusObj[data].title : data;
+                            var tone = (data in statusObj) ? statusObj[data].tone : 'tone-slate';
+                            if (data === 'pending_approval' && row.current_approval_level) {
+                                title += ' · ' + __('level') + ' ' + row.current_approval_level;
+                            }
+                            if (type !== 'display') return title;
+                            return '<span class="sr-pill ' + tone + '"><span class="sr-dot"></span>' + esc(title) + '</span>';
+                        }
+                    },
+                    { data: 'action', className: 'text-right', searchable: false },
                     { data: 'current_approval_level', visible: false, searchable: false }
                 ],
                 language: {
-                    search: `<span>${__('search')}:</span> _INPUT_`,
-                    searchPlaceholder: `${__('search')}...`,
                     lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                     info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
                     infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                    infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                    infoFiltered: '',
                     paginate: {
                         first: __('first'),
                         last: __('last'),
-                        next: __('next'),
-                        previous: __('previous')
+                        next: '<i class="mdi mdi-chevron-right"></i>',
+                        previous: '<i class="mdi mdi-chevron-left"></i>'
                     },
-                    emptyTable: __('no_data_available_in_table'),
-                    zeroRecords: __('no_matching_records_found'),
-                    processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                    emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+                    zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+                    processing: `<div class="spinner-border text-primary" role="status"><span class="sr-only">${__('loading')}...</span></div>`
                 }
             });
-            
-            // Status filter change
-            $('#statusFilter').change(function () {
-                table.draw();
+
+            // Export buttons live in the toolbar
+            table.buttons().container().appendTo('#srExportButtons');
+
+            // Whole row opens the request (except clicks on links/buttons/dropdowns)
+            $('#generalRequestsTbl tbody').on('click', 'tr', function (e) {
+                if ($(e.target).closest('a, button, .dropdown-menu, .dtr-control').length) return;
+                if ($(this).hasClass('child')) return;
+                var row = table.row(this).data();
+                if (row && row.inv_no) window.location = 'view_general_request.php?id=' + encodeURIComponent(row.inv_no);
             });
 
-            // Search functionality
-            $('#search').keyup(function(){
-                table.search($(this).val()).draw();
+            $('#srTiles').on('click', '.sr-tile', function () {
+                setStatus($(this).data('status') + '');
             });
 
-            // Remove default search box
-            $('#generalRequestsTbl_filter').remove();
-            
+            var searchTimer = null;
+            $('#search').on('input', function () {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(function () { table.draw(); }, 300);
+            });
+
             // Delete request handler
             $(document).on('click', '.deleteRequest', function() {
                 const inv_no = $(this).data('id');

@@ -61,7 +61,10 @@ $baseSql = "FROM `general_requests` `gr`
             LEFT JOIN `request_approvers` `ra_fin` ON `gr`.`inv_no` = `ra_fin`.`request_inv_no`
                 AND `ra_fin`.`request_type_id` = ".(int)$request_type_id."
                 AND `ra_fin`.`approver_id` = ".(int)$emp_id."
-            WHERE 1 {$searchQuery} {$statusSearchQuery}";
+            WHERE 1 {$searchQuery}";
+// Same scope without the status filter - used for the per-status summary tiles
+$baseSqlAllStatuses = $baseSql;
+$baseSql .= " {$statusSearchQuery}";
 
 // Role-based filtering - similar to smart_request
 $additionalConditions = "";
@@ -100,6 +103,7 @@ $sql = "SELECT
             `gr`.`request_category`,
             `gr`.`priority`,
             `gr`.`emp_name`,
+            `gr`.`emp_id`,
             `gr`.`created_at`,
             `gr`.`current_status`,
             `gr`.`current_approval_level`,
@@ -129,27 +133,30 @@ $data = array();
 if ($query) {
     while ($row = mysqli_fetch_assoc($query)) {
         // Build action buttons
-        $actionButtons = "<div class='btn-group dropdown'>
-                            <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
+        $invSafe = htmlspecialchars((string)$row['inv_no'], ENT_QUOTES);
+        $actionButtons = "<div class='sr-actions'>
+                            <a href='view_general_request.php?id=".$invSafe."' class='sr-open-btn' title='".__('open')."'><i class='mdi mdi-eye-outline'></i> ".__('open')."</a>
+                            <div class='btn-group dropdown'>
+                            <a href='javascript: void(0);' class='sr-more-btn dropdown-toggle arrow-none' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-vertical'></i></a>
                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                <a href='view_general_request.php?id=".$row['inv_no']."' class='dropdown-item text-dark'><i class='mdi mdi-eye-outline'></i> ".__('view')."</a>";
+                                <a href='view_general_request.php?id=".$invSafe."' class='dropdown-item text-dark'><i class='mdi mdi-eye-outline'></i>".__('view')."</a>";
         
         // Allow delete only for draft status and creator
         if ($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$row['inv_no']."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('delete')."</a>";
+            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash'></i>".__('delete')."</a>";
         }
 
         // Creator can self-cancel while pending/approved (soft cancel, keeps history)
         if (in_array($row['current_status'], ['pending_approval', 'approved'], true) && $row['emp_id'] == $emp_id) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger cancelGeneralRequestSelf' data-id='".$row['inv_no']."'><i class='fa fa-ban mr-2 font-18 vertical-middle'></i>".__('cancel_request', 'Cancel Request')."</a>";
+            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger cancelGeneralRequestSelf' data-id='".$invSafe."'><i class='fa fa-ban'></i>".__('cancel_request', 'Cancel Request')."</a>";
         }
 
         // Administrator or special-access grantee can cancel/delete any request
         if ($canCancelAnyGeneralRequest && !($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id)) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$row['inv_no']."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('cancel', 'Cancel')."</a>";
+            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash'></i>".__('cancel', 'Cancel')."</a>";
         }
         
-        $actionButtons .= "</div></div>";
+        $actionButtons .= "</div></div></div>";
         
         $data[] = array(
             "id"                     => $row['id'],
@@ -169,11 +176,25 @@ if ($query) {
     }
 }
 
+## Per-status counts for the summary tiles (same scope/search, every status)
+$counts = ['all' => 0];
+if (!empty($_POST['withCounts'])) {
+    $countSql = "SELECT `t`.`current_status`, COUNT(*) AS `c` FROM (
+                    SELECT DISTINCT `gr`.`id`, `gr`.`current_status` " . $baseSqlAllStatuses . $additionalConditions . "
+                 ) `t` GROUP BY `t`.`current_status`";
+    $countRes = mysqli_query($conDB, $countSql);
+    while ($countRes && ($cr = mysqli_fetch_assoc($countRes))) {
+        $counts[$cr['current_status']] = (int)$cr['c'];
+        $counts['all'] += (int)$cr['c'];
+    }
+}
+
 ## Response
 $response = array(
     "draw"            => intval($draw),
     "recordsTotal"    => $totalRecords,
     "recordsFiltered" => $recordsFiltered,
+    "counts"          => $counts,
     "data"            => $data
 );
 

@@ -48,6 +48,7 @@
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
         <style>
             .swal2-html-container{
@@ -839,6 +840,40 @@
                     margin-right: 14px;
                 }
             }
+
+            /* ---------- New GUI (sr-* design system) overrides ---------- */
+            .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            @media (max-width: 991px) { .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+            @media (max-width: 575px) { .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            .sr-page .pg-tile { position: relative; cursor: default; }
+            .sr-page .pg-tile:hover { transform: none; }
+            .pg-tile-icon { position: absolute; top: 14px; inset-inline-end: 14px; font-size: 18px; color: var(--sr-border-strong); }
+            .sr-page .payroll-toolbar { background: var(--sr-surface-2); border: 1px solid var(--sr-border); border-radius: var(--sr-radius); box-shadow: none; }
+            .sr-page .payroll-month-card { background: var(--sr-surface); border-color: var(--sr-border); border-radius: 12px; }
+            .sr-page .payroll-month-label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+            .sr-page .payroll-month-value { color: var(--sr-accent-strong); background: var(--sr-accent-soft); border-color: var(--tone-indigo-bd); }
+            .sr-page .payroll-month-btn, .sr-page .payroll-month-input, .sr-page .payroll-filter-input,
+            .sr-page .payroll-filter-control .select2-container--default .select2-selection--multiple,
+            .sr-page .payroll-filter-control .select2-container--default .select2-selection--single {
+                border-color: var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text); border-radius: 10px;
+            }
+            .sr-page .payroll-month-btn:hover { background: var(--sr-accent-soft); border-color: var(--sr-accent); }
+            .sr-page .payroll-month-today-btn { border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text-2); }
+            .sr-page .payroll-month-today-btn:hover { border-color: var(--sr-accent); color: var(--sr-accent-strong); }
+            .sr-page #payrollActionsToggle { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; border-radius: 10px; }
+            .sr-page #payrollActionsToggle:hover:not(:disabled) { background: var(--sr-accent-strong); }
+            .sr-page .pg-edit-generated { background: var(--tone-amber-bg); border-color: var(--tone-amber-bd); color: var(--tone-amber-fg) !important; }
+            .sr-page .pg-dt-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 12px; }
+            .sr-page .pg-dt-top .dataTables_length, .sr-page .pg-dt-top .dataTables_filter { margin: 0; padding: 0; float: none; }
+            .sr-page .pg-dt-top label { margin: 0; font-size: 12px; color: var(--sr-muted); display: inline-flex; align-items: center; gap: 6px; }
+            .sr-page .pg-dt-top select, .sr-page .pg-dt-top input[type=search] {
+                height: 36px; border-radius: 10px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text); font-size: 13px; margin: 0 !important;
+            }
+            .sr-page .pg-dt-top input[type=search] { min-width: 240px; padding: 0 12px; }
+            .sr-page .pg-dt-top input[type=search]:focus { outline: 0; background: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+            .sr-page .pg-dt-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+            .sr-page #employeeTable tbody tr { cursor: default; }
+            .sr-page #employeeTable input[type=checkbox], .sr-page #selectAllEmployees { width: 16px; height: 16px; accent-color: var(--sr-accent); }
         </style>
         <?php if ($is_rtl ?? false): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -894,74 +929,46 @@
 
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box table-responsive">
-                                    <!-- <a href="add_car.php" class="btn btn-primary waves-effect"><i class="mdi mdi-car"></i> Add New Car</a> -->
-                                    <h4 class="m-t-0 header-title"><?=__('employee_payroll_management')?></h4>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?=__('employee_payroll_management')?></h1>
+                                <p><?= __('payroll_page_sub', 'Generate, review and send the monthly payroll for approval.') ?></p>
+                            </div>
+                        </div>
 
-                                    <div class="card-body">
-                                        <!-- Payroll Summary Cards -->
-                                        <div class="row text-center payroll-summary-cards-row">
-                                            <div class="col-sm-6 col-xl">
-                                                <div class="stats-card professional-theme payroll-stats-card" data-color="success">
-                                                    <div class="stats-card-icon professional-theme" data-color="success">
-                                                        <div class="stats-card-count-circle" id="statGeneratedCount">0</div>
-                                                        <i class="fa fa-solid fa-check"></i>
-                                                    </div>
-                                                    <div class="stats-card-content">
-                                                        <div class="stats-card-label"><?= __('generated_badge', 'Generated') ?></div>
-                                                    </div>
-                                                </div>
+                                        <!-- Payroll Summary (counts filled by updatePayrollSummaryCards) -->
+                                        <div class="sr-tiles pg-tiles">
+                                            <div class="sr-tile pg-tile">
+                                                <span class="sr-tile-label"><span class="sr-dot dot-indigo"></span><?= __('generated_badge', 'Generated') ?></span>
+                                                <span class="sr-tile-value" id="statGeneratedCount">0</span>
+                                                <i class="fa fa-solid fa-check pg-tile-icon"></i>
                                             </div>
-                                            <div class="col-sm-6 col-xl">
-                                                <div class="stats-card professional-theme payroll-stats-card" data-color="secondary">
-                                                    <div class="stats-card-icon professional-theme" data-color="secondary">
-                                                        <div class="stats-card-count-circle" id="statNotGeneratedCount">0</div>
-                                                        <i class="fa fa-solid fa-hourglass-half"></i>
-                                                    </div>
-                                                    <div class="stats-card-content">
-                                                        <div class="stats-card-label"><?= __('not_generated', 'Un-Generated') ?></div>
-                                                    </div>
-                                                </div>
+                                            <div class="sr-tile pg-tile">
+                                                <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('not_generated', 'Un-Generated') ?></span>
+                                                <span class="sr-tile-value" id="statNotGeneratedCount">0</span>
+                                                <i class="fa fa-solid fa-hourglass-half pg-tile-icon"></i>
                                             </div>
-                                            <div class="col-sm-6 col-xl">
-                                                <div class="stats-card professional-theme payroll-stats-card" data-color="danger">
-                                                    <div class="stats-card-icon professional-theme" data-color="danger">
-                                                        <div class="stats-card-count-circle" id="statHoldCount">0</div>
-                                                        <i class="fa fa-solid fa-pause"></i>
-                                                    </div>
-                                                    <div class="stats-card-content">
-                                                        <div class="stats-card-label"><?= __('payroll_on_hold', 'On Hold') ?></div>
-                                                    </div>
-                                                </div>
+                                            <div class="sr-tile pg-tile">
+                                                <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('payroll_on_hold', 'On Hold') ?></span>
+                                                <span class="sr-tile-value" id="statHoldCount">0</span>
+                                                <i class="fa fa-solid fa-pause pg-tile-icon"></i>
                                             </div>
-                                            <div class="col-sm-6 col-xl">
-                                                <div class="stats-card professional-theme payroll-stats-card" data-color="info">
-                                                    <div class="stats-card-icon professional-theme" data-color="info">
-                                                        <div class="stats-card-count-circle" id="statBankCount">0</div>
-                                                        <i class="fa fa-solid fa-building-columns"></i>
-                                                    </div>
-                                                    <div class="stats-card-content">
-                                                        <div class="stats-card-label"><?= __('bank_option', 'Bank') ?></div>
-                                                    </div>
-                                                </div>
+                                            <div class="sr-tile pg-tile">
+                                                <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('bank_option', 'Bank') ?></span>
+                                                <span class="sr-tile-value" id="statBankCount">0</span>
+                                                <i class="fa fa-solid fa-building-columns pg-tile-icon"></i>
                                             </div>
-                                            <div class="col-sm-6 col-xl">
-                                                <div class="stats-card professional-theme payroll-stats-card" data-color="purple">
-                                                    <div class="stats-card-icon professional-theme" data-color="purple">
-                                                        <div class="stats-card-count-circle" id="statCashCount">0</div>
-                                                        <i class="fa fa-solid fa-money-bill-wave"></i>
-                                                    </div>
-                                                    <div class="stats-card-content">
-                                                        <div class="stats-card-label"><?= __('cash_option', 'Cash') ?></div>
-                                                    </div>
-                                                </div>
+                                            <div class="sr-tile pg-tile">
+                                                <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('cash_option', 'Cash') ?></span>
+                                                <span class="sr-tile-value" id="statCashCount">0</span>
+                                                <i class="fa fa-solid fa-money-bill-wave pg-tile-icon"></i>
                                             </div>
                                         </div>
 
+                                    <div class="sr-card">
+                                    <div class="sr-card-body">
                                         <!-- Controls Section -->
                                         <div class="payroll-toolbar">
                                             <div class="payroll-toolbar-grid">
@@ -978,7 +985,7 @@
                                                         <button type="button" id="nextPayrollMonthBtn" class="btn payroll-month-btn" title="Next month">
                                                             <i class="mdi mdi-chevron-right"></i>
                                                         </button>
-                                                        <button type="button" id="currentPayrollMonthBtn" class="btn btn-outline-primary payroll-month-today-btn" title="Current month">
+                                                        <button type="button" id="currentPayrollMonthBtn" class="btn payroll-month-today-btn" title="Current month">
                                                             <?= __('today') ?: 'Current' ?>
                                                         </button>
                                                     </div>
@@ -1083,11 +1090,11 @@
                                             <div class="mt-2 text-muted"><?= __('loading') ?>...</div>
                                         </div>
 
-                                        <div id="noDataMessage" class="alert alert-info text-center d-none" role="alert"></div>
+                                        <div id="noDataMessage" class="sr-empty d-none" role="alert"></div>
 
                                         <div id="employeeTableWrapper" class="table-responsive" style="display:none;">
-                                            <table id="employeeTable" class="table table-striped table-hover align-middle w-100">
-                                                <thead class="table-light">
+                                            <table id="employeeTable" class="table sr-table w-100">
+                                                <thead>
                                                     <tr>
                                                         <th scope="col" class="text-center" style="width: 50px;">
                                                             <input class="" type="checkbox" id="selectAllEmployees">
@@ -1106,13 +1113,7 @@
                                             </table>
                                         </div>
                                     </div>
-
-
-                                </div>
-                            </div>
-                        </div>
-
-
+                                    </div>
                     </div> <!-- container -->
 
                 </div> <!-- content -->
@@ -2117,7 +2118,7 @@ function initializeDataTable() {
                     // Check if payroll is on hold (payment_type = 3)
                     const isPayrollOnHold = row.payment_type === 3 || row.payment_type === '3';
                     if (isPayrollOnHold) {
-                        return `<span class="badge badge-warning" style="background-color: #ff9800;"><i class="mdi mdi-pause-circle"></i> ${__('payroll_on_hold')}</span>`;
+                        return `<span class="sr-pill sr-pill-xs tone-amber"><i class="mdi mdi-pause-circle"></i> ${__('payroll_on_hold')}</span>`;
                     }
                     
                     // Check if payroll is generated for the current month
@@ -2125,27 +2126,35 @@ function initializeDataTable() {
                     const isPayrollGenerated = row.payroll_status && (row.payroll_status === 'generated');
                     const isPayrollPaid = row.payroll_status && (row.payroll_status === 'paid');
                     if (isPayrollGenerated) {
-                        return `<span class="badge badge-primary">${__('generated_badge')}</span>`;
+                        return `<span class="sr-pill sr-pill-xs tone-indigo"><i class="mdi mdi-check"></i> ${__('generated_badge')}</span>`;
                     } else if (isPayrollPaid){
-                        return `<span class="badge badge-success"><i class="fa fa-certificate"></i> ${__('paid_badge')}</span>`;
+                        return `<span class="sr-pill sr-pill-xs tone-green"><i class="fa fa-certificate"></i> ${__('paid_badge')}</span>`;
                     }
                     return `<input type="checkbox" class="employee-checkbox" data-emp-id="${row.emp_id}">`;
                 }
             },
-            { data: 'emp_id' },
-            { data: 'parsed_name' }, // parseName()'d short name (get_employees.php already computes this)
+            { data: 'emp_id', render: function(data, type) { return type === 'display' ? '<span class="sr-chip sr-mono">' + $('<div>').text(data).html() + '</span>' : data; } },
+            {
+                data: 'parsed_name', // parseName()'d short name (get_employees.php already computes this)
+                render: function(data, type) {
+                    if (type !== 'display') return data;
+                    const nm = String(data || '');
+                    const ini = nm.trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+                    return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + $('<div>').text(ini).html() + '</span><span class="sr-person-name">' + $('<div>').text(nm).html() + '</span></div>';
+                }
+            },
                 { data: 'comp_name' }, // Company name
                 { 
                     data: 'payment_type',
                     render: function(data) {
                         const pt = parseInt(data || 1, 10);
                         if (pt === 2) {
-                            return `<span class="badge badge-info">${__('cash_option') || 'Cash'}</span>`;
+                            return `<span class="sr-pill sr-pill-xs tone-green"><i class="fa fa-money-bill-wave"></i> ${__('cash_option') || 'Cash'}</span>`;
                         }
                         if (pt === 3) {
-                            return `<span class="badge badge-warning" style="background-color: #ff9800;">${__('hold_option') || 'Hold'}</span>`;
+                            return `<span class="sr-pill sr-pill-xs tone-amber"><i class="fa fa-pause"></i> ${__('hold_option') || 'Hold'}</span>`;
                         }
-                        return `<span class="badge badge-primary">${__('bank_option') || 'Bank'}</span>`;
+                        return `<span class="sr-pill sr-pill-xs tone-sky"><i class="fa fa-building-columns"></i> ${__('bank_option') || 'Bank'}</span>`;
                     }
                 },
             {
@@ -2155,7 +2164,7 @@ function initializeDataTable() {
                     if (type === 'sort' || type === 'type') {
                         return numericValue;
                     }
-                    return `<i class="icon-saudi_riyal"></i> ${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    return `<span class="sr-money">${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <i class="icon-saudi_riyal"></i></span>`;
                 }
             },
             {
@@ -2169,15 +2178,15 @@ function initializeDataTable() {
                     // (view-edit-btn's own delegated click handler decides read-only mode
                     // from the fetched payroll's own status, see showPayrollDetails()).
                     if (isPayrollPaid) {
-                        return `<button class="btn btn-secondary btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${__('view_payroll_readonly_title', 'View payroll (read-only, already paid)')}">
+                        return `<button class="sr-btn sr-btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${__('view_payroll_readonly_title', 'View payroll (read-only, already paid)')}">
                                     <i class="mdi mdi-eye-outline"></i> ${__('view_only_button', 'View Only')}
                                 </button>`;
                     }
                     
                     // Edit button for both pending and generated (warning color for generated)
-                    const buttonColor = isPayrollGenerated ? 'btn-warning' : 'btn-dark';
+                    const buttonColor = isPayrollGenerated ? 'pg-edit-generated' : 'sr-btn-primary';
                     const buttonTitle = isPayrollGenerated ? __('edit_generated_payroll_title') : __('create_edit_payroll_title');
-                    return `<button class="btn ${buttonColor} btn-sm view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${buttonTitle}">
+                    return `<button class="sr-btn sr-btn-sm ${buttonColor} view-edit-btn" data-emp-id="${row.emp_id}" data-emp-name="${row.name}" title="${buttonTitle}">
                                 <i class="mdi mdi-account-edit"></i> ${__('edit')}
                             </button>`;
                 }
@@ -2196,14 +2205,14 @@ function initializeDataTable() {
             paginate: {
                 first: __('first'),
                 last: __('last'),
-                next: __('next'),
-                previous: __('previous')
+                next: '<i class="mdi mdi-chevron-right"></i>',
+                previous: '<i class="mdi mdi-chevron-left"></i>'
             },
-            emptyTable: __('no_data_available_in_table'),
-            zeroRecords: __('no_matching_records_found'),
+            emptyTable: `<div class="sr-empty"><i class="mdi mdi-inbox"></i>${__('no_data_available_in_table')}</div>`,
+            zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
             processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
         },
-        // dom: '<"flex justify-between items-center mb-4"lf>rt<"flex justify-between items-center mt-4"ip>',
+        dom: '<"pg-dt-top"lf>rt<"pg-dt-bottom"ip>',
         // The `initComplete` function is crucial for attaching event listeners after DataTables has drawn the table.
         initComplete: function() {
             addEventListeners(); // Initial attachment of listeners

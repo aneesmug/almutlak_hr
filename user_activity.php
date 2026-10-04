@@ -44,78 +44,13 @@ if (mysqli_num_rows($query) == 1) {
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
         <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
 
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <style type="text/css">
-            .activity-card {
-                border-left: 4px solid #5b73e8;
-                margin-bottom: 1rem;
-            }
-
-            .device-icon {
-                font-size: 2rem;
-                color: #5b73e8;
-            }
-
-            .location-badge {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 0.25rem 0.75rem;
-                border-radius: 20px;
-                font-size: 0.85rem;
-            }
-
-            .status-active {
-                background-color: #1abc9c;
-            }
-
-            .status-logged-out {
-                background-color: #95a5a6;
-            }
-
-            .status-timeout {
-                background-color: #e74c3c;
-            }
-
-            .info-label {
-                font-weight: 600;
-                color: #6c757d;
-                font-size: 0.85rem;
-            }
-
-            .info-value {
-                color: #343a40;
-                font-size: 0.9rem;
-            }
-
-            .dt-button-down-arrow {
-                display: none !important;
-            }
-
-            .badge-border-success {
-                border: 2px solid #1abc9c;
-                color: #1abc9c;
-                background: transparent;
-                padding: 0.35rem 0.65rem;
-                border-radius: 4px;
-                font-weight: 600;
-            }
-
-            .badge-border-danger {
-                border: 2px solid #e74c3c;
-                color: #e74c3c;
-                background: transparent;
-                padding: 0.35rem 0.65rem;
-                border-radius: 4px;
-                font-weight: 600;
-            }
-
-            .badge-border-secondary {
-                border: 2px solid #95a5a6;
-                color: #95a5a6;
-                background: transparent;
-                padding: 0.35rem 0.65rem;
-                border-radius: 4px;
-                font-weight: 600;
-            }
+            .ua-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+            @media (max-width: 991px) { .ua-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            .ua-stats .sr-stat { background: var(--sr-surface); }
+            .ua-filters { border-bottom: 1px solid var(--sr-border); }
+            .dt-button-down-arrow { display: none !important; }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -162,151 +97,97 @@ if (mysqli_num_rows($query) == 1) {
                 <!-- Top Bar End -->
 
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box">
-                                    <h4 class="m-t-0 header-title">
-                                        <i class="mdi mdi-shield-account-outline mr-2"></i>
-                                        <?= __('user_activity_log') ?? 'User Activity Log' ?>
-                                    </h4>
-                                    <p class="text-muted font-14 mb-4">
-                                        <?= __('user_activity_description') ?? 'Track user login sessions, location, device information, and browsing details.' ?>
-                                    </p>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('user_activity_log') ?? 'User Activity Log' ?></h1>
+                                <p><?= __('user_activity_description') ?? 'Track user login sessions, location, device information, and browsing details.' ?></p>
+                            </div>
+                        </div>
 
-                                    <div class="row mb-3">
-                                        <div class="col-md-3">
-                                            <div class="card mini-stat bg-primary text-white">
-                                                <div class="card-body">
-                                                    <div class="mb-4">
-                                                        <div class="float-left mini-stat-img mr-4">
-                                                            <i class="mdi mdi-account-check font-40"></i>
-                                                        </div>
-                                                        <h5 class="font-16 text-uppercase text-white-50 mt-0">
-                                                            <?= __('active_sessions') ?? 'Active Sessions' ?>
-                                                        </h5>
-                                                        <h4 class="font-500" id="active-sessions-count">
-                                                            <i class="mdi mdi-spin mdi-loading"></i>
-                                                        </h4>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                        <div class="ua-stats">
+                            <div class="sr-stat is-green">
+                                <div class="sr-stat-label"><?= __('active_sessions') ?? 'Active Sessions' ?> <i class="mdi mdi-account-check"></i></div>
+                                <div class="sr-stat-value" id="active-sessions-count"><i class="mdi mdi-spin mdi-loading"></i></div>
+                            </div>
+                            <div class="sr-stat is-sky">
+                                <div class="sr-stat-label"><?= __('today_logins') ?? 'Today\'s Logins' ?> <i class="mdi mdi-calendar-today"></i></div>
+                                <div class="sr-stat-value" id="today-logins-count"><i class="mdi mdi-spin mdi-loading"></i></div>
+                            </div>
+                            <div class="sr-stat is-amber">
+                                <div class="sr-stat-label"><?= __('unique_locations') ?? 'Unique Locations' ?> <i class="mdi mdi-earth"></i></div>
+                                <div class="sr-stat-value" id="unique-locations-count"><i class="mdi mdi-spin mdi-loading"></i></div>
+                            </div>
+                            <div class="sr-stat">
+                                <div class="sr-stat-label"><?= __('device_types') ?? 'Device Types' ?> <i class="mdi mdi-cellphone-link"></i></div>
+                                <div class="sr-stat-value" id="device-types-count"><i class="mdi mdi-spin mdi-loading"></i></div>
+                            </div>
+                        </div>
 
-                                        <div class="col-md-3">
-                                            <div class="card mini-stat bg-success text-white">
-                                                <div class="card-body">
-                                                    <div class="mb-4">
-                                                        <div class="float-left mini-stat-img mr-4">
-                                                            <i class="mdi mdi-calendar-today font-40"></i>
-                                                        </div>
-                                                        <h5 class="font-16 text-uppercase text-white-50 mt-0">
-                                                            <?= __('today_logins') ?? 'Today\'s Logins' ?>
-                                                        </h5>
-                                                        <h4 class="font-500" id="today-logins-count">
-                                                            <i class="mdi mdi-spin mdi-loading"></i>
-                                                        </h4>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-md-3">
-                                            <div class="card mini-stat bg-warning text-white">
-                                                <div class="card-body">
-                                                    <div class="mb-4">
-                                                        <div class="float-left mini-stat-img mr-4">
-                                                            <i class="mdi mdi-earth font-40"></i>
-                                                        </div>
-                                                        <h5 class="font-16 text-uppercase text-white-50 mt-0">
-                                                            <?= __('unique_locations') ?? 'Unique Locations' ?>
-                                                        </h5>
-                                                        <h4 class="font-500" id="unique-locations-count">
-                                                            <i class="mdi mdi-spin mdi-loading"></i>
-                                                        </h4>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-md-3">
-                                            <div class="card mini-stat bg-info text-white">
-                                                <div class="card-body">
-                                                    <div class="mb-4">
-                                                        <div class="float-left mini-stat-img mr-4">
-                                                            <i class="mdi mdi-devices font-40"></i>
-                                                        </div>
-                                                        <h5 class="font-16 text-uppercase text-white-50 mt-0">
-                                                            <?= __('device_types') ?? 'Device Types' ?>
-                                                        </h5>
-                                                        <h4 class="font-500" id="device-types-count">
-                                                            <i class="mdi mdi-spin mdi-loading"></i>
-                                                        </h4>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="row mb-3">
-                                        <div class="col-12">
-                                            <div class="card-box">
-                                                <h4 class="m-t-0 header-title"><i class="mdi mdi-map-marker-radius mr-2"></i><?= __('login_map') ?? 'Login Map' ?></h4>
-                                                <p class="text-muted font-14 mb-2"><?= __('login_map_desc') ?? 'Geographic view of recent user login locations (last 500 records with coordinates).' ?></p>
-                                                <div id="activity-map" style="height:420px; border-radius:12px; overflow:hidden; position:relative;">
-                                                    <div id="map-loading" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; display:none;">
-                                                        <i class="mdi mdi-spin mdi-loading" style="font-size:48px; color:#5b73e8;"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="d-flex justify-content-between align-items-center row pb-2 gap-3 gap-md-0">
-                                        <div class="col-md-3 mb-2">
-                                            <label class="font-weight-bold mb-1"><?= __('filter_by_user', 'Filter by User') ?>:</label>
-                                            <div class="user_filter"></div>
-                                        </div>
-                                        <div class="col-md-3 mb-2">
-                                            <label class="font-weight-bold mb-1"><?= __('filter_by_status', 'Filter by Status') ?>:</label>
-                                            <div class="status_filter"></div>
-                                        </div>
-                                        <div class="col-md-3 mb-2">
-                                            <label class="font-weight-bold mb-1"><?= __('filter_by_device', 'Filter by Device') ?>:</label>
-                                            <div class="device_filter"></div>
-                                        </div>
-                                        <div class="col-md-3 mb-2">
-                                            <label class="font-weight-bold mb-1"><?= __('filter_by_location', 'Filter by Location') ?>:</label>
-                                            <div class="location_filter"></div>
-                                        </div>
-                                    </div>
-
-                                    <div class="table-responsive">
-                                        <table id="activity_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                            <thead>
-                                                <tr>
-                                                    <th>ID</th>
-                                                    <th><?= __('user') ?? 'User' ?></th>
-                                                    <th><?= __('login_time') ?? 'Login Time' ?></th>
-                                                    <th><?= __('logout_time') ?? 'Logout Time' ?></th>
-                                                    <th><?= __('duration') ?? 'Duration' ?></th>
-                                                    <th><?= __('ip_address') ?? 'IP Address' ?></th>
-                                                    <th><?= __('location') ?? 'Location' ?></th>
-                                                    <th><?= __('device') ?? 'Device' ?></th>
-                                                    <th><?= __('browser') ?? 'Browser' ?></th>
-                                                    <th><?= __('os') ?? 'OS' ?></th>
-                                                    <th><?= __('screen') ?? 'Screen' ?></th>
-                                                    <th><?= __('status') ?? 'Status' ?></th>
-                                                    <th><?= __('action') ?? 'Action' ?></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <!-- Data will be loaded via AJAX/Server-side -->
-                                            </tbody>
-                                        </table>
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-map-marker-radius"></i> <?= __('login_map') ?? 'Login Map' ?></h2>
+                                <span class="sr-card-sub"><?= __('login_map_desc') ?? 'Geographic view of recent user login locations (last 500 records with coordinates).' ?></span>
+                            </div>
+                            <div class="sr-card-body">
+                                <div id="activity-map" style="height:420px; border-radius:12px; overflow:hidden; position:relative;">
+                                    <div id="map-loading" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:1000; display:none;">
+                                        <i class="mdi mdi-spin mdi-loading" style="font-size:48px; color:var(--sr-accent);"></i>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-toolbar">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="uaSearch" placeholder="<?= __('search_placeholder') ?>" autocomplete="off" aria-label="<?= __('search') ?>">
+                                </div>
+                                <div class="sr-toolbar-right">
+                                    <div id="srExportButtons"></div>
+                                </div>
+                            </div>
+                            <div class="sr-filter-grid ua-filters">
+                                <div>
+                                    <label><?= __('filter_by_user', 'Filter by User') ?></label>
+                                    <div class="user_filter"></div>
+                                </div>
+                                <div>
+                                    <label><?= __('filter_by_status', 'Filter by Status') ?></label>
+                                    <div class="status_filter"></div>
+                                </div>
+                                <div>
+                                    <label><?= __('filter_by_device', 'Filter by Device') ?></label>
+                                    <div class="device_filter"></div>
+                                </div>
+                                <div>
+                                    <label><?= __('filter_by_location', 'Filter by Location') ?></label>
+                                    <div class="location_filter"></div>
+                                </div>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="activity_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th><?= __('user') ?? 'User' ?></th>
+                                            <th><?= __('login_time') ?? 'Login Time' ?></th>
+                                            <th><?= __('logout_time') ?? 'Logout Time' ?></th>
+                                            <th><?= __('duration') ?? 'Duration' ?></th>
+                                            <th><?= __('ip_address') ?? 'IP Address' ?></th>
+                                            <th><?= __('location') ?? 'Location' ?></th>
+                                            <th><?= __('device') ?? 'Device' ?></th>
+                                            <th><?= __('browser') ?? 'Browser' ?></th>
+                                            <th><?= __('os') ?? 'OS' ?></th>
+                                            <th><?= __('screen') ?? 'Screen' ?></th>
+                                            <th><?= __('status') ?? 'Status' ?></th>
+                                            <th class="text-right"><?= __('action') ?? 'Action' ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -366,24 +247,24 @@ if (mysqli_num_rows($query) == 1) {
                 
                 buttonConfig.push({
                     extend: 'copy',
-                    text: '<i class="mdi mdi-content-copy text-info mr-1"></i>Copy',
+                    text: '<i class="mdi mdi-content-copy"></i> Copy',
                     exportOptions: { columns: columnNum }
                 });
                 buttonConfig.push({
                     extend: 'excel',
-                    text: '<i class="mdi mdi-file-excel text-success mr-1"></i>Excel',
+                    text: '<i class="mdi mdi-file-excel"></i> Excel',
                     exportOptions: { columns: columnNum },
                     title: 'User Activity Log'
                 });
                 buttonConfig.push({
                     extend: 'csv',
-                    text: '<i class="mdi mdi-file-document mr-1"></i>CSV',
+                    text: '<i class="mdi mdi-file-document"></i> CSV',
                     exportOptions: { columns: columnNum },
                     title: 'User Activity Log'
                 });
                 buttonConfig.push({
                     extend: 'pdf',
-                    text: '<i class="mdi mdi-file-pdf text-danger mr-1"></i>PDF',
+                    text: '<i class="mdi mdi-file-pdf"></i> PDF',
                     exportOptions: { columns: columnNum },
                     title: 'User Activity Log',
                     orientation: 'landscape',
@@ -391,17 +272,20 @@ if (mysqli_num_rows($query) == 1) {
                 });
                 buttonConfig.push({
                     extend: 'print',
-                    text: '<i class="mdi mdi-printer text-primary mr-1"></i>Print',
+                    text: '<i class="mdi mdi-printer"></i> Print',
                     exportOptions: { columns: columnNum },
                     title: 'User Activity Log'
                 });
 
                 // Status object for rendering
                 var statusObj = {
-                    'active': { title: 'Active', class: 'badge-border-success' },
-                    'logged_out': { title: 'Logged Out', class: 'badge-border-secondary' },
-                    'timeout': { title: 'Timeout', class: 'badge-border-danger' }
+                    'active': { title: 'Active', tone: 'tone-green' },
+                    'logged_out': { title: 'Logged Out', tone: 'tone-slate' },
+                    'timeout': { title: 'Timeout', tone: 'tone-red' }
                 };
+                function initials(name) {
+                    return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase();
+                }
 
                 // Initialize DataTable
                 var table = $('#activity_table').DataTable({
@@ -424,7 +308,7 @@ if (mysqli_num_rows($query) == 1) {
                         // }
                     },
                     lengthChange: true,
-                    dom: 'Bfrtip',
+                    dom: 'Brtip',
                     buttons: buttonConfig,
                     order: [[0, "desc"]],
                     pageLength: 10,
@@ -450,11 +334,19 @@ if (mysqli_num_rows($query) == 1) {
                             searchable: false
                         },
                         {
+                            // User column
+                            targets: 1,
+                            render: function(data, type) {
+                                if (type !== 'display') return data;
+                                return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + escapeHtml(initials(data)) + '</span><span class="sr-person-name">' + escapeHtml(data) + '</span></div>';
+                            }
+                        },
+                        {
                             // Duration column
                             targets: 4,
                             orderable: false,
                             render: function(data, type, row, meta) {
-                                if (!row[3]) return '<span class="badge badge-success">Active</span>';
+                                if (!row[3]) return '<span class="sr-pill sr-pill-xs tone-green"><span class="sr-dot"></span>Active</span>';
                                 return data;
                             }
                         },
@@ -462,7 +354,9 @@ if (mysqli_num_rows($query) == 1) {
                             // Status column
                             targets: 11,
                             render: function(data, type, row, meta) {
-                                return `<span class="badge-border ${statusObj[data].class}">${statusObj[data].title}</span>`;
+                                var st = statusObj[data] || { title: data, tone: 'tone-slate' };
+                                if (type !== 'display') return st.title;
+                                return '<span class="sr-pill ' + st.tone + '"><span class="sr-dot"></span>' + escapeHtml(st.title) + '</span>';
                             }
                         },
                         {
@@ -470,23 +364,21 @@ if (mysqli_num_rows($query) == 1) {
                             targets: 12,
                             orderable: false,
                             searchable: false,
+                            className: 'text-right',
                             render: function(data, type, row, meta) {
-                                var statusClass = row[11] === 'active' ? 'btn-danger' : 'btn-secondary disabled';
                                 var isActive = row[11] === 'active';
-                                return `<div class="btn-group" role="group">
-                                    <button class="btn btn-sm btn-info view-details" data-id="${row[0]}" title="View Details">
-                                        <i class="mdi mdi-eye"></i> Details
-                                    </button>
-                                    <button class="btn btn-sm ${statusClass} signout-user ${isActive ? '' : 'disabled'}" data-id="${row[0]}" data-username="${row[1]}" ${!isActive ? 'disabled' : ''} title="Sign Out User">
-                                        <i class="mdi mdi-logout-variant"></i> Sign Out
-                                    </button>
-                                </div>`;
+                                return '<div class="sr-actions">'
+                                    + '<button type="button" class="sr-open-btn border-0 view-details" data-id="' + escapeHtml(row[0]) + '" title="View Details"><i class="mdi mdi-eye-outline"></i> Details</button>'
+                                    + (isActive
+                                        ? '<button type="button" class="sr-btn sr-btn-sm sr-btn-danger signout-user" data-id="' + escapeHtml(row[0]) + '" data-username="' + escapeHtml(row[1]) + '" title="Sign Out User"><i class="mdi mdi-logout-variant"></i> Sign Out</button>'
+                                        : '')
+                                    + '</div>';
                             }
                         }
                     ],
                     initComplete: function() {
                         var api = this.api();
-                        var selectOpt = `<select class="custom-select form-select input-sm"><option value=""> All </option></select>`;
+                        var selectOpt = `<select class="form-control"><option value=""> All </option></select>`;
                         
                         // User filter (column 1)
                         api.columns(1).every(function() {
@@ -508,7 +400,7 @@ if (mysqli_num_rows($query) == 1) {
                                 column.search(val).draw();
                             });
                             column.data().unique().sort().each(function(d, j) {
-                                select.append(`<option value="${d}">${statusObj[d].title}</option>`);
+                                select.append($('<option>').val(d).text(statusObj[d] ? statusObj[d].title : d));
                             });
                         });
 
@@ -542,7 +434,8 @@ if (mysqli_num_rows($query) == 1) {
                     }
                 });
 
-                table.buttons().container().appendTo('#activity_table_wrapper .col-md-6:eq(0)');
+                table.buttons().container().appendTo('#srExportButtons');
+                $('#uaSearch').on('input', function() { table.search(this.value).draw(); });
 
                 // Auto-refresh table every 30 seconds
                 setInterval(function() {
@@ -572,7 +465,8 @@ if (mysqli_num_rows($query) == 1) {
                         confirmButtonColor: APP_COLORS.danger,
                         cancelButtonColor: APP_COLORS.secondary,
                         confirmButtonText: '<?= __("yes_sign_out") ?? "Yes, Sign Out" ?>',
-                        cancelButtonText: '<?= __("cancel") ?? "Cancel" ?>'
+                        cancelButtonText: '<?= __("cancel") ?? "Cancel" ?>',
+                        allowOutsideClick: false
                     }).then((result) => {
                         if (result.isConfirmed) {
                             signOutUser(activityId);
@@ -716,7 +610,7 @@ if (mysqli_num_rows($query) == 1) {
                                 title: 'Success',
                                 text: res.message || 'User has been signed out successfully.',
                                 icon: 'success',
-                                confirmButtonColor: '#5b73e8'
+                                confirmButtonColor: APP_COLORS.primary
                             }).then(() => {
                                 // Reload the table
                                 $('#activity_table').DataTable().ajax.reload(null, false);
@@ -783,38 +677,32 @@ if (mysqli_num_rows($query) == 1) {
                         }
                         if (res.status === 200) {
                             var data = res.data;
-                            var html = `
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <p><span class="info-label">User:</span> <span class="info-value">${data.username}</span></p>
-                                        <p><span class="info-label">Employee Name:</span> <span class="info-value">${data.emp_name || 'N/A'}</span></p>
-                                        <p><span class="info-label">Login Time:</span> <span class="info-value">${data.login_time}</span></p>
-                                        <p><span class="info-label">Logout Time:</span> <span class="info-value">${data.logout_time || 'Still Active'}</span></p>
-                                        <p><span class="info-label">Session Duration:</span> <span class="info-value">${data.duration}</span></p>
-                                        <p><span class="info-label">IP Address:</span> <span class="info-value">${data.ip_address}</span></p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <p><span class="info-label">Country:</span> <span class="info-value">${data.country}</span></p>
-                                        <p><span class="info-label">Region/City:</span> <span class="info-value">${data.region}, ${data.city}</span></p>
-                                        <p><span class="info-label">ISP:</span> <span class="info-value">${data.isp}</span></p>
-                                        <p><span class="info-label">Browser:</span> <span class="info-value">${data.browser} ${data.browser_version}</span></p>
-                                        <p><span class="info-label">Operating System:</span> <span class="info-value">${data.os} ${data.os_version}</span></p>
-                                        <p><span class="info-label">Device:</span> <span class="info-value">${data.device_type}</span></p>
-                                        <p><span class="info-label">Screen Resolution:</span> <span class="info-value">${data.screen_width}x${data.screen_height}</span></p>
-                                    </div>
-                                    <div class="col-12 mt-3">
-                                        <p><span class="info-label">User Agent:</span><br><small class="text-muted">${data.user_agent}</small></p>
-                                    </div>
-                                </div>
-                            `;
-                            
+                            var e = escapeHtml;
+                            var kv = function(label, value) {
+                                return '<div class="row-kv"><dt>' + e(label) + '</dt><dd>' + e(value == null || value === '' ? 'N/A' : value) + '</dd></div>';
+                            };
+                            var html = '<div class="sr-page text-left"><div class="row">'
+                                + '<div class="col-md-6"><dl class="sr-kv">'
+                                + kv('User', data.username) + kv('Employee Name', data.emp_name)
+                                + kv('Login Time', data.login_time) + kv('Logout Time', data.logout_time || 'Still Active')
+                                + kv('Session Duration', data.duration) + kv('IP Address', data.ip_address)
+                                + '</dl></div><div class="col-md-6"><dl class="sr-kv">'
+                                + kv('Country', data.country) + kv('Region/City', [data.region, data.city].filter(Boolean).join(', '))
+                                + kv('ISP', data.isp) + kv('Browser', [data.browser, data.browser_version].filter(Boolean).join(' '))
+                                + kv('Operating System', [data.os, data.os_version].filter(Boolean).join(' ')) + kv('Device', data.device_type)
+                                + kv('Screen Resolution', data.screen_width && data.screen_height ? data.screen_width + 'x' + data.screen_height : '')
+                                + '</dl></div>'
+                                + '<div class="col-12 mt-3"><div class="sr-field-label">User Agent</div><div class="sr-mono small text-muted" style="word-break: break-all;">' + e(data.user_agent) + '</div></div>'
+                                + '</div></div>';
+
                             Swal.fire({
                                 title: 'Activity Details',
                                 html: html,
                                 width: '800px',
                                 showCloseButton: true,
                                 showConfirmButton: false,
-                                cancelButtonText: 'Close'
+                                allowOutsideClick: false,
+                                customClass: { popup: 'sr-addline-popup' }
                             });
                         }
                     }

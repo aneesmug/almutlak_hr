@@ -1102,7 +1102,21 @@ if (!empty($formData['issue_date'])) {
     <link href="./plugins/summernote/0.8.20/summernote-bs4.min.css" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
 
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <style>
+        /* ---------- New GUI layout ---------- */
+        .ann-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+        @media (max-width: 1199px) { .ann-grid { grid-template-columns: 1fr; } }
+        @media (min-width: 1200px) { .ann-side .sr-card { position: sticky; top: 86px; } }
+        .ann-recipients { display: grid; gap: 8px; }
+        .sr-form .ann-recipients .sr-choice span { justify-content: flex-start; flex-wrap: wrap; }
+        .ann-recipients .sr-choice small { font-weight: 500; color: var(--sr-muted); }
+        .ann-scan-status { color: var(--tone-green-fg) !important; font-weight: 600; }
+        .ann-scan-status:empty { display: none !important; }
+        .ann-actions .sr-card-body { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 18px; }
+        .ann-actions .sr-spacer { flex: 1 1 auto; }
+        .sr-page .preview-shell { border-color: var(--sr-border); background: var(--sr-surface-3); }
+        .circ-pop .sr-table tbody tr { cursor: pointer; }
         .announcement-editor .card-box { border-radius: 14px; }
         /* Summernote - same look as the Memo page (employee_memos.php) */
         .note-editor.note-frame { border-color: #e3e6f0; }
@@ -1239,236 +1253,250 @@ if (!empty($formData['issue_date'])) {
     <div class="content-page">
         <?php include('./includes/topbar.php'); ?>
 
-        <div class="content">
-            <div class="container-fluid pt-3 announcement-editor">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card-box">
-                            <h4 class="m-0 header-title">Bilingual Announcement Sender (English / العربية)</h4>
-                            <p class="text-muted mt-2 mb-4">Create and send mirrored circular announcements side by side.</p>
+        <div class="content sr-page">
+            <div class="container-fluid announcement-editor">
+                <div class="sr-head">
+                    <div>
+                        <h1>Bilingual Announcement Sender</h1>
+                        <p>Create and send mirrored circular announcements side by side (English / العربية).</p>
+                    </div>
+                    <div class="sr-head-actions">
+                        <button type="button" id="btnViewAllCirculars" class="sr-btn"><i class="fa fa-list"></i> View All Circulars</button>
+                    </div>
+                </div>
 
-                            <!-- Load Previous Announcement -->
-                            <div class="card border mb-4">
-                                <div class="card-body py-3">
-                                    <h5 class="mb-3"><i class="fa fa-history"></i> Load Previous Announcement</h5>
-                                    <form method="get" action="<?= htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="form-inline">
-                                        <div class="form-group mr-2 mb-2">
-                                            <label class="mr-2">Circular No</label>
-                                            <input type="text" name="load_circular_no"
-                                                class="form-control"
-                                                placeholder="e.g. 001"
-                                                list="recentCircularsList"
-                                                style="width:180px;"
-                                                value="<?= htmlspecialchars((string)($_GET['load_circular_no'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                                            <datalist id="recentCircularsList">
-                                                <?php foreach ($recentAnnouncements as $recentItem): ?>
-                                                    <option value="<?= htmlspecialchars($recentItem['circular_no'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars('#' . $recentItem['circular_no'] . ' — ' . mb_substr((string)($recentItem['subject_en'] ?? ''), 0, 40), ENT_QUOTES, 'UTF-8') ?></option>
-                                                <?php endforeach; ?>
-                                            </datalist>
-                                        </div>
-                                        <div class="btn-group mb-2" role="group">
-                                            <button type="submit" class="btn btn-outline-info"><i class="fa fa-search"></i> Load &amp; Reuse</button>
-                                            <button type="button" id="btnViewAllCirculars" class="btn btn-outline-primary"><i class="fa fa-list"></i> View All Circulars</button>
-                                        </div>
-                                    </form>
-                                </div>
+                <!-- Load Previous Announcement -->
+                <div class="sr-card">
+                    <form method="get" action="<?= htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="sr-toolbar">
+                        <h2 class="sr-card-title"><i class="fa fa-history"></i> Load Previous Announcement</h2>
+                        <div class="sr-toolbar-right">
+                            <div class="sr-search" style="flex: 0 1 240px;">
+                                <i class="mdi mdi-pound"></i>
+                                <input type="text" name="load_circular_no" placeholder="Circular No - e.g. 001" list="recentCircularsList" autocomplete="off"
+                                    value="<?= htmlspecialchars((string)($_GET['load_circular_no'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <datalist id="recentCircularsList">
+                                    <?php foreach ($recentAnnouncements as $recentItem): ?>
+                                        <option value="<?= htmlspecialchars($recentItem['circular_no'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars('#' . $recentItem['circular_no'] . ' — ' . mb_substr((string)($recentItem['subject_en'] ?? ''), 0, 40), ENT_QUOTES, 'UTF-8') ?></option>
+                                    <?php endforeach; ?>
+                                </datalist>
                             </div>
+                            <button type="submit" class="sr-btn"><i class="fa fa-search"></i> Load &amp; Reuse</button>
+                        </div>
+                    </form>
+                </div>
 
-                            <?php if ($messageHtml !== ''): ?>
-                                <div class="alert alert-<?= htmlspecialchars($messageType, ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= $messageHtml ?>
-                                </div>
-                            <?php endif; ?>
+                <?php if ($messageHtml !== ''): ?>
+                    <?php $annTone = ['success' => 'tone-green', 'danger' => 'tone-red', 'warning' => 'tone-amber'][$messageType] ?? 'tone-sky'; ?>
+                    <div class="sr-notice <?= $annTone ?>">
+                        <i class="mdi mdi-information-outline"></i>
+                        <div><?= $messageHtml ?></div>
+                    </div>
+                <?php endif; ?>
 
-                            <form method="post" id="announcementForm" action="<?= htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>">
-                                <input type="hidden" name="announcement_image_data" id="announcementImageData" value="">
-                                <input type="hidden" name="form_action" id="formAction" value="">
-                                <div class="row">
-                                    <div class="col-lg-5">
-                                        <div class="form-group">
-                                            <label class="d-block">Announcement Type</label>
-                                            <div class="custom-control custom-radio custom-control-inline">
-                                                <input type="radio" id="announcement_type_text" name="announcement_type" value="text" class="custom-control-input" <?= $announcementType === 'text' ? 'checked' : '' ?>>
-                                                <label class="custom-control-label" for="announcement_type_text">Text body</label>
-                                            </div>
-                                            <div class="custom-control custom-radio custom-control-inline">
-                                                <input type="radio" id="announcement_type_attachment" name="announcement_type" value="attachment" class="custom-control-input" <?= $announcementType === 'attachment' ? 'checked' : '' ?>>
-                                                <label class="custom-control-label" for="announcement_type_attachment">Attachment (signed scan - PDF or image)</label>
+                <form method="post" id="announcementForm" class="sr-form" action="<?= htmlspecialchars($_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="announcement_image_data" id="announcementImageData" value="">
+                    <input type="hidden" name="form_action" id="formAction" value="">
+                    <div class="ann-grid">
+                        <div>
+                            <div class="sr-card">
+                                <div class="sr-card-body">
+                                    <div class="sr-fsec">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-format-list-bulleted"></i> Announcement Type</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-12">
+                                                <div class="sr-attach-choice">
+                                                    <label class="sr-choice"><input type="radio" id="announcement_type_text" name="announcement_type" value="text" <?= $announcementType === 'text' ? 'checked' : '' ?>><span><i class="mdi mdi-format-text"></i> Text body</span></label>
+                                                    <label class="sr-choice"><input type="radio" id="announcement_type_attachment" name="announcement_type" value="attachment" <?= $announcementType === 'attachment' ? 'checked' : '' ?>><span><i class="mdi mdi-paperclip"></i> Signed scan (PDF / image)</span></label>
+                                                </div>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        <div class="form-row">
-                                            <div class="form-group col-md-6">
-                                                <label>Circular No *</label>
+                                    <div class="sr-fsec">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i> Circular</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-6">
+                                                <label>Circular No <span class="text-danger">*</span></label>
                                                 <input type="text" name="circular_no" class="form-control js-bind" data-bind="circular_no" required value="<?= htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') ?>">
                                             </div>
-                                            <div class="form-group col-md-6">
-                                                <label>Date (dd-mm-yyyy) *</label>
+                                            <div class="sr-fcol c-6">
+                                                <label>Date (dd-mm-yyyy) <span class="text-danger">*</span></label>
                                                 <input type="text" name="issue_date" class="form-control js-bind" data-bind="issue_date" required value="<?= htmlspecialchars($formData['issue_date'], ENT_QUOTES, 'UTF-8') ?>">
                                             </div>
-                                        </div>
-
-                                        <div class="js-text-only">
-                                            <div class="form-group">
+                                            <div class="sr-fcol c-6 js-text-only">
                                                 <label>To (English)</label>
                                                 <input type="text" name="to_en" class="form-control js-bind" data-bind="to_en" value="<?= htmlspecialchars($formData['to_en'], ENT_QUOTES, 'UTF-8') ?>">
                                             </div>
-                                            <div class="form-group">
+                                            <div class="sr-fcol c-6 js-text-only">
                                                 <label>إلى (Arabic)</label>
-                                                <input type="text" name="to_ar" class="form-control js-bind" data-bind="to_ar" value="<?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="text" name="to_ar" class="form-control js-bind" data-bind="to_ar" dir="rtl" value="<?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="sr-fcol c-6">
+                                                <label>Subject (English) <span class="text-danger">*</span></label>
+                                                <input type="text" name="subject_en" class="form-control js-bind" data-bind="subject_en" value="<?= htmlspecialchars($formData['subject_en'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="sr-fcol c-6">
+                                                <label>العنوان (Arabic) <span class="text-danger">*</span></label>
+                                                <input type="text" name="subject_ar" class="form-control js-bind" data-bind="subject_ar" dir="rtl" value="<?= htmlspecialchars($formData['subject_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="sr-fcol c-7">
+                                                <label>Announcement Link URL</label>
+                                                <input type="text" name="announcement_link_url" class="form-control js-bind" data-bind="announcement_link_url" placeholder="https://example.com" value="<?= htmlspecialchars($formData['announcement_link_url'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="sr-fcol c-5">
+                                                <label>Link Button Text</label>
+                                                <input type="text" name="announcement_link_text" class="form-control js-bind" data-bind="announcement_link_text" value="<?= htmlspecialchars($formData['announcement_link_text'], ENT_QUOTES, 'UTF-8') ?>">
                                             </div>
                                         </div>
-
-                                        <div class="form-group">
-                                            <label>Subject (English) *</label>
-                                            <input type="text" name="subject_en" class="form-control js-bind" data-bind="subject_en" value="<?= htmlspecialchars($formData['subject_en'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>العنوان (Arabic) *</label>
-                                            <input type="text" name="subject_ar" class="form-control js-bind" data-bind="subject_ar" value="<?= htmlspecialchars($formData['subject_ar'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label>Announcement Link URL</label>
-                                            <input type="text" name="announcement_link_url" class="form-control js-bind" data-bind="announcement_link_url" placeholder="https://example.com" value="<?= htmlspecialchars($formData['announcement_link_url'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Link Button Text</label>
-                                            <input type="text" name="announcement_link_text" class="form-control js-bind" data-bind="announcement_link_text" value="<?= htmlspecialchars($formData['announcement_link_text'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-
-                                        <div class="js-attachment-only" style="display:none;">
-                                            <hr>
-                                            <h5 class="mb-2">Announcement File *</h5>
-                                            <small class="text-muted d-block mb-2">Select the scanned, signed announcement (PDF or image). It is shown in the email body as a picture, not as an attachment - a PDF is converted to one picture per page (up to 10 pages). The subject above is used as the email subject.</small>
-                                            <input type="file" id="scanFile" class="form-control-file" accept="application/pdf,.pdf,image/*">
-                                            <div class="mt-2">
-                                                <span id="scanStatus" class="text-muted"></span>
-                                                <button type="button" id="scanClearBtn" class="btn btn-sm btn-outline-danger ml-2" style="display:none;"><i class="fa fa-trash"></i> Remove file</button>
-                                            </div>
-                                            <div id="scanPagesInputs"></div>
-                                        </div>
-
-                                        <div class="js-text-only">
-                                        <hr>
-                                        <h5 class="mb-2">Content *</h5>
-                                        <small class="text-muted d-block mb-2">Write the whole announcement in each editor - press Enter for a new paragraph and use the toolbar for headings, bold, lists, alignment, tables and links.</small>
-                                        <div id="contentBlock">
-                                            <div class="form-group mb-3">
-                                                <label>English Content</label>
-                                                <textarea name="block_en[]" rows="8" class="form-control js-block-en js-rich-editor"><?= htmlspecialchars($contentBlock['en'], ENT_QUOTES, 'UTF-8') ?></textarea>
-                                            </div>
-                                            <div class="form-group mb-2">
-                                                <label>Arabic Content</label>
-                                                <textarea name="block_ar[]" rows="8" class="form-control js-block-ar js-rich-editor"><?= htmlspecialchars($contentBlock['ar'], ENT_QUOTES, 'UTF-8') ?></textarea>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-group mt-3">
-                                            <label>Footer (English)</label>
-                                            <input type="text" name="footer_en" class="form-control js-bind" data-bind="footer_en" value="<?= htmlspecialchars($formData['footer_en'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>التذييل (Arabic)</label>
-                                            <input type="text" name="footer_ar" class="form-control js-bind" data-bind="footer_ar" value="<?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </div>
-                                        </div><!-- /.js-text-only -->
                                     </div>
 
-                                    <div class="col-lg-7">
-                                        <div class="card border mb-3">
-                                            <div class="card-body">
-                                                <h5 class="mb-3">Recipients</h5>
-                                                <?php foreach ($announcementGroups as $recipientKey => $recipientGroup): ?>
-                                                    <?php if ($recipientKey === 'other') { continue; } ?>
-                                                    <div class="custom-control custom-radio mb-3">
-                                                        <input type="radio" id="recipient_<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" name="recipient_mode" value="<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" class="custom-control-input" <?= $selectedRecipientMode === (string)$recipientKey ? 'checked' : '' ?>>
-                                                        <label class="custom-control-label" for="recipient_<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($recipientGroup['name'] . ' <' . $recipientGroup['email'] . '>', ENT_QUOTES, 'UTF-8') ?></label>
+                                    <div class="sr-fsec js-attachment-only" style="display:none;">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-paperclip"></i> Announcement File *</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-12">
+                                                <label class="sr-filepick" for="scanFile">
+                                                    <input type="file" id="scanFile" accept="application/pdf,.pdf,image/*">
+                                                    <i class="mdi mdi-cloud-upload"></i>
+                                                    <span><b>Choose the signed PDF or image</b>
+                                                    <small id="scanStatus" class="ann-scan-status"></small>
+                                                    <small>Shown in the email body as a picture, not as an attachment - a PDF becomes one picture per page (up to 10 pages). The subject above is used as the email subject.</small></span>
+                                                </label>
+                                                <button type="button" id="scanClearBtn" class="sr-btn sr-btn-sm sr-btn-ghost text-danger mt-2" style="display:none;"><i class="fa fa-trash"></i> Remove file</button>
+                                                <div id="scanPagesInputs"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="sr-fsec js-text-only">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-format-align-left"></i> Content *</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-12">
+                                                <span class="sr-fhint mt-0 mb-2">Write the whole announcement in each editor - press Enter for a new paragraph and use the toolbar for headings, bold, lists, alignment, tables and links.</span>
+                                                <div id="contentBlock">
+                                                    <div class="mb-3">
+                                                        <label>English Content</label>
+                                                        <textarea name="block_en[]" rows="8" class="form-control js-block-en js-rich-editor"><?= htmlspecialchars($contentBlock['en'], ENT_QUOTES, 'UTF-8') ?></textarea>
                                                     </div>
-                                                <?php endforeach; ?>
+                                                    <div>
+                                                        <label>Arabic Content</label>
+                                                        <textarea name="block_ar[]" rows="8" class="form-control js-block-ar js-rich-editor"><?= htmlspecialchars($contentBlock['ar'], ENT_QUOTES, 'UTF-8') ?></textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="sr-fcol c-6">
+                                                <label>Footer (English)</label>
+                                                <input type="text" name="footer_en" class="form-control js-bind" data-bind="footer_en" value="<?= htmlspecialchars($formData['footer_en'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                            <div class="sr-fcol c-6">
+                                                <label>التذييل (Arabic)</label>
+                                                <input type="text" name="footer_ar" class="form-control js-bind" data-bind="footer_ar" dir="rtl" value="<?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?>">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="sr-fsec mb-0">
+                                        <div class="sr-fsec-head"><span><i class="mdi mdi-account-multiple"></i> Recipients</span></div>
+                                        <div class="sr-fgrid">
+                                            <div class="sr-fcol c-12">
+                                                <div class="ann-recipients">
+                                                    <?php foreach ($announcementGroups as $recipientKey => $recipientGroup): ?>
+                                                        <?php if ($recipientKey === 'other') { continue; } ?>
+                                                        <label class="sr-choice"><input type="radio" id="recipient_<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" name="recipient_mode" value="<?= htmlspecialchars((string)$recipientKey, ENT_QUOTES, 'UTF-8') ?>" <?= $selectedRecipientMode === (string)$recipientKey ? 'checked' : '' ?>><span><i class="mdi mdi-email-outline"></i> <b><?= htmlspecialchars($recipientGroup['name'], ENT_QUOTES, 'UTF-8') ?></b> <small><?= htmlspecialchars($recipientGroup['email'], ENT_QUOTES, 'UTF-8') ?></small></span></label>
+                                                    <?php endforeach; ?>
+                                                    <?php if ($allowOtherRecipient): ?>
+                                                        <label class="sr-choice"><input type="radio" id="recipient_other" name="recipient_mode" value="other" <?= $selectedRecipientMode === 'other' ? 'checked' : '' ?>><span><i class="mdi mdi-flask-outline"></i> <b>Other</b> <small>enter an email for testing</small></span></label>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <?php if ($allowOtherRecipient): ?>
-                                                    <div class="custom-control custom-radio mb-2">
-                                                        <input type="radio" id="recipient_other" name="recipient_mode" value="other" class="custom-control-input" <?= $selectedRecipientMode === 'other' ? 'checked' : '' ?>>
-                                                        <label class="custom-control-label" for="recipient_other">Other (enter email for testing)</label>
-                                                    </div>
-                                                    <input type="email" id="other_email" name="other_email" class="form-control" placeholder="name@example.com" value="<?= htmlspecialchars($_POST['other_email'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="display:<?= $selectedRecipientMode === 'other' ? 'block' : 'none' ?>;">
+                                                    <input type="email" id="other_email" name="other_email" class="form-control mt-2" placeholder="name@example.com" value="<?= htmlspecialchars($_POST['other_email'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="display:<?= $selectedRecipientMode === 'other' ? 'block' : 'none' ?>;">
                                                 <?php endif; ?>
                                                 <?php if (count(array_diff_key($announcementGroups, ['other' => true])) === 0 && !$allowOtherRecipient): ?>
-                                                    <p class="text-danger mb-2">No recipients are set up yet.</p>
+                                                    <div class="sr-notice tone-red mt-2 mb-0"><i class="mdi mdi-alert-circle-outline"></i><div>No recipients are set up yet.</div></div>
                                                 <?php endif; ?>
-                                                <small class="text-muted d-block mt-2">This list is managed in App Settings &gt; Email &gt; Announcement Recipients.</small>
-                                            </div>
-                                        </div>
-
-                                        <div class="preview-shell ad-keep">
-                                            <div class="announcement-sheet" id="announcementPreview" style="--watermark: url('<?= htmlspecialchars((string)get_setting($conDB, 'logo'), ENT_QUOTES, 'UTF-8') ?>');">
-                                                <div class="announcement-head">
-                                                    <div class="en-title">Almutlak Trade &amp;<br>Industries Holding Co.</div>
-                                                    <div class="logo">
-                                                        <img src="<?= htmlspecialchars((string)get_setting($conDB, 'logo'), ENT_QUOTES, 'UTF-8') ?>" alt="logo">
-                                                    </div>
-                                                    <div class="ar-title">شركة المطلق<br>للتجارة والصناعة القابضة</div>
-                                                </div>
-
-                                                <div class="announcement-meta">
-                                                    <div id="pvCircularEn">Circular No: <?= htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') ?> in <?= htmlspecialchars($previewYear, ENT_QUOTES, 'UTF-8') ?></div>
-                                                    <div id="pvCircularAr">تعميم رقم <?= htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') ?> لعام <?= htmlspecialchars($previewYear, ENT_QUOTES, 'UTF-8') ?>م</div>
-                                                </div>
-
-                                                <div class="announcement-to">
-                                                    <div class="cell" id="pvToEn">To: <?= htmlspecialchars($formData['to_en'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                    <div class="cell ar" id="pvToAr">إلى: <?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                </div>
-
-                                                <div class="announcement-body">
-                                                    <div class="announcement-col en">
-                                                        <div class="announcement-date" id="pvDateEn">Date: <?= htmlspecialchars($formData['issue_date'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                        <div class="announcement-subject" id="pvSubjectEn"><?= htmlspecialchars($formData['subject_en'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                        <div id="pvBlocksEn">
-                                                            <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
-                                                                <?php if (trim((string)($block['en'] ?? '')) !== ''): ?>
-                                                                    <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['en']) ?></div>
-                                                                <?php endif; ?>
-                                                            <?php endforeach; ?>
-                                                        </div>
-                                                    </div>
-                                                    <div class="announcement-col ar">
-                                                        <div class="announcement-date" id="pvDateAr">التاريخ: <?= htmlspecialchars($formData['issue_date'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                        <div class="announcement-subject" id="pvSubjectAr"><?= htmlspecialchars($formData['subject_ar'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                        <div id="pvBlocksAr">
-                                                            <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
-                                                                <?php if (trim((string)($block['ar'] ?? '')) !== ''): ?>
-                                                                    <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['ar']) ?></div>
-                                                                <?php endif; ?>
-                                                            <?php endforeach; ?>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div class="announcement-footer">
-                                                    <div id="pvFooterEn"><?= htmlspecialchars($formData['footer_en'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                    <div id="pvFooterAr"><?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?></div>
-                                                    <div id="pvAnnouncementLink" class="mt-2"></div>
-                                                </div>
-                                            </div>
-                                            <div class="scan-preview" id="scanPreview" style="display:none;">
-                                                <div class="scan-empty">Select a PDF or image to see how it will look in the email.</div>
+                                                <span class="sr-fhint">This list is managed in App Settings &gt; Email &gt; Announcement Recipients.</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
 
-                                <div class="mt-3">
-                                    <div class="btn-group" role="group">
-                                        <a href="dashboard.php" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> Back</a>
-                                        <button type="submit" name="save_draft" class="btn btn-outline-secondary js-text-only"><i class="fa fa-save"></i> Save as Draft</button>
-                                        <button type="submit" name="send_announcement" class="btn btn-primary"><i class="fa fa-paper-plane"></i> Send Announcement</button>
+                        <div class="ann-side">
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h2 class="sr-card-title"><i class="mdi mdi-eye-outline"></i> Live Preview</h2>
+                                    <span class="sr-card-sub">This is how the email will look</span>
+                                </div>
+                                <div class="sr-card-body">
+                                    <div class="preview-shell ad-keep">
+                                        <div class="announcement-sheet" id="announcementPreview" style="--watermark: url('<?= htmlspecialchars((string)get_setting($conDB, 'logo'), ENT_QUOTES, 'UTF-8') ?>');">
+                                            <div class="announcement-head">
+                                                <div class="en-title">Almutlak Trade &amp;<br>Industries Holding Co.</div>
+                                                <div class="logo">
+                                                    <img src="<?= htmlspecialchars((string)get_setting($conDB, 'logo'), ENT_QUOTES, 'UTF-8') ?>" alt="logo">
+                                                </div>
+                                                <div class="ar-title">شركة المطلق<br>للتجارة والصناعة القابضة</div>
+                                            </div>
+
+                                            <div class="announcement-meta">
+                                                <div id="pvCircularEn">Circular No: <?= htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') ?> in <?= htmlspecialchars($previewYear, ENT_QUOTES, 'UTF-8') ?></div>
+                                                <div id="pvCircularAr">تعميم رقم <?= htmlspecialchars($formData['circular_no'], ENT_QUOTES, 'UTF-8') ?> لعام <?= htmlspecialchars($previewYear, ENT_QUOTES, 'UTF-8') ?>م</div>
+                                            </div>
+
+                                            <div class="announcement-to">
+                                                <div class="cell" id="pvToEn">To: <?= htmlspecialchars($formData['to_en'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                <div class="cell ar" id="pvToAr">إلى: <?= htmlspecialchars($formData['to_ar'], ENT_QUOTES, 'UTF-8') ?></div>
+                                            </div>
+
+                                            <div class="announcement-body">
+                                                <div class="announcement-col en">
+                                                    <div class="announcement-date" id="pvDateEn">Date: <?= htmlspecialchars($formData['issue_date'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div class="announcement-subject" id="pvSubjectEn"><?= htmlspecialchars($formData['subject_en'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div id="pvBlocksEn">
+                                                        <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
+                                                            <?php if (trim((string)($block['en'] ?? '')) !== ''): ?>
+                                                                <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['en']) ?></div>
+                                                            <?php endif; ?>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                </div>
+                                                <div class="announcement-col ar">
+                                                    <div class="announcement-date" id="pvDateAr">التاريخ: <?= htmlspecialchars($formData['issue_date'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div class="announcement-subject" id="pvSubjectAr"><?= htmlspecialchars($formData['subject_ar'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div id="pvBlocksAr">
+                                                        <?php foreach (($formData['content_blocks'] ?? []) as $block): ?>
+                                                            <?php if (trim((string)($block['ar'] ?? '')) !== ''): ?>
+                                                                <div class="announcement-block-item"><?= sanitize_announcement_html_fragment((string)$block['ar']) ?></div>
+                                                            <?php endif; ?>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="announcement-footer">
+                                                <div id="pvFooterEn"><?= htmlspecialchars($formData['footer_en'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                <div id="pvFooterAr"><?= htmlspecialchars($formData['footer_ar'], ENT_QUOTES, 'UTF-8') ?></div>
+                                                <div id="pvAnnouncementLink" class="mt-2"></div>
+                                            </div>
+                                        </div>
+                                        <div class="scan-preview" id="scanPreview" style="display:none;">
+                                            <div class="scan-empty">Select a PDF or image to see how it will look in the email.</div>
+                                        </div>
                                     </div>
                                 </div>
-                            </form>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <div class="sr-card ann-actions">
+                        <div class="sr-card-body">
+                            <a href="dashboard.php" class="sr-btn sr-btn-ghost"><i class="fa fa-angle-double-left"></i> Back</a>
+                            <span class="sr-spacer"></span>
+                            <button type="submit" name="save_draft" class="sr-btn js-text-only"><i class="fa fa-save"></i> Save as Draft</button>
+                            <button type="submit" name="send_announcement" class="sr-btn sr-btn-primary"><i class="fa fa-paper-plane"></i> Send Announcement</button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -1545,21 +1573,23 @@ if (!empty($formData['issue_date'])) {
     $('#btnViewAllCirculars').on('click', function () {
         if (typeof Swal !== 'function') { return; }
         var rows = allCirculars.map(function (c) {
-            var badge = c.draft ? '<span class="badge badge-warning">Draft</span>' : '<span class="badge badge-success">Sent</span>';
+            var badge = c.draft ? '<span class="sr-pill sr-pill-xs tone-amber"><span class="sr-dot"></span>Draft</span>' : '<span class="sr-pill sr-pill-xs tone-green"><span class="sr-dot"></span>Sent</span>';
             return '<tr class="circ-row" data-no="' + escHtml(c.no) + '" style="cursor:pointer;">' +
-                '<td>#' + escHtml(c.no) + '</td><td>' + escHtml(c.date) + '</td>' +
+                '<td><span class="sr-chip sr-mono">#' + escHtml(c.no) + '</span></td><td class="sr-date">' + escHtml(c.date) + '</td>' +
                 '<td class="text-left">' + escHtml(c.subject) + '</td><td>' + escHtml(c.to) + '</td><td>' + badge + '</td></tr>';
         }).join('');
-        if (!rows) { rows = '<tr><td colspan="5" class="text-muted">No circulars found.</td></tr>'; }
+        if (!rows) { rows = '<tr><td colspan="5"><div class="sr-empty"><i class="mdi mdi-inbox"></i>No circulars found.</div></td></tr>'; }
         Swal.fire({
             title: 'All Circulars',
             width: "75%",
             showConfirmButton: false,
             showCloseButton: true,
             allowOutsideClick: false,
-            html: '<input type="text" id="circSearch" class="form-control mb-2" placeholder="Search by number, subject or date">' +
-                '<div style="max-height:400px;overflow:auto;"><table class="table table-sm table-hover mb-0"><thead><tr><th>No</th><th>Date</th><th class="text-left">Subject</th><th>To</th><th>Status</th></tr></thead><tbody id="circBody">' + rows + '</tbody></table></div>' +
-                '<small class="text-muted d-block mt-2">Click a circular to open it here with a new Circular No.</small>',
+            customClass: { popup: 'sr-addline-popup' },
+            html: '<div class="sr-page circ-pop text-left">' +
+                '<div class="sr-search mb-2" style="max-width:none;"><i class="mdi mdi-magnify"></i><input type="search" id="circSearch" placeholder="Search by number, subject or date" autocomplete="off"></div>' +
+                '<div style="max-height:420px;overflow:auto;border:1px solid var(--sr-border);border-radius:12px;"><table class="sr-table"><thead><tr><th>No</th><th>Date</th><th>Subject</th><th>To</th><th>Status</th></tr></thead><tbody id="circBody">' + rows + '</tbody></table></div>' +
+                '<span class="sr-fhint mt-2">Click a circular to open it here with a new Circular No.</span></div>',
             didOpen: function () {
                 $('#circSearch').on('input', function () {
                     var q = $(this).val().toLowerCase();

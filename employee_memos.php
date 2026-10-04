@@ -50,6 +50,7 @@ if ($preselectEmpId !== '') {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <?php if ($is_rtl ?? false): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -166,6 +167,30 @@ if ($preselectEmpId !== '') {
         .memo-sal-add .btn { white-space: nowrap; }
         .memo-sal-total { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #cfd6e4; text-align: right; font-size: 14px; }
         @media (max-width: 575px) { .memo-sal-amount { flex-basis: 120px; } }
+
+        /* ---------- New GUI (sr-* design system) ---------- */
+        .memo-top { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; }
+        @media (max-width: 991px) { .memo-top { grid-template-columns: 1fr; } }
+        .memo-top .sr-card { margin-bottom: 20px; }
+        .memo-num {
+            display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%;
+            font-size: 12px; font-weight: 800; background: var(--sr-accent); color: #fff;
+        }
+        .memo-draft-flag.show { display: inline-flex; }
+        .memo-compose-disabled { opacity: .55; }
+        .memo-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+        .sr-page .memo-type-btn { border-color: var(--sr-border); background: var(--sr-surface); color: var(--sr-text-2); border-radius: 10px; }
+        .sr-page .memo-type-btn i { color: var(--sr-accent); }
+        .sr-page .memo-type-btn:hover { border-color: var(--sr-accent); background: var(--sr-accent-soft); }
+        .sr-page .memo-type-btn.active { border-color: var(--sr-accent); background: var(--sr-accent); color: #fff; }
+        .sr-page .memo-type-btn.active i { color: #fff; }
+        .sr-page .memo-field-card { border-color: var(--sr-border); border-radius: 12px; }
+        .sr-page .memo-preview { border-color: var(--sr-border); border-radius: 12px; }
+        .sr-page .sr-toolbar .sr-card-title { margin-inline-end: auto; }
+        #memoTplModal.sr-page .modal-content { border: 1px solid var(--sr-border); border-radius: var(--sr-radius); background: var(--sr-surface); color: var(--sr-text-2); }
+        #memoTplModal.sr-page .modal-header, #memoTplModal.sr-page .modal-footer { border-color: var(--sr-border); }
+        #memoTplModal.sr-page .modal-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--sr-text); }
+        #memoTplModal.sr-page .modal-title i { color: var(--sr-accent); }
     </style>
 </head>
 
@@ -187,50 +212,71 @@ if ($preselectEmpId !== '') {
     <div class="content-page">
         <?php include("./includes/topbar.php"); ?>
 
-        <div class="content">
+        <div class="content sr-page">
             <div class="container-fluid">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card-box memo-form">
-                            <h4 class="m-t-0 header-title"><i class="fa-duotone fa-envelope-open-text mr-1"></i> <?= __('send_memo', 'Send Memo') ?></h4>
-                            <p class="text-muted"><?= __('send_memo_desc', 'Choose an employee and a memo type. The email is prepared from a ready template with the employee\'s details - review or edit it, then send. Every memo is saved in the employee\'s master file.') ?></p>
+                <div class="sr-head">
+                    <div>
+                        <h1><?= __('send_memo', 'Send Memo') ?></h1>
+                        <p><?= __('send_memo_desc', 'Choose an employee and a memo type. The email is prepared from a ready template with the employee\'s details - review or edit it, then send. Every memo is saved in the employee\'s master file.') ?></p>
+                    </div>
+                    <?php if ($canManageTemplates): ?>
+                    <div class="sr-head-actions">
+                        <button type="button" class="sr-btn" id="memoManageTpl"><i class="fa fa-sliders"></i> <?= __('manage_templates', 'Manage Templates') ?></button>
+                    </div>
+                    <?php endif; ?>
+                </div>
 
-                            <div class="row">
-                                <div class="col-lg-5 mb-3">
-                                    <div class="memo-step">1. <?= __('employee', 'Employee') ?></div>
-                                    <select id="memoEmployee" class="form-control">
-                                        <?php if ($preselectEmpId !== ''): ?>
-                                            <option value="<?= htmlspecialchars($preselectEmpId) ?>" selected><?= htmlspecialchars($preselectText) ?></option>
-                                        <?php endif; ?>
-                                    </select>
-                                    <small class="form-text text-muted"><?= __('search_by_emp_id_or_name', 'Search by Employee ID, name or Iqama.') ?></small>
-                                    <div class="alert alert-info py-2 px-3 mt-2 mb-0 small" id="memoCandidateNote" style="display:none">
-                                        <i class="fa fa-user-plus mr-1"></i><?= __('memo_candidate_note', 'Job offer for a new employee: no employee is selected. Enter the candidate and the offer terms in Details. The candidate gets an email with a link to open, print and sign the letter.') ?>
-                                    </div>
-                                </div>
-                                <div class="col-lg-7 mb-3">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div class="memo-step">2. <?= __('memo_type', 'Memo Type') ?></div>
-                                        <?php if ($canManageTemplates): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-primary mb-2" id="memoManageTpl"><i class="fa fa-sliders mr-1"></i><?= __('manage_templates', 'Manage Templates') ?></button>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="memo-type-grid" id="memoTypeGrid"></div>
+                <div class="memo-form">
+                    <div class="memo-top">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><span class="memo-num">1</span> <?= __('employee', 'Employee') ?></h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <select id="memoEmployee" class="form-control">
+                                    <?php if ($preselectEmpId !== ''): ?>
+                                        <option value="<?= htmlspecialchars($preselectEmpId) ?>" selected><?= htmlspecialchars($preselectText) ?></option>
+                                    <?php endif; ?>
+                                </select>
+                                <small class="sr-fhint"><?= __('search_by_emp_id_or_name', 'Search by Employee ID, name or Iqama.') ?></small>
+                                <div class="sr-notice tone-sky mt-3 mb-0" id="memoCandidateNote" style="display:none">
+                                    <i class="fa fa-user-plus"></i>
+                                    <div><?= __('memo_candidate_note', 'Job offer for a new employee: no employee is selected. Enter the candidate and the offer terms in Details. The candidate gets an email with a link to open, print and sign the letter.') ?></div>
                                 </div>
                             </div>
+                        </div>
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><span class="memo-num">2</span> <?= __('memo_type', 'Memo Type') ?></h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <div class="memo-type-grid" id="memoTypeGrid"></div>
+                            </div>
+                        </div>
+                    </div>
 
-                            <div id="memoCompose" class="memo-compose-disabled">
-                                <div class="memo-step mt-2">3. <?= __('memo_details', 'Details') ?>
-                                    <span class="badge badge-warning ml-2 memo-draft-flag" id="memoDraftFlag"><i class="fa fa-file-pen mr-1"></i><?= __('editing_draft', 'Editing draft') ?> #<span></span></span>
-                                </div>
-                                <div id="memoFields" class="mb-2"></div>
+                    <div id="memoCompose" class="memo-compose-disabled">
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><span class="memo-num">3</span> <?= __('memo_details', 'Details') ?>
+                                    <span class="sr-pill sr-pill-xs tone-amber memo-draft-flag" id="memoDraftFlag"><i class="fa fa-file-pen"></i><?= __('editing_draft', 'Editing draft') ?> #<span></span></span>
+                                </h2>
+                            </div>
+                            <div class="sr-card-body">
+                                <div id="memoFields"></div>
+                            </div>
+                        </div>
 
-                                <div class="memo-step mt-3">4. <?= __('review_and_send', 'Review & Send') ?></div>
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><span class="memo-num">4</span> <?= __('review_and_send', 'Review & Send') ?></h2>
+                            </div>
+                            <div class="sr-card-body">
                                 <div class="form-row">
                                     <div class="form-group col-md-4">
                                         <label for="memoTo"><?= __('to', 'To') ?> <span class="text-danger">*</span></label>
                                         <input type="email" id="memoTo" class="form-control" placeholder="employee@company.com">
-                                        <small class="form-text text-muted" id="memoToHint"></small>
+                                        <small class="sr-fhint" id="memoToHint"></small>
                                     </div>
                                     <div class="form-group col-md-5">
                                         <label for="memoCc"><?= __('cc', 'CC') ?></label>
@@ -256,40 +302,42 @@ if ($preselectEmpId !== '') {
                                     <div id="memoPreview" class="memo-preview ad-keep"></div>
                                     <div id="memoManualWrap" style="display:none">
                                         <textarea id="memoBody"></textarea>
-                                        <small class="form-text text-warning"><?= __('memo_manual_hint', 'Manual mode: changes in the Details fields no longer update the text. Turn it off to rebuild the memo from the fields.') ?></small>
+                                        <small class="sr-fhint text-warning"><?= __('memo_manual_hint', 'Manual mode: changes in the Details fields no longer update the text. Turn it off to rebuild the memo from the fields.') ?></small>
                                     </div>
                                 </div>
-                                <div class="text-right">
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-light" id="memoNew"><i class="fa fa-file mr-1"></i><?= __('new_memo', 'New Memo') ?></button>
-                                        <button type="button" class="btn btn-secondary" id="memoSaveDraft"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_draft', 'Save Draft') ?></button>
-                                        <button type="button" class="btn btn-primary" id="memoSend"><i class="fa fa-paper-plane mr-1"></i><?= __('send_memo', 'Send Memo') ?></button>
-                                    </div>
+                                <div class="memo-actions">
+                                    <button type="button" class="sr-btn sr-btn-ghost" id="memoNew"><i class="fa fa-file"></i> <?= __('new_memo', 'New Memo') ?></button>
+                                    <button type="button" class="sr-btn" id="memoSaveDraft"><i class="fa fa-floppy-disk"></i> <?= __('save_draft', 'Save Draft') ?></button>
+                                    <button type="button" class="sr-btn sr-btn-primary" id="memoSend"><i class="fa fa-paper-plane"></i> <?= __('send_memo', 'Send Memo') ?></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card-box">
-                            <h4 class="m-t-0 header-title"><?= __('sent_memos', 'Sent Memos') ?></h4>
-                            <table id="memoHistory" class="table table-striped table-bordered dt-responsive nowrap" style="width:100%">
-                                <thead>
-                                <tr>
-                                    <th><?= __('date') ?></th>
-                                    <th><?= __('employee', 'Employee') ?></th>
-                                    <th><?= __('memo_type', 'Memo Type') ?></th>
-                                    <th><?= __('subject', 'Subject') ?></th>
-                                    <th><?= __('reference_no', 'Reference No.') ?></th>
-                                    <th><?= __('status') ?></th>
-                                    <th><?= __('sent_by', 'Sent By') ?></th>
-                                    <th><?= __('action') ?></th>
-                                </tr>
-                                </thead>
-                            </table>
+                <div class="sr-card">
+                    <div class="sr-toolbar">
+                        <h2 class="sr-card-title"><i class="mdi mdi-email-outline"></i> <?= __('sent_memos', 'Sent Memos') ?></h2>
+                        <div class="sr-search">
+                            <i class="mdi mdi-magnify"></i>
+                            <input type="search" data-dt-search="#memoHistory" placeholder="<?= __('search_placeholder') ?>" autocomplete="off" aria-label="<?= __('search') ?>">
                         </div>
+                    </div>
+                    <div class="sr-table-wrap">
+                        <table id="memoHistory" class="table sr-table dt-responsive nowrap" style="width:100%">
+                            <thead>
+                            <tr>
+                                <th><?= __('date') ?></th>
+                                <th><?= __('employee', 'Employee') ?></th>
+                                <th><?= __('memo_type', 'Memo Type') ?></th>
+                                <th><?= __('subject', 'Subject') ?></th>
+                                <th><?= __('reference_no', 'Reference No.') ?></th>
+                                <th><?= __('status') ?></th>
+                                <th><?= __('sent_by', 'Sent By') ?></th>
+                                <th class="text-right"><?= __('action') ?></th>
+                            </tr>
+                            </thead>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -298,7 +346,7 @@ if ($preselectEmpId !== '') {
         <footer class="footer"><?= $site_footer ?></footer>
 
         <!-- Manage Templates -->
-        <div class="modal fade" id="memoTplModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal fade sr-page" id="memoTplModal" tabindex="-1" role="dialog" aria-hidden="true">
             <div class="modal-dialog modal-dialog-scrollable" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
@@ -309,9 +357,9 @@ if ($preselectEmpId !== '') {
                         <div id="memoTplListView">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <small class="text-muted"><?= __('memo_tpl_list_hint', 'Edit the wording of any template. Inactive templates are hidden from the memo type list. Built-in templates can be reset to their original text.') ?></small>
-                                <button type="button" class="btn btn-sm btn-primary" id="memoTplAdd"><i class="fa fa-plus mr-1"></i><?= __('new_template', 'New Template') ?></button>
+                                <button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="memoTplAdd"><i class="fa fa-plus"></i><?= __('new_template', 'New Template') ?></button>
                             </div>
-                            <table class="table table-sm table-hover mb-0">
+                            <table class="table sr-table mb-0">
                                 <thead><tr><th><?= __('name', 'Name') ?></th><th><?= __('subject', 'Subject') ?></th><th><?= __('active', 'Active') ?></th><th><?= __('last_updated', 'Last Updated') ?></th><th class="text-right"><?= __('action') ?></th></tr></thead>
                                 <tbody id="memoTplRows"></tbody>
                             </table>
@@ -341,7 +389,7 @@ if ($preselectEmpId !== '') {
                                 <thead><tr><th style="width:15%">Key</th><th>Label (English)</th><th>Label (العربية)</th><th style="width:12%">Type</th><th style="width:9%" title="Separate English and Arabic values">EN + AR</th><th style="width:8%">Required</th><th style="width:5%"></th></tr></thead>
                                 <tbody id="tplFieldRows"></tbody>
                             </table>
-                            <button type="button" class="btn btn-sm btn-outline-primary mb-3" id="tplFieldAdd"><i class="fa fa-plus mr-1"></i><?= __('add_field', 'Add field') ?></button>
+                            <button type="button" class="sr-btn sr-btn-sm mb-3" id="tplFieldAdd"><i class="fa fa-plus"></i><?= __('add_field', 'Add field') ?></button>
 
                             <div class="form-group mb-1">
                                 <label class="mb-1"><?= __('placeholders', 'Placeholders') ?> <small class="text-muted"><?= __('memo_ph_hint2', '- click to insert where the cursor is (subject or body)') ?></small></label>
@@ -369,12 +417,12 @@ if ($preselectEmpId !== '') {
                     </div>
                     <div class="modal-footer">
                         <div id="memoTplEditButtons" style="display:none">
-                            <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-light" id="memoTplBack"><i class="fa fa-arrow-left mr-1"></i><?= __('back', 'Back') ?></button>
-                                <button type="button" class="btn btn-primary" id="memoTplSave"><i class="fa fa-floppy-disk mr-1"></i><?= __('save_template', 'Save Template') ?></button>
+                            <div class="d-flex" style="gap: 8px;">
+                                <button type="button" class="sr-btn" id="memoTplBack"><i class="fa fa-arrow-left"></i> <?= __('back', 'Back') ?></button>
+                                <button type="button" class="sr-btn sr-btn-primary" id="memoTplSave"><i class="fa fa-floppy-disk"></i> <?= __('save_template', 'Save Template') ?></button>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal" id="memoTplClose"><?= __('close', 'Close') ?></button>
+                        <button type="button" class="sr-btn sr-btn-ghost" data-dismiss="modal" id="memoTplClose"><?= __('close', 'Close') ?></button>
                     </div>
                 </div>
             </div>
