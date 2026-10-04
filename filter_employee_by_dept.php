@@ -203,6 +203,7 @@ if ($total_items > 0) {
 	<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 	<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 	<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 	<script src="assets/js/modernizr.min.js"></script>
     <style>
         .filter-controls { max-width: 800px; }

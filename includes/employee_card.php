@@ -101,165 +101,84 @@ if ($card_job_id > 0) {
     $card_job_title = $GLOBALS['__employee_card_job_cache'][$card_job_id];
 }
 ?>
-<!-- ============================================
-    NEW MODERN GUI DESIGN - Employee Card
-    ============================================ -->
-<div class="col-lg-3 col-md-6 mb-4">
-    <div class="employee-card-modern <?= $status_class ?>">
-        <div class="employee-card-top-line"></div>
-        <!-- Card Header with Background -->
-        <div class="employee-card-header">
-            <div class="header-gradient"></div>
-            
-            <!-- Employee Avatar -->
-            <div class="employee-avatar-wrapper<?= $card_is_online ? ' is-online' : '' ?>" title="<?= $card_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
-                <img src="<?= htmlspecialchars($emp_avatar) ?>" class="employee-avatar-modern" alt="<?= htmlspecialchars($name) ?>">
-                <div class="avatar-status-badge <?= str_replace('status-', '', $status_class) ?>"></div>
-                <?php if ($card_is_online): ?><span class="avatar-online-dot"></span><?php endif; ?>
-            </div>
+<?php
+require_once __DIR__ . '/special_access_helper.php';
+// System admin, HR department, or anyone granted the 'access_edit_employee' special access
+$can_modify_employee = (
+    ($is_system_admin ?? false) ||
+    ($isDeptHr ?? false) ||
+    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
+$card_can_edit = ($emp_status == 1 && $can_modify_employee);
+$card_can_delete = !empty($is_system_admin);
 
-            <!-- Quick Actions -->
-            <div class="card-actions-modern">
-                <?php
-                require_once __DIR__ . '/special_access_helper.php';
-                // System admin, HR department, or anyone granted the 'access_edit_employee' special access
-                $can_modify_employee = (
-                    ($is_system_admin ?? false) ||
-                    ($isDeptHr ?? false) ||
-                    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-                );
-                ?>
-                <?php if ($emp_status == 1 && $can_modify_employee): ?>
-                    <a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="action-btn edit-btn" title="<?= __('edit') ?>" data-toggle="tooltip">
-                        <i class="fa fa-solid fa-pen-to-square"></i>
-                    </a>
-                <?php endif; ?>
-                <?php if (isset($is_system_admin) && $is_system_admin): ?>
-                    <a href="javascript:void(0);" class="action-btn delete-btn deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0' title="<?= __('delete') ?>" data-toggle="tooltip">
-                        <i class="fa fa-solid fa-trash-alt"></i>
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
+$card_state = str_replace('status-', '', (string)$status_class); // active | fly | inactive
+$card_state_meta = [
+    'active'   => ['tone' => 'green', 'label' => __('active', 'Active'), 'icon' => 'fa-check'],
+    'fly'      => ['tone' => 'sky',   'label' => __('on_vacation', 'On vacation'), 'icon' => 'fa-plane'],
+    'inactive' => ['tone' => 'slate', 'label' => __('inactive', 'Inactive'), 'icon' => 'fa-minus'],
+][$card_state] ?? ['tone' => 'slate', 'label' => '', 'icon' => 'fa-minus'];
+$card_view_url = 'view_employee.php?emp_id=' . urlencode((string)$emp_id);
+$card_display_name = getDisplayName($name);
+?>
+<!-- Employee card - "profile cover" layout (new GUI - assets/css/smart_request.css: .sr-emp-card).
+     The card carries its own .sr-page scope so the design tokens work on any page. -->
+<div class="col-xl-3 col-lg-4 col-md-6 mb-4 sr-emp-col">
+    <div class="sr-page sr-emp-card is-<?= htmlspecialchars($card_state) ?>">
 
-        <!-- Card Body -->
-        <div class="employee-card-body">
-            <!-- Name -->
-            <div class="employee-info-primary">
-                <h5 class="employee-name"><?= getDisplayName($name) ?></h5>
-            </div>
-
-            <!-- Position/Type Badge -->
-            <div class="employee-type-section">
-                <?php if (!empty($card_job_title)): ?>
-                    <span class="emp-type-badge manager"><?= htmlspecialchars($card_job_title) ?></span>
-                <?php endif; ?>
-            </div>
-
-            <!-- Department / Company -->
-            <?php if (!empty($card_dept_name) || !empty($card_comp_name)): ?>
-            <div class="employee-org-row">
-                <?php if (!empty($card_dept_name)): ?>
-                    <span class="employee-org-item" title="<?= __('department') ?>">
-                        <i class="fad fa-sitemap"></i> <?= htmlspecialchars($card_dept_name) ?>
-                    </span>
-                <?php endif; ?>
-                <?php if (!empty($card_comp_name)): ?>
-                    <span class="employee-org-item" title="<?= __('company') ?>">
-                        <i class="fad fa-building"></i> <?= htmlspecialchars($card_comp_name) ?>
-                    </span>
-                <?php endif; ?>
-            </div>
+        <div class="sr-emp-cover">
+            <span class="sr-emp-state"><i class="fa <?= $card_state_meta['icon'] ?>"></i><?= htmlspecialchars($card_state_meta['label']) ?></span>
+            <?php if ($card_can_delete): ?>
+                <div class="btn-group dropdown sr-emp-menu">
+                    <a href="javascript:void(0);" class="dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false" title="<?= __('actions') ?>"><i class="fa fa-ellipsis-v"></i></a>
+                    <div class="dropdown-menu dropdown-menu-right">
+                        <?php if ($card_can_edit): ?>
+                            <a class="dropdown-item" href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>"><i class="fa fa-pen-to-square mr-2"></i><?= __('edit') ?></a>
+                        <?php endif; ?>
+                        <a class="dropdown-item text-danger deleteAjax" href="javascript:void(0);" data-id="<?= (int)$id ?>" data-tbl="employee" data-file="0"><i class="fa fa-trash-alt mr-2"></i><?= __('delete') ?></a>
+                    </div>
+                </div>
             <?php endif; ?>
+        </div>
 
-            <!-- Stats Section -->
-            <?php /* if($emp_status == 1): ?>
-                <div class="employee-stats">
-                    <div class="stat-item">
-                        <span class="stat-label"><?= __('fly') ?></span>
-                        <span class="stat-value"><?= $cont_fly ?></span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label"><?= __('encashed') ?></span>
-                        <span class="stat-value"><?= $cont_encashed ?></span>
-                    </div>
-                </div>
-            <?php endif; */?>
+        <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-emp-avatar<?= $card_is_online ? ' is-online' : '' ?>" title="<?= $card_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
+            <img src="<?= htmlspecialchars($emp_avatar) ?>" alt="<?= htmlspecialchars($name) ?>" loading="lazy">
+            <span class="sr-emp-online"></span>
+        </a>
 
-            <!-- Employee Details -->
-            <div class="employee-details-grid">
-                <div class="detail-item">
-                    <span class="detail-label"><?= __('employee_id') ?></span>
-                    <span class="detail-value"><?= $emp_id ?></span>
+        <div class="sr-emp-body">
+            <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-emp-name" title="<?= htmlspecialchars($card_display_name) ?>"><?= htmlspecialchars($card_display_name) ?></a>
+            <span class="sr-emp-job"><?= !empty($card_job_title) ? htmlspecialchars($card_job_title) : '&ndash;' ?></span>
+
+            <div class="sr-emp-chips">
+                <?php if ($card_dept_name !== ''): ?>
+                    <span class="sr-chip" title="<?= __('department') ?>"><i class="fa fa-sitemap"></i><?= htmlspecialchars($card_dept_name) ?></span>
+                <?php endif; ?>
+                <?php if ($card_comp_name !== ''): ?>
+                    <span class="sr-chip" title="<?= __('company') ?>"><i class="fa fa-building"></i><?= htmlspecialchars($card_comp_name) ?></span>
+                <?php endif; ?>
+                <?php if ($card_is_online): ?>
+                    <span class="sr-chip sr-emp-online-chip"><i class="fa fa-circle"></i><?= __('online', 'Online') ?></span>
+                <?php endif; ?>
+            </div>
+
+            <div class="sr-emp-kv">
+                <div>
+                    <small><?= __('employee_id') ?></small>
+                    <b class="sr-mono"><?= htmlspecialchars((string)$emp_id) ?></b>
                 </div>
-                <div class="detail-item">
-                    <span class="detail-label"><?= __('iqama_id') ?></span>
-                    <span class="detail-value copyToClipboard" title="<?= __('copy') ?>"><?= $iqama ?></span>
+                <div>
+                    <small><?= __('iqama_id') ?></small>
+                    <b class="sr-mono copyToClipboard" title="<?= __('copy') ?>"><?= htmlspecialchars((string)$iqama) ?></b>
                 </div>
             </div>
 
-            <!-- Primary Action Button -->
-            <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn-view-details">
-                <span><?= __('view_details') ?></span>
-                <i class="fa fa-solid fa-arrow-right"></i>
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- ============================================
-    OLD DESIGN - COMMENTED OUT FOR RESTORATION
-    ============================================ 
-
-<div class="col-lg-3 col-md-6 mb-4">
-    <div class="card card-employee shadow-sm h-100 <?= $status_class ?>">
-        <div class="card-actions">
-            <div class="btn-group" role="group">
-                <?php
-                require_once __DIR__ . '/special_access_helper.php';
-                // System admin, HR department, or anyone granted the 'access_edit_employee' special access
-                $can_modify_employee = (
-                    ($is_system_admin ?? false) ||
-                    ($isDeptHr ?? false) ||
-                    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-                );
-                ?>
-                <?php if ($emp_status == 1 && $can_modify_employee): ?>
-                    <a href="edit_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-light btn-sm" title="<?= __('edit') ?>">
-                        <i class="fa fa-solid fa-user-pen"></i>
-                    </a>
+            <div class="sr-emp-actions">
+                <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-btn sr-btn-primary sr-btn-sm sr-emp-view"><?= __('view_details') ?> <i class="fa fa-arrow-right"></i></a>
+                <?php if ($card_can_edit): ?>
+                    <a href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" class="sr-btn sr-btn-sm sr-btn-icon" title="<?= __('edit') ?>"><i class="fa fa-pen-to-square"></i></a>
                 <?php endif; ?>
-                <?php if (isset($is_system_admin) && $is_system_admin): ?>
-                    <a href="javascript:void(0);" class="btn btn-danger btn-sm deleteAjax" data-id="<?= $id ?>" data-tbl="employee" data-file='0' title="<?= __('delete') ?>">
-                        <i class="fa fa-solid fa-remove"></i>
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
-        <div class="card-body text-center d-flex flex-column">
-            <img src="<?= htmlspecialchars($emp_avatar) ?>" class="rounded-circle mx-auto mb-3 emp-avatar" alt="Profile Image">
-
-            <h5 class="mb-0 font-weight-bold"><?= ($name) ?></h5>
-            <p class="text-muted small"><?= (strtolower($emptype) == "manager") ? "<span class=\"badge badge-info\">".__(strtolower($emptype))."</span>" : __(strtolower($emptype)) ?></p>
-            <?php if($emp_status == 1): ?>
-                <span class="badge badge-dark badge-pill mx-auto my-3"><?= __('fly') ?>: <?= $cont_fly ?> | <?= __('encashed') ?>: <?= $cont_encashed ?></span>
-            <?php endif;?>
-            <a href="view_employee.php?emp_id=<?= $emp_id ?>" class="btn btn-primary btn-block mt-auto waves-effect waves-light"><i class="fa fa-solid fa-eye mr-2"></i><?= __('view_details') ?></a>
-
-            <div class="mt-4 pt-3 border-top">
-                <div class="row">
-                    <div class="col-6 text-center">
-                        <p class="text-muted mb-0 small text-uppercase"><?= __('employee_id') ?></p>
-                        <h6 class="mb-0"><?= $emp_id ?></h6>
-                    </div>
-                    <div class="col-6 text-center border-left">
-                        <p class="text-muted mb-0 small text-uppercase"><?= __('iqama_id') ?></p>
-                        <h6 class="mb-0 copyToClipboard" title="Copy ID"><?= $iqama ?></h6>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
 </div>
-
--->

@@ -610,6 +610,84 @@ if(isset($_POST['submit'])){
 				display: inline-block;
 			}
 		</style>
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+		<style>
+			/* ---------- New GUI (sr-* design system) ---------- */
+			.dash-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+			@media (max-width: 1199px) { .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+			@media (max-width: 575px) { .dash-kpis { grid-template-columns: 1fr; } }
+			.dash-kpi {
+				--kpi: #6366f1; --kpi-soft: rgba(99, 102, 241, .12);
+				position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; min-width: 0;
+				border-radius: var(--sr-radius); background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow);
+				color: var(--sr-text-2) !important; text-decoration: none !important; overflow: hidden;
+				transition: transform .15s, border-color .15s, box-shadow .15s;
+			}
+			.dash-kpi::before { content: ''; position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 4px; background: var(--kpi); }
+			a.dash-kpi:hover { transform: translateY(-2px); border-color: var(--kpi); box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
+			.dash-kpi.is-blue   { --kpi: #3b82f6; --kpi-soft: rgba(59, 130, 246, .12); }
+			.dash-kpi.is-indigo { --kpi: #6366f1; --kpi-soft: rgba(99, 102, 241, .12); }
+			.dash-kpi.is-violet { --kpi: #8b5cf6; --kpi-soft: rgba(139, 92, 246, .12); }
+			.dash-kpi.is-sky    { --kpi: #0ea5e9; --kpi-soft: rgba(14, 165, 233, .12); }
+			.dash-kpi.is-amber  { --kpi: #f59e0b; --kpi-soft: rgba(245, 158, 11, .14); }
+			.dash-kpi.is-teal   { --kpi: #14b8a6; --kpi-soft: rgba(20, 184, 166, .12); }
+			.dash-kpi.is-red    { --kpi: #ef4444; --kpi-soft: rgba(239, 68, 68, .12); }
+			.dash-kpi.is-rose   { --kpi: #f43f5e; --kpi-soft: rgba(244, 63, 94, .12); }
+			.dash-kpi.is-green  { --kpi: #22c55e; --kpi-soft: rgba(34, 197, 94, .12); }
+			.dash-kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+			.dash-kpi-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); line-height: 1.35; }
+			.dash-kpi-value { margin-top: 4px; font-size: 28px; font-weight: 800; line-height: 1; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+			.dash-kpi-icon {
+				flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+				font-size: 18px; color: var(--kpi); background: var(--kpi-soft);
+			}
+			.dash-kpi-bar { height: 6px; border-radius: 6px; background: var(--sr-surface-3); overflow: hidden; }
+			.dash-kpi-bar span { display: block; height: 100%; border-radius: 6px; background: var(--kpi); transition: width .6s; }
+			.dash-kpi-foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--sr-muted); }
+			.dash-kpi-foot b { color: var(--sr-text-2); }
+			.dash-kpi-foot i { color: var(--kpi); }
+
+			/* Demographics */
+			.dash-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; padding: 14px 18px; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface-2); }
+			@media (max-width: 991px) { .dash-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+			@media (max-width: 575px) { .dash-filters { grid-template-columns: 1fr; } }
+			.dash-filters label { display: block; margin: 0 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+			.dash-filters .select2-container--default .select2-selection--multiple { min-height: 38px; border-radius: 10px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); }
+			.dash-check { display: flex; align-items: center; gap: 8px; margin: 0 0 9px; font-size: 13px; font-weight: 600; color: var(--sr-text-2); cursor: pointer; text-transform: none !important; letter-spacing: 0 !important; }
+			.dash-check input { width: 16px; height: 16px; accent-color: var(--sr-accent); }
+			.dash-tip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 18px 0; font-size: 12px; color: var(--sr-muted); }
+			.dash-charts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; padding: 14px 18px 18px; }
+			@media (max-width: 1399px) { .dash-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+			@media (max-width: 767px) { .dash-charts { grid-template-columns: 1fr; } }
+			.sr-page .dash-pie-card { border-radius: 12px; border-color: var(--sr-border); }
+			.sr-page .dash-pie-title { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: #475569; }
+			.sr-page .dash-slice-filter-badge { margin-top: 0; }
+
+			/* Document expiry alert tiles */
+			.dash-expiry { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
+			@media (max-width: 991px) { .dash-expiry { grid-template-columns: 1fr; } }
+			.sr-page .doc-expiry-card {
+				display: flex; gap: 14px; align-items: center; min-height: 0; padding: 16px; border-radius: 12px; border: 1px solid; cursor: pointer;
+				transition: transform .15s, box-shadow .15s;
+			}
+			.sr-page .doc-expiry-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15, 23, 42, .08); }
+			.doc-expiry-card .dx-count { flex: 0 0 auto; min-width: 58px; height: 58px; padding: 0 8px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; background: var(--sr-surface); }
+			.doc-expiry-card .dx-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+			.doc-expiry-card .dx-sub { margin-top: 4px; font-size: 12px; opacity: .85; line-height: 1.5; }
+
+			/* Access scope */
+			.dash-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
+			@media (max-width: 991px) { .dash-scope { grid-template-columns: 1fr; } }
+			.dash-scope-item { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface-2); min-width: 0; }
+			.dash-scope-item h6 { margin: 0 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); display: flex; align-items: center; gap: 6px; }
+			.dash-scope-item h6 i { color: var(--sr-accent); }
+			.dash-scope-item p { margin: 0; font-size: 13px; color: var(--sr-text-2); line-height: 1.5; word-break: break-word; }
+			.sr-page .allowed-employees-card { background: transparent; border: 0; padding: 0; }
+			.sr-page .allowed-employees-card .employee-badge { background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: none; font-weight: 600; }
+
+			.dash-dt-search { max-width: 300px; }
+			.sr-page .sr-table .iqama_exp_hijri { white-space: nowrap; }
+		</style>
 
 		<?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -666,12 +744,11 @@ if(isset($_POST['submit'])){
                <?php include("./includes/topbar.php"); ?>
                 <!-- Top Bar End -->
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
 
                     <div class="container-fluid">
-						<div class="card-box">
 
-						<?php 
+						<?php
 							$message;
 							if (isset($_SESSION['error_msg'])) {
 								echo $_SESSION['error_msg'];
@@ -680,381 +757,170 @@ if(isset($_POST['submit'])){
 							}
 						?>
 
+						<div class="sr-head">
+							<div>
+								<h1><?= __('dashboard') ?></h1>
+								<p><i class="fa fa-calendar-alt"></i> <?= date('l, d F Y') ?></p>
+							</div>
+							<div class="sr-head-actions">
+								<a href="reg_employee.php" class="sr-btn"><i class="fa fa-users"></i> <?= __('all_employees') ?></a>
+							</div>
+						</div>
 
-						<div class="card-box">
-							<h4 class="m-t-0 header-title"><?= __('employee_demographics') ?: 'Employee Demographics' ?></h4>
+						<?php
+						// KPI tiles: [label, value, percent, fa icon, tone, link (null = not clickable)]
+						$dash_kpis = [
+							[__('almutlak_employees'), (int)$status_cont_active, $pct_active, 'fa-house-chimney-user', 'blue', 'dashbydepart.php'],
+							[__('man_power_employees'), (int)$status_cont_man_power, $pct_man_power, 'fa-users-rays', 'violet', 'filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'],
+							[__('total_on_job_employees'), (int)$status_cont_man_power + (int)$status_cont_active, $pct_on_job, 'fa-briefcase', 'indigo', $status_cont_fly > 0 ? 'dashbydepart.php' : null],
+							[__('departed_employees'), (int)$status_cont_fly, $pct_fly, 'fa-plane-departure', 'amber', $status_cont_fly > 0 ? 'filter_employee.php?page=1&departed=1' : null],
+							[__('local_vacation_employees'), (int)($status_cont_local_vac ?? 0), $pct_local_vac, 'fa-umbrella-beach', 'sky', ($status_cont_local_vac ?? 0) > 0 ? 'filter_employee.php?page=1&local_vac=1' : null],
+							[__('terminated_employees'), (int)$status_cont_ter, $pct_terminated, 'fa-users-slash', 'red', 'filter_employee.php?page=1&status=0&fly=0'],
+							[__('terminated_employees_current_year', 'Terminated Employees (Current Year)'), (int)$status_cont_ter_year, $pct_terminated_year, 'fa-user-slash', 'rose', 'filter_employee.php?page=1&status=0&fly=0&ter_year=' . date('Y')],
+							[__('total_employees'), (int)$status_cont_tot, $pct_total, 'fa-users-viewfinder', 'green', 'reg_employee.php'],
+						];
+						?>
+						<div class="dash-kpis">
+							<?php foreach ($dash_kpis as [$k_label, $k_value, $k_pct, $k_icon, $k_tone, $k_href]):
+								$k_tag = $k_href ? 'a href="' . htmlspecialchars($k_href) . '"' : 'div';
+								$k_end = $k_href ? 'a' : 'div';
+							?>
+								<<?= $k_tag ?> class="dash-kpi is-<?= $k_tone ?>">
+									<div class="dash-kpi-top">
+										<div style="min-width: 0;">
+											<div class="dash-kpi-label"><?= htmlspecialchars($k_label) ?></div>
+											<div class="dash-kpi-value"><?= number_format($k_value) ?></div>
+										</div>
+										<span class="dash-kpi-icon"><i class="fa <?= $k_icon ?>"></i></span>
+									</div>
+									<div class="dash-kpi-bar"><span style="width: <?= (float)$k_pct ?>%;"></span></div>
+									<div class="dash-kpi-foot">
+										<span><b><?= $k_pct ?>%</b> <?= __('of_total_employees') ?></span>
+										<?php if ($k_href): ?><i class="fa fa-arrow-right"></i><?php endif; ?>
+									</div>
+								</<?= $k_end ?>>
+							<?php endforeach; ?>
+						</div>
 
-							<div class="row dash-pie-filter-row">
-								<div class="col-sm-4 col-md-3">
-									<label for="dashChartDeptFilter" class="mb-1"><?= __('department') ?></label>
+						<div class="sr-card">
+							<div class="sr-card-head">
+								<h5 class="sr-card-title"><i class="fa fa-chart-pie"></i> <?= __('employee_demographics') ?: 'Employee Demographics' ?></h5>
+							</div>
+							<div class="dash-filters dash-pie-filter-row">
+								<div>
+									<label for="dashChartDeptFilter"><?= __('department') ?></label>
 									<select class="form-control" id="dashChartDeptFilter" multiple>
 										<?php foreach ($chart_filter_departments as $d): ?>
 											<option value="<?= (int)$d['id'] ?>"><?= htmlspecialchars(($is_rtl ?? false) && !empty($d['dep_nme_ar']) ? $d['dep_nme_ar'] : $d['dep_nme'], ENT_QUOTES, 'UTF-8') ?></option>
 										<?php endforeach; ?>
 									</select>
 								</div>
-								<div class="col-sm-4 col-md-3">
-									<label for="dashChartCompFilter" class="mb-1"><?= __('company') ?: 'Company' ?></label>
+								<div>
+									<label for="dashChartCompFilter"><?= __('company') ?: 'Company' ?></label>
 									<select class="form-control" id="dashChartCompFilter" multiple>
 										<?php foreach ($chart_filter_companies as $c): ?>
 											<option value="<?= (int)$c['comp_id'] ?>"><?= htmlspecialchars(($is_rtl ?? false) && !empty($c['comp_name_ar']) ? $c['comp_name_ar'] : $c['comp_name'], ENT_QUOTES, 'UTF-8') ?></option>
 										<?php endforeach; ?>
 									</select>
 								</div>
-								<div class="col-sm-4 col-md-3 d-flex align-items-end">
-									<div class="btn-group" role="group">
-										<button type="button" class="btn btn-primary" id="dashChartApplyFilterBtn"><?= __('apply') ?: 'Apply' ?></button>
-										<button type="button" class="btn btn-secondary" id="dashChartResetFilterBtn"><?= __('reset') ?></button>
-									</div>
+								<div style="display: flex; gap: 6px;">
+									<button type="button" class="sr-btn sr-btn-primary" id="dashChartApplyFilterBtn"><i class="fa fa-filter"></i> <?= __('apply') ?: 'Apply' ?></button>
+									<button type="button" class="sr-btn" id="dashChartResetFilterBtn"><?= __('reset') ?></button>
 								</div>
-								<div class="col-sm-4 col-md-3 d-flex align-items-end">
-									<div class="custom-control custom-checkbox">
-										<input type="checkbox" class="custom-control-input" id="dashChartShowLabels">
-										<label class="custom-control-label" for="dashChartShowLabels"><?= __('show_slice_labels', 'Show data labels on slices') ?></label>
-									</div>
-								</div>
-								<div class="col-12">
-									<span class="badge badge-info dash-slice-filter-badge" id="dashSliceFilterBadge" style="display:none;" title="<?= __('click_to_clear') ?: 'Click to clear' ?>"></span>
+								<div>
+									<label class="dash-check" for="dashChartShowLabels">
+										<input type="checkbox" id="dashChartShowLabels">
+										<span><?= __('show_slice_labels', 'Show data labels on slices') ?></span>
+									</label>
 								</div>
 							</div>
-							<div class="small text-muted mt-1"><?= __('click_a_chart_slice_to_filter') ?: 'Tip: click a slice on the Country, Gender, or Saudi/Non-Saudi chart to filter all charts by it.' ?></div>
-
-							<div class="row mt-3">
-								<div class="col-md-6 col-xl-3">
-									<div class="dash-pie-card">
-										<div class="dash-pie-title"><?= __('employees_by_country') ?: 'Employees by Country' ?></div>
-										<div class="dash-pie-canvas-wrap" id="chartByCountry"></div>
-									</div>
+							<div class="dash-tip">
+								<span><i class="fa fa-lightbulb"></i> <?= __('click_a_chart_slice_to_filter') ?: 'Tip: click a slice on the Country, Gender, or Saudi/Non-Saudi chart to filter all charts by it.' ?></span>
+								<span class="sr-pill sr-pill-xs tone-indigo dash-slice-filter-badge" id="dashSliceFilterBadge" style="display:none;" title="<?= __('click_to_clear') ?: 'Click to clear' ?>"></span>
+							</div>
+							<div class="dash-charts">
+								<div class="dash-pie-card">
+									<div class="dash-pie-title"><?= __('employees_by_country') ?: 'Employees by Country' ?></div>
+									<div class="dash-pie-canvas-wrap" id="chartByCountry"></div>
 								</div>
-								<div class="col-md-6 col-xl-3">
-									<div class="dash-pie-card">
-										<div class="dash-pie-title"><?= __('employees_by_gender') ?: 'Employees by Gender' ?></div>
-										<div class="dash-pie-canvas-wrap" id="chartByGender"></div>
-									</div>
+								<div class="dash-pie-card">
+									<div class="dash-pie-title"><?= __('employees_by_gender') ?: 'Employees by Gender' ?></div>
+									<div class="dash-pie-canvas-wrap" id="chartByGender"></div>
 								</div>
-								<div class="col-md-6 col-xl-3">
-									<div class="dash-pie-card">
-										<div class="dash-pie-title"><?= __('employees_by_company') ?: 'Employees by Company' ?></div>
-										<div class="dash-pie-canvas-wrap" id="chartByCompany"></div>
-									</div>
+								<div class="dash-pie-card">
+									<div class="dash-pie-title"><?= __('employees_by_company') ?: 'Employees by Company' ?></div>
+									<div class="dash-pie-canvas-wrap" id="chartByCompany"></div>
 								</div>
-								<div class="col-md-6 col-xl-3">
-									<div class="dash-pie-card">
-										<div class="dash-pie-title"><?= __('saudi_vs_non_saudi') ?: 'Saudi vs Non-Saudi' ?></div>
-										<div class="dash-pie-canvas-wrap" id="chartBySaudi"></div>
-									</div>
+								<div class="dash-pie-card">
+									<div class="dash-pie-title"><?= __('saudi_vs_non_saudi') ?: 'Saudi vs Non-Saudi' ?></div>
+									<div class="dash-pie-canvas-wrap" id="chartBySaudi"></div>
 								</div>
 							</div>
 						</div>
 
-
-						<div class="row text-center">
-							<div class="col-sm-3 col-xl-3" onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;">
-							<div class="stats-card professional-theme theme-custom" data-color="custom">
-								<div class="stats-card-icon professional-theme theme-custom" data-color="custom">
-									<div class="stats-card-count-circle"><?=$status_cont_active ?></div>
-									<span class="stats-card-tooltip">Active Employees</span>
-									<i class="fa fa-house-chimney-user"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('almutlak_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_active ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_active ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=1&fly=no&emp_sup_type=man_power'" style="cursor: pointer;">
-							<div class="stats-card professional-theme theme-purple" data-color="purple">
-								<div class="stats-card-icon professional-theme theme-purple" data-color="purple">
-									<div class="stats-card-count-circle"><?php if($status_cont_man_power > 0){ echo $status_cont_man_power;}else{echo "0";} ?></div>
-									<span class="stats-card-tooltip">Man Power</span>
-									<i class="fa fa-users-rays"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('man_power_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_man_power ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_man_power ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='dashbydepart.php'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card professional-theme theme-primary" data-color="primary">
-								<div class="stats-card-icon professional-theme theme-primary" data-color="primary">
-									<div class="stats-card-count-circle"><?=$status_cont_man_power + $status_cont_active ?></div>
-									<span class="stats-card-tooltip">Total On Job</span>
-									<i class="fa fa-plane-departure"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('total_on_job_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_on_job ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_on_job ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" <?php if($status_cont_fly > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&departed=1'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card professional-theme" data-color="warning">
-								<div class="stats-card-icon professional-theme" data-color="warning">
-									<div class="stats-card-count-circle"><?=$status_cont_fly ?></div>
-									<span class="stats-card-tooltip">Departed Employees</span>
-									<i class="fa fa-plane-departure"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('departed_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_fly ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_fly ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" <?php if(($status_cont_local_vac ?? 0) > 0){ ?> onclick="window.location.href='filter_employee.php?page=1&local_vac=1'" style="cursor: pointer;" <?php } ?> >
-							<div class="stats-card professional-theme" data-color="info">
-								<div class="stats-card-icon professional-theme" data-color="info">
-									<div class="stats-card-count-circle"><?=$status_cont_local_vac ?? 0 ?></div>
-									<span class="stats-card-tooltip">Local Vacation</span>
-									<i class="fa fa-umbrella-beach"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('local_vacation_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_local_vac ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_local_vac ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0'" style="cursor: pointer;">
-							<div class="stats-card professional-theme" data-color="danger">
-								<div class="stats-card-icon professional-theme" data-color="danger">
-									<div class="stats-card-count-circle"><?=$status_cont_ter ?></div>
-									<span class="stats-card-tooltip">Terminated Employees</span>
-									<i class="fa fa-users-slash"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('terminated_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_terminated ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_terminated ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" onclick="window.location.href='filter_employee.php?page=1&status=0&fly=0&ter_year=<?=date('Y')?>'" style="cursor: pointer;">
-							<div class="stats-card professional-theme" data-color="danger">
-								<div class="stats-card-icon professional-theme" data-color="danger">
-									<div class="stats-card-count-circle"><?=$status_cont_ter_year ?></div>
-									<span class="stats-card-tooltip">Terminated Employees (Current Year)</span>
-									<i class="fa fa-user-slash"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('terminated_employees_current_year', 'Terminated Employees (Current Year)') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_terminated_year ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_terminated_year ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							<div class="col-sm-3 col-xl-3" onclick="window.location.href='reg_employee.php'" style="cursor: pointer;">
-							<div class="stats-card professional-theme theme-success" data-color="success">
-								<div class="stats-card-icon professional-theme theme-success" data-color="success">
-									<div class="stats-card-count-circle"><?=$status_cont_tot ?></div>
-									<span class="stats-card-tooltip">Total Employees</span>
-									<i class="fa fa-users-viewfinder"></i>
-								</div>
-								<div class="stats-card-content">
-									<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?=__('total_employees') ?></div>
-									<div class="stats-card-footer">
-										<span class="stats-card-percentage positive">
-											<i class="mdi mdi-trending-up"></i>
-										</span>
-									</div>
-									<div style="width:100%;margin-top:18px;">
-										<div style="background:rgba(255,255,255,0.25);border-radius:8px;height:12px;overflow:hidden;">
-											<div class="progress-bar-fill-animated" style="height:12px;border-radius:8px;width:<?=$pct_total ?>%;background:rgba(255,255,255,0.9);box-shadow:0 0 8px rgba(255,255,255,0.6);transition:width 0.6s;"></div>
-										</div>
-										<div style="font-size:13px;color:#fff;opacity:0.85;margin-top:4px;">
-											<?=$pct_total ?>% <?=__('of_total_employees') ?>
-										</div>
-									</div>
-								</div>
-							</div>
-							</div>
-							</div>
-                        </div>
 						<?php if ($can_view_expiry_block): ?>
-						<div class="card-box">
-							<div class="card-box mt-2">
-								<h4 class="m-t-0 header-title"><?= getDisplayName('Document Expiry Alerts') ?></h4>
-								<div class="row text-center">
-									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card professional-theme doc-expiry-card" data-color="info" data-level="info">
-											<div class="stats-card-icon professional-theme" data-color="info">
-												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['info'] ?></div>
-												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 21-30 days range') ?></span>
-												<i class="fa fa-circle-info"></i>
-											</div>
-											<div class="stats-card-content">
-												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 30 Days') ?>
-													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['info']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['info']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['info']['contract'] ?></small>
-												</div>
-											</div>
-										</div>
-									</div>
-
-									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card professional-theme doc-expiry-card" data-color="warning" data-level="warning">
-											<div class="stats-card-icon professional-theme" data-color="warning">
-												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['warning'] ?></div>
-												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 11-20 days range') ?></span>
-												<i class="fa fa-triangle-exclamation"></i>
-											</div>
-											<div class="stats-card-content">
-												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 20 Days') ?>
-													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['warning']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['warning']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['warning']['contract'] ?></small>
-												</div>
+						<?php
+						$dash_expiry_tiles = [
+							['info', 'sky', __('within_30_days', getDisplayName('Within 30 Days')), getDisplayName('Employees in 21-30 days range'), 'fa-circle-info'],
+							['warning', 'amber', __('within_20_days', getDisplayName('Within 20 Days')), getDisplayName('Employees in 11-20 days range'), 'fa-triangle-exclamation'],
+							['danger', 'red', __('within_10_days', getDisplayName('Within 10 Days')), getDisplayName('Employees in 0-10 days or expired range'), 'fa-skull-crossbones'],
+						];
+						?>
+						<div class="sr-card">
+							<div class="sr-card-head">
+								<h5 class="sr-card-title"><i class="fa fa-id-card"></i> <?= getDisplayName('Document Expiry Alerts') ?></h5>
+								<span class="sr-card-sub"><?= __('click_card_to_view_list', 'Click a card to see the employees') ?></span>
+							</div>
+							<div class="dash-expiry">
+								<?php foreach ($dash_expiry_tiles as [$x_level, $x_tone, $x_title, $x_tip, $x_icon]): ?>
+									<div class="doc-expiry-card tone-<?= $x_tone ?>" data-level="<?= $x_level ?>" title="<?= htmlspecialchars($x_tip) ?>">
+										<span class="dx-count"><?= (int)$doc_expiry_counts[$x_level] ?></span>
+										<div style="min-width: 0;">
+											<div class="dx-title"><i class="fa <?= $x_icon ?>"></i> <?= htmlspecialchars($x_title) ?></div>
+											<div class="dx-sub">
+												<?= getDisplayName('ID/Iqama') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['id_iqama'] ?></b> &middot;
+												<?= getDisplayName('Passport') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['passport'] ?></b> &middot;
+												<?= getDisplayName('Contract') ?>: <b><?= (int)$doc_expiry_doc_counts[$x_level]['contract'] ?></b>
 											</div>
 										</div>
 									</div>
-
-									<div class="col-sm-4 col-xl-4">
-										<div class="stats-card professional-theme doc-expiry-card" data-color="danger" data-level="danger">
-											<div class="stats-card-icon professional-theme" data-color="danger">
-												<div class="stats-card-count-circle"><?= (int)$doc_expiry_counts['danger'] ?></div>
-												<span class="stats-card-tooltip"><?= getDisplayName('Employees in 0-10 days or expired range') ?></span>
-												<i class="fa fa-skull-crossbones"></i>
-											</div>
-											<div class="stats-card-content">
-												<div class="stats-card-label" style="color:#fff;opacity:0.95;"><?= getDisplayName('Within 10 Days') ?>
-													<small><?= getDisplayName('ID/Iqama') ?>: <?= (int)$doc_expiry_doc_counts['danger']['id_iqama'] ?> | <?= getDisplayName('Passport') ?>: <?= (int)$doc_expiry_doc_counts['danger']['passport'] ?> | <?= getDisplayName('Contract') ?>: <?= (int)$doc_expiry_doc_counts['danger']['contract'] ?></small>
-												</div>
-											</div>
-										</div>
-									</div>
-								</div>
+								<?php endforeach; ?>
 							</div>
 						</div>
 						<?php endif; ?>
 
-						<div class="card-box">
-							<h4 class="m-t-0 header-title"><?= getDisplayName('Access Scope') ?></h4>
-							<div class="row">
-								<div class="col-md-4">
-									<div class="card-box" style="border: 1px solid #e5e7eb;">
-										<h5 class="m-t-0"><?= __('allowed_companies') ?: 'Allowed Companies' ?></h5>
-										<div class="small text-muted"><?= htmlspecialchars($allowed_company_names) ?></div>
-									</div>
+						<div class="sr-card">
+							<div class="sr-card-head">
+								<h5 class="sr-card-title"><i class="fa fa-shield-halved"></i> <?= getDisplayName('Access Scope') ?></h5>
+							</div>
+							<div class="dash-scope">
+								<div class="dash-scope-item">
+									<h6><i class="fa fa-building"></i> <?= __('allowed_companies') ?: 'Allowed Companies' ?></h6>
+									<p><?= htmlspecialchars($allowed_company_names) ?></p>
 								</div>
-								<div class="col-md-4">
-									<div class="card-box" style="border: 1px solid #e5e7eb;">
-										<h5 class="m-t-0"><?= __('allowed_departments') ?: 'Allowed Departments' ?></h5>
-										<div class="small text-muted"><?= htmlspecialchars($allowed_department_names) ?></div>
-									</div>
+								<div class="dash-scope-item">
+									<h6><i class="fa fa-sitemap"></i> <?= __('allowed_departments') ?: 'Allowed Departments' ?></h6>
+									<p><?= htmlspecialchars($allowed_department_names) ?></p>
 								</div>
 								<?php if (!empty($allowed_employee_names)): ?>
-								<div class="col-md-4">
-									<div class="allowed-employees-card" id="allowed-employees-badge-card">
-										<div class="allowed-employees-card-title"><?= __('allowed_employees') ?: 'Allowed Employees' ?></div>
-										<div class="allowed-employees-card-content" id="allowed-employees-container">
-											<!-- Badges will be populated by JavaScript -->
-										</div>
+								<div class="dash-scope-item allowed-employees-card" id="allowed-employees-badge-card">
+									<h6><i class="fa fa-users"></i> <?= __('allowed_employees') ?: 'Allowed Employees' ?></h6>
+									<div class="allowed-employees-card-content" id="allowed-employees-container">
+										<!-- Badges will be populated by JavaScript -->
 									</div>
 								</div>
 								<?php endif; ?>
 							</div>
 						</div>
-                        <?php /* if($user_type == $access1 OR $user_type == $access2){ ?>
-                        <div class="card-box">
-                        	<h4 class="m-t-0 header-title">Search Birthday by Month</h4>
-                        	<form action="find_birthday.php" method="get">
-							<?=$msg ?>
-							<div class="form-row">
-								<div class="form-group col-md-6">
-									<label for="datepickerdob" class="col-form-label">Section Name<span class="text-danger">*</span></label>
-									<input type="text" name="find_birthday" parsley-trigger="change" required placeholder="Select any date of month" class="form-control" id="datepickerdob">
-								</div>
-							</div>							
-							<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-update"></i> Search Birthday</button>
-							</form>ى
-                        </div>
-                        <?php } */?>
+
 							<?php
 
 							// Show expiry notifications for: Administrators, HR team, Finance team, IT team, and department managers
 							if ($can_view_expiry_block):
 								// Use the same access control pattern for expiry notifications
 								if(!$can_see_all_employees && isset($user_dept)){
-									$result=mysqli_query($conDB, "SELECT 
-									`e`.*, 
+									$result=mysqli_query($conDB, "SELECT
+									`e`.*,
 									`d`.`dep_nme`,
 									`d`.`dep_nme_ar`,
 									`c`.`name` AS `countryname_en`,
@@ -1064,8 +930,8 @@ if(isset($_POST['submit'])){
 									LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 									WHERE `e`.`status`=1 AND `e`.`iqama_exp_g` BETWEEN CURDATE() and DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND `e`.`dept`='".$user_dept."' ");
 								}else{
-									$result=mysqli_query($conDB, "SELECT 
-									`e`.*, 
+									$result=mysqli_query($conDB, "SELECT
+									`e`.*,
 									`d`.`dep_nme`,
 									`d`.`dep_nme_ar`,
 									`c`.`name` AS `countryname_en`,
@@ -1078,74 +944,76 @@ if(isset($_POST['submit'])){
 
 								if( mysqli_num_rows($result) != 0 ){
 							?>
-						<div class="card-box">
-							<h4 class="m-t-0 header-title"><?=__('coming_soon_expiry_with_30_days') ?></h4>
-							<table id="datatable" class="table table-striped dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-								<thead class="thead-dark">
+						<div class="sr-card">
+							<div class="sr-toolbar">
+								<h5 class="sr-card-title"><i class="fa fa-hourglass-half"></i> <?=__('coming_soon_expiry_with_30_days') ?></h5>
+								<div class="sr-search dash-dt-search">
+									<i class="fa fa-search"></i>
+									<input type="search" class="dash-dt-filter" data-table="#datatable" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+								</div>
+							</div>
+							<div class="sr-table-wrap">
+							<table id="datatable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+								<thead>
 								<tr>
-									<th><?=__('employee_id') ?></th>
 									<th><?=__('name') ?></th>
 									<th><?=__('iqama_id') ?></th>
 									<th><?=__('department') ?></th>
 									<th><?=__('country') ?></th>
 									<th><?=__('iqama_id_expiry') ?></th>
 									<th><?=__('days_of_expiry') ?></th>
-									<th width="200"><?=__('action') ?></th>
+									<th class="text-right"><?=__('action') ?></th>
 								</tr>
 								</thead>
 
 								<tbody>
 								<?php
-									while($row = mysqli_fetch_assoc($result)){	
+									while($row = mysqli_fetch_assoc($result)){
 										if(strtotime(date("Y/m/d")) < strtotime($row['iqama_exp_g'])){
 
 											$from = strtotime(date("d-m-Y", strtotime($row['iqama_exp_g'])));
 											$today = time();
 											$difference = $from - $today;
 											$daystoexp = floor($difference / 86400);  // (60 * 60 * 24)
-											
+
 											if($daystoexp <= "10"){
-												$color = "table-danger";
+												$days_tone = "red";
 											}elseif($daystoexp <= "20"){
-												$color = "table-warning";
-											}elseif($daystoexp <= "30"){
-												$color = "table-info";
+												$days_tone = "amber";
+											}else{
+												$days_tone = "sky";
 											}
-											
-//													 echo "<div style='background-color: {$color};'>Expires in {$when} day(s)</div>";
 								?>
-									
-								<tr class="<?=$color; ?>">
-									<td><?=$row['emp_id']; ?></td>
-									<td><?=getDisplayName($row['name']); ?></td>
-									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
-									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
-									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
-									<td><?=$row['iqama_exp']; ?></td>
-									<td align="center"><?=$daystoexp; ?> <?=__('days')?></td>
-									<td>
-										<div class="btn-group" role="group" aria-label="Edit Button">
-											<a href="javascript:void(0);" class="btn btn-primary m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
-												<i class="mdi mdi-account-card-details"></i> <?=__('update_expiry')?>
-											</a>
+								<tr>
+									<td data-order="<?= htmlspecialchars(getDisplayName($row['name'])) ?>">
+										<div class="sr-person">
+											<span class="sr-avatar"><?= htmlspecialchars(mb_strtoupper(mb_substr(trim((string)$row['name']), 0, 1))) ?></span>
+											<div style="min-width: 0;">
+												<span class="sr-cell-title"><?= htmlspecialchars(getDisplayName($row['name'])) ?></span>
+												<span class="sr-cell-sub sr-mono"><?= htmlspecialchars($row['emp_id']) ?></span>
+											</div>
 										</div>
+									</td>
+									<td><span class="sr-mono copyToClipboard" style="cursor: copy;"><?= htmlspecialchars($row['iqama']) ?></span></td>
+									<td><?= htmlspecialchars(($is_rtl ?? false) ? $row['dep_nme_ar'] : $row['dep_nme']) ?></td>
+									<td><?= htmlspecialchars(($is_rtl ?? false) ? $row['countryname_ar'] : $row['countryname_en']) ?></td>
+									<td data-order="<?= htmlspecialchars($row['iqama_exp_g']) ?>"><?= htmlspecialchars($row['iqama_exp']) ?></td>
+									<td data-order="<?= (int)$daystoexp ?>"><span class="sr-pill sr-pill-xs tone-<?= $days_tone ?>"><span class="sr-dot"></span><?= $daystoexp ?> <?= __('days') ?></span></td>
+									<td class="text-right">
+										<a href="javascript:void(0);" class="sr-open-btn iqama_exp_hijri" data-id="<?=$row['id']?>"><i class="fa fa-id-card"></i> <?=__('update_expiry')?></a>
 									</td>
 								</tr>
 								<?php } } ?>
 								</tbody>
 							</table>
+							</div>
 						</div>
 						<?php } ?>
 						<?php
-							// Query for expired Iqamas - use same access control
-							if(!$can_see_all_employees && isset($user_dept)){
-									// Query for department-restricted users (commented out in original)
-									// Keep it commented as the else block is used for all cases
-							}
 							// Always use the full query, filtered by department if needed
 							$expired_filter = $can_see_all_employees ? "" : " AND `e`.`dept`='".$user_dept."'";
-							$result=mysqli_query($conDB, "SELECT 
-								`e`.*, 
+							$result=mysqli_query($conDB, "SELECT
+								`e`.*,
 								`d`.`dep_nme`,
 								`d`.`dep_nme_ar`,
 								`c`.`name` AS `countryname_en`,
@@ -1155,24 +1023,29 @@ if(isset($_POST['submit'])){
 								LEFT JOIN `countries` `c` ON `c`.`id` = `e`.`country`
 								WHERE `e`.`status`=1 AND DATEDIFF(`e`.`iqama_exp_g`, NOW()) <= 1".$expired_filter."
 							");
-							
+
 							if( mysqli_num_rows($result) != 0 ){
 
 						?>
-						<div class="card-box">
-							<h4 class="m-t-0 header-title"><?=__('expired') ?></h4>
-
-							<table id="datatable_exp" class="table table-striped dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-								<thead class="thead-dark">
+						<div class="sr-card">
+							<div class="sr-toolbar">
+								<h5 class="sr-card-title"><i class="fa fa-circle-exclamation" style="color: #ef4444;"></i> <?=__('expired') ?></h5>
+								<div class="sr-search dash-dt-search">
+									<i class="fa fa-search"></i>
+									<input type="search" class="dash-dt-filter" data-table="#datatable_exp" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+								</div>
+							</div>
+							<div class="sr-table-wrap">
+							<table id="datatable_exp" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+								<thead>
 								<tr>
-									<th><?=__('employee_id') ?></th>
 									<th><?=__('name') ?></th>
 									<th><?=__('iqama_id') ?></th>
 									<th><?=__('department') ?></th>
 									<th><?=__('country') ?></th>
 									<th><?=__('iqama_id_expiry') ?></th>
 									<th><?=__('days_of_expiry') ?></th>
-									<th width="200"><?=__('action') ?></th>
+									<th class="text-right"><?=__('action') ?></th>
 								</tr>
 								</thead>
 
@@ -1186,29 +1059,33 @@ if(isset($_POST['submit'])){
 											$daystoexp = floor($difference / 86400);  // (60 * 60 * 24)
 									?>
 								<tr>
-									<td><?=$row['emp_id']; ?></td>
-									<td><?=getDisplayName($row['name']); ?></td>
-									<td><span class='copyToClipboard'><?=$row['iqama']?></span> <i class='fa fa-clipboard'></i></td>
-									<td><?=($is_rtl ?? false ? $row['dep_nme_ar']:$row['dep_nme'])?></td>
-									<td><?=($is_rtl ?? false? $row['countryname_ar'] : $row['countryname_en']);?></td>
-									<td><?=date("d/m/Y", strtotime($row['iqama_exp_g'])); ?></td>
-									<td align="center"><?=$daystoexp; ?> <?=__('days') ?></td>
-									<td>
-										<div class="btn-group" role="group" aria-label="Edit Button">
-											<a href="javascript:void(0);" class="btn btn-danger m-t-20 btn-rounded waves-effect w-md waves-light btn-sm iqama_exp_hijri" data-id="<?=$row['id']?>" >
-												<i class="fa fa-images-user"></i> <?=__('update_expiry') ?>
-											</a>
+									<td data-order="<?= htmlspecialchars(getDisplayName($row['name'])) ?>">
+										<div class="sr-person">
+											<span class="sr-avatar" style="background: var(--tone-red-bg); color: var(--tone-red-fg);"><?= htmlspecialchars(mb_strtoupper(mb_substr(trim((string)$row['name']), 0, 1))) ?></span>
+											<div style="min-width: 0;">
+												<span class="sr-cell-title"><?= htmlspecialchars(getDisplayName($row['name'])) ?></span>
+												<span class="sr-cell-sub sr-mono"><?= htmlspecialchars($row['emp_id']) ?></span>
+											</div>
 										</div>
+									</td>
+									<td><span class="sr-mono copyToClipboard" style="cursor: copy;"><?= htmlspecialchars($row['iqama']) ?></span></td>
+									<td><?= htmlspecialchars(($is_rtl ?? false) ? $row['dep_nme_ar'] : $row['dep_nme']) ?></td>
+									<td><?= htmlspecialchars(($is_rtl ?? false) ? $row['countryname_ar'] : $row['countryname_en']) ?></td>
+									<td data-order="<?= htmlspecialchars($row['iqama_exp_g']) ?>"><?= date("d/m/Y", strtotime($row['iqama_exp_g'])) ?></td>
+									<td data-order="<?= (int)$daystoexp ?>"><span class="sr-pill sr-pill-xs tone-red"><span class="sr-dot"></span><?= $daystoexp ?> <?= __('days') ?></span></td>
+									<td class="text-right">
+										<a href="javascript:void(0);" class="sr-open-btn iqama_exp_hijri" data-id="<?=$row['id']?>" style="color: var(--tone-red-fg);"><i class="fa fa-id-card"></i> <?=__('update_expiry') ?></a>
 									</td>
 								</tr>
 								<?php } } ?>
 								</tbody>
 							</table>
+							</div>
 						</div>
 						<?php } ?>
 
 					<?php endif; ?>
-							
+
                     </div> <!-- container -->
 
                 </div> <!-- content -->
@@ -1579,8 +1456,9 @@ if(isset($_POST['submit'])){
 
                 // Default Datatable
                 $('#datatable').DataTable({
+						dom: 'rtip',
 						lengthChange: false,
-						order: [[ 5, "asc" ]],
+						order: [[ 4, "asc" ]],
 						language: {
 							search: `<span>${__('search')}:</span> _INPUT_`,
 							searchPlaceholder: `${__('search')}...`,
@@ -1601,6 +1479,8 @@ if(isset($_POST['submit'])){
 					}
 				);
                 $('#datatable_exp').DataTable({
+					dom: 'rtip',
+					order: [[ 4, "asc" ]],
 					language: {
 						search: `<span>${__('search')}:</span> _INPUT_`,
 						searchPlaceholder: `${__('search')}...`,
@@ -1619,6 +1499,12 @@ if(isset($_POST['submit'])){
 						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
 					}
 				});
+
+                // Card search boxes drive the DataTables search
+                $('.dash-dt-filter').on('input', function() {
+                    var sel = $(this).data('table');
+                    if ($.fn.dataTable.isDataTable(sel)) { $(sel).DataTable().search(this.value).draw(); }
+                });
 
                 //Buttons examples
                 var table = $('#datatable-buttons').DataTable({

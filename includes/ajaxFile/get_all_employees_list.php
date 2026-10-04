@@ -39,6 +39,16 @@ if (!empty($search_term)) {
     $types .= "ssss";
 }
 
+// Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
+$status_filter = in_array(($_POST['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_POST['emp_status'] : '';
+if ($status_filter === 'active') {
+    $where_conditions[] = "(status = 1 AND fly = 0)";
+} elseif ($status_filter === 'fly') {
+    $where_conditions[] = "fly = 1";
+} elseif ($status_filter === 'inactive') {
+    $where_conditions[] = "(status <> 1 AND fly <> 1)";
+}
+
 $where_sql = "";
 if (!empty($where_conditions)) {
     $where_sql = " WHERE " . implode(' AND ', $where_conditions);
@@ -118,11 +128,10 @@ if (!empty($employees)) {
 } else {
     ?>
     <div class="col-12">
-        <div class="text-center mt-5">
-            <i class="fas fa-users fa-3x text-muted mb-3"></i>
-            <h2><?= __('no_employees_found') ?></h2>
-            <p class="text-muted"><?= __('no_employees_matching_filters') ?></p>
-        </div>
+        <div class="sr-page sr-card"><div class="sr-empty"><i class="fa fa-users"></i>
+            <strong style="display: block; color: var(--sr-text); font-size: 15px;"><?= __('no_employees_found') ?></strong>
+            <?= __('no_employees_matching_filters') ?>
+        </div></div>
     </div>
     <?php
 }
@@ -131,6 +140,9 @@ $cards_html = ob_get_clean();
 $pagination_params = [];
 if (!empty($search_term)) {
     $pagination_params['search'] = $search_term;
+}
+if ($status_filter !== '') {
+    $pagination_params['emp_status'] = $status_filter;
 }
 if ($show_all) {
     $pagination_params['limit'] = 'all';

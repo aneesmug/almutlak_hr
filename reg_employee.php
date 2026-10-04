@@ -46,6 +46,16 @@ if (!empty($search_term)) {
     $types .= "ssss";
 }
 
+// Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
+$status_filter = in_array(($_GET['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_GET['emp_status'] : '';
+if ($status_filter === 'active') {
+    $where_conditions[] = "(status = 1 AND fly = 0)";
+} elseif ($status_filter === 'fly') {
+    $where_conditions[] = "fly = 1";
+} elseif ($status_filter === 'inactive') {
+    $where_conditions[] = "(status <> 1 AND fly <> 1)";
+}
+
 
 $where_sql = "";
 if (!empty($where_conditions)) {
@@ -103,13 +113,23 @@ $unfiltered_sql = "SELECT COUNT(id) as total FROM employees WHERE 1=1" . $compan
 $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
+// Tile counts (respect the same company/department/employee scope, ignore search + status)
+$emp_counts = ['all' => 0, 'active' => 0, 'fly' => 0, 'inactive' => 0];
+$counts_res = mysqli_query($conDB, "SELECT COUNT(*) AS all_cnt,
+        SUM(status = 1 AND fly = 0) AS active_cnt, SUM(fly = 1) AS fly_cnt, SUM(status <> 1 AND fly <> 1) AS inactive_cnt
+    FROM employees WHERE 1=1" . $company_filter . $department_filter . $employee_filter);
+if ($counts_res && ($cr = mysqli_fetch_assoc($counts_res))) {
+    $emp_counts = ['all' => (int)$cr['all_cnt'], 'active' => (int)$cr['active_cnt'], 'fly' => (int)$cr['fly_cnt'], 'inactive' => (int)$cr['inactive_cnt']];
+}
+$can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in_array($user_type, $can_see_new_employee_page ?? []);
+
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
 <head>
 	<meta charset="utf-8" />
-	<title><?= $site_title ?> - All Employees</title>
+	<title><?= $site_title ?> - <?= __('all_employees') ?></title>
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	<meta content="Anees Afzal" name="author" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -124,23 +144,15 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
     <link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css">
     <link rel="stylesheet" href="./plugins/select2/css/select2.min.css">
 
-    <!-- DataTables -->
-    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <!-- Responsive datatable examples -->
-    <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
-    <!-- Multi Item Selection examples -->
-    <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-
     <link href="./plugins/summernote/summernote.min.css" rel="stylesheet" />
 
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <!-- <link href="assets/css/icons.css" rel="stylesheet" type="text/css" /> -->
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
     <!-- SweetAlert2 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -150,10 +162,13 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/dropzone.min.css">
 
     <script src="assets/js/modernizr.min.js"></script>
-    
-    <!-- SweetAlert2 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @media (max-width: 767px) { .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        #employeesCardsContainer { transition: opacity .15s; }
+        .emp-pager { margin-top: 4px; }
+    </style>
 
 	<?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -181,28 +196,45 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 		<div class="content-page">
 			<?php include("./includes/topbar.php"); ?>
 
-			<div class="content">
+			<div class="content sr-page">
 				<div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?=__('all_employees')?></h4>
-                                <div class="row align-items-stretch" style="max-width: 1000px; margin: auto;">
-                                    <div class="col-md-9 d-flex">
-                                        <div class="form-group w-100 mb-0 d-flex flex-column justify-content-between" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
-                                            <label for="searchFilter" class="font-weight-bold"><?=__('search_by_name_id_mobile_iqama_id')?></label>
-                                            <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>" style="background: #fff;">
-                                        </div>
-                                    </div>
-                                    <?php if (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page)): ?>
-                                        <div class="col-md-3 d-flex mt-2 mt-md-0">
-                                            <div class="form-group w-100 mb-0 d-flex flex-column justify-content-between" style="background: #f4f6f9; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
-                                                <label class="font-weight-bold d-block"><?=__('add_new_employee_modal_title', 'Add New Employee') ?></label>
-                                                <button type="button" class="btn btn-primary btn-block" onclick="openNewEmployeeTypeModal()"><i class="fa fa-user-plus"></i> <?=__('new_employee') ?></button>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
+
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('all_employees') ?></h1>
+                            <p><?= __('all_employees_subtitle', 'Everyone you can access, newest first.') ?></p>
+                        </div>
+                        <?php if ($can_add_employee): ?>
+                            <div class="sr-head-actions">
+                                <button type="button" class="sr-btn sr-btn-primary" onclick="openNewEmployeeTypeModal()"><i class="fa fa-user-plus"></i> <?= __('new_employee') ?></button>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="sr-tiles emp-tiles" id="empTiles">
+                        <button type="button" class="sr-tile<?= $status_filter === '' ? ' active' : '' ?>" data-key="">
+                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
+                            <span class="sr-tile-value"><?= $emp_counts['all'] ?></span>
+                        </button>
+                        <button type="button" class="sr-tile<?= $status_filter === 'active' ? ' active' : '' ?>" data-key="active">
+                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('active', 'Active') ?></span>
+                            <span class="sr-tile-value"><?= $emp_counts['active'] ?></span>
+                        </button>
+                        <button type="button" class="sr-tile<?= $status_filter === 'fly' ? ' active' : '' ?>" data-key="fly">
+                            <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('on_vacation', 'On vacation') ?></span>
+                            <span class="sr-tile-value"><?= $emp_counts['fly'] ?></span>
+                        </button>
+                        <button type="button" class="sr-tile<?= $status_filter === 'inactive' ? ' active' : '' ?>" data-key="inactive">
+                            <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('inactive', 'Inactive') ?></span>
+                            <span class="sr-tile-value"><?= $emp_counts['inactive'] ?></span>
+                        </button>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-toolbar" style="border-bottom: 0;">
+                            <div class="sr-search" style="max-width: 560px;">
+                                <i class="fa fa-search"></i>
+                                <input type="search" id="searchFilter" placeholder="<?= __('search_by_name_id_mobile_iqama_id') ?>..." value="<?= htmlspecialchars($search_term); ?>" autocomplete="off" aria-label="<?= __('search_by_name_id_mobile_iqama_id') ?>">
                             </div>
                         </div>
                     </div>
@@ -235,24 +267,24 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 							<?php } ?>
 						<?php else: ?>
                             <div class="col-12">
-                                <div class="text-center mt-5">
-                                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                                    <h2><?=__('no_employees_found')?></h2>
-                                    <p class="text-muted"><?=__('no_employees_matching_filters')?></p>
-                                </div>
+                                <div class="sr-card"><div class="sr-empty"><i class="fa fa-users"></i>
+                                    <strong style="display: block; color: var(--sr-text); font-size: 15px;"><?= __('no_employees_found') ?></strong>
+                                    <?= __('no_employees_matching_filters') ?>
+                                </div></div>
                             </div>
 						<?php endif; ?>
 					</div>
 
-					<div class="row">
-						<div class="col-12" id="employeesPaginationContainer">
+                    <div class="sr-card emp-pager">
+                        <div class="sr-pager" id="employeesPaginationContainer" style="padding-top: 14px;">
                             <?php
                                 $pagination_params = [];
-								if (!empty($search_term)) $pagination_params['search'] = $search_term;
-								echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
+                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                if ($status_filter !== '') $pagination_params['emp_status'] = $status_filter;
+                                echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
                             ?>
-						</div>
-					</div>
+                        </div>
+                    </div>
 
 				</div>
 			</div>
@@ -294,7 +326,7 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
                 url: './includes/ajaxFile/get_all_employees_list.php',
                 type: 'POST',
                 dataType: 'json',
-                data: { search: search, limit: limit, page: page }
+                data: { search: search, limit: limit, page: page, emp_status: $('#empTiles .sr-tile.active').data('key') || '' }
             }).done(function(response) {
                 if (!response || response.status !== 200) {
                     return;
@@ -309,6 +341,12 @@ $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
         function applyFilters() {
             loadEmployeesList(1);
         }
+
+        $('#empTiles').on('click', '.sr-tile', function() {
+            $('#empTiles .sr-tile').removeClass('active');
+            $(this).addClass('active');
+            loadEmployeesList(1);
+        });
 
         document.getElementById('searchFilter').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') { applyFilters(); }

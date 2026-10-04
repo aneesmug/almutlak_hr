@@ -424,6 +424,7 @@ if (mysqli_num_rows($query) == 1) {
 		<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
 		<!-- SweetAlert2 -->
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
