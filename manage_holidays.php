@@ -365,42 +365,52 @@ if (mysqli_num_rows($query) == 1) {
         }
     }
 
-    // Determine filter from GET/POST or default to '1' (Active)
-    $status_filter = $_GET['status'] ?? $_POST['status_filter'] ?? '1';
-    $where = '';
-    if ($status_filter === '1') {
-        $where = 'WHERE h.is_active = 1';
-    } elseif ($status_filter === '0') {
-        $where = 'WHERE h.is_active = 0';
-    } // else show all
+    // ===== PAGE DATA =====
+    // All holidays are loaded; the tiles filter Active / Archived / Upcoming on the client.
+    // ?status=1 (default) | 0 | all picks the tile that is selected first.
+    $status_filter = $_GET['status'] ?? '1';
+    $initial_key = $status_filter === '0' ? 'archived' : (($status_filter === 'all' || $status_filter === '') ? '' : 'active');
 
-    // Fetch holidays matching filter
-    $stmt = $pdo->prepare("
-        SELECT h.* FROM emp_holidays h
-        $where
-        ORDER BY h.start_date DESC
-    ");
-    $stmt->execute();
-    $holidays = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $holidays = $pdo->query("SELECT h.* FROM emp_holidays h ORDER BY h.start_date DESC")->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch company assignments for each holiday
+    // Company assignments for every holiday in one query
+    $assigned = [];
+    $comp_rows = $pdo->query("
+        SELECT hc.holiday_id, hc.company_id, c.comp_name
+        FROM holiday_companies hc
+        JOIN companies c ON hc.company_id = c.id
+        ORDER BY c.comp_name ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($comp_rows as $cr) {
+        $assigned[(int)$cr['holiday_id']][] = $cr;
+    }
+
+    $today = date('Y-m-d');
+    $year = date('Y');
+    $count = ['all' => 0, 'active' => 0, 'archived' => 0, 'upcoming' => 0, 'year_days' => 0];
     foreach ($holidays as &$holiday) {
-        $comp_stmt = $pdo->prepare("
-            SELECT hc.company_id, c.comp_name 
-            FROM holiday_companies hc
-            JOIN companies c ON hc.company_id = c.id
-            WHERE hc.holiday_id = ?
-        ");
-        $comp_stmt->execute([$holiday['id']]);
-        $holiday['assigned_companies'] = $comp_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $holiday['assigned_companies'] = $assigned[(int)$holiday['id']] ?? [];
+        $holiday['is_on'] = ((int)$holiday['is_active'] === 1);
+        $holiday['is_upcoming'] = $holiday['is_on'] && $holiday['end_date'] >= $today;
+        $count['all']++;
+        $count[$holiday['is_on'] ? 'active' : 'archived']++;
+        if ($holiday['is_upcoming']) $count['upcoming']++;
+        if ($holiday['is_on'] && substr($holiday['start_date'], 0, 4) === $year) $count['year_days'] += (int)$holiday['total_days'];
     }
     unset($holiday);
+
+    $h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES); };
+    $type_meta = [
+        'religious' => ['tone' => 'sky',   'icon' => 'mdi-star-circle',    'label' => __('religious', 'Religious')],
+        'national'  => ['tone' => 'green', 'icon' => 'mdi-flag',           'label' => __('national', 'National')],
+        'other'     => ['tone' => 'slate', 'icon' => 'mdi-calendar-blank', 'label' => __('other', 'Other')],
+    ];
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
     <head>
         <meta charset="utf-8" />
-        <title><?= $site_title ?> - Holiday Management</title>
+        <title><?= $site_title ?> - <?= __('holiday_management', 'Holiday Management') ?></title>
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
@@ -408,15 +418,12 @@ if (mysqli_num_rows($query) == 1) {
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Plugins css -->
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-        <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -424,6 +431,7 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
 
         <?php if ($is_rtl): ?>
@@ -434,35 +442,47 @@ if (mysqli_num_rows($query) == 1) {
         </script>
 
         <style type="text/css">
-            .holiday-type-badge {
-                display: inline-block;
-                padding: 0.25rem 0.5rem;
-                border-radius: 0.25rem;
-                font-size: 0.875rem;
+            .sr-page .sr-tiles.hol-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            @media (max-width: 991px) { .sr-page .sr-tiles.hol-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+            @media (max-width: 575px) { .sr-page .sr-tiles.hol-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            .sr-page .sr-tile.is-static { cursor: default; }
+            .sr-page .sr-tile.is-static:hover { transform: none; border-color: var(--sr-border); }
+            .hol-avatar { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
+            .hol-avatar.tone-sky   { background: var(--tone-sky-bg);   color: var(--tone-sky-fg); }
+            .hol-avatar.tone-green { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+            .hol-avatar.tone-slate { background: var(--sr-surface-3);  color: var(--sr-muted); }
+            .sr-page table.sr-table tbody tr.is-inactive td { opacity: .62; }
+            .sr-page table.sr-table tbody tr.is-inactive:hover td { opacity: 1; }
+            .hol-companies { display: flex; flex-wrap: wrap; gap: 4px; max-width: 340px; white-space: normal; }
+            .hol-type-select {
+                height: 34px; padding: 0 30px 0 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+                border: 1px solid var(--sr-border-strong); background-color: var(--sr-surface); color: var(--sr-text-2);
             }
+            /* Deduction rules notice */
+            .hol-info { flex: 1; min-width: 0; }
+            .hol-info summary { cursor: pointer; font-weight: 700; outline: 0; }
+            .hol-info-body { margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+            @media (max-width: 767px) { .hol-info-body { grid-template-columns: 1fr; } }
+            .hol-info-body h6 { margin: 0 0 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: inherit; }
+            .hol-info-body ul { margin: 0; padding-inline-start: 18px; }
+            .hol-info-body li { margin-bottom: 3px; }
+            .hol-formula { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, .55); font-weight: 600; }
+            html.app-dark .hol-formula { background: rgba(0, 0, 0, .2); }
 
             /* Keep date-range calendars side-by-side inside SweetAlert modals */
             .swal2-container .daterangepicker {
                 z-index: 2200 !important;
                 min-width: 650px;
             }
-
-            .swal2-container .daterangepicker .drp-calendar {
-                max-width: none;
-            }
-
+            .swal2-container .daterangepicker .drp-calendar { max-width: none; }
             .swal2-container .daterangepicker.show-calendar .drp-calendar.left,
             .swal2-container .daterangepicker.show-calendar .drp-calendar.right {
                 display: inline-block;
                 float: none;
                 vertical-align: top;
             }
-
             @media (max-width: 767px) {
-                .swal2-container .daterangepicker {
-                    min-width: 0;
-                    width: 100%;
-                }
+                .swal2-container .daterangepicker { min-width: 0; width: 100%; }
             }
         </style>
     </head>
@@ -474,176 +494,202 @@ if (mysqli_num_rows($query) == 1) {
 
             <!-- ========== Left Sidebar Start ========== -->
             <div class="left side-menu">
-
                 <div class="slimscroll-menu" id="remove-scroll">
-
-                    <!-- LOGO -->
                     <div class="topbar-left">
                         <a href="dashboard.php" class="logo">
-                            <span>
-                                <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22">
-                            </span>
-                            <i>
-                                <img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28">
-                            </i>
+                            <span><img src="<?=get_setting($conDB, 'logo')?>" alt="" height="22"></span>
+                            <i><img src="<?=get_setting($conDB, 'white_logo')?>" alt="" height="28"></i>
                         </a>
                     </div>
-
-                    <!-- User box -->
-
-                    <!--- Sidemenu -->
                     <?php include("./includes/main_menu.php"); ?>
-                    <!-- Sidebar -->
-
                     <div class="clearfix"></div>
-
                 </div>
-                <!-- Sidebar -left -->
-
             </div>
             <!-- Left Sidebar End -->
 
-
-            <!-- ============================================================== -->
-            <!-- Start right Content here -->
-            <!-- ============================================================== -->
-
             <div class="content-page">
 
-                <!-- Top Bar Start -->
                 <?php include("./includes/topbar.php"); ?>
-                <!-- Top Bar End -->
 
-
-                <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="card-box">
-                                    <h4 class="m-t-0 header-title">Holiday Management</h4>
-                                    <p class="text-muted">Manage company holidays for vacation deduction calculations</p>
-                                    
-                                    <!-- Info Box: Vacation Deduction Logic -->
-                                    <div class="alert alert-info alert-styled-left" style="margin-bottom: 20px; background-color: #e3f2fd; border-left: 4px solid #2196F3;">
-                                        <strong>💡 How Vacation Deduction Works:</strong>
-                                        <br>
-                                        <small>
-                                            <strong>Formula:</strong> Deductible Days = Total Vacation Days − Weekend Days − Holiday Days
-                                            <br>
-                                            <strong>Weekend Rules (Company-Specific):</strong>
-                                            <ul style="margin: 5px 0 5px 20px; font-size: 0.9rem;">
-                                                <li><strong>Head Office (Company 4):</strong> Friday & Saturday off (all departments)</li>
-                                                <li><strong>Head Office EXCEPT:</strong> Sales (Dept 14) & Purchase (Dept 13) = Friday only</li>
-                                                <li><strong>All Other Companies (1,2,3,5,6,7,8,9,10,11):</strong> Friday only</li>
-                                            </ul>
-                                            <strong>Example:</strong> 5-day vacation from Thursday to Monday (Head Office, Regular Dept):
-                                            <ul style="margin: 5px 0 5px 20px; font-size: 0.9rem;">
-                                                <li>Total vacation: 5 days (Thu, Fri, Sat, Sun, Mon)</li>
-                                                <li>Weekends (Fri, Sat): 2 days (NOT deducted per Head Office rules)</li>
-                                                <li>Holiday during period: 0 days</li>
-                                                <li><strong>Result: 5 − 2 − 0 = 3 days deducted</strong> ✓</li>
-                                            </ul>
-                                            <strong>Note:</strong> Holidays are filtered by employee's company. Weekend calculation is based on employee's company and department assignment.
-                                        </small>
-                                    </div>
-                                    
-                                    <div style="margin-bottom: 20px;">
-                                        <button class="btn btn-primary waves-effect" onclick="openAddHolidayModal()" style="margin-right: 10px;">
-                                            <i class="mdi mdi-plus"></i> Add Holiday
-                                        </button>
-                                        <select class="form-control" name="status_filter" id="status_filter" style="max-width: 200px; display: inline-block;">
-                                            <option value="" <?= $status_filter === '' ? 'selected' : '' ?>>All Records</option>
-                                            <option value="1" <?= $status_filter === '1' ? 'selected' : '' ?>>Active</option>
-                                            <option value="0" <?= $status_filter === '0' ? 'selected' : '' ?>>Inactive</option>
-                                        </select>
-                                    </div>
 
-                                    <?php if (empty($holidays)): ?>
-                                        <div class="alert alert-info">
-                                            <i class="mdi mdi-information"></i> No holidays added yet. Add your first holiday using the button above.
-                                        </div>
-                                    <?php else: ?>
-                                        <div class="table-responsive">
-                                            <table id="holidays_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Holiday Name</th>
-                                                        <th>Start Date</th>
-                                                        <th>End Date</th>
-                                                        <th>Days</th>
-                                                        <th>Companies</th>
-                                                        <th>Type</th>
-                                                        <th>Status</th>
-                                                        <th>Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($holidays as $holiday): ?>
-                                                        <tr class="holiday-row" data-status="<?= $holiday['is_active'] ?>">
-                                                            <td><strong><?= htmlspecialchars($holiday['holiday_name']) ?></strong></td>
-                                                            <td><?= date('M d, Y', strtotime($holiday['start_date'])) ?></td>
-                                                            <td><?= date('M d, Y', strtotime($holiday['end_date'])) ?></td>
-                                                            <td><span class="badge badge-info"><?= $holiday['total_days'] ?> days</span></td>
-                                                            <td>
-                                                                <?php if (!empty($holiday['assigned_companies'])): ?>
-                                                                    <?php foreach ($holiday['assigned_companies'] as $company): ?>
-                                                                        <span class="badge badge-primary" style="margin: 2px;"><?= htmlspecialchars($company['comp_name']) ?></span>
-                                                                    <?php endforeach; ?>
-                                                                <?php else: ?>
-                                                                    <span class="badge badge-danger">No Companies</span>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                            <td>
-                                                                <?php 
-                                                                    $type_classes = [
-                                                                        'religious' => 'badge badge-info',
-                                                                        'national' => 'badge badge-success',
-                                                                        'other' => 'badge badge-secondary'
-                                                                    ];
-                                                                    $type = $holiday['holiday_type'] ?? 'other';
-                                                                    $class = $type_classes[$type] ?? 'badge badge-secondary';
-                                                                ?>
-                                                                <span class="<?= $class ?>"><?= ucfirst($type) ?></span>
-                                                            </td>
-                                                            <td>
-                                                                <?php if ((int)$holiday['is_active'] === 1): ?>
-                                                                    <span class="badge badge-success">Active</span>
-                                                                <?php else: ?>
-                                                                    <span class="badge badge-danger">Inactive</span>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                            <td>
-                                                                <?php if ((int)$holiday['is_active'] === 1): ?>
-                                                                    <div class='btn-group dropdown'>
-                                                                        <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                                                                        <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                            <a href='javascript:void(0);' class='dropdown-item' onclick="editHoliday(<?= $holiday['id'] ?>)">
-                                                                                <i class='mdi mdi-pencil mr-2'></i>Edit
-                                                                            </a>
-                                                                            <a href='javascript:void(0);' class='dropdown-item text-danger' onclick="deleteHoliday(<?= $holiday['id'] ?>)">
-                                                                                <i class='mdi mdi-delete mr-2'></i>Archive
-                                                                            </a>
-                                                                        </div>
-                                                                    </div>
-                                                                <?php else: ?>
-                                                                    <a href='javascript:void(0);' class='btn btn-primary btn-sm' onclick="unarchiveHoliday(<?= $holiday['id'] ?>, '<?= htmlspecialchars($holiday['holiday_name']) ?>')">
-                                                                        <i class='mdi mdi-restore mr-1'></i>Unarchive
-                                                                    </a>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    <?php endif; ?>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('holiday_management', 'Holiday Management') ?></h1>
+                                <p><?= __('holiday_management_subtitle', 'Company holidays used when calculating vacation deductions.') ?></p>
+                            </div>
+                            <div class="sr-head-actions">
+                                <button type="button" class="sr-btn sr-btn-primary" id="addHolidayBtn"><i class="mdi mdi-plus"></i> <?= __('add_holiday', 'Add holiday') ?></button>
+                            </div>
+                        </div>
+
+                        <div class="sr-tiles hol-tiles" id="holTiles">
+                            <button type="button" class="sr-tile<?= $initial_key === '' ? ' active' : '' ?>" data-key="">
+                                <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
+                                <span class="sr-tile-value"><?= $count['all'] ?></span>
+                            </button>
+                            <button type="button" class="sr-tile<?= $initial_key === 'active' ? ' active' : '' ?>" data-key="active">
+                                <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('active', 'Active') ?></span>
+                                <span class="sr-tile-value"><?= $count['active'] ?></span>
+                            </button>
+                            <button type="button" class="sr-tile" data-key="upcoming">
+                                <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('upcoming', 'Upcoming') ?></span>
+                                <span class="sr-tile-value"><?= $count['upcoming'] ?></span>
+                            </button>
+                            <button type="button" class="sr-tile<?= $initial_key === 'archived' ? ' active' : '' ?>" data-key="archived">
+                                <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('archived', 'Archived') ?></span>
+                                <span class="sr-tile-value"><?= $count['archived'] ?></span>
+                            </button>
+                            <div class="sr-tile is-static">
+                                <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('holiday_days_in', 'Holiday days in') ?> <?= $year ?></span>
+                                <span class="sr-tile-value"><?= $count['year_days'] ?></span>
+                            </div>
+                        </div>
+
+                        <!-- How vacation deduction works -->
+                        <div class="sr-notice tone-sky">
+                            <i class="mdi mdi-information-outline"></i>
+                            <details class="hol-info">
+                                <summary><?= __('how_vacation_deduction_works', 'How vacation deduction works') ?></summary>
+                                <span class="hol-formula"><?= __('deductible_days', 'Deductible days') ?> = <?= __('total_vacation_days', 'Total vacation days') ?> &minus; <?= __('weekend_days', 'Weekend days') ?> &minus; <?= __('holiday_days', 'Holiday days') ?></span>
+                                <div class="hol-info-body">
+                                    <div>
+                                        <h6><?= __('weekend_rules', 'Weekend rules (per company)') ?></h6>
+                                        <ul>
+                                            <li><strong>Head Office (Company 4):</strong> Friday &amp; Saturday off (all departments)</li>
+                                            <li><strong>Head Office except:</strong> Sales (Dept 14) &amp; Purchase (Dept 13) = Friday only</li>
+                                            <li><strong>All other companies (1,2,3,5,6,7,8,9,10,11):</strong> Friday only</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h6><?= __('example', 'Example') ?></h6>
+                                        <ul>
+                                            <li>5-day vacation Thursday &rarr; Monday (Head Office, regular department)</li>
+                                            <li>Weekends (Fri, Sat): 2 days, not deducted</li>
+                                            <li>Holidays during the period: 0 days</li>
+                                            <li><strong>Result: 5 &minus; 2 &minus; 0 = 3 days deducted</strong></li>
+                                        </ul>
+                                    </div>
                                 </div>
+                                <div style="margin-top: 8px;"><small>Holidays are filtered by the employee's company. Weekends follow the employee's company and department.</small></div>
+                            </details>
+                        </div>
+
+                        <div class="sr-card">
+                            <div class="sr-toolbar">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="holSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                                </div>
+                                <div class="sr-toolbar-right">
+                                    <select id="holType" class="hol-type-select" aria-label="<?= __('type') ?>">
+                                        <option value=""><?= __('type') ?>: <?= __('all', 'All') ?></option>
+                                        <?php foreach ($type_meta as $tk => $tm): ?>
+                                            <option value="<?= $tk ?>"><?= $h($tm['label']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div id="holExportButtons"></div>
+                                </div>
+                            </div>
+
+                            <div class="sr-table-wrap">
+                                <table id="holidays_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('holiday', 'Holiday') ?></th>
+                                            <th><?= __('period', 'Period') ?></th>
+                                            <th><?= __('days', 'Days') ?></th>
+                                            <th><?= __('companies', 'Companies') ?></th>
+                                            <th><?= __('type') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th class="text-right"><?= __('action') ?></th>
+                                            <th>key</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($holidays as $holiday):
+                                            $id = (int)$holiday['id'];
+                                            $type = isset($type_meta[$holiday['holiday_type']]) ? $holiday['holiday_type'] : 'other';
+                                            $tm = $type_meta[$type];
+                                            $keys = [$holiday['is_on'] ? 'active' : 'archived'];
+                                            if ($holiday['is_upcoming']) $keys[] = 'upcoming';
+                                            $start_ts = strtotime($holiday['start_date']);
+                                            $end_ts = strtotime($holiday['end_date']);
+                                            $same_day = $holiday['start_date'] === $holiday['end_date'];
+                                            // When: ongoing / in N days / past
+                                            if ($holiday['start_date'] <= $today && $holiday['end_date'] >= $today) {
+                                                $when = '<span class="sr-pill sr-pill-xs tone-green"><span class="sr-dot"></span>' . __('ongoing', 'Ongoing') . '</span>';
+                                            } elseif ($holiday['start_date'] > $today) {
+                                                $in_days = (int)round(($start_ts - strtotime($today)) / 86400);
+                                                $when = '<span class="sr-cell-sub"><i class="mdi mdi-calendar-clock"></i>' . __('in', 'in') . ' ' . $in_days . ' ' . __('days', 'days') . '</span>';
+                                            } else {
+                                                $when = '<span class="sr-cell-sub">' . __('past', 'Past') . '</span>';
+                                            }
+                                            $comp_names = array_column($holiday['assigned_companies'], 'comp_name');
+                                        ?>
+                                            <tr class="<?= $holiday['is_on'] ? '' : 'is-inactive' ?>">
+                                                <td data-order="<?= $h($holiday['holiday_name']) ?>" data-export="<?= $h($holiday['holiday_name']) ?>">
+                                                    <div class="sr-person">
+                                                        <span class="sr-avatar hol-avatar tone-<?= $holiday['is_on'] ? $tm['tone'] : 'slate' ?>"><i class="mdi <?= $tm['icon'] ?>"></i></span>
+                                                        <div style="min-width: 0;">
+                                                            <span class="sr-cell-title"><?= $h($holiday['holiday_name']) ?></span>
+                                                            <?php if (!empty($holiday['remarks'])): ?>
+                                                                <span class="sr-cell-sub" title="<?= $h($holiday['remarks']) ?>"><?= $h(mb_strimwidth($holiday['remarks'], 0, 48, '…')) ?></span>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td data-order="<?= $h($holiday['start_date']) ?>" data-export="<?= date('d M Y', $start_ts) . ($same_day ? '' : ' - ' . date('d M Y', $end_ts)) ?>">
+                                                    <span class="sr-cell-title"><?= date('d M Y', $start_ts) ?><?php if (!$same_day): ?> &rarr; <?= date('d M Y', $end_ts) ?><?php endif; ?></span>
+                                                    <?= $holiday['is_on'] ? $when : '' ?>
+                                                </td>
+                                                <td data-order="<?= (int)$holiday['total_days'] ?>" data-export="<?= (int)$holiday['total_days'] ?>">
+                                                    <span class="sr-chip"><i class="mdi mdi-calendar-range"></i><?= (int)$holiday['total_days'] ?> <?= __('days', 'days') ?></span>
+                                                </td>
+                                                <td data-export="<?= $h(implode(', ', $comp_names)) ?>">
+                                                    <?php if ($comp_names): ?>
+                                                        <span class="hol-companies">
+                                                            <?php foreach ($comp_names as $cn): ?>
+                                                                <span class="sr-chip"><i class="mdi mdi-domain"></i><?= $h($cn) ?></span>
+                                                            <?php endforeach; ?>
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="sr-pill sr-pill-xs tone-red"><span class="sr-dot"></span><?= __('no_companies', 'No companies') ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td data-search="<?= $type ?>" data-export="<?= $h($tm['label']) ?>">
+                                                    <span class="sr-pill tone-<?= $tm['tone'] ?>"><span class="sr-dot"></span><?= $h($tm['label']) ?></span>
+                                                </td>
+                                                <td data-export="<?= $holiday['is_on'] ? __('active', 'Active') : __('archived', 'Archived') ?>">
+                                                    <?= $holiday['is_on']
+                                                        ? '<span class="sr-pill tone-green"><span class="sr-dot"></span>' . __('active', 'Active') . '</span>'
+                                                        : '<span class="sr-pill tone-slate"><span class="sr-dot"></span>' . __('archived', 'Archived') . '</span>' ?>
+                                                </td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($holiday['is_on']): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn js-edit" data-id="<?= $id ?>"><i class="mdi mdi-pencil"></i> <?= __('edit') ?></a>
+                                                            <div class="btn-group dropdown">
+                                                                <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                                <div class="dropdown-menu dropdown-menu-right">
+                                                                    <a href="javascript:void(0);" class="dropdown-item text-danger js-archive" data-id="<?= $id ?>" data-name="<?= $h($holiday['holiday_name']) ?>"><i class="mdi mdi-archive mr-2"></i><?= __('archive', 'Archive') ?></a>
+                                                                </div>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn js-restore" data-id="<?= $id ?>" data-name="<?= $h($holiday['holiday_name']) ?>"><i class="mdi mdi-restore"></i> <?= __('reactivate', 'Reactivate') ?></a>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </td>
+                                                <td><?= implode(' ', $keys) ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
                     </div> <!-- container -->
-
                 </div> <!-- content -->
 
                 <footer class="footer">
@@ -651,10 +697,6 @@ if (mysqli_num_rows($query) == 1) {
                 </footer>
 
             </div>
-
-            <!-- ============================================================== -->
-            <!-- End Right content here -->
-            <!-- ============================================================== -->
         </div>
         <!-- END wrapper -->
 
@@ -671,7 +713,6 @@ if (mysqli_num_rows($query) == 1) {
         <!-- Required datatable js -->
         <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
         <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-        <!-- Buttons examples -->
         <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
         <script src="./plugins/datatables/buttons.bootstrap4.min.js"></script>
         <script src="./plugins/datatables/jszip.min.js"></script>
@@ -679,596 +720,291 @@ if (mysqli_num_rows($query) == 1) {
         <script src="./plugins/datatables/vfs_fonts.js"></script>
         <script src="./plugins/datatables/buttons.html5.min.js"></script>
         <script src="./plugins/datatables/buttons.print.min.js"></script>
+        <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
+        <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
 
         <!-- Date Range Picker -->
         <script src="./plugins/moment/moment.js"></script>
         <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-
         <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
-        <script src="./plugins/bootstrap-select/js/bootstrap-select.js" type="text/javascript"></script>
-
-        <!-- Key Tables -->
-        <script src="./plugins/datatables/dataTables.keyTable.min.js"></script>
-
-        <!-- Responsive examples -->
-        <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
-        <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
-
-        <!-- Selection table -->
-        <script src="./plugins/datatables/dataTables.select.min.js"></script>
 
         <!-- App js -->
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
 
         <script>
-            // Helper function to calculate and update days count
-            function updateDaysCount(countElementId, dateInputId) {
-                const dateInput = document.getElementById(dateInputId);
-                const countElement = document.getElementById(countElementId);
+            const F = window.SRForm, esc = F.esc;
+            const T = <?= json_encode([
+                'add' => __('add_holiday', 'Add holiday'),
+                'edit' => __('edit_holiday', 'Edit holiday'),
+                'save' => __('save_holiday', 'Save holiday'),
+                'update' => __('update_holiday', 'Update holiday'),
+                'details' => __('holiday_details', 'Holiday details'),
+                'name' => __('holiday_name', 'Holiday name'),
+                'name_ph' => __('holiday_name_ph', 'e.g. Eid al-Fitr'),
+                'name_req' => __('holiday_name_required', 'Please enter the holiday name'),
+                'range' => __('date_range', 'Date range'),
+                'range_req' => __('date_range_required', 'Please select the date range'),
+                'type' => __('holiday_type', 'Holiday type'),
+                'religious' => __('religious', 'Religious'),
+                'national' => __('national', 'National'),
+                'other' => __('other', 'Other'),
+                'companies' => __('assign_to_companies', 'Assign to companies'),
+                'companies_ph' => __('select_companies', 'Select one or more companies'),
+                'companies_req' => __('select_company_required', 'Please select at least one company'),
+                'companies_hint' => __('holiday_companies_hint', 'Only employees of these companies get this holiday excluded from their vacation.'),
+                'select_all' => __('select_all', 'Select all'),
+                'remarks' => __('remarks', 'Remarks'),
+                'remarks_ph' => __('remarks_ph', 'Any additional remarks'),
+                'days' => __('days', 'days'),
+                'archive_q' => __('archive_holiday_q', 'Archive holiday?'),
+                'archive_txt' => __('archive_holiday_txt', 'It will no longer be used in vacation calculations.'),
+                'archive_yes' => __('yes_archive', 'Yes, archive it'),
+                'restore_q' => __('reactivate_holiday_q', 'Reactivate holiday?'),
+                'restore_yes' => __('yes_reactivate', 'Yes, reactivate'),
+                'exists_q' => __('holiday_archived_exists', 'Holiday already exists (archived)'),
+                'load_err' => __('error_loading_data', 'Error loading data'),
+                'export' => __('holidays', 'Holidays'),
+                'print' => __('print', 'Print'),
+            ]) ?>;
+            const DATE_FMT = 'MM/DD/YYYY'; // server parses m/d/Y
 
-                if (!dateInput || !countElement) {
-                    return;
-                }
-
-                const dateRangeValue = String(dateInput.value || '').trim();
-                
-                if (!dateRangeValue) {
-                    countElement.textContent = '0';
-                    return;
-                }
-                
-                const dates = dateRangeValue.split(' - ');
-                if (dates.length === 2) {
-                    const startDate = moment(dates[0], 'MM/DD/YYYY');
-                    const endDate = moment(dates[1], 'MM/DD/YYYY');
-                    
-                    if (startDate.isValid() && endDate.isValid()) {
-                        const daysCount = endDate.diff(startDate, 'days') + 1; // +1 to include both start and end dates
-                        countElement.textContent = daysCount;
-                    }
-                }
-            }
-
-            function initDateRangePicker(inputSelector, countElementId, startDate = null, endDate = null) {
-                const $input = $(inputSelector);
-                if (!$input.length) {
-                    return;
-                }
-
-                if (!$.fn || typeof $.fn.daterangepicker !== 'function' || typeof moment === 'undefined') {
-                    console.error('Date range picker dependencies are missing.');
-                    return;
-                }
-
-                if ($input.data('daterangepicker')) {
-                    $input.data('daterangepicker').remove();
-                }
-
-                const options = {
-                    locale: { format: 'MM/DD/YYYY' },
-                    autoUpdateInput: true,
-                    parentEl: '.swal2-popup',
-                    sideBySide: true,
-                    opens: 'center',
-                    drops: 'down'
+            /* ---------- table ---------- */
+            $(function() {
+                const KEY_COL = 7, TYPE_COL = 4;
+                const exportOptions = {
+                    columns: [0, 1, 2, 3, 4, 5],
+                    format: { body: function(data, row, col, node) { return $(node).attr('data-export') || $(node).text().trim(); } }
                 };
 
-                const defaultStart = moment().format(options.locale.format);
-                const parsedStart = startDate ? moment(startDate) : null;
-                const parsedEnd = endDate ? moment(endDate) : null;
-
-                options.startDate = parsedStart && parsedStart.isValid()
-                    ? parsedStart.format(options.locale.format)
-                    : defaultStart;
-                options.endDate = parsedEnd && parsedEnd.isValid()
-                    ? parsedEnd.format(options.locale.format)
-                    : options.startDate;
-
-                $input.daterangepicker(options);
-                updateDaysCount(countElementId, $input.attr('id'));
-
-                $input.off('apply.daterangepicker.holidays').on('apply.daterangepicker.holidays', function() {
-                    updateDaysCount(countElementId, $input.attr('id'));
-                });
-            }
-            
-            function loadCompaniesForSelect(selectElement, selectedIds = []) {
-                const $select = $(selectElement);
-                if (!$select.length) {
-                    return;
-                }
-
-                $.ajax({
-                    url: 'manage_holidays.php',
-                    type: 'GET',
-                    data: { action: 'get_companies' },
-                    dataType: 'json',
-                    success: function(res) {
-                        if (res && res.status === 'success' && Array.isArray(res.data)) {
-                            $select.empty();
-                            
-                            // Add default option
-                            $select.append('<option></option>');
-                            
-                            res.data.forEach(function(company) {
-                                if (!company || typeof company.id === 'undefined') {
-                                    return;
-                                }
-                                $select.append(
-                                    '<option value=\"' + company.id + '\">' + 
-                                    $('<div/>').text(company.comp_name || '').html() + 
-                                    '</option>'
-                                );
-                            });
-                            
-                            if ($.fn && typeof $.fn.select2 === 'function') {
-                                // Initialize or reinitialize Select2
-                                if ($select.hasClass('select2-hidden-accessible')) {
-                                    $select.select2('destroy');
-                                }
-
-                                $select.select2({
-                                    allowClear: true,
-                                    placeholder: 'Select one or more companies',
-                                    width: '100%',
-                                    dropdownParent: $('.swal2-popup')
-                                });
-                            }
-                            
-                            // Pre-select values if provided
-                            if (Array.isArray(selectedIds) && selectedIds.length > 0) {
-                                $select.val(selectedIds).trigger('change');
-                            }
-                        } else {
-                            console.error('Error loading companies:', (res && res.message) ? res.message : 'Invalid response format');
-                            Swal.fire('Error', 'Failed to load companies', 'error');
-                        }
-                    },
-                    error: function() {
-                        console.error('Error loading companies');
-                        Swal.fire('Error', 'Error loading companies', 'error');
-                    }
-                });
-            }
-
-            $(document).ready(function() {
-                console.log('Page loaded - initializing holidays table');
-                
-                // Get status parameter from URL, default to '1' (Active) to show only active records
-                const urlParams = new URLSearchParams(window.location.search);
-                const statusParam = urlParams.get('status') || '1';
-                
-                console.log('Status filter:', statusParam);
-                
-                // Set filter dropdown
-                $('#status_filter').val(statusParam);
-                
-                // IMPORTANT: Apply filter BEFORE DataTable initialization
-                // This ensures only the correct records are in the DOM before DataTable processes them
-                applyStatusFilter(statusParam);
-                
-                // Initialize DataTable
-                $('#holidays_table').DataTable({
+                const table = $('#holidays_table').DataTable({
+                    dom: 'Brtip',
+                    pageLength: 15,
                     responsive: true,
-                    paging: true,
-                    searching: true,
-                    ordering: true,
-                    drawCallback: function(settings) {
-                        console.log('DataTable rows drawn');
+                    order: [[1, 'desc']],
+                    buttons: [
+                        { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: exportOptions, title: T.export },
+                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + esc(T.print), exportOptions: exportOptions, title: T.export }
+                    ],
+                    columnDefs: [
+                        { targets: [KEY_COL], visible: false },
+                        { targets: [3, 6], orderable: false }
+                    ],
+                    language: {
+                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                        infoFiltered: '',
+                        paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                        emptyTable: `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_data_available_in_table')}</div>`,
+                        zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
                     }
+                });
+                table.buttons().container().appendTo('#holExportButtons');
+
+                function applyKey(key) {
+                    table.column(KEY_COL).search(key ? '\\b' + key + '\\b' : '', true, false).draw();
+                }
+                applyKey($('#holTiles .sr-tile.active').data('key') || '');
+
+                $('#holTiles').on('click', 'button.sr-tile', function() {
+                    $('#holTiles .sr-tile').removeClass('active');
+                    $(this).addClass('active');
+                    applyKey($(this).data('key'));
                 });
 
-                // Status filter - reload page with correct status parameter
-                $('#status_filter').on('change', function() {
-                    var status = $(this).val();
-                    var newUrl = new URL(window.location.href);
-                    if (status === '' || status === 'all') {
-                        newUrl.searchParams.set('status', 'all');
-                    } else {
-                        newUrl.searchParams.set('status', status);
-                    }
-                    window.location.href = newUrl.toString();
+                $('#holSearch').on('input', function() { table.search(this.value).draw(); });
+
+                $('#holType').on('change', function() {
+                    const v = this.value;
+                    table.column(TYPE_COL).search(v ? '^' + $.fn.dataTable.util.escapeRegex(v) + '$' : '', true, false).draw();
                 });
+
+                $('#addHolidayBtn').on('click', function() { openHolidayForm(null); });
+
+                $('#holidays_table').on('click', '.js-edit', function() { editHoliday($(this).data('id')); })
+                    .on('click', '.js-archive', function() { archiveHoliday($(this).data('id'), $(this).data('name')); })
+                    .on('click', '.js-restore', function() { restoreHoliday($(this).data('id'), $(this).data('name')); });
             });
 
-            // Function to apply status filter
-            function applyStatusFilter(status) {
-                console.log('Filtering with status:', status);
-                
-                // Convert status to string for comparison
-                const filterValue = String(status);
-                
-                // Get all holiday rows
-                const rows = $('.holiday-row');
-                console.log('Total rows:', rows.length);
-                
-                let visibleCount = 0;
-                
-                rows.each(function() {
-                    const rowStatus = String($(this).attr('data-status'));
-                    console.log('Row data-status:', rowStatus, 'Filter value:', filterValue);
-                    
-                    if (filterValue === 'all' || filterValue === '') {
-                        // Show all records
-                        $(this).show();
-                        visibleCount++;
-                    } else if (filterValue === rowStatus) {
-                        // Show matching records
-                        $(this).show();
-                        visibleCount++;
-                    } else {
-                        // Hide non-matching records
-                        $(this).hide();
-                    }
-                });
-                
-                console.log('Visible rows after filter:', visibleCount);
+            /* ---------- add / edit popup ---------- */
+            function holidayFormHtml(d) {
+                const typeItems = [
+                    { v: 'religious', l: T.religious, icon: 'mdi-star-circle' },
+                    { v: 'national', l: T.national, icon: 'mdi-flag' },
+                    { v: 'other', l: T.other, icon: 'mdi-calendar-blank' }
+                ];
+                const daysChip = `<span class="sr-chip"><i class="mdi mdi-calendar-range"></i><b id="hDays">0</b> ${esc(T.days)}</span>`;
+                const selectAllBtn = `<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="hSelectAll"><i class="mdi mdi-check-all"></i> ${esc(T.select_all)}</button>`;
+
+                return '<form id="holForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                    F.section('mdi-calendar-check', T.details,
+                        F.field({ col: 7, name: 'holiday_name', id: 'hName', label: T.name, req: true, ph: T.name_ph, msg: T.name_req, value: d.holiday_name || '' }) +
+                        F.field({ col: 5, name: 'daterangepicker', id: 'hRange', label: T.range, req: true, msg: T.range_req, attrs: ' readonly style="background-color: var(--sr-surface);"' }) +
+                        '<div class="sr-fcol c-12"><label>' + esc(T.type) + '</label>' + F.choices('holiday_type', typeItems) + '</div>',
+                        daysChip) +
+                    F.section('mdi-domain', T.companies,
+                        '<div class="sr-fcol c-12">' +
+                            `<select name="company_ids" id="hCompanies" class="form-control" multiple data-required="1" data-msg="${esc(T.companies_req)}"></select>` +
+                            `<small class="sr-fhint">${esc(T.companies_hint)}</small>` +
+                        '</div>',
+                        selectAllBtn) +
+                    F.section('mdi-note-text', T.remarks,
+                        F.field({ col: 12, name: 'remarks', id: 'hRemarks', type: 'textarea', rows: 2, ph: T.remarks_ph, value: d.remarks || '' })) +
+                '</form>';
             }
 
-            function openAddHolidayModal() {
-                Swal.fire({
-                    title: 'Add Holiday',
-                    width: '760px',
-                    html: `
-                        <div class="text-left">
-                            <div class="form-group">
-                                <label for="holiday_name" class="text-left">Holiday Name <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="holiday_name" placeholder="e.g., Eid al-Fitr">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="daterangepicker_add" class="text-left">Date Range <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="daterangepicker_add" placeholder="Select date range">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="text-left"><strong>Selected Days: <span id="days_count_add">0</span> days</strong></label>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="companies_select_add" class="text-left">Assign to Companies <span class="text-danger">*</span></label>
-                                <select class="form-control select2-multi" id="companies_select_add" multiple="multiple" data-placeholder="Select one or more companies"></select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="holiday_type" class="text-left">Holiday Type</label>
-                                <select class="form-control" id="holiday_type">
-                                    <option value="religious">Religious</option>
-                                    <option value="national">National</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="remarks" class="text-left">Remarks</label>
-                                <textarea class="form-control" id="remarks" rows="3" placeholder="Enter any additional remarks"></textarea>
-                            </div>
-                        </div>
-                    `,
-                    didOpen: function() {
-                        try {
-                            loadCompaniesForSelect('#companies_select_add');
-                            initDateRangePicker('#daterangepicker_add', 'days_count_add');
-                        } catch (err) {
-                            console.error('Error opening Add Holiday modal:', err);
-                        }
-                    },
-                    showCancelButton: true,
-                    confirmButtonText: 'Save Holiday',
-                    cancelButtonText: 'Cancel',
-                    allowOutsideClick: false,
-                    preConfirm: function() {
-                        const holidayName = document.getElementById('holiday_name').value.trim();
-                        const dateRange = document.getElementById('daterangepicker_add').value.trim();
-                        const companies = $('#companies_select_add').val();
-                        
-                        if (!holidayName) {
-                            Swal.showValidationMessage('Please enter holiday name');
-                            return false;
-                        }
-                        
-                        if (!dateRange) {
-                            Swal.showValidationMessage('Please select date range');
-                            return false;
-                        }
-                        
-                        if (!companies || companies.length === 0) {
-                            Swal.showValidationMessage('Please select at least one company');
-                            return false;
-                        }
-                        
-                        return {
-                            holiday_id: '',
-                            holiday_name: holidayName,
-                            daterangepicker: dateRange,
-                            holiday_type: document.getElementById('holiday_type').value,
-                            remarks: document.getElementById('remarks').value.trim(),
-                            company_ids: companies
-                        };
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        saveHoliday(result.value, 'add');
-                    }
-                });
-            }
-
-            function editHoliday(holidayId) {
-                $.ajax({
-                    url: 'manage_holidays.php',
-                    type: 'GET',
-                    data: { action: 'get_single', id: holidayId },
-                    dataType: 'json',
-                    success: function(res) {
-                        if (res.status === 'success') {
-                            const data = res.data;
-                            const startMoment = moment(data.start_date, ['YYYY-MM-DD', 'MM/DD/YYYY']);
-                            const endMoment = moment(data.end_date, ['YYYY-MM-DD', 'MM/DD/YYYY']);
-                            const startDateValue = startMoment.isValid() ? startMoment.format('MM/DD/YYYY') : '';
-                            const endDateValue = endMoment.isValid() ? endMoment.format('MM/DD/YYYY') : '';
-                            const dateRangeString = startDateValue && endDateValue
-                                ? (startDateValue + ' - ' + endDateValue)
-                                : '';
-                            
-                            Swal.fire({
-                                title: 'Edit Holiday',
-                                width: '760px',
-                                html: `
-                                    <div class="text-left">
-                                        <div class="form-group">
-                                            <label for="holiday_name_edit" class="text-left">Holiday Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control" id="holiday_name_edit" value="${data.holiday_name}">
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="daterangepicker_edit" class="text-left">Date Range <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control" id="daterangepicker_edit" value="${dateRangeString}">
-                                        </div>
-
-                                        <div class="form-group">
-                                            <label class="text-left"><strong>Selected Days: <span id="days_count_edit">${data.total_days}</span> days</strong></label>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="companies_select_edit" class="text-left">Assign to Companies <span class="text-danger">*</span></label>
-                                            <select class="form-control select2-multi" id="companies_select_edit" multiple="multiple" data-placeholder="Select one or more companies"></select>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="holiday_type_edit" class="text-left">Holiday Type</label>
-                                            <select class="form-control" id="holiday_type_edit">
-                                                <option value="religious" ${data.holiday_type === 'religious' ? 'selected' : ''}>Religious</option>
-                                                <option value="national" ${data.holiday_type === 'national' ? 'selected' : ''}>National</option>
-                                                <option value="other" ${data.holiday_type === 'other' ? 'selected' : ''}>Other</option>
-                                            </select>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="remarks_edit" class="text-left">Remarks</label>
-                                            <textarea class="form-control" id="remarks_edit" rows="3">${data.remarks || ''}</textarea>
-                                        </div>
-                                    </div>
-                                `,
-                                didOpen: function() {
-                                    try {
-                                        // Load companies and pre-select assigned ones
-                                        loadCompaniesForSelect('#companies_select_edit', data.company_ids || []);
-
-                                        // Initialize date range picker after modal is shown
-                                        initDateRangePicker('#daterangepicker_edit', 'days_count_edit', startDateValue, endDateValue);
-                                    } catch (err) {
-                                        console.error('Error opening Edit Holiday modal:', err);
-                                    }
-                                },
-                                showCancelButton: true,
-                                confirmButtonText: 'Update Holiday',
-                                cancelButtonText: 'Cancel',
-                                allowOutsideClick: false,
-                                preConfirm: function() {
-                                    const holidayName = document.getElementById('holiday_name_edit').value.trim();
-                                    const dateRange = document.getElementById('daterangepicker_edit').value.trim();
-                                    const companies = $('#companies_select_edit').val();
-                                    
-                                    if (!holidayName) {
-                                        Swal.showValidationMessage('Please enter holiday name');
-                                        return false;
-                                    }
-                                    
-                                    if (!dateRange) {
-                                        Swal.showValidationMessage('Please select date range');
-                                        return false;
-                                    }
-                                    
-                                    if (!companies || companies.length === 0) {
-                                        Swal.showValidationMessage('Please select at least one company');
-                                        return false;
-                                    }
-                                    
-                                    return {
-                                        holiday_id: data.id,
-                                        holiday_name: holidayName,
-                                        daterangepicker: dateRange,
-                                        holiday_type: document.getElementById('holiday_type_edit').value,
-                                        remarks: document.getElementById('remarks_edit').value.trim(),
-                                        company_ids: companies
-                                    };
-                                }
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    saveHoliday(result.value, 'edit');
-                                }
-                            });
-                        } else {
-                            Swal.fire('Error', res.message, 'error');
-                        }
-                    },
-                    error: function() {
-                        Swal.fire('Error', 'Error loading holiday data', 'error');
-                    }
-                });
-            }
-
-            function saveHoliday(data, action) {
-                const formData = new FormData();
-                formData.append('action', action);
-                formData.append('holiday_id', data.holiday_id);
-                formData.append('holiday_name', data.holiday_name);
-                formData.append('daterangepicker', data.daterangepicker);
-                formData.append('holiday_type', data.holiday_type);
-                formData.append('remarks', data.remarks);
-                
-                // Append company IDs
-                if (data.company_ids && Array.isArray(data.company_ids)) {
-                    data.company_ids.forEach(function(companyId) {
-                        formData.append('company_ids[]', companyId);
-                    });
-                } else if (data.company_ids) {
-                    formData.append('company_ids[]', data.company_ids);
+            function updateDays() {
+                const parts = String($('#hRange').val() || '').split(' - ');
+                let n = 0;
+                if (parts.length === 2) {
+                    const s = moment(parts[0], DATE_FMT), e = moment(parts[1], DATE_FMT);
+                    if (s.isValid() && e.isValid()) n = e.diff(s, 'days') + 1;
                 }
-                
-                $.ajax({
-                    url: 'manage_holidays.php',
-                    type: 'POST',
-                    data: formData,
-                    dataType: 'json',
-                    processData: false,
-                    contentType: false,
-                    success: function(res) {
-                        if (res.status === 'success') {
-                            Swal.fire({
-                                title: 'Success',
-                                text: res.message,
-                                icon: 'success'
-                            }).then(() => {
-                                location.reload();
-                            });
-                        } else if (res.status === 'archived') {
-                            // Archived duplicate found - offer to reactivate
-                            Swal.fire({
-                                title: 'Holiday Already Exists (Archived)',
-                                html: res.message,
-                                icon: 'question',
-                                showCancelButton: true,
-                                confirmButtonText: 'Yes, Reactivate It',
-                                cancelButtonText: 'No, Cancel',
-                                allowOutsideClick: false
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    // Reactivate the archived holiday
-                                    reactivateHoliday(res.holiday_id);
-                                }
-                            });
-                        } else {
-                            Swal.fire('Error', res.message, 'error');
-                        }
-                    },
-                    error: function() {
-                        Swal.fire('Error', 'Error saving holiday', 'error');
-                    }
-                });
+                $('#hDays').text(n);
             }
 
-            function reactivateHoliday(holidayId) {
-                $.ajax({
-                    url: 'manage_holidays.php',
-                    type: 'POST',
-                    dataType: 'json',
-                    data: { action: 'unarchive', holiday_id: holidayId },
-                    success: function(res) {
-                        if (res.status === 'success') {
-                            Swal.fire({
-                                title: 'Success!',
-                                text: res.message,
-                                icon: 'success'
-                            }).then(() => {
-                                location.reload();
-                            });
-                        } else {
-                            Swal.fire('Error', res.message, 'error');
-                        }
-                    },
-                    error: function() {
-                        Swal.fire('Error', 'Error reactivating holiday', 'error');
-                    }
+            function initRange(start, end) {
+                const $input = $('#hRange');
+                if (!$.fn.daterangepicker || typeof moment === 'undefined') return;
+                const s = start && moment(start, ['YYYY-MM-DD', DATE_FMT]).isValid() ? moment(start, ['YYYY-MM-DD', DATE_FMT]) : moment();
+                const e = end && moment(end, ['YYYY-MM-DD', DATE_FMT]).isValid() ? moment(end, ['YYYY-MM-DD', DATE_FMT]) : s.clone();
+                $input.daterangepicker({
+                    locale: { format: DATE_FMT },
+                    autoUpdateInput: true,
+                    parentEl: '.swal2-popup',
+                    opens: 'center',
+                    drops: 'down',
+                    startDate: s,
+                    endDate: e
                 });
+                $input.on('apply.daterangepicker', function() { $(this).removeClass('is-invalid'); updateDays(); });
+                updateDays();
             }
 
-            function deleteHoliday(holidayId) {
-                Swal.fire({
-                    title: 'Archive Holiday?',
-                    text: 'This holiday will be archived and no longer used in calculations',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Yes, Archive it',
-                    cancelButtonText: 'Cancel'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        $.ajax({
+            function loadCompanies(selectedIds) {
+                const $sel = $('#hCompanies');
+                $.getJSON('manage_holidays.php', { action: 'get_companies' }).done(function(res) {
+                    if (!(res && res.status === 'success' && Array.isArray(res.data))) {
+                        Swal.showValidationMessage(T.load_err);
+                        return;
+                    }
+                    $sel.html(res.data.map(c => `<option value="${esc(c.id)}">${esc(c.comp_name || '')}</option>`).join(''));
+                    F.select2($sel, { placeholder: T.companies_ph, allowClear: true });
+                    if (Array.isArray(selectedIds) && selectedIds.length) $sel.val(selectedIds.map(String)).trigger('change');
+                }).fail(function() { Swal.showValidationMessage(T.load_err); });
+            }
+
+            function openHolidayForm(d) {
+                const isEdit = !!(d && d.id);
+                d = d || {};
+                F.open({
+                    title: isEdit ? T.edit : T.add,
+                    html: holidayFormHtml(d),
+                    width: '780px',
+                    icon: isEdit ? 'mdi-content-save' : 'mdi-plus',
+                    confirm: isEdit ? T.update : T.save,
+                    didOpen: function() {
+                        const $form = $('#holForm');
+                        F.liveClear($form);
+                        $form.find(`input[name="holiday_type"][value="${d.holiday_type || 'religious'}"]`).prop('checked', true);
+                        initRange(d.start_date, d.end_date);
+                        loadCompanies(d.company_ids || []);
+                        $('#hSelectAll').on('click', function() {
+                            const $sel = $('#hCompanies');
+                            $sel.val($sel.find('option').map(function() { return this.value; }).get()).trigger('change').removeClass('is-invalid');
+                        });
+                        $('#hCompanies').on('change', function() { $(this).removeClass('is-invalid'); });
+                    },
+                    preConfirm: function() {
+                        const $form = $('#holForm');
+                        const msg = F.validate($form);
+                        if (msg) { Swal.showValidationMessage(msg); return false; }
+                        return $.ajax({
                             url: 'manage_holidays.php',
                             type: 'POST',
                             dataType: 'json',
-                            data: { action: 'delete', holiday_id: holidayId },
-                            success: function(res) {
-                                if (res.status === 'success') {
-                                    Swal.fire({
-                                        title: 'Archived!',
-                                        text: res.message,
-                                        icon: 'success'
-                                    }).then(() => {
-                                        location.reload();
-                                    });
-                                } else {
-                                    Swal.fire('Error', res.message, 'error');
-                                }
-                            },
-                            error: function() {
-                                Swal.fire('Error', 'Error deleting holiday', 'error');
+                            data: {
+                                action: isEdit ? 'edit' : 'add',
+                                holiday_id: d.id || '',
+                                holiday_name: $.trim($('#hName').val()),
+                                daterangepicker: $.trim($('#hRange').val()),
+                                holiday_type: $form.find('input[name="holiday_type"]:checked').val() || 'other',
+                                remarks: $.trim($('#hRemarks').val()),
+                                company_ids: $('#hCompanies').val() || []
                             }
+                        }).then(function(res) {
+                            if (res && (res.status === 'success' || res.status === 'archived')) return res;
+                            throw new Error((res && res.message) || 'Error');
+                        }).catch(function(err) {
+                            Swal.showValidationMessage((err && err.message) || (err && err.statusText) || 'Error');
                         });
                     }
+                }).then(function(result) {
+                    if (!(result.isConfirmed && result.value)) return;
+                    const res = result.value;
+                    if (res.status === 'archived') {
+                        // Same holiday exists but is archived - offer to bring it back
+                        Swal.fire({
+                            title: T.exists_q,
+                            text: res.message,
+                            icon: 'question',
+                            showCancelButton: true,
+                            confirmButtonColor: window.APP_COLORS && APP_COLORS.primary,
+                            confirmButtonText: T.restore_yes,
+                            cancelButtonText: F.t('cancel', 'Cancel'),
+                            allowOutsideClick: false
+                        }).then(r => { if (r.isConfirmed) postAction('unarchive', res.holiday_id); });
+                        return;
+                    }
+                    F.done({ isConfirmed: true, value: { type: 'success', message: res.message } });
                 });
             }
 
-            function unarchiveHoliday(holidayId, holidayName) {
-                Swal.fire({
-                    title: 'Reactivate Holiday?',
-                    text: 'Do you want to reactivate "' + holidayName + '"?',
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonColor: '#28a745',
-                    cancelButtonColor: '#6c757d',
-                    confirmButtonText: 'Yes, Reactivate',
-                    cancelButtonText: 'Cancel'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        $.ajax({
-                            url: 'manage_holidays.php',
-                            type: 'POST',
-                            dataType: 'json',
-                            data: { action: 'unarchive', holiday_id: holidayId },
-                            success: function(res) {
-                                if (res.status === 'success') {
-                                    Swal.fire({
-                                        title: 'Success!',
-                                        text: res.message,
-                                        icon: 'success'
-                                    }).then(() => {
-                                        location.reload();
-                                    });
-                                } else {
-                                    Swal.fire('Error', res.message, 'error');
-                                }
-                            },
-                            error: function() {
-                                Swal.fire('Error', 'Error reactivating holiday', 'error');
-                            }
-                        });
-                    }
+            function editHoliday(id) {
+                $.getJSON('manage_holidays.php', { action: 'get_single', id: id }).done(function(res) {
+                    if (res && res.status === 'success') openHolidayForm(res.data);
+                    else Swal.fire({ title: F.t('error', 'Error'), text: (res && res.message) || T.load_err, icon: 'error', allowOutsideClick: false });
+                }).fail(function() {
+                    Swal.fire({ title: F.t('error', 'Error'), text: T.load_err, icon: 'error', allowOutsideClick: false });
                 });
+            }
+
+            /* ---------- archive / reactivate ---------- */
+            function postAction(action, id) {
+                return $.post('manage_holidays.php', { action: action, holiday_id: id }, null, 'json').done(function(res) {
+                    if (res && res.status === 'success') {
+                        F.done({ isConfirmed: true, value: { type: 'success', message: res.message } });
+                    } else {
+                        Swal.fire({ title: F.t('error', 'Error'), text: (res && res.message) || 'Error', icon: 'error', allowOutsideClick: false });
+                    }
+                }).fail(function(xhr) {
+                    Swal.fire({ title: F.t('error', 'Error'), text: xhr.statusText || 'Error', icon: 'error', allowOutsideClick: false });
+                });
+            }
+
+            function confirmAction(o) {
+                Swal.fire({
+                    title: o.title,
+                    html: `<div class="sr-page"><div class="sr-notice ${o.tone}" style="margin: 0; text-align: start;"><i class="mdi ${o.icon}"></i><div><strong>${esc(o.name)}</strong><br>${esc(o.text || '')}</div></div></div>`,
+                    showCancelButton: true,
+                    confirmButtonColor: o.color,
+                    cancelButtonColor: window.APP_COLORS && APP_COLORS.danger_dark,
+                    confirmButtonText: o.confirm,
+                    cancelButtonText: F.t('cancel', 'Cancel'),
+                    allowOutsideClick: false,
+                    customClass: { popup: 'sr-addline-popup' }
+                }).then(r => { if (r.isConfirmed) postAction(o.action, o.id); });
+            }
+
+            function archiveHoliday(id, name) {
+                confirmAction({ action: 'delete', id: id, name: name, title: T.archive_q, text: T.archive_txt,
+                    tone: 'tone-amber', icon: 'mdi-archive', color: '#dc2626', confirm: '<i class="mdi mdi-archive"></i> ' + esc(T.archive_yes) });
+            }
+
+            function restoreHoliday(id, name) {
+                confirmAction({ action: 'unarchive', id: id, name: name, title: T.restore_q, text: '',
+                    tone: 'tone-green', icon: 'mdi-restore', color: '#16a34a', confirm: '<i class="mdi mdi-restore"></i> ' + esc(T.restore_yes) });
             }
         </script>
     </body>
