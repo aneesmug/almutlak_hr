@@ -846,14 +846,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $manageHolidaysLink ?>"><i class="fa-duotone fa-calendar-days" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
                 <?php endif; ?>
 
-                <?php /* 
-                if (
-                    in_array($user_role, $can_see_evaluations_report_strict) ||
-                    in_array($user_type, $can_see_evaluations_report_strict) ||
-                    $is_gm || $is_admin
-                ): ?>
+                <?php if ($is_system_admin): ?>
                     <li><a href="<?= $allEmployeeEvaluationsLink ?>"><i class="fa-duotone fa-file-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('evaluation_reports', 'Evaluation Reports') ?></span></a></li>
-                <?php endif; */ ?>
+                <?php endif; ?>
             </ul>
         </li>
         <?php endif; ?>

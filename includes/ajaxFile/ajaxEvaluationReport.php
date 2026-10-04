@@ -39,7 +39,8 @@ try {
             $from_date = $_POST['from_date'] ?? '';
             $to_date = $_POST['to_date'] ?? '';
             $min_score = $_POST['min_score'] ?? '';
-            $is_dept_restricted = isset($_POST['is_dept_restricted']) && $_POST['is_dept_restricted'] === 'true';
+            // System admin always sees every employee's evaluations
+            $is_dept_restricted = !$is_system_admin && isset($_POST['is_dept_restricted']) && $_POST['is_dept_restricted'] === 'true';
             $user_dept = (int)($_POST['user_dept'] ?? 0);
             
             // Build query
@@ -102,7 +103,9 @@ try {
             }
             
             // Add access control filters - strict employee scope first (prevents cross-manager leaks)
-            if (!empty($allowed_employees_array)) {
+            if ($is_system_admin) {
+                // no employee/company scope for system admin
+            } elseif (!empty($allowed_employees_array)) {
                 $placeholders = implode(',', array_fill(0, count($allowed_employees_array), '?'));
                 $sql .= " AND e.emp_id IN ($placeholders)";
                 $params = array_merge($params, $allowed_employees_array);

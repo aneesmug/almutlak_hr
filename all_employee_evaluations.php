@@ -40,7 +40,7 @@ if (!$has_access) {
 }
 
 // Check if user should only see their department
-$is_dept_restricted = $isDeptManager && !in_array($user_role, ['hr_recruitment', 'hr_supervisor', 'hr_senior_bp', 'gm', 'administrator']);
+$is_dept_restricted = !$is_system_admin && $isDeptManager && !in_array($user_role, ['hr_recruitment', 'hr_supervisor', 'hr_senior_bp', 'gm', 'administrator']);
 
 // ================================================================
 // GET DEPARTMENTS FOR FILTER
