@@ -943,7 +943,8 @@ if (mysqli_num_rows($query) == 1) {
 				}
 			}
 
-			/* Employee Detail Tabs - redesign (tab bar fused to content panel) */
+			/* Employee Detail Tabs - New GUI (sr-* tokens). Geometry unchanged: wrapping bar,
+			   items flex 1 1 auto, 10px/16px links; only the look moved onto the design tokens. */
 			.emp-tabs {
 				display: flex;
 				flex-wrap: wrap;
@@ -951,10 +952,10 @@ if (mysqli_num_rows($query) == 1) {
 				list-style: none;
 				margin: 0;
 				padding: 6px 6px 0 6px;
-				background: #f4f6f9;
-				border: 1px solid rgba(67, 97, 238, 0.18);
+				background: var(--sr-surface-3);
+				border: 1px solid var(--sr-border);
 				border-bottom: none;
-				border-radius: 12px 12px 0 0;
+				border-radius: var(--sr-radius) var(--sr-radius) 0 0;
 			}
 
 			.emp-tabs .nav-item {
@@ -969,29 +970,37 @@ if (mysqli_num_rows($query) == 1) {
 				white-space: nowrap;
 				padding: 10px 16px;
 				margin-bottom: 6px;
-				border-radius: 8px;
+				border-radius: 10px;
 				font-weight: 600;
 				font-size: 0.875rem;
-				color: #64748b;
+				color: var(--sr-muted);
 				background: transparent;
-				border: none;
-				transition: color .15s ease, background-color .15s ease, box-shadow .15s ease;
+				border: 1px solid transparent;
+				transition: color .15s ease, background-color .15s ease, box-shadow .15s ease, border-color .15s ease;
 			}
 
 			.emp-tabs .nav-link i {
 				font-size: 1rem;
 				line-height: 1;
+				margin: 0 !important;
+				opacity: .85;
 			}
 
 			.emp-tabs .nav-link:hover {
-				color: #1f2937;
-				background: rgba(255, 255, 255, 0.7);
+				color: var(--sr-text);
+				background: var(--sr-surface-2);
 			}
 
 			.emp-tabs .nav-link.active {
-				color: #fff;
-				background: var(--primary, #4361ee);
-				box-shadow: 0 4px 10px rgba(67, 97, 238, 0.25);
+				color: var(--sr-accent-strong);
+				background: var(--sr-surface);
+				border-color: var(--sr-border);
+				box-shadow: 0 1px 2px rgba(15, 23, 42, .06), inset 0 -2px 0 var(--sr-accent);
+			}
+
+			.emp-tabs .nav-link.active i {
+				color: var(--sr-accent);
+				opacity: 1;
 			}
 
 			.emp-tabs .nav-link .badge-count {
@@ -1001,16 +1010,18 @@ if (mysqli_num_rows($query) == 1) {
 				min-width: 20px;
 				height: 20px;
 				padding: 0 6px;
-				border-radius: 10px;
+				border-radius: 999px;
 				font-size: 0.7rem;
 				font-weight: 700;
-				background: #ffedd5;
-				color: #c2410c;
+				background: var(--tone-amber-bg);
+				color: var(--tone-amber-fg);
+				border: 1px solid var(--tone-amber-bd);
 			}
 
 			.emp-tabs .nav-link.active .badge-count {
-				background: #ffedd5;
-				color: #c2410c;
+				background: var(--sr-accent);
+				color: #fff;
+				border-color: var(--sr-accent);
 			}
 
 			@media (max-width: 768px) {
@@ -1027,11 +1038,11 @@ if (mysqli_num_rows($query) == 1) {
 
 			.tab-content {
 				margin: 0 0 1.5rem 0;
-				border: 1px solid rgba(67, 97, 238, 0.35);
+				border: 1px solid var(--sr-border);
 				border-top: none;
-				border-radius: 0 0 12px 12px;
-				background: #fff;
-				box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.08), 0 10px 28px rgba(67, 97, 238, 0.14);
+				border-radius: 0 0 var(--sr-radius) var(--sr-radius);
+				background: var(--sr-surface);
+				box-shadow: var(--sr-shadow);
 				animation: emp-tab-glow-in .2s ease;
 			}
 
@@ -1040,15 +1051,138 @@ if (mysqli_num_rows($query) == 1) {
 			}
 
 			@keyframes emp-tab-glow-in {
-				from {
-					box-shadow: 0 0 0 0 rgba(67, 97, 238, 0);
-					opacity: .7;
-				}
-				to {
-					box-shadow: 0 0 0 1px rgba(67, 97, 238, 0.08), 0 10px 28px rgba(67, 97, 238, 0.14);
-					opacity: 1;
-				}
+				from { opacity: .7; }
+				to { opacity: 1; }
 			}
+
+			/* ---------- Tab panes: old markup re-mapped onto the New GUI ---------- */
+			.tab-content.sr-page .header-title { color: var(--sr-text); font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+			.tab-content.sr-page .card-box,
+			.tab-content.sr-page .card {
+				background: var(--sr-surface);
+				border: 1px solid var(--sr-border) !important;
+				border-radius: var(--sr-radius);
+				box-shadow: none;
+				overflow: hidden;
+			}
+			.tab-content.sr-page .card-box { padding: 18px; margin-bottom: 20px; }
+			.tab-content.sr-page .card > .card-header {
+				display: flex; align-items: center; gap: 8px;
+				background: var(--sr-surface-2) !important;
+				color: var(--sr-text) !important;
+				border-bottom: 1px solid var(--sr-border);
+				font-size: 14px; font-weight: 700; padding: 12px 18px;
+			}
+			.tab-content.sr-page .card > .card-header h5 { font-size: 14px; font-weight: 700; color: var(--sr-text); }
+			.tab-content.sr-page .card > .card-header i { color: var(--sr-accent); }
+			.tab-content.sr-page .card > .card-body .text-muted.text-uppercase { font-size: 11px; font-weight: 700; letter-spacing: .5px; color: var(--sr-muted) !important; }
+			.tab-content.sr-page .table-responsive { border: 1px solid var(--sr-border); border-radius: var(--sr-radius); padding: 6px; margin-bottom: 20px; }
+			.tab-content.sr-page .card .table-responsive { border: 0; padding: 0; margin: 0; }
+			.tab-content.sr-page .table-responsive > .mb-3:first-child { padding: 8px 8px 0; }
+			.tab-content.sr-page .ve-head-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+			.tab-content.sr-page .ve-head-tools .sr-search { flex: 0 1 260px; }
+
+			/* tables */
+			.tab-content.sr-page table.sr-table tbody tr { cursor: default; }
+			.tab-content.sr-page table.sr-table tbody td { white-space: nowrap; }
+			.tab-content.sr-page table.sr-table td .btn-sm,
+			.tab-content.sr-page table.sr-table td .btn-xs {
+				display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+				min-width: 30px; height: 30px; padding: 0 9px; border-radius: 8px; font-size: 12px; line-height: 1; box-shadow: none !important;
+			}
+			.tab-content.sr-page table.sr-table td .btn-group { gap: 4px; }
+			.tab-content.sr-page table.sr-table td .btn-group > .btn { border-radius: 8px !important; }
+
+			/* bootstrap badges -> sr pills */
+			.tab-content.sr-page .sr-table .badge,
+			.tab-content.sr-page .card-body .badge {
+				display: inline-flex; align-items: center; gap: 5px;
+				padding: 3px 9px; border-radius: 999px; border: 1px solid var(--tone-slate-bd);
+				font-size: 11.5px; font-weight: 600; line-height: 1.4;
+				background: var(--tone-slate-bg); color: var(--tone-slate-fg);
+			}
+			.tab-content.sr-page .badge-success { background: var(--tone-green-bg) !important; color: var(--tone-green-fg) !important; border-color: var(--tone-green-bd) !important; }
+			.tab-content.sr-page .badge-danger { background: var(--tone-red-bg) !important; color: var(--tone-red-fg) !important; border-color: var(--tone-red-bd) !important; }
+			.tab-content.sr-page .badge-warning { background: var(--tone-amber-bg) !important; color: var(--tone-amber-fg) !important; border-color: var(--tone-amber-bd) !important; }
+			.tab-content.sr-page .badge-info { background: var(--tone-sky-bg) !important; color: var(--tone-sky-fg) !important; border-color: var(--tone-sky-bd) !important; }
+			.tab-content.sr-page .badge-primary { background: var(--tone-indigo-bg) !important; color: var(--tone-indigo-fg) !important; border-color: var(--tone-indigo-bd) !important; }
+			.tab-content.sr-page .badge-secondary,
+			.tab-content.sr-page .badge-dark,
+			.tab-content.sr-page .badge-light { background: var(--tone-slate-bg) !important; color: var(--tone-slate-fg) !important; border-color: var(--tone-slate-bd) !important; }
+
+			/* DataTables controls */
+			.tab-content.sr-page .dataTables_wrapper .dataTables_length,
+			.tab-content.sr-page .dataTables_wrapper .dataTables_filter { padding: 6px 4px 10px; font-size: 12px; color: var(--sr-muted); }
+			.tab-content.sr-page .dataTables_wrapper .dataTables_length select,
+			.tab-content.sr-page .dataTables_wrapper .dataTables_filter input {
+				height: 34px; border-radius: 10px; border: 1px solid var(--sr-border-strong);
+				background: var(--sr-surface); color: var(--sr-text); font-size: 13px; box-shadow: none; outline: none;
+			}
+			.tab-content.sr-page .dataTables_wrapper .dataTables_filter input { min-width: 220px; padding: 0 12px; margin-inline-start: 6px; }
+			.tab-content.sr-page .dataTables_wrapper .dataTables_filter input:focus,
+			.tab-content.sr-page .dataTables_wrapper .dataTables_length select:focus { border-color: var(--sr-accent); box-shadow: 0 0 0 3px var(--sr-accent-soft); }
+			/* buttons: centred content; 3+ buttons = one joined button group, 1-2 = separate buttons */
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; float: none; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn {
+				display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+				height: 34px; padding: 0 14px !important; margin: 0 !important; line-height: 1 !important;
+				border-radius: 10px !important; background: var(--sr-surface) !important; border: 1px solid var(--sr-border-strong) !important;
+				color: var(--sr-text-2) !important; font-size: 12.5px; font-weight: 600; box-shadow: none !important; white-space: nowrap;
+			}
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn > span { display: inline-flex; align-items: center; gap: 6px; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn i { font-size: 15px; line-height: 1; color: var(--sr-muted); }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn:hover { background: var(--sr-surface-2) !important; color: var(--sr-accent-strong) !important; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn:hover i { color: var(--sr-accent); }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons:has(> .btn:nth-child(3)) { gap: 0; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons:has(> .btn:nth-child(3)) > .btn { border-radius: 0 !important; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons:has(> .btn:nth-child(3)) > .btn + .btn { margin-inline-start: -1px !important; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons:has(> .btn:nth-child(3)) > .btn:first-child { border-start-start-radius: 10px !important; border-end-start-radius: 10px !important; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons:has(> .btn:nth-child(3)) > .btn:last-child { border-start-end-radius: 10px !important; border-end-end-radius: 10px !important; }
+			.tab-content.sr-page .dataTables_wrapper .dt-buttons .btn:hover { position: relative; z-index: 1; border-color: var(--sr-accent) !important; }
+
+			/* row action buttons -> soft New GUI buttons (solid bootstrap colours re-mapped onto tones) */
+			.tab-content.sr-page table.sr-table td .btn { border: 1px solid transparent !important; font-weight: 600; transition: background .12s, color .12s, border-color .12s; }
+			.tab-content.sr-page table.sr-table td .btn-primary { background: var(--tone-indigo-bg) !important; color: var(--tone-indigo-fg) !important; border-color: var(--tone-indigo-bd) !important; }
+			.tab-content.sr-page table.sr-table td .btn-info { background: var(--tone-sky-bg) !important; color: var(--tone-sky-fg) !important; border-color: var(--tone-sky-bd) !important; }
+			.tab-content.sr-page table.sr-table td .btn-success { background: var(--tone-green-bg) !important; color: var(--tone-green-fg) !important; border-color: var(--tone-green-bd) !important; }
+			.tab-content.sr-page table.sr-table td .btn-warning { background: var(--tone-amber-bg) !important; color: var(--tone-amber-fg) !important; border-color: var(--tone-amber-bd) !important; }
+			.tab-content.sr-page table.sr-table td .btn-danger { background: var(--tone-red-bg) !important; color: var(--tone-red-fg) !important; border-color: var(--tone-red-bd) !important; }
+			.tab-content.sr-page table.sr-table td .btn-secondary,
+			.tab-content.sr-page table.sr-table td .btn-light,
+			.tab-content.sr-page table.sr-table td .btn-dark,
+			.tab-content.sr-page table.sr-table td [class*="btn-outline-"] { background: var(--sr-surface) !important; color: var(--sr-text-2) !important; border-color: var(--sr-border-strong) !important; }
+			.tab-content.sr-page table.sr-table td .btn-primary:hover { background: var(--sr-accent) !important; border-color: var(--sr-accent) !important; color: #fff !important; }
+			.tab-content.sr-page table.sr-table td .btn-info:hover { background: #0284c7 !important; border-color: #0284c7 !important; color: #fff !important; }
+			.tab-content.sr-page table.sr-table td .btn-success:hover { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
+			.tab-content.sr-page table.sr-table td .btn-warning:hover { background: #f59e0b !important; border-color: #f59e0b !important; color: #fff !important; }
+			.tab-content.sr-page table.sr-table td .btn-danger:hover { background: #dc2626 !important; border-color: #dc2626 !important; color: #fff !important; }
+			.tab-content.sr-page table.sr-table td .btn-secondary:hover,
+			.tab-content.sr-page table.sr-table td .btn-light:hover,
+			.tab-content.sr-page table.sr-table td .btn-dark:hover,
+			.tab-content.sr-page table.sr-table td [class*="btn-outline-"]:hover { border-color: var(--sr-accent) !important; color: var(--sr-accent-strong) !important; }
+			.tab-content.sr-page table.sr-table td .btn i { margin: 0 !important; }
+
+			/* pagination: compact chevrons */
+			.tab-content.sr-page .dataTables_wrapper .pagination .page-link { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 8px; }
+			.tab-content.sr-page .dataTables_wrapper .pagination .page-link i { font-size: 16px; line-height: 1; }
+
+			/* row action buttons: 2+ = joined group */
+			.tab-content.sr-page table.sr-table td .btn-group:has(> .btn:nth-child(2)) { gap: 0; }
+			.tab-content.sr-page table.sr-table td .btn-group:has(> .btn:nth-child(2)) > .btn { border-radius: 0 !important; }
+			.tab-content.sr-page table.sr-table td .btn-group:has(> .btn:nth-child(2)) > .btn:first-child { border-start-start-radius: 8px !important; border-end-start-radius: 8px !important; }
+			.tab-content.sr-page table.sr-table td .btn-group:has(> .btn:nth-child(2)) > .btn:last-child { border-start-end-radius: 8px !important; border-end-end-radius: 8px !important; }
+			.tab-content.sr-page .sr-actions:has(> .sr-btn:nth-child(2)) { gap: 0; }
+			.tab-content.sr-page .sr-actions:has(> .sr-btn:nth-child(2)) > .sr-btn { border-radius: 0; }
+			.tab-content.sr-page .sr-actions:has(> .sr-btn:nth-child(2)) > .sr-btn + .sr-btn { margin-inline-start: -1px; }
+			.tab-content.sr-page .sr-actions:has(> .sr-btn:nth-child(2)) > .sr-btn:first-child { border-start-start-radius: 8px; border-end-start-radius: 8px; }
+			.tab-content.sr-page .sr-actions:has(> .sr-btn:nth-child(2)) > .sr-btn:last-child { border-start-end-radius: 8px; border-end-end-radius: 8px; }
+
+			/* length / filter row under the buttons */
+			.tab-content.sr-page .dataTables_wrapper .dataTables_length label,
+			.tab-content.sr-page .dataTables_wrapper .dataTables_filter label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+			.tab-content.sr-page .dataTables_wrapper .dataTables_length select { width: auto; min-width: 70px; padding: 0 28px 0 10px; }
+
+			.tab-content.sr-page table.dataTable td.dataTables_empty { padding: 28px 12px !important; color: var(--sr-muted); text-align: center; }
 
 			/* Direct Reports - search toolbar */
 			.direct-reports-search-group {
@@ -1345,7 +1479,7 @@ if (mysqli_num_rows($query) == 1) {
 											<?php */ ?>
 										</div>
 									</div>
-									<ul class="nav emp-tabs">
+									<ul class="nav emp-tabs sr-page">
 
 										<li class="nav-item">
 											<a href="#profile1" data-toggle="tab" aria-expanded="true" class="nav-link active show">
@@ -1418,7 +1552,7 @@ if (mysqli_num_rows($query) == 1) {
 										</li>
 										<?php endif; ?>
 									</ul>
-									<div class="tab-content">
+									<div class="tab-content sr-page">
 										<!-- Profile -->
 										<div class="tab-pane active show" id="profile1">
 											<div class="profile-content-wrapper">
@@ -1790,7 +1924,7 @@ if (mysqli_num_rows($query) == 1) {
 													</div>
 												<?php } ?>
 												<h4 class="m-t-0 header-title"></h4>
-												<table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+												<table id="employee_vac" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
 															<th><?= __('id') ?></th>
@@ -1902,7 +2036,7 @@ if (mysqli_num_rows($query) == 1) {
 														<i class="mdi mdi-history mr-1"></i><?= __('vacation_activity_log', 'Vacation Activity Log') ?>
 													</div>
 													<div class="card-body table-responsive">
-														<table id="employee_vac_activity_log" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+														<table id="employee_vac_activity_log" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 															<thead>
 																<tr>
 																	<th><?= __('date') ?></th>
@@ -1974,7 +2108,7 @@ if (mysqli_num_rows($query) == 1) {
 														<i class="mdi mdi-calendar-clock mr-1"></i><?= __('vacation_daily_balance_snapshot', 'Vacation Daily Balance Snapshot (Cron)') ?>
 													</div>
 													<div class="card-body table-responsive">
-														<table id="employee_vac_cron_snapshot" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+														<table id="employee_vac_cron_snapshot" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 															<thead>
 																<tr>
 														<th><?= __('last_updated', 'Last Updated') ?></th>
@@ -2178,7 +2312,7 @@ if (mysqli_num_rows($query) == 1) {
 												</button>
 												<?php endif; ?>
 											</div>
-											<table id="loan_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+											<table id="loan_history_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 												<thead>
 													<tr>
 														<th><?= __('loan_amount') ?></th>
@@ -2285,7 +2419,7 @@ if (mysqli_num_rows($query) == 1) {
 											</table>
 
 											<h4 class="header-title m-t-0 m-b-30 mt-4"><?= __('repayment_history') ?></h4>
-											<table id="payment_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+											<table id="payment_history_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 												<thead>
 													<tr>
 														<th><?= __('payment_date') ?></th>
@@ -2353,7 +2487,7 @@ if (mysqli_num_rows($query) == 1) {
 										<?php if ($canViewSalary): ?>
 										<div class="tab-pane" id="payroll1">
 											<h4 class="header-title m-t-0 m-b-30"><?= __('payroll_history', 'Payroll History') ?></h4>
-											<table id="payroll_history_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
+											<table id="payroll_history_tbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
 												<thead>
 													<tr>
 														<th><?= __('month', 'Month') ?></th>
@@ -2484,7 +2618,7 @@ if (mysqli_num_rows($query) == 1) {
 
 										<?php if (count($medical_insurance_records) > 1): ?>
 										<h5 class="header-title mt-4"><?= __('insurance_history', 'Insurance History') ?></h5>
-										<table class="table table-striped table-bordered" style="width: 100%;">
+										<table class="table sr-table" style="width: 100%;">
 											<thead>
 												<tr>
 													<th><?= __('insurance_no', 'Insurance No') ?></th>
@@ -2533,7 +2667,7 @@ if (mysqli_num_rows($query) == 1) {
 											<label class="form-check-label" for="oiShowInactive"><?= __('show_inactive', 'Show Inactive') ?></label>
 										</div>
 										<?php endif; ?>
-										<table class="table table-striped table-bordered" style="width: 100%;">
+										<table class="table sr-table" style="width: 100%;">
 											<thead>
 												<tr>
 													<th><?= __('other_income_title', 'Title') ?></th>
@@ -2579,7 +2713,7 @@ if (mysqli_num_rows($query) == 1) {
 										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>
 										<div class="tab-pane" id="assets">
 											<h4 class="header-title m-t-0 m-b-30 mt-4"><?= __('assigned_assets') ?></h4>
-											<table id="assets_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
+											<table id="assets_tbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
 												<thead>
 													<tr>
 														<th><?= __('asset_type') ?></th>
@@ -2760,9 +2894,12 @@ if (mysqli_num_rows($query) == 1) {
 											<div class="card-box">
 												<div class="d-flex justify-content-between align-items-center m-b-20">
 													<h4 class="header-title mb-0"><?= __('memos', 'Memos') ?></h4>
-													<a href="employee_memos.php?emp_id=<?= urlencode($emprow['emp_id']) ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-email-send-outline"></i> <?= __('send_memo', 'Send Memo') ?></a>
+													<div class="ve-head-tools">
+														<div class="sr-search"><i class="mdi mdi-magnify"></i><input type="search" data-dt-search="#memos_tbl" placeholder="<?= __('search', 'Search') ?>" autocomplete="off"></div>
+														<a href="employee_memos.php?emp_id=<?= urlencode($emprow['emp_id']) ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-email-send-outline"></i> <?= __('send_memo', 'Send Memo') ?></a>
+													</div>
 												</div>
-												<table id="memos_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="width: 100%;">
+												<table id="memos_tbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
 													<thead>
 														<tr>
 															<th><?= __('date') ?></th>
@@ -2779,7 +2916,7 @@ if (mysqli_num_rows($query) == 1) {
 											<?php endif; ?>
 											<div class="card-box">
 												<h4 class="header-title m-b-30"><?= __('all_notes') ?></h4>
-												<table id="notes_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"></table>
+												<table id="notes_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;"></table>
 											</div>
 										</div>
 
@@ -2812,7 +2949,7 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 
-												<table id="attendance_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+												<table id="attendance_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
 															<th><?= __('date') ?></th>
@@ -2838,7 +2975,7 @@ if (mysqli_num_rows($query) == 1) {
 											<div class="card-box">
 												<h4 class="header-title m-b-30"><?= __('evaluations', 'Performance Evaluations') ?></h4>
 												
-												<table id="evaluations_tbl" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+												<table id="evaluations_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
 													<thead>
 														<tr>
 															<th><?= __('id') ?></th>
@@ -3804,8 +3941,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -3928,8 +4065,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -3951,8 +4088,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -3974,8 +4111,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -3993,8 +4130,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -4018,8 +4155,8 @@ if (mysqli_num_rows($query) == 1) {
 							paginate: {
 								first: __('first'),
 								last: __('last'),
-								next: __('next'),
-								previous: __('previous')
+								next: '<i class="mdi mdi-chevron-right"></i>',
+								previous: '<i class="mdi mdi-chevron-left"></i>'
 							},
 							emptyTable: __('no_data_available_in_table'),
 							zeroRecords: __('no_matching_records_found'),
@@ -4044,8 +4181,8 @@ if (mysqli_num_rows($query) == 1) {
 							paginate: {
 								first: __('first'),
 								last: __('last'),
-								next: __('next'),
-								previous: __('previous')
+								next: '<i class="mdi mdi-chevron-right"></i>',
+								previous: '<i class="mdi mdi-chevron-left"></i>'
 							},
 							emptyTable: __('no_data_available_in_table'),
 							zeroRecords: __('no_matching_records_found'),
@@ -4335,8 +4472,8 @@ if (mysqli_num_rows($query) == 1) {
 						paginate: {
 							first: __('first'),
 							last: __('last'),
-							next: __('next'),
-							previous: __('previous')
+							next: '<i class="mdi mdi-chevron-right"></i>',
+							previous: '<i class="mdi mdi-chevron-left"></i>'
 						},
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
@@ -4496,7 +4633,7 @@ if (mysqli_num_rows($query) == 1) {
 						searchPlaceholder: `${__('search')}...`,
 						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
 						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-						paginate: { first: __('first'), last: __('last'), next: __('next'), previous: __('previous') },
+						paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
 						emptyTable: __('no_data_available_in_table'),
 						zeroRecords: __('no_matching_records_found'),
 					}
