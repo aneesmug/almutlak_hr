@@ -386,150 +386,60 @@ if ($can_see_all_depts) {
     <!-- Select2 -->
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls {
-            max-width: 800px;
+        /* ---------- Page (sr-* design system, assets/css/smart_request.css) ---------- */
+        .vac-filters {
+            display: grid; grid-template-columns: 1.4fr 1fr 1fr .7fr .7fr auto; gap: 10px; align-items: end;
+            padding: 14px 18px; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface-2);
         }
-
-        .request-card {
-            border-radius: 15px;
-            border: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        @media (max-width: 991px) { .vac-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 575px) { .vac-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .vac-filters label { display: block; margin: 0 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+        .vac-filters .form-control {
+            height: 36px; border-radius: 8px; font-size: 13px;
+            border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text);
         }
+        .vac-filters .vac-filter-btns { display: flex; gap: 6px; }
+        .vac-filter-toggle .sr-count { margin-inline-start: 2px; }
+        .sr-page .sr-tabs .nav-link { cursor: pointer; }
 
-        .request-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+        .sr-page table.sr-table.vac-table tbody td { vertical-align: top; }
+        .vac-table .sr-cell-sub { white-space: nowrap; }
+        .vac-period { white-space: nowrap; }
+        .vac-period .sr-cell-title i { color: var(--sr-muted); font-size: 12px; margin: 0 3px; }
+        .vac-flags { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        .vac-reject-note {
+            margin-top: 6px; max-width: 260px; white-space: normal; font-size: 12px; line-height: 1.4;
+            padding: 6px 9px; border-radius: 8px; color: var(--tone-red-fg); background: var(--tone-red-bg); border: 1px solid var(--tone-red-bd);
         }
+        .vac-attach { margin-top: 6px; cursor: pointer; border: 0; }
+        .vac-attach:hover { color: var(--sr-accent-strong); }
+        .sr-page .sr-actions .dropdown-menu { z-index: 2000; }
+        .sr-page .sr-actions .dropdown-item i { width: 18px; text-align: center; margin-inline-end: 6px; }
+        @media (max-width: 1199px) { .sr-page .vac-table-wrap { overflow-x: auto; } }
 
-        .request-card .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom: none;
-            font-weight: 600;
-            font-size: 1.1em;
-            border-top-left-radius: 15px;
-            border-top-right-radius: 15px;
+        /* Server-side pagination (generate_pagination_controls) inside the card */
+        .vac-pager { padding: 0 18px 16px; }
+        .vac-pager .row { margin: 0 !important; }
+        .vac-pager .col-12 { padding: 0; font-size: 12.5px; color: var(--sr-muted); }
+        .vac-pager .pagination { gap: 4px; }
+        .vac-pager .page-link {
+            min-width: 32px; height: 32px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 8px !important; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600;
         }
+        .vac-pager .page-item.active .page-link { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; }
+        .vac-pager .page-item.disabled .page-link { opacity: .5; }
+        .vac-pager #limitFilter { height: 32px; border-radius: 8px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text); }
 
-        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
-
-        .request-card .card-header .float-right {
-            font-size: 0.85em;
-            opacity: 0.9;
-        }
-
-        .request-card .card-body {
-            padding: 1.5rem;
-        }
-
-        .detail-item {
-            display: flex;
-            align-items: center;
-            /*margin-bottom: 1rem;*/
-            font-size: 1.09em;
-        }
-
-        .detail-item i.fad {
-            color: #4a90e2;
-            margin-right: 15px;
-            width: 20px;
-            text-align: center;
-        }
-
-        .detail-item strong {
-            color: #8a94a6;
-            min-width: 130px;
-            display: inline-block;
-        }
-
-        .request-card .card-footer {
-            background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%);
-            border-top: 2px solid #a5b0e8;
-            border-bottom-left-radius: 15px;
-            border-bottom-right-radius: 15px;
-            overflow: visible;
-        }
-
-        .request-time-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.78em;
-            color: #6c757d;
-            padding-bottom: 8px;
-            margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago,
-        .request-time-footer .rtf-exact {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            white-space: nowrap;
-        }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-
-        /* Footer actions: responsive grid to avoid overflow and keep symmetry */
-        .vac-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: .5rem;
-        }
-
-        .vac-actions .btn {
-            white-space: normal;
-            line-height: 1.2;
-        }
-
-        .vac-actions .btn i {
-            margin-inline-end: .35rem;
-        }
-
-        /* Keep block buttons filling their grid cell */
-        .vac-actions .btn.btn-block {
-            display: inline-flex;
-            width: 100%;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .no-requests {
-            padding: 3rem;
-            background: #fff;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-        }
-
-        .btn-block+.btn-block {
-            margin-top: 0rem !important;
-        }
-
-        /* --- NEW STYLES FOR APPROVER LIST --- */
-        /* Ensure dropdowns are not hidden behind adjacent cards */
-        .request-card {
-            position: relative;
-        }
-
-        .request-card:hover,
-        .request-card:focus-within {
-            z-index: 50;
-        }
-
-        .request-card .dropdown-menu {
-            z-index: 2000;
-        }
-
+        /* ---------- Approval popups ---------- */
         .swal-approval-chain .select2-container {
             width: 100% !important;
         }
@@ -640,7 +550,6 @@ if ($can_see_all_depts) {
             background: white;
         }
 
-        /* --- END NEW STYLES --- */
         .detail-item {
             flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
         }
@@ -676,513 +585,510 @@ if ($can_see_all_depts) {
 
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <?php
+            $h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES); };
+            $initials = function ($name) {
+                $p = preg_split('/\s+/', trim((string)$name), -1, PREG_SPLIT_NO_EMPTY);
+                $i = mb_substr($p[0] ?? '', 0, 1) . (count($p) > 1 ? mb_substr($p[count($p) - 1], 0, 1) : '');
+                return mb_strtoupper($i ?: '?');
+            };
+            $status_icons = [
+                'my_pending' => 'mdi-timer-sand',
+                'my_team' => 'mdi-account-multiple',
+                'my_dept' => 'mdi-domain',
+                'pending_approval' => 'mdi-clock',
+                'pending_payment' => 'mdi-credit-card',
+                'pending_deduction' => 'mdi-calculator',
+                'approved' => 'mdi-check-circle',
+                'rejected' => 'mdi-close-circle',
+                'cancelled' => 'mdi-cancel',
+                'all' => 'mdi-format-list-bulleted',
+            ];
+            $vac_type_options = ['Fly', 'Local Vacation', 'Encashed', 'Sick Leave', 'Marriage Leave', 'Death Leave', 'Newborn Leave', 'Hajj Leave', 'Exam Leave', 'Other Leave'];
+            $active_extra_filters = (int)($filter_vac_type !== '') + (int)($filter_date_from !== '') + (int)($filter_date_to !== '') + (int)($filter_days_min !== null) + (int)($filter_days_max !== null);
+            $showing_text = str_replace('{0}', (string)(int)$total_items, __('showing_requests'));
+            ?>
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('vacation_approval_center') ?></h4>
 
-                                <div class="row filter-controls mx-auto mb-5">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <div class="form-group">
-                                            <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                            <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                        <?= htmlspecialchars($status_value); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($search_term); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                                
-                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                </div>
-                                                <?php endif; ?>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('vacation_approval_center') ?></h1>
+                            <p><?= $h($page_title) ?> &middot; <?= $showing_text ?></p>
+                        </div>
+                    </div>
 
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div class="sr-card">
+                        <!-- Status filter (applyFilters() reads #statusFilter) -->
+                        <input type="hidden" id="statusFilter" value="<?= $h($current_filter) ?>">
+                        <ul class="sr-tabs" id="vacStatusTabs">
+                            <?php foreach ($all_statuses as $status_key => $status_value): ?>
+                                <li>
+                                    <a class="nav-link<?= $current_filter == $status_key ? ' active' : '' ?>" data-status="<?= $h($status_key) ?>">
+                                        <i class="mdi <?= $status_icons[$status_key] ?? 'mdi-format-list-bulleted' ?>"></i><?= $h($status_value) ?>
+                                        <?php if ($current_filter == $status_key): ?><span class="sr-count"><?= (int)$total_items ?></span><?php endif; ?>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
 
-                                <div class="row filter-controls mx-auto mb-5">
-                                    <div class="col-md-3 mb-3 mb-md-0">
-                                        <div class="form-group mb-0">
-                                            <label for="vacTypeFilter" class="font-weight-bold"><?= __('vacation_type', 'Type') ?></label>
-                                            <select class="form-control" id="vacTypeFilter">
-                                                <option value=""><?= __('all', 'All') ?></option>
-                                                <?php foreach (['Fly', 'Local Vacation', 'Encashed', 'Sick Leave', 'Marriage Leave', 'Death Leave', 'Newborn Leave', 'Hajj Leave', 'Exam Leave', 'Other Leave'] as $type_option): ?>
-                                                    <option value="<?= htmlspecialchars($type_option) ?>" <?= ($filter_vac_type === $type_option) ? 'selected' : '' ?>><?= htmlspecialchars(getDisplayName($type_option)) ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2 mb-3 mb-md-0">
-                                        <div class="form-group mb-0">
-                                            <label for="dateFromFilter" class="font-weight-bold"><?= __('from_date', 'From') ?></label>
-                                            <input type="date" class="form-control" id="dateFromFilter" value="<?= htmlspecialchars($filter_date_from) ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2 mb-3 mb-md-0">
-                                        <div class="form-group mb-0">
-                                            <label for="dateToFilter" class="font-weight-bold"><?= __('to_date', 'To') ?></label>
-                                            <input type="date" class="form-control" id="dateToFilter" value="<?= htmlspecialchars($filter_date_to) ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2 mb-3 mb-md-0">
-                                        <div class="form-group mb-0">
-                                            <label for="daysMinFilter" class="font-weight-bold"><?= __('min_days', 'Min Days') ?></label>
-                                            <input type="number" min="0" class="form-control" id="daysMinFilter" value="<?= $filter_days_min !== null ? htmlspecialchars((string)$filter_days_min) : '' ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-2 mb-3 mb-md-0">
-                                        <div class="form-group mb-0">
-                                            <label for="daysMaxFilter" class="font-weight-bold"><?= __('max_days', 'Max Days') ?></label>
-                                            <input type="number" min="0" class="form-control" id="daysMaxFilter" value="<?= $filter_days_max !== null ? htmlspecialchars((string)$filter_days_max) : '' ?>">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-1 mb-3 mb-md-0 d-flex align-items-end">
-                                        <button type="button" class="btn btn-primary btn-block" onclick="applyFilters()"><i class="fas fa-filter"></i></button>
-                                    </div>
-                                </div>
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="searchFilter" placeholder="<?= __('search_by_name_id') ?>..." value="<?= $h($search_term) ?>" autocomplete="off" aria-label="<?= __('search_by_name_id') ?>">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <button type="button" class="sr-btn sr-btn-sm vac-filter-toggle" id="vacFilterToggle" aria-expanded="<?= $active_extra_filters ? 'true' : 'false' ?>">
+                                    <i class="mdi mdi-filter"></i> <?= __('filters', 'Filters') ?>
+                                    <?php if ($active_extra_filters): ?><span class="sr-count"><?= $active_extra_filters ?></span><?php endif; ?>
+                                </button>
+                                <?php if (!empty($search_term) || $current_filter !== 'my_pending' || $active_extra_filters): ?>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" onclick="resetFilters(<?= $perpage ?>)"><i class="mdi mdi-filter-remove"></i> <?= __('reset', 'Reset') ?></button>
+                                <?php endif; ?>
+                            </div>
+                        </div>
 
-                                <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <?php
-                                    // Replace placeholder {0} in translation with the total count
-                                    $showing_text = str_replace('{0}', (string)(int)$total_items, __('showing_requests'));
-                                    ?>
-                                    <h4 class="mb-0 text-muted"><?= $showing_text ?></h4>
-                                    <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $total_items; ?></span>
-                                </div>
+                        <div class="vac-filters" id="vacFilters" <?= $active_extra_filters ? '' : 'style="display: none;"' ?>>
+                            <div>
+                                <label for="vacTypeFilter"><?= __('vacation_type', 'Type') ?></label>
+                                <select class="form-control" id="vacTypeFilter">
+                                    <option value=""><?= __('all', 'All') ?></option>
+                                    <?php foreach ($vac_type_options as $type_option): ?>
+                                        <option value="<?= $h($type_option) ?>" <?= ($filter_vac_type === $type_option) ? 'selected' : '' ?>><?= $h(getDisplayName($type_option)) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="dateFromFilter"><?= __('from_date', 'From') ?></label>
+                                <input type="date" class="form-control" id="dateFromFilter" value="<?= $h($filter_date_from) ?>">
+                            </div>
+                            <div>
+                                <label for="dateToFilter"><?= __('to_date', 'To') ?></label>
+                                <input type="date" class="form-control" id="dateToFilter" value="<?= $h($filter_date_to) ?>">
+                            </div>
+                            <div>
+                                <label for="daysMinFilter"><?= __('min_days', 'Min Days') ?></label>
+                                <input type="number" min="0" class="form-control" id="daysMinFilter" value="<?= $filter_days_min !== null ? $h($filter_days_min) : '' ?>">
+                            </div>
+                            <div>
+                                <label for="daysMaxFilter"><?= __('max_days', 'Max Days') ?></label>
+                                <input type="number" min="0" class="form-control" id="daysMaxFilter" value="<?= $filter_days_max !== null ? $h($filter_days_max) : '' ?>">
+                            </div>
+                            <div class="vac-filter-btns">
+                                <button type="button" class="sr-btn sr-btn-primary" onclick="applyFilters()"><i class="mdi mdi-filter"></i> <?= __('apply', 'Apply') ?></button>
+                            </div>
+                        </div>
 
-                                <?php if (!empty($requests)): ?>
-                                    <div class="row">
+                        <?php if (!empty($requests)): ?>
+                            <div class="sr-table-wrap vac-table-wrap">
+                                <table class="table sr-table vac-table" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee', 'Employee') ?></th>
+                                            <th><?= __('type') ?></th>
+                                            <th><?= __('period', 'Period') ?></th>
+                                            <th><?= __('days') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th><?= __('applied') ?></th>
+                                            <th class="text-right"><?= __('actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php foreach ($requests as $req): ?>
-                                            <div class="col-lg-4 col-md-6 mb-4">
-                                                <div class="card request-card h-100">
-                                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                                        <span><?= getDisplayName($req['employee_name']); ?></span>
-                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars($req['emp_id']); ?></span>
+                                            <?php
+                                            // --- Status ---
+                                            $status_tone = 'slate';
+                                            $status_text = '';
+                                            switch ($req['current_status']) {
+                                                case 'pending_approval':
+                                                    $status_tone = 'amber';
+                                                    $approver_name = $req['current_approver_name'] ? parseName($req['current_approver_name']) : 'next approver';
+                                                    $status_text = __('pending_with') . ' ' . $approver_name;
+                                                    break;
+                                                case 'approved':
+                                                    $status_tone = 'green';
+                                                    $status_text = __('approved');
+                                                    break;
+                                                case 'rejected':
+                                                    $status_tone = 'red';
+                                                    $status_text = __('rejected');
+                                                    break;
+                                                case 'completed':
+                                                    $status_tone = 'indigo';
+                                                    $status_text = __('completed');
+                                                    break;
+                                                case 'cancelled':
+                                                    $status_tone = 'slate';
+                                                    $cancelled_by_emp_id = trim((string)($req['cancelled_by'] ?? ''));
+                                                    $cancelled_request_owner_id = trim((string)($req['emp_id'] ?? ''));
+                                                    if ($cancelled_by_emp_id !== '' && $cancelled_by_emp_id !== $cancelled_request_owner_id) {
+                                                        $canceller_name = $req['cancelled_by_name'] ?? '';
+                                                        $status_text = __('cancelled_by', 'Cancelled by') . ' ' . ($canceller_name !== '' ? parseName($canceller_name) : $cancelled_by_emp_id);
+                                                    } else {
+                                                        $status_text = __('cancelled_by_employee');
+                                                    }
+                                                    break;
+                                                default:
+                                                    $status_text = __($req['current_status']);
+                                                    break;
+                                            }
+
+                                            // Check if payment is pending for annual fly vacation
+                                            // Payment is pending if ANY of these is missing/zero: departure_date, arrival_date, ticket_pay, permit_fee
+                                            $is_payment_pending = false;
+                                            $is_deduction_pending = false;
+                                            $is_travel_email_pending = false;
+                                            if (
+                                                $req['current_status'] == 'approved' &&
+                                                $req['vac_type'] == 'Fly' &&
+                                                $req['fly_type'] == 'annual'
+                                            ) {
+                                                // Check if travel email is pending (not sent yet)
+                                                if (empty($req['departure_date']) || empty($req['arrival_date']) || $req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) {
+                                                    $is_travel_email_pending = true;
+                                                }
+
+                                                // Check all payment fields are properly filled
+                                                $has_departure = !empty($req['departure_date']);
+                                                $has_arrival = !empty($req['arrival_date']);
+                                                $has_ticket_pay = !empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0;
+                                                $has_permit_fee = !empty($req['permit_fee']) && (float)$req['permit_fee'] > 0;
+
+                                                // Payment is pending if ANY field is missing or zero
+                                                if (!$has_departure || !$has_arrival || !$has_ticket_pay || !$has_permit_fee) {
+                                                    $is_payment_pending = true;
+                                                }
+
+                                                // Check if deduction/overtime is pending
+                                                // All adjustment fields are NULL or 0 means no adjustments have been entered
+                                                $has_overtime = !empty($req['overtime_hours']) && (float)$req['overtime_hours'] > 0;
+                                                $has_deduction_hours = !empty($req['deduction_hours']) && (float)$req['deduction_hours'] > 0;
+                                                $has_deduction_days = !empty($req['deduction_days']) && (float)$req['deduction_days'] > 0;
+                                                $has_other_earnings = !empty($req['other_earnings']) && (float)$req['other_earnings'] > 0;
+                                                $has_other_deductions = !empty($req['other_deductions']) && (float)$req['other_deductions'] > 0;
+                                                $no_modifications = !empty($req['no_modifications']) && (int)$req['no_modifications'] === 1;
+
+                                                // Deduction is pending if ALL adjustment fields are missing or zero AND no_modifications is NOT set
+                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days && !$has_other_earnings && !$has_other_deductions && !$no_modifications) {
+                                                    $is_deduction_pending = true;
+                                                }
+                                            }
+
+                                            // Pre-compute action parameters
+                                            $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
+                                            $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
+                                            $vac_type_js = htmlspecialchars($req['vac_type']);
+                                            $fly_type_js = htmlspecialchars($req['fly_type'] ?? '', ENT_QUOTES);
+                                            $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
+                                            $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
+                                            $days_js = htmlspecialchars($req['vacdays']);
+                                            $current_level_js = (int)$req['current_approval_level'];
+                                            $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
+                                            $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
+                                            $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
+
+                                            // Check if current user is ANY pending approver (not just the 'current' one)
+                                            // This allows GR Officer and other later-stage approvers to see the approve button
+                                            $is_pending_approver = false;
+                                            if ($req['current_status'] == 'pending_approval' || $req['current_status'] == 'approved') {
+                                                $check_approver = $conDB->prepare("SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
+                                                $check_approver->bind_param('si', $req['request_inv_no'], $empid);
+                                                $check_approver->execute();
+                                                $is_pending_approver = $check_approver->get_result()->num_rows > 0;
+                                                $check_approver->close();
+                                            }
+                                            $is_pending_with_me = $is_pending_approver;
+
+                                            // Determine other conditional actions
+                                            $show_payment_button = false;
+                                            $show_adjustments_button = false;
+                                            $show_travel_email_button = false;
+
+                                            // === WORKFLOW FOR FLY + ANNUAL VACATION ===
+                                            // 1. STEP 1: Show Travel Email button FIRST (when departure/arrival dates are set and email NOT sent)
+                                            if (
+                                                isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
+                                                isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
+                                                $req['current_status'] == 'approved' &&
+                                                !empty($req['departure_date']) &&
+                                                !empty($req['arrival_date']) &&
+                                                ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
+                                                ($isHR || $is_system_admin)
+                                            ) {
+                                                $show_travel_email_button = true;
+                                            }
+
+                                            // 2. STEP 2: Show Payment button AFTER travel email is sent (and payments missing)
+                                            if (
+                                                isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
+                                                isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
+                                                $req['current_status'] == 'approved' &&
+                                                !empty($req['departure_date']) &&
+                                                !empty($req['arrival_date']) &&
+                                                ($req['travel_email_sent'] == 1) &&
+                                                (empty($req['ticket_pay']) || (float)$req['ticket_pay'] <= 0 || empty($req['permit_fee']) || (float)$req['permit_fee'] <= 0) &&
+                                                ($is_system_admin || $isHR_Payroll) &&
+                                                $user_type !== 'gr_officer'
+                                            ) {
+                                                $show_payment_button = true;
+                                            }
+
+                                            // 3. STEP 3: Show Adjustments button for HR Payroll/System Admin on eligible approved vacations
+                                            // Keep tracking missing state for badges/reporting, but do not hide the button when values already exist.
+                                            $adjustments_missing = (empty($req['overtime_hours']) || (float)$req['overtime_hours'] <= 0) &&
+                                                (empty($req['deduction_hours']) || (float)$req['deduction_hours'] <= 0) &&
+                                                (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0) &&
+                                                (empty($req['other_earnings']) || (float)$req['other_earnings'] <= 0) &&
+                                                (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0) &&
+                                                (empty($req['no_modifications']) || (int)$req['no_modifications'] !== 1);
+
+                                            $can_manage_adjustments = ($is_system_admin || $isHR_Payroll);
+
+                                            // Fly | Annual: show adjustments button (add/edit)
+                                            if (
+                                                isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
+                                                isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
+                                                $req['current_status'] == 'approved' &&
+                                                $can_manage_adjustments
+                                            ) {
+                                                $show_adjustments_button = true;
+                                            }
+
+                                            // Local | Annual: show ONLY adjustments button (no booking)
+                                            if (
+                                                isset($req['vac_type']) && $req['vac_type'] !== 'Fly' &&
+                                                isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
+                                                $req['current_status'] == 'approved' &&
+                                                $can_manage_adjustments
+                                            ) {
+                                                $show_adjustments_button = true;
+                                                // Explicitly ensure booking buttons are hidden
+                                                $show_travel_email_button = false;
+                                                $show_payment_button = false;
+                                            }
+
+                                            // Fly | Emergency: show ONLY adjustments button (no booking)
+                                            if (
+                                                isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
+                                                isset($req['fly_type']) && strtolower($req['fly_type']) === 'emergency' &&
+                                                $req['current_status'] == 'approved' &&
+                                                $can_manage_adjustments
+                                            ) {
+                                                $show_adjustments_button = true;
+                                                $show_travel_email_button = false;
+                                                $show_payment_button = false;
+                                            }
+
+                                            // STEP 4: Settlement - check if settlement already exists for this request
+                                            $settlementCheckQry = mysqli_query($conDB, "SELECT id, request_inv_no, settlement_status FROM settlement_records WHERE request_inv_no LIKE 'SETL-" . $req['request_inv_no'] . "%' LIMIT 1");
+                                            $settlementRow = $settlementCheckQry ? mysqli_fetch_assoc($settlementCheckQry) : null;
+                                            if ($settlementCheckQry) {
+                                                mysqli_free_result($settlementCheckQry);
+                                            }
+                                            $settlementExists = !empty($settlementRow);
+                                            $settlementId = $settlementRow['id'] ?? null;
+                                            $settlementInvNo = $settlementRow['request_inv_no'] ?? null;
+                                            $settlementStatus = $settlementRow['settlement_status'] ?? null;
+
+                                            // Settlement button eligibility:
+                                            // 1) Fly + Annual OR Encashed (existing behavior)
+                                            // 2) Local Vacation + Annual only when days > 5 and salary type is payroll (YES)
+                                            // 3) Fly + Emergency - pays only for days worked before departure
+                                            //    (working_days_salary), never the vacation period itself - see
+                                            //    getVacationDetailsForSettlement() in leaveHandler.php.
+                                            $isAnnualFlyOrEncashed = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') || $req['vac_type'] === 'Encashed');
+                                            $isEmergencyFly = ($req['vac_type'] === 'Fly' && $req['fly_type'] === 'emergency');
+                                            $isLocalAnnual = ($req['vac_type'] === 'Local Vacation' && $req['fly_type'] === 'annual');
+                                            $localVacationDays = (float)($req['vacdays'] ?? 0);
+                                            $vacationSalaryType = strtolower(trim((string)($req['vacation_salary_type'] ?? 'payroll')));
+                                            $vacationSalaryType = resolveVacationSalaryType($req['fly_type'] ?? '', $localVacationDays, $vacationSalaryType, resolveSettlementVacSalaryOverride($conDB, $req['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $req['emp_id'] ?? '')));
+                                            $isLocalAnnualSettlementEligible = ($isLocalAnnual && $localVacationDays > 5 && $vacationSalaryType === 'payroll');
+                                            $canCreateSettlement = ($isAnnualFlyOrEncashed || $isEmergencyFly || $isLocalAnnualSettlementEligible);
+                                            $show_create_settlement = (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $canCreateSettlement && !$settlementExists);
+                                            $show_settlement_report = (($settlementExists && $settlementStatus === 'completed' && $settlementId && $settlementInvNo) AND ($isHR_Payroll || $is_system_admin));
+
+                                            // Attachments (JSON array, or old single-file format)
+                                            $attachments = [];
+                                            if (!empty($req['attachment_path'])) {
+                                                $attachments = json_decode($req['attachment_path'], true);
+                                                if (!is_array($attachments)) {
+                                                    $attachments = [$req['attachment_path']];
+                                                }
+                                            }
+
+                                            $is_fly_annual = ($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual');
+                                            $display_name = getDisplayName($req['employee_name']);
+                                            $report_url = 'vacation_report_details.php?id=' . (int)$req['id'] . '&emp_id=' . urlencode($req['emp_id']);
+                                            ?>
+                                            <tr>
+                                                <td>
+                                                    <div class="sr-person">
+                                                        <span class="sr-avatar"><?= $h($initials(parseName($req['employee_name']))) ?></span>
+                                                        <div style="min-width: 0;">
+                                                            <span class="sr-cell-title"><?= $h($display_name) ?></span>
+                                                            <span class="sr-cell-sub sr-mono"><?= $h($req['emp_id']) ?></span>
                                                         </div>
                                                     </div>
-                                                    <div class="card-body">
-                                                        <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?= __('applied') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'd M Y')); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-suitcase-rolling duotone-info"></i><strong><?= __('type') ?>:</strong> <?= getDisplayName($req['vac_type']) . " | " . $req['fly_type_translated']; ?></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?= __('start') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['start_date'] ?? null, 'l, d M Y', 'N/A')); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?= __('return') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['return_date'] ?? null, 'l, d M Y', 'N/A')); ?></div>
-                                                        <?php if (!empty($req['departure_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
-                                                            <div class="detail-item"><i class="fad fa-plane-departure duotone-info"></i><strong><?= __('departure_date') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['departure_date'], 'l, d M Y', 'N/A')); ?></div>
+                                                </td>
+                                                <td>
+                                                    <span class="sr-chip"><i class="mdi <?= $req['vac_type'] === 'Fly' ? 'mdi-airplane' : 'mdi-calendar-range' ?>"></i><?= $h(getDisplayName($req['vac_type'])) ?></span>
+                                                    <?php if (!empty($req['fly_type_translated'])): ?>
+                                                        <span class="sr-cell-sub"><?= $h($req['fly_type_translated']) ?></span>
+                                                    <?php endif; ?>
+                                                    <span class="sr-cell-sub sr-mono"><?= $h($req['request_inv_no']) ?></span>
+                                                    <?php if ($attachments): ?>
+                                                        <button type="button" class="sr-chip vac-attach" onclick='showAttachmentsModal(<?= $h(json_encode($attachments)) ?>, <?= $h(json_encode(__('attachments'))) ?>)'>
+                                                            <i class="mdi mdi-paperclip"></i><?= count($attachments) ?> <?= __('attachments') ?>
+                                                        </button>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="vac-period">
+                                                    <span class="sr-cell-title"><?= $h(format_safe_date($req['start_date'] ?? null, 'd M Y', 'N/A')) ?><i class="mdi mdi-arrow-right"></i><?= $h(format_safe_date($req['return_date'] ?? null, 'd M Y', 'N/A')) ?></span>
+                                                    <?php if ($is_fly_annual && !empty($req['departure_date'])): ?>
+                                                        <span class="sr-cell-sub" title="<?= __('departure_date') ?>"><i class="mdi mdi-airplane-takeoff"></i> <?= $h(format_safe_date($req['departure_date'], 'd M Y', 'N/A')) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if ($is_fly_annual && !empty($req['arrival_date'])): ?>
+                                                        <span class="sr-cell-sub" title="<?= __('arrival_date') ?>"><i class="mdi mdi-airplane-landing"></i> <?= $h(format_safe_date($req['arrival_date'], 'd M Y', 'N/A')) ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <span class="sr-chip"><?= $h($req['vacdays']) ?> <?= __('days') ?></span>
+                                                    <?php if ($req['current_status'] == 'approved' && isset($req['remaining_balance'])): ?>
+                                                        <span class="sr-cell-sub" title="<?= __('remaining') ?>"><i class="mdi mdi-wallet"></i> <?= $h(number_format($req['remaining_balance'], 2)) ?> <?= __('remaining') ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <div class="vac-flags">
+                                                        <span class="sr-pill tone-<?= $status_tone ?>"><span class="sr-dot"></span><?= $h($status_text) ?></span>
+                                                        <?php if ($is_travel_email_pending): ?>
+                                                            <span class="sr-pill sr-pill-xs tone-red"><i class="mdi mdi-send"></i><?= __('pending_travel_email') ?: 'Pending Travel Email' ?></span>
                                                         <?php endif; ?>
-                                                        <?php if (!empty($req['arrival_date']) && $req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual'): ?>
-                                                            <div class="detail-item"><i class="fad fa-plane-arrival duotone-info"></i><strong><?= __('arrival_date') ?>:</strong> <?= htmlspecialchars(format_safe_date($req['arrival_date'], 'l, d M Y', 'N/A')); ?></div>
+                                                        <?php if ($is_payment_pending): ?>
+                                                            <span class="sr-pill sr-pill-xs tone-amber"><i class="mdi mdi-credit-card"></i><?= __('pending_booking_payment') ?></span>
                                                         <?php endif; ?>
-                                                        <div class="detail-item"><i class="fad fa-sun duotone-info"></i><strong><?= __('days') ?>:</strong> <?= htmlspecialchars($req['vacdays']); ?></div>
-
-                                                        <?php if (!empty($req['attachment_path'])):
-                                                            // Decode JSON array of attachments
-                                                            $attachments = json_decode($req['attachment_path'], true);
-                                                            if (!is_array($attachments)) {
-                                                                // Fallback for old single file format
-                                                                $attachments = [$req['attachment_path']];
-                                                            }
-                                                        ?>
-                                                            <div class="detail-item">
-                                                                <i class="fad fa-paperclip duotone-info"></i>
-                                                                <strong><?= __('attachments') ?> (<?= count($attachments) ?>):</strong>
-                                                                <button type="button" class="btn btn-info btn-sm ml-2" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")'>
-                                                                    <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
-                                                                </button>
-                                                            </div>
-                                                        <?php endif; ?>
-
-                                                        <div class="detail-item">
-                                                            <?php
-                                                            // --- NEW DYNAMIC STATUS LOGIC ---
-                                                            $badge_class = 'secondary';
-                                                            $status_text = '';
-                                                            $status_icon = '';
-
-                                                            switch ($req['current_status']) {
-                                                                case 'pending_approval':
-                                                                    $badge_class = 'warning';
-                                                                    $approver_name = $req['current_approver_name'] ? parseName($req['current_approver_name']) : 'next approver';
-                                                                    $status_text = __('pending_with') . ' ' . htmlspecialchars($approver_name);
-                                                                    $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
-                                                                    break;
-                                                                case 'approved':
-                                                                    $badge_class = 'success';
-                                                                    $status_text = __('approved');
-                                                                    $status_icon = "<i class='fa fa-solid fa-check text-white'></i>";
-                                                                    break;
-                                                                case 'rejected':
-                                                                    $badge_class = 'danger';
-                                                                    $status_text = __('rejected');
-                                                                    $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
-                                                                    break;
-                                                                case 'completed':
-                                                                    $badge_class = 'primary';
-                                                                    $status_text = __('completed');
-                                                                    $status_icon = "<i class='fa fa-solid fa-badge-check text-white'></i>";
-                                                                    break;
-                                                                case 'cancelled':
-                                                                    $badge_class = 'dark';
-                                                                    $cancelled_by_emp_id = trim((string)($req['cancelled_by'] ?? ''));
-                                                                    $cancelled_request_owner_id = trim((string)($req['emp_id'] ?? ''));
-                                                                    if ($cancelled_by_emp_id !== '' && $cancelled_by_emp_id !== $cancelled_request_owner_id) {
-                                                                        $canceller_name = $req['cancelled_by_name'] ?? '';
-                                                                        $status_text = __('cancelled_by', 'Cancelled by') . ' ' . htmlspecialchars($canceller_name !== '' ? parseName($canceller_name) : $cancelled_by_emp_id);
-                                                                    } else {
-                                                                        $status_text = __('cancelled_by_employee');
-                                                                    }
-                                                                    $status_icon = "<i class='fa fa-solid fa-ban text-white'></i>";
-                                                                    break;
-                                                                default:
-                                                                    $status_text = __($req['current_status']);
-                                                                    $status_icon = "";
-                                                                    break;
-                                                            }
-
-                                                            // Check if payment is pending for annual fly vacation
-                                                            // Payment is pending if ANY of these is missing/zero: departure_date, arrival_date, ticket_pay, permit_fee
-                                                            $is_payment_pending = false;
-                                                            $is_deduction_pending = false;
-                                                            $is_travel_email_pending = false;
-                                                            if (
-                                                                $req['current_status'] == 'approved' &&
-                                                                $req['vac_type'] == 'Fly' &&
-                                                                $req['fly_type'] == 'annual'
-                                                            ) {
-                                                                // Check if travel email is pending (not sent yet)
-                                                                if (empty($req['departure_date']) || empty($req['arrival_date']) || $req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) {
-                                                                    $is_travel_email_pending = true;
-                                                                }
-
-                                                                // Check all payment fields are properly filled
-                                                                $has_departure = !empty($req['departure_date']);
-                                                                $has_arrival = !empty($req['arrival_date']);
-                                                                $has_ticket_pay = !empty($req['ticket_pay']) && (float)$req['ticket_pay'] > 0;
-                                                                $has_permit_fee = !empty($req['permit_fee']) && (float)$req['permit_fee'] > 0;
-
-                                                                // Payment is pending if ANY field is missing or zero
-                                                                if (!$has_departure || !$has_arrival || !$has_ticket_pay || !$has_permit_fee) {
-                                                                    $is_payment_pending = true;
-                                                                }
-
-                                                                // Check if deduction/overtime is pending
-                                                                // All adjustment fields are NULL or 0 means no adjustments have been entered
-                                                                $has_overtime = !empty($req['overtime_hours']) && (float)$req['overtime_hours'] > 0;
-                                                                $has_deduction_hours = !empty($req['deduction_hours']) && (float)$req['deduction_hours'] > 0;
-                                                                $has_deduction_days = !empty($req['deduction_days']) && (float)$req['deduction_days'] > 0;
-                                                                $has_other_earnings = !empty($req['other_earnings']) && (float)$req['other_earnings'] > 0;
-                                                                $has_other_deductions = !empty($req['other_deductions']) && (float)$req['other_deductions'] > 0;
-                                                                $no_modifications = !empty($req['no_modifications']) && (int)$req['no_modifications'] === 1;
-
-                                                                // Deduction is pending if ALL adjustment fields are missing or zero AND no_modifications is NOT set
-                                                                if (!$has_overtime && !$has_deduction_hours && !$has_deduction_days && !$has_other_earnings && !$has_other_deductions && !$no_modifications) {
-                                                                    $is_deduction_pending = true;
-                                                                }
-                                                            }
-                                                            ?>
-                                                            <i class="fad fa-info-circle duotone-info"></i>
-                                                            <strong><?= __('status') ?>:</strong>
-                                                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                                                <span class="badge badge-<?= $badge_class; ?> p-2" style="display: inline-block; width: fit-content;">
-                                                                    <?= $status_icon . " " . htmlspecialchars($status_text); ?>
-                                                                </span>
-                                                                <?php if ($is_travel_email_pending): ?>
-                                                                    <span class="badge badge-danger p-2" style="display: inline-block; width: fit-content;">
-                                                                        <i class="fa fa-paper-plane"></i> <?= __('pending_travel_email') ?: 'Pending Travel Email' ?>
-                                                                    </span>
-                                                                <?php endif; ?>
-                                                                <?php if ($is_payment_pending): ?>
-                                                                    <span class="badge badge-warning p-2" style="display: inline-block; width: fit-content;">
-                                                                        <i class="fa fa-credit-card"></i> <?= __('pending_booking_payment') ?>
-                                                                    </span>
-                                                                <?php endif; ?>
-                                                                <?php if ($is_deduction_pending): ?>
-                                                                    <span class="badge badge-info p-2" style="display: inline-block; width: fit-content;">
-                                                                        <i class="fa fa-calculator"></i> <?= __('pending_deduction_overtime') ?: 'Pending Deduction/Overtime' ?>
-                                                                    </span>
-                                                                <?php endif; ?>
-                                                            </div>
-
-                                                        </div>
-
-                                                        <?php if ($req['current_status'] === 'rejected' && !empty($req['rejection_note'])): 
-                                                            $rejection_note_clean = stripslashes($req['rejection_note']);
-                                                        ?>
-                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
-                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i>
-                                                                <strong><?= __('rejection_reason') ?>:</strong>&nbsp;<?= nl2br(htmlspecialchars(getDisplayName($rejection_note_clean))); ?>
-                                                            </div>
-                                                        <?php endif; ?>
-
-                                                        <?php if ($req['current_status'] == 'approved' && isset($req['remaining_balance'])): ?>
-                                                            <hr>
-                                                            <div class="detail-item"><i class="fad fa-wallet duotone-success"></i><strong><?= __('remaining') ?>:</strong> <?= htmlspecialchars(number_format($req['remaining_balance'], 2)); ?> <?= __('days') ?></div>
+                                                        <?php if ($is_deduction_pending): ?>
+                                                            <span class="sr-pill sr-pill-xs tone-sky"><i class="mdi mdi-calculator"></i><?= __('pending_deduction_overtime') ?: 'Pending Deduction/Overtime' ?></span>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <?php
-                                                    // Pre-compute action parameters
-                                                    $employee_name_js = htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES);
-                                                    $employee_id_js = htmlspecialchars($req['emp_id'], ENT_QUOTES);
-                                                    $vac_type_js = htmlspecialchars($req['vac_type']);
-                                                    $fly_type_js = htmlspecialchars($req['fly_type'] ?? '', ENT_QUOTES);
-                                                    $start_date_js = htmlspecialchars($req['start_date'] ?? 'N/A');
-                                                    $end_date_js = htmlspecialchars($req['return_date'] ?? 'N/A');
-                                                    $days_js = htmlspecialchars($req['vacdays']);
-                                                    $current_level_js = (int)$req['current_approval_level'];
-                                                    $user_role_js = htmlspecialchars($user_type, ENT_QUOTES);
-                                                    $has_supervisor_js = !empty($req['supervisor_id']) ? 'true' : 'false';
-                                                    $is_simple_leave_js = ($req['vac_type'] != 'Fly') ? 'true' : 'false';
-                                                    
-                                                    // Check if current user is ANY pending approver (not just the 'current' one)
-                                                    // This allows GR Officer and other later-stage approvers to see the approve button
-                                                    $is_pending_approver = false;
-                                                    if ($req['current_status'] == 'pending_approval' || $req['current_status'] == 'approved') {
-                                                        $check_approver = $conDB->prepare("SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
-                                                        $check_approver->bind_param('si', $req['request_inv_no'], $empid);
-                                                        $check_approver->execute();
-                                                        $is_pending_approver = $check_approver->get_result()->num_rows > 0;
-                                                        $check_approver->close();
-                                                    }
-                                                    $is_pending_with_me = $is_pending_approver;
-
-                                                    // Determine other conditional actions
-                                                    $show_payment_button = false;
-                                                    $show_adjustments_button = false;
-                                                    $show_travel_email_button = false;
-
-                                                    // === WORKFLOW FOR FLY + ANNUAL VACATION ===
-                                                    // 1. STEP 1: Show Travel Email button FIRST (when departure/arrival dates are set and email NOT sent)
-                                                    if (
-                                                        isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
-                                                        isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
-                                                        $req['current_status'] == 'approved' &&
-                                                        !empty($req['departure_date']) &&
-                                                        !empty($req['arrival_date']) &&
-                                                        ($req['travel_email_sent'] == 0 || empty($req['travel_email_sent'])) &&
-                                                        ($isHR || $is_system_admin)
-                                                    ) {
-                                                        $show_travel_email_button = true;
-                                                    }
-
-                                                    // 2. STEP 2: Show Payment button AFTER travel email is sent (and payments missing)
-                                                    if (
-                                                        isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
-                                                        isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
-                                                        $req['current_status'] == 'approved' &&
-                                                        !empty($req['departure_date']) &&
-                                                        !empty($req['arrival_date']) &&
-                                                        ($req['travel_email_sent'] == 1) &&
-                                                        (empty($req['ticket_pay']) || (float)$req['ticket_pay'] <= 0 || empty($req['permit_fee']) || (float)$req['permit_fee'] <= 0) &&
-                                                        ($is_system_admin || $isHR_Payroll) &&
-                                                        $user_type !== 'gr_officer'
-                                                    ) {
-                                                        $show_payment_button = true;
-                                                    }
-
-                                                    // 3. STEP 3: Show Adjustments button for HR Payroll/System Admin on eligible approved vacations
-                                                    // Keep tracking missing state for badges/reporting, but do not hide the button when values already exist.
-                                                    $adjustments_missing = (empty($req['overtime_hours']) || (float)$req['overtime_hours'] <= 0) &&
-                                                        (empty($req['deduction_hours']) || (float)$req['deduction_hours'] <= 0) &&
-                                                        (empty($req['deduction_days']) || (float)$req['deduction_days'] <= 0) &&
-                                                        (empty($req['other_earnings']) || (float)$req['other_earnings'] <= 0) &&
-                                                        (empty($req['other_deductions']) || (float)$req['other_deductions'] <= 0) &&
-                                                        (empty($req['no_modifications']) || (int)$req['no_modifications'] !== 1);
-
-                                                    $can_manage_adjustments = ($is_system_admin || $isHR_Payroll);
-
-                                                    // Fly | Annual: show adjustments button (add/edit)
-                                                    if (
-                                                        isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
-                                                        isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
-                                                        $req['current_status'] == 'approved' &&
-                                                        $can_manage_adjustments
-                                                    ) {
-                                                        $show_adjustments_button = true;
-                                                    }
-
-                                                    // Local | Annual: show ONLY adjustments button (no booking)
-                                                    if (
-                                                        isset($req['vac_type']) && $req['vac_type'] !== 'Fly' &&
-                                                        isset($req['fly_type']) && $req['fly_type'] === 'annual' &&
-                                                        $req['current_status'] == 'approved' &&
-                                                        $can_manage_adjustments
-                                                    ) {
-                                                        $show_adjustments_button = true;
-                                                        // Explicitly ensure booking buttons are hidden
-                                                        $show_travel_email_button = false;
-                                                        $show_payment_button = false;
-                                                    }
-
-                                                    // Fly | Emergency: show ONLY adjustments button (no booking)
-                                                    if (
-                                                        isset($req['vac_type']) && $req['vac_type'] === 'Fly' &&
-                                                        isset($req['fly_type']) && strtolower($req['fly_type']) === 'emergency' &&
-                                                        $req['current_status'] == 'approved' &&
-                                                        $can_manage_adjustments
-                                                    ) {
-                                                        $show_adjustments_button = true;
-                                                        $show_travel_email_button = false;
-                                                        $show_payment_button = false;
-                                                    }
-                                                    ?>
-                                                    <div class="card-footer">
-                                                        <div class="request-time-footer">
-                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></span>
-                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                        </div>
-                                                        <div class="btn-group flex-fill" style="display:flex;">
-                                                            <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                <?= __('actions') ?> <span class="caret"></span>
-                                                            </button>
+                                                    <?php if ($req['current_status'] === 'rejected' && !empty($req['rejection_note'])): ?>
+                                                        <div class="vac-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br($h(getDisplayName(stripslashes($req['rejection_note'])))) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <span class="sr-date">
+                                                        <?= $h(format_safe_date($req['created_at'] ?? null, 'd M Y')) ?>
+                                                        <small title="<?= $h(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?>"><?= $h(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></small>
+                                                    </span>
+                                                </td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($is_pending_with_me): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveRequest(<?= $req['id']; ?>, '<?= $employee_id_js; ?>', '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $fly_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>', <?= $current_level_js; ?>, '<?= $user_role_js; ?>', <?= $has_supervisor_js; ?>, <?= $is_simple_leave_js; ?>, <?= (int)($req['payer_emp_id'] ?? 0); ?>, <?= (int)$empid; ?>)">
+                                                                <i class="mdi mdi-check"></i> <?= __('approve') ?>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <a href="<?= $h($report_url) ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-file-pdf"></i> <?= __('report') ?></a>
+                                                        <?php endif; ?>
+                                                        <div class="btn-group dropdown">
+                                                            <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
                                                             <div class="dropdown-menu dropdown-menu-right">
-                                                                <a class="dropdown-item" href="vacation_report_details.php?id=<?= $req['id']; ?>&emp_id=<?= $req['emp_id']; ?>" target="_blank">
-                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
-                                                                </a>
-                                                                <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
-                                                                    <i class="fa fa-history"></i> <?= __('history') ?>
-                                                                </a>
+                                                                <?php if ($is_pending_with_me): ?>
+                                                                    <a class="dropdown-item" href="<?= $h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?= __('report') ?></a>
+                                                                <?php endif; ?>
+                                                                <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($is_system_admin): ?>
-                                                                    <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="openVacationDateEditor(<?= (int)$req['id']; ?>, '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-edit text-primary"></i> <?= __('edit') ?> <?= __('start') ?> / <?= __('return') ?>
+                                                                        <i class="mdi mdi-pencil text-primary"></i><?= __('edit') ?> <?= __('start') ?> / <?= __('return') ?>
                                                                     </a>
                                                                 <?php endif; ?>
                                                                 <?php if ($is_pending_with_me): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveRequest(<?= $req['id']; ?>, '<?= $employee_id_js; ?>', '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $fly_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>', <?= $current_level_js; ?>, '<?= $user_role_js; ?>', <?= $has_supervisor_js; ?>, <?= $is_simple_leave_js; ?>, <?= (int)($req['payer_emp_id'] ?? 0); ?>, <?= (int)$empid; ?>)">
-                                                                        <i class="fa fa-check text-success"></i> <?= __('approve') ?>
-                                                                    </a>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="rejectVacationRequest(<?= $req['id']; ?>, '<?= $employee_name_js; ?>', '<?= $vac_type_js; ?>', '<?= $start_date_js; ?>', '<?= $end_date_js; ?>', '<?= $days_js; ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                    </a>
-                                                                <?php endif; ?>
-                                                                <?php if ($can_cancel_vacation_requests && in_array($req['current_status'], $cancellable_vacation_statuses, true)): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="cancelVacationRequestAdmin(<?= (int)$req['id']; ?>, '<?= $employee_name_js; ?>', '<?= $req['request_inv_no']; ?>')">
-                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel_request', 'Cancel Request') ?>
+                                                                        <i class="mdi mdi-close text-danger"></i><?= __('reject') ?>
                                                                     </a>
                                                                 <?php endif; ?>
 
                                                                 <?php if ($show_travel_email_button || $show_payment_button || $show_adjustments_button): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <!-- STEP 1: Show Travel Email Button First -->
+                                                                    <!-- STEP 1: Travel email first -->
                                                                     <?php if ($show_travel_email_button): ?>
                                                                         <a class="dropdown-item" id="travel-email-btn-<?= $req['id']; ?>" href="javascript:void(0);" onclick="sendTravelEmail(<?= $req['id']; ?>, '<?= htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>')">
-                                                                            <i class="fa fa-paper-plane text-primary"></i> <?= __('send_travel_email') ?>
+                                                                            <i class="mdi mdi-send text-primary"></i><?= __('send_travel_email') ?>
                                                                         </a>
                                                                     <?php endif; ?>
 
-                                                                    <!-- STEP 2: Show Payment Button After Travel Email is Sent -->
+                                                                    <!-- STEP 2: Payment after travel email is sent -->
                                                                     <?php if ($show_payment_button): ?>
                                                                         <a class="dropdown-item" href="javascript:void(0);" onclick="addVacationPayments(<?= $req['id']; ?>, '<?= htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>','<?= $req['ticket_pay'] ?? '0.00'; ?>','<?= $req['permit_fee'] ?? '0.00'; ?>')">
-                                                                            <i class="fa fa-credit-card text-warning"></i> <?= __('booking_exit_reentry') ?>
+                                                                            <i class="mdi mdi-credit-card text-warning"></i><?= __('booking_exit_reentry') ?>
                                                                         </a>
                                                                     <?php endif; ?>
 
-                                                                    <!-- STEP 3: Show Adjustments Button After Payments are Complete -->
+                                                                    <!-- STEP 3: Adjustments -->
                                                                     <?php if ($show_adjustments_button): ?>
                                                                         <a class="dropdown-item" href="javascript:void(0);" onclick="addVacationAdjustments(<?= $req['id']; ?>, '<?= htmlspecialchars(addslashes(parseName($req['employee_name'])), ENT_QUOTES); ?>', '<?= $req['overtime_hours'] ?? '0'; ?>', '<?= $req['deduction_hours'] ?? '0'; ?>', '<?= $req['deduction_days'] ?? '0'; ?>', '<?= $req['other_earnings'] ?? '0'; ?>', `<?= htmlspecialchars($req['payroll_note'] ?? '', ENT_QUOTES); ?>`, '<?= $req['other_deductions'] ?? '0'; ?>')">
-                                                                            <i class="fa fa-calculator text-info"></i> <?= __('add_deduction_overtime') ?: 'Add deduction/overtime' ?>
+                                                                            <i class="mdi mdi-calculator text-info"></i><?= __('add_deduction_overtime') ?: 'Add deduction/overtime' ?>
                                                                         </a>
                                                                     <?php endif; ?>
                                                                 <?php endif; ?>
 
-                                                                <!-- STEP 4: Settlement Button - After Full Approval -->
-                                                                <?php 
-                                                                // Check if settlement already exists for this request
-                                                                $settlementCheckQry = mysqli_query($conDB, "SELECT id, request_inv_no, settlement_status FROM settlement_records WHERE request_inv_no LIKE 'SETL-" . $req['request_inv_no'] . "%' LIMIT 1");
-                                                                $settlementRow = $settlementCheckQry ? mysqli_fetch_assoc($settlementCheckQry) : null;
-                                                                if ($settlementCheckQry) {
-                                                                    mysqli_free_result($settlementCheckQry);
-                                                                }
-                                                                $settlementExists = !empty($settlementRow);
-                                                                $settlementId = $settlementRow['id'] ?? null;
-                                                                $settlementInvNo = $settlementRow['request_inv_no'] ?? null;
-                                                                $settlementStatus = $settlementRow['settlement_status'] ?? null;
-                                                                
-                                                                // Settlement button eligibility:
-                                                                // 1) Fly + Annual OR Encashed (existing behavior)
-                                                                // 2) Local Vacation + Annual only when days > 5 and salary type is payroll (YES)
-                                                                // 3) Fly + Emergency - pays only for days worked before departure
-                                                                //    (working_days_salary), never the vacation period itself - see
-                                                                //    getVacationDetailsForSettlement() in leaveHandler.php.
-                                                                $isAnnualFlyOrEncashed = (($req['vac_type'] === 'Fly' && $req['fly_type'] === 'annual') || $req['vac_type'] === 'Encashed');
-                                                                $isEmergencyFly = ($req['vac_type'] === 'Fly' && $req['fly_type'] === 'emergency');
-                                                                $isLocalAnnual = ($req['vac_type'] === 'Local Vacation' && $req['fly_type'] === 'annual');
-                                                                $localVacationDays = (float)($req['vacdays'] ?? 0);
-                                                                $vacationSalaryType = strtolower(trim((string)($req['vacation_salary_type'] ?? 'payroll')));
-                                                                $vacationSalaryType = resolveVacationSalaryType($req['fly_type'] ?? '', $localVacationDays, $vacationSalaryType, resolveSettlementVacSalaryOverride($conDB, $req['request_inv_no'] ?? '', employeeAllowsVacSalaryBelowMinDays($conDB, $req['emp_id'] ?? '')));
-                                                                $isLocalAnnualSettlementEligible = ($isLocalAnnual && $localVacationDays > 5 && $vacationSalaryType === 'payroll');
-                                                                $canCreateSettlement = ($isAnnualFlyOrEncashed || $isEmergencyFly || $isLocalAnnualSettlementEligible);
-                                                                ?>
-                                                                <?php if (($req['current_status'] === 'approved' OR $req['current_status'] === 'completed') && $canCreateSettlement && !$settlementExists): ?>
+                                                                <!-- STEP 4: Settlement - after full approval -->
+                                                                <?php if ($show_create_settlement): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="createSettlement(<?= $req['id']; ?>, '<?= $req['request_inv_no']; ?>', '<?= $req['emp_id']; ?>', '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>', <?= $req['vacdays']; ?>)">
-                                                                        <i class="fa fa-handshake text-success"></i> <?= __('create_settlement') ?: 'Create Settlement' ?>
+                                                                        <i class="mdi mdi-cash text-success"></i><?= __('create_settlement') ?: 'Create Settlement' ?>
                                                                     </a>
                                                                 <?php endif; ?>
 
-                                                                <?php if (($settlementExists && $settlementStatus === 'completed' && $settlementId && $settlementInvNo) AND ($isHR_Payroll || $is_system_admin)): ?>
+                                                                <?php if ($show_settlement_report): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= (int)$settlementId; ?>, '<?= htmlspecialchars($settlementInvNo, ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-file-alt text-info"></i> <?= __('settlement_report') ?: 'Settlement Report' ?>
+                                                                        <i class="mdi mdi-file-document text-info"></i><?= __('settlement_report') ?: 'Settlement Report' ?>
                                                                     </a>
                                                                 <?php endif; ?>
-                                                                
+
+                                                                <?php if ($can_cancel_vacation_requests && in_array($req['current_status'], $cancellable_vacation_statuses, true)): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelVacationRequestAdmin(<?= (int)$req['id']; ?>, '<?= $employee_name_js; ?>', '<?= $req['request_inv_no']; ?>')">
+                                                                        <i class="mdi mdi-cancel"></i><?= __('cancel_request', 'Cancel Request') ?>
+                                                                    </a>
+                                                                <?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
-                                    </div>
+                                    </tbody>
+                                </table>
+                            </div>
 
-                                    <?php
-                                    $pagination_params = [];
-                                    if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                    if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                    if ($filter_vac_type !== '') $pagination_params['filter_vac_type'] = $filter_vac_type;
-                                    if ($filter_date_from !== '') $pagination_params['filter_date_from'] = $filter_date_from;
-                                    if ($filter_date_to !== '') $pagination_params['filter_date_to'] = $filter_date_to;
-                                    if ($filter_days_min !== null) $pagination_params['filter_days_min'] = $filter_days_min;
-                                    if ($filter_days_max !== null) $pagination_params['filter_days_max'] = $filter_days_max;
-                                    echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
-                                    ?>
+                            <div class="vac-pager">
+                                <?php
+                                $pagination_params = [];
+                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                if ($filter_vac_type !== '') $pagination_params['filter_vac_type'] = $filter_vac_type;
+                                if ($filter_date_from !== '') $pagination_params['filter_date_from'] = $filter_date_from;
+                                if ($filter_date_to !== '') $pagination_params['filter_date_to'] = $filter_date_to;
+                                if ($filter_days_min !== null) $pagination_params['filter_days_min'] = $filter_days_min;
+                                if ($filter_days_max !== null) $pagination_params['filter_days_max'] = $filter_days_max;
+                                echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <div class="sr-empty">
+                                <i class="mdi mdi-inbox"></i>
+                                <strong style="display: block; color: var(--sr-text); font-size: 15px;"><?= __('no_requests_found') ?></strong>
+                                <?php if (($current_filter && $current_filter !== 'all' && $current_filter !== 'none') || !empty($search_term)): ?>
+                                    <?= __('no_requests_matching_filters_vac') ?>
                                 <?php else: ?>
-                                    <div class="row justify-content-center">
-                                        <div class="col-md-8">
-                                            <div class="text-center no-requests">
-                                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                                <h2><?= __('no_requests_found') ?></h2>
-                                                <?php
-                                                if (($current_filter && $current_filter !== 'all' && $current_filter !== 'none') || !empty($search_term)): ?>
-                                                    <p class="text-muted"><?= __('no_requests_matching_filters_vac') ?></p>
-                                                <?php else: ?>
-                                                    <p class="text-muted"><?= __('no_requests_to_display') ?></p>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <?= __('no_requests_to_display') ?>
                                 <?php endif; ?>
                             </div>
-                        </div>
+                        <?php endif; ?>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '© 2025 Almutlak' ?></footer>
@@ -1203,24 +1109,22 @@ if ($can_see_all_depts) {
     <script>
         const canEditVacationDates = <?= !empty($is_system_admin) ? 'true' : 'false' ?>;
 
-        // Move each card's "Actions" dropdown from the footer into the header so the
-        // menu has room to open downward instead of getting clipped at the bottom of
-        // the page (was especially bad for the last row of cards on a page).
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.request-card').forEach(function(card) {
-                const footer = card.querySelector('.card-footer');
-                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-                const headerSlot = card.querySelector('.card-header-actions');
-                if (!actionsGroup || !headerSlot) {
-                    return;
-                }
-                actionsGroup.classList.remove('flex-fill');
-                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
-                    toggleBtn.classList.add('btn-sm', 'btn-light');
-                }
-                headerSlot.appendChild(actionsGroup);
+        // Status tabs / search / extra filters (all reload the page through applyFilters())
+        $(function() {
+            $('#vacStatusTabs').on('click', '.nav-link', function() {
+                $('#statusFilter').val($(this).data('status'));
+                applyFilters();
+            });
+            $('#searchFilter').on('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); applyFilters(); }
+            });
+            $('#vacFilters').on('keydown', 'input', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); applyFilters(); }
+            });
+            $('#vacFilterToggle').on('click', function() {
+                const $f = $('#vacFilters');
+                $f.slideToggle(150);
+                $(this).attr('aria-expanded', $f.is(':visible') ? 'false' : 'true');
             });
         });
 
