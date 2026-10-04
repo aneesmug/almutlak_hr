@@ -167,6 +167,7 @@ function employeeTransferForm_HTML() {
 }
 
 function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
+    if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
     let jobsList = [];
     let employeesByJob = {}; // emp_id -> row data, cached from the last emp_by_job / target-info fetch
 
@@ -198,11 +199,11 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
         const rangeHtml = `
             <div class="row">
                 <div class="col-6">
-                    <label class="form-label" style="font-weight:600;font-size:12px;color:#858796;text-transform:uppercase;">${__('start_date', 'Start Date')}</label>
+                    <label class="form-label">${__('start_date', 'Start Date')}</label>
                     <input type="text" id="et_range_start_input" class="form-control et-date-trigger" style="text-align:center;font-weight:600;" readonly>
                 </div>
                 <div class="col-6">
-                    <label class="form-label" style="font-weight:600;font-size:12px;color:#858796;text-transform:uppercase;">${__('end_date', 'End Date')}</label>
+                    <label class="form-label">${__('end_date', 'End Date')}</label>
                     <input type="text" id="et_range_end_input" class="form-control et-date-trigger" style="text-align:center;font-weight:600;" readonly>
                 </div>
             </div>
@@ -217,15 +218,9 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
             cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel', 'Cancel'),
             confirmButtonColor: (typeof APP_COLORS !== 'undefined') ? APP_COLORS.primary : '#3085d6',
             cancelButtonColor: (typeof APP_COLORS !== 'undefined') ? APP_COLORS.danger_dark : '#aaa',
-            width: isRange ? '35%' : '25%',
-            padding: '20px',
+            width: isRange ? '560px' : '420px',
             allowOutsideClick: false,
-            customClass: {
-                popup: 'vacation-modal-popup',
-                title: 'vacation-modal-title',
-                confirmButton: 'btn-modern-confirm',
-                cancelButton: 'btn-modern-cancel'
-            },
+            customClass: { popup: 'sr-addline-popup sr-page' },
             didOpen: () => {
                 const canUseDateRangePicker = (typeof $.fn.daterangepicker === 'function' && typeof moment === 'function');
                 const popup = Swal.getPopup();
@@ -432,15 +427,9 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel', 'Cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
-        width: '65%',
-        padding: '20px',
+        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '900px',
         scrollbarPadding: false,
-        customClass: {
-            popup: 'vacation-modal-popup',
-            title: 'vacation-modal-title',
-            confirmButton: 'btn-modern-confirm',
-            cancelButton: 'btn-modern-cancel'
-        },
+        customClass: { popup: 'sr-addline-popup sr-page' },
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
             $('#et_requester_emp_id').val(requesterEmpId);

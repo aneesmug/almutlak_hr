@@ -24,13 +24,7 @@
  * Supports both domestic and international trip types
  */
 function businessTripForm_HTML() {
-    var strView = `<style>
-        .trip-days-readonly {
-            background-color: #f0f0f0;
-        }
-    </style>
-    
-    <form id="submitBusinessTripForm" enctype="multipart/form-data">
+    var strView = `<form id="submitBusinessTripForm" enctype="multipart/form-data">
         <div class="vacation-form-container">
             
             <!-- Employee Information -->
@@ -158,15 +152,19 @@ function businessTripForm_HTML() {
                     <i class="fa fa-globe"></i>
                     ${__('international_details') || 'International Trip Details'}<span class="text-danger">*</span>
                 </div>
-                <div id="passportStatusMsg" class="alert alert-info" style="margin-bottom: 12px; padding: 10px 12px; font-size: 13px;">${__('passport_check_will_run_for_international_trip') || 'Passport check will run for international trip.'}</div>
+                <div id="passportStatusMsg" class="alert alert-info" style="margin-bottom: 12px;">${__('passport_check_will_run_for_international_trip') || 'Passport check will run for international trip.'}</div>
                 <div id="passportUploadSection" class="form-group d-none" style="margin-bottom: 12px;">
                     <label class="form-label" for="passport_file">${__('passport_attachment') || 'Passport Attachment'} <span class="text-danger">*</span></label>
-                    <input type="file" name="passport_file" id="passport_file" class="form-control" accept=".jpg,.jpeg,.png,.pdf,application/pdf,image/jpeg,image/png">
-                    <small class="text-muted">${__('upload_passport_as_jpg_or_pdf') || 'Upload passport file as JPG, PNG or PDF'}</small>
+                    <div class="sr-form">
+                        <label class="sr-filepick" for="passport_file">
+                            <input type="file" name="passport_file" id="passport_file" accept=".jpg,.jpeg,.png,.pdf,application/pdf,image/jpeg,image/png">
+                            <i class="mdi mdi-cloud-upload"></i>
+                            <span><b class="js-file-name">${__('choose_file', 'Choose a file or drop it here')}</b>
+                            <small>${__('upload_passport_as_jpg_or_pdf') || 'Upload passport file as JPG, PNG or PDF'}</small></span>
+                        </label>
+                    </div>
                 </div>
-                <div style="margin-top: 10px;">
-                    <label><input type="checkbox" name="visa_required" id="visa_required"> ${__('visa_required') || 'Visa Required'}</label>
-                </div>
+                <label class="sr-check" for="visa_required"><input type="checkbox" name="visa_required" id="visa_required"> ${__('visa_required') || 'Visa Required'}</label>
             </div>
 
             <!-- Additional Notes -->
@@ -194,93 +192,89 @@ function businessTripForm_HTML() {
  * @param {string} country - Country (for context)
  */
 function openBusinessTripApplyModal(empid, deptId, country) {
+    if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
     const normalizeStatus = (statusValue) => String(statusValue || '').toLowerCase().replace(/_/g, ' ').trim();
     const toTitle = (value) => String(value || '').replace(/\b\w/g, ch => ch.toUpperCase());
     const getStatusMeta = (statusValue) => {
         const normalized = normalizeStatus(statusValue);
 
         if (normalized.includes('approved')) {
-            return { icon: 'fa-check-square', cls: 'text-success', label: __('approved', 'Approved') };
+            return { icon: 'fa-check-square', cls: 'text-success', tone: 'tone-green', label: __('approved', 'Approved') };
         }
         if (normalized.includes('pending')) {
-            return { icon: 'fa-hourglass-half', cls: 'text-warning', label: __('pending', 'Pending') };
+            return { icon: 'fa-hourglass-half', cls: 'text-warning', tone: 'tone-amber', label: __('pending', 'Pending') };
         }
         if (normalized.includes('awaiting')) {
-            return { icon: 'fa-pause-circle', cls: 'text-info', label: __('awaiting', 'Awaiting') };
+            return { icon: 'fa-pause-circle', cls: 'text-info', tone: 'tone-sky', label: __('awaiting', 'Awaiting') };
         }
         if (normalized.includes('rejected')) {
-            return { icon: 'fa-times-circle', cls: 'text-danger', label: __('rejected', 'Rejected') };
+            return { icon: 'fa-times-circle', cls: 'text-danger', tone: 'tone-red', label: __('rejected', 'Rejected') };
         }
 
-        return { icon: 'fa-circle', cls: 'text-secondary', label: toTitle(normalized || __('unknown', 'Unknown')) };
+        return { icon: 'fa-circle', cls: 'text-secondary', tone: 'tone-slate', label: toTitle(normalized || __('unknown', 'Unknown')) };
     };
+
+    const escHtml = (value) => $('<div>').text(value == null ? '' : String(value)).html();
+    const kvRow = (label, valueHtml) => '<div class="row-kv"><dt>' + label + '</dt><dd>' + valueHtml + '</dd></div>';
 
     const buildActiveRequestHtml = (res) => {
         const req = (res && res.existing_request) ? res.existing_request : null;
         const chain = (res && Array.isArray(res.approval_chain)) ? res.approval_chain : [];
 
         if (!req) {
-            return res && res.html ? res.html : ('<div class="vacation-form-container"><div class="vacation-card"><div class="vacation-card-header"><i class="fa fa-info-circle"></i>' + __('applied_information', 'Applied Information') + '</div><div style="padding:8px 0;">' + ((res && res.message)) + '</div></div></div>');
+            return res && res.html ? res.html : ('<div class="sr-page"><div class="sr-form"><div class="sr-notice tone-sky"><i class="mdi mdi-information-outline"></i><div>' + escHtml(res && res.message) + '</div></div></div></div>');
         }
 
         const isInternational = String(req.trip_type || '').toLowerCase() === 'international';
         const fromRouteName = (req.from_city_route_name && String(req.from_city_route_name).trim() !== '') ? String(req.from_city_route_name).trim() : ('#' + (req.from_city_id || '-'));
         const toRouteName = (req.to_city_route_name && String(req.to_city_route_name).trim() !== '') ? String(req.to_city_route_name).trim() : ('#' + (req.to_city_id || '-'));
-        const routeText = isInternational
-            ? (__('destination_country', 'Destination Country') + ': ' + (req.destination_country || '-'))
-            : (__('route', 'Route') + ': ' + fromRouteName + ' -> ' + toRouteName);
+        const statusMeta = getStatusMeta(req.current_status);
 
-        let chainHtml = '<div style="padding:8px 0; color:#6c757d;">' + __('no_data_found', 'No data found') + '</div>';
+        let chainHtml = '<span class="sr-fhint">' + __('no_data_found', 'No data found') + '</span>';
         if (chain.length > 0) {
-            chainHtml = '<ul style="margin:0; padding-left:0; list-style:none;">';
-            chain.forEach(c => {
+            chainHtml = '<div class="sr-levels">' + chain.map(c => {
                 const approverName = (c.approver_name && String(c.approver_name).trim() !== '') ? c.approver_name : ('Emp#' + (c.approver_id || '-'));
                 const level = c.level || c.approval_level || '-';
-                const statusMeta = getStatusMeta(c.status);
-                chainHtml += '<li style="margin:2px 0;"><i class="fa ' + statusMeta.icon + ' ' + statusMeta.cls + '" style="margin-right:6px;"></i>(' + __('level', 'Level') + ' ' + level + '): ' + approverName + ' — ' + statusMeta.label + '</li>';
-            });
-            chainHtml += '</ul>';
+                const meta = getStatusMeta(c.status);
+                return '<div class="sr-level-row"><span><b>' + __('level', 'Level') + ' ' + escHtml(level) + '</b>' + escHtml(approverName) + '</span>'
+                    + '<span class="sr-pill sr-pill-xs ' + meta.tone + '"><i class="fa ' + meta.icon + '"></i> ' + meta.label + '</span></div>';
+            }).join('') + '</div>';
         }
 
         return `
-            <div class="vacation-form-container">
-                <div class="vacation-card">
-                    <div class="vacation-card-header">
-                        <i class="fa fa-info-circle"></i>
-                        ${__('active_request_exists')}
-                    </div>
-                    <div style="padding:8px 0;">
-                        ${__('you_already_have_active_business_trip', 'You already have an active business trip request. New request is not allowed until current one is completed.')}
+            <div class="sr-page">
+            <div class="sr-form">
+                <div class="sr-notice tone-amber" style="margin-bottom:12px;">
+                    <i class="mdi mdi-alert"></i>
+                    <div>${__('you_already_have_active_business_trip', 'You already have an active business trip request. New request is not allowed until current one is completed.')}</div>
+                </div>
+
+                <div class="sr-fsec">
+                    <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i> ${__('applied_information', 'Applied Information')}</span></div>
+                    <div class="sr-fsec-body">
+                        <dl class="sr-kv">
+                            ${kvRow(__('request_id', 'Request ID'), '<span class="sr-mono">' + escHtml(req.request_inv_no || '-') + '</span>')}
+                            ${kvRow(__('status', 'Status'), '<span class="sr-pill sr-pill-xs ' + statusMeta.tone + '"><i class="fa ' + statusMeta.icon + '"></i> ' + escHtml(__(req.current_status) || '-') + '</span>')}
+                            ${kvRow(__('trip_type', 'Trip Type'), escHtml(__(req.trip_type) || '-'))}
+                            ${kvRow(__('trip_dates', 'Trip Dates'), escHtml(req.trip_start_date || '-') + ' ' + __('to', 'to') + ' ' + escHtml(req.trip_end_date || '-'))}
+                            ${isInternational
+                                ? kvRow(__('destination_country', 'Destination Country'), escHtml(req.destination_country || '-'))
+                                : kvRow(__('route', 'Route'), escHtml(fromRouteName) + ' <i class="mdi mdi-arrow-right"></i> ' + escHtml(toRouteName))}
+                        </dl>
                     </div>
                 </div>
 
-                <div class="vacation-card">
-                    <div class="vacation-card-header">
-                        <i class="fa fa-file-alt"></i>
-                        ${__('applied_information', 'Applied Information')}
-                    </div>
-                    <ul style="margin:0; padding-left:20px;">
-                        <li>${__('request_id', 'Request ID')}: ${req.request_inv_no || '-'}</li>
-                        <li>${__('status', 'Status')}: ${__(req.current_status) || '-'}</li>
-                        <li>${__('trip_type', 'Trip Type')}: ${__(req.trip_type) || '-'}</li>
-                        <li>${__('trip_dates', 'Trip Dates')}: ${(req.trip_start_date || '-')} ${__('to', 'to')} ${(req.trip_end_date || '-')}</li>
-                        <li>${routeText}</li>
-                    </ul>
+                <div class="sr-fsec mb-0">
+                    <div class="sr-fsec-head"><span><i class="mdi mdi-sitemap"></i> ${__('request_chain', 'Request Chain')}</span></div>
+                    <div class="sr-fsec-body">${chainHtml}</div>
                 </div>
-
-                <div class="vacation-card">
-                    <div class="vacation-card-header">
-                        <i class="fa fa-sitemap"></i>
-                        ${__('request_chain', 'Request Chain')}
-                    </div>
-                    ${chainHtml}
-                </div>
+            </div>
             </div>
         `;
     };
 
     const showActiveRequestModal = (res) => {
-        const modalWidth = (window.innerWidth && window.innerWidth < 768) ? '95%' : '56rem';
+        const modalWidth = (window.innerWidth && window.innerWidth < 768) ? '95%' : '640px';
         Swal.fire({
             title: '<i class="fa fa-plane" style="margin-right: 8px;"></i> ' + (res.title || __('active_request_exists')),
             html: buildActiveRequestHtml(res),
@@ -290,14 +284,8 @@ function openBusinessTripApplyModal(empid, deptId, country) {
             cancelButtonText: '<i class="fa fa-times"></i> ' + (__('close', 'Close')),
             allowOutsideClick: false,
             width: modalWidth,
-            padding: '20px',
             scrollbarPadding: false,
-            customClass: {
-                popup: 'vacation-modal-popup',
-                title: 'vacation-modal-title',
-                confirmButton: 'btn-modern-confirm',
-                cancelButton: 'btn-modern-cancel'
-            }
+            customClass: { popup: 'sr-addline-popup sr-page' }
         });
     };
 
@@ -318,14 +306,14 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
-        width: '95%',
-        padding: '20px',
+        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '960px',
         scrollbarPadding: false,
-        customClass: {
-            popup: 'vacation-modal-popup',
-            title: 'vacation-modal-title',
-            confirmButton: 'btn-modern-confirm',
-            cancelButton: 'btn-modern-cancel'
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        didRender: () => {
+            if (typeof window.srBindFilePick === 'function') {
+                const $f = $('#submitBusinessTripForm');
+                if (!$f.data('srPickBound')) { $f.data('srPickBound', 1); window.srBindFilePick($f); }
+            }
         },
         willOpen: () => {
             
@@ -424,7 +412,7 @@ function openBusinessTripApplyModal(empid, deptId, country) {
                                 $upload.removeClass('d-none');
                             } else {
                                 $upload.addClass('d-none');
-                                $('#passport_file').val('');
+                                $('#passport_file').val('').trigger('change');
                             }
                         } else {
                             passportEligibility = {

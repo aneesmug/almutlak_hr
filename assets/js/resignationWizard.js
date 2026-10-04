@@ -20,19 +20,28 @@ $(document).on('click', '.applyResignation', function(e) {
 /**
  * Step 1: Resignation Information - Select Last Working Day
  */
+function resignationEnsureCss() {
+    if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); return; }
+    if (!document.querySelector('link[href*="smart_request.css"]')) {
+        $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">');
+    }
+}
+
 function openResignationWizard(empId, empName, preselectedReason = '', preselectedReasonText = '') {
+    resignationEnsureCss();
     Swal.fire({
         title: __('resignation_title') || 'Employee Resignation',
         html: resignationStep1_HTML(empName),
-        icon: 'question',
         showCancelButton: true,
+        confirmButtonColor: (typeof APP_COLORS !== 'undefined') ? APP_COLORS.primary : undefined,
+        cancelButtonColor: (typeof APP_COLORS !== 'undefined') ? APP_COLORS.danger_dark : undefined,
         confirmButtonText: __('next') || 'Next',
         cancelButtonText: __('cancel') || 'Cancel',
         customClass: {
             container: 'resignation-wizard',
-            popup: 'resignation-popup'
+            popup: 'resignation-popup sr-addline-popup'
         },
-        width: '600px',
+        width: '640px',
         allowOutsideClick: false,
         didOpen: () => {
             // Fetch resignation reasons from API
@@ -219,18 +228,19 @@ function loadResignationReasons(selectedReasonValue = '', selectedReasonText = '
  * Step 2: Exit Interview Questions
  */
 function openExitInterviewWizard() {
+    resignationEnsureCss();
     Swal.fire({
         title: __('exit_interview_questions'),
         html: exitInterviewStep2_HTML(),
-        icon: 'info',
         showCancelButton: true,
+        confirmButtonColor: (typeof APP_COLORS !== 'undefined') ? APP_COLORS.primary : undefined,
         confirmButtonText: __('submit') || 'Submit Resignation',
         cancelButtonText: __('back') || 'Back',
         customClass: {
             container: 'exit-interview-wizard',
-            popup: 'exit-interview-popup'
+            popup: 'exit-interview-popup sr-addline-popup'
         },
-        width: '700px',
+        width: '760px',
         allowOutsideClick: false,
         preConfirm: () => {
             // Validate all required fields
@@ -417,48 +427,36 @@ function initializeCharacterCounters() {
  * HTML for Step 1: Resignation Information
  */
 function resignationStep1_HTML(empName) {
+    const safeName = $('<div>').text(empName == null ? '' : String(empName)).html();
     return `
-        <div class="resignation-step1" style="text-align: left; padding: 20px;">
-            <h5 style="color: #2c3e50; margin-bottom: 20px; font-weight: 600;">
-                ${__('resignation_notice_header') || 'Employee: ' + empName}
-            </h5>
-            
-            <form id="resignationStep1Form">
-                <div class="form-group mb-3">
-                    <label for="last_working_day" class="form-label" style="font-weight: 500; color: #34495e;">
-                        ${__('last_working_day') || 'Last Working Day'} <span style="color: red;">*</span>
-                    </label>
-                    <input 
-                        type="text" 
-                        id="last_working_day" 
-                        name="last_working_day" 
-                        class="form-control" 
-                        placeholder="YYYY-MM-DD"
-                        style="padding: 12px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px;"
-                        required
-                    />
-                    <small class="form-text text-muted" style="margin-top: 5px;">
-                        ${__('select_your_last_working_date') || 'Please select your last working date'}
-                    </small>
+        <div class="sr-page resignation-step1">
+        <form id="resignationStep1Form" class="sr-form">
+            <div class="sr-fsec">
+                <div class="sr-fsec-head">
+                    <span><i class="mdi mdi-exit-to-app"></i> ${__('resignation_notice_header') || 'Resignation'}</span>
+                    <span class="sr-chip">${safeName}</span>
                 </div>
-                
-                <div class="form-group mb-3">
-                    <label for="resignation_reason" class="form-label" style="font-weight: 500; color: #34495e;">
-                        ${__('resignation_reason') || 'Reason for Leaving'} <span style="color: red;">*</span>
-                    </label>
-                    <select id="resignation_reason" name="resignation_reason" class="form-control" required>
-                        <option value="">${__('loading') || 'Loading reasons...'}</option>
-                    </select>
-                    <small class="form-text text-muted" style="margin-top: 5px;">
-                        ${__('select_resignation_reason_hint') || 'Please select the main reason for your resignation'}
-                    </small>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="last_working_day">${__('last_working_day') || 'Last Working Day'} <span class="text-danger">*</span></label>
+                        <input type="text" id="last_working_day" name="last_working_day" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" required />
+                        <span class="sr-fhint">${__('select_your_last_working_date') || 'Please select your last working date'}</span>
+                    </div>
+                    <div class="sr-fcol c-12">
+                        <label for="resignation_reason">${__('resignation_reason') || 'Reason for Leaving'} <span class="text-danger">*</span></label>
+                        <select id="resignation_reason" name="resignation_reason" class="form-control" required>
+                            <option value="">${__('loading') || 'Loading reasons...'}</option>
+                        </select>
+                        <span class="sr-fhint">${__('select_resignation_reason_hint') || 'Please select the main reason for your resignation'}</span>
+                    </div>
                 </div>
-                
-                <div class="alert alert-info" style="margin-top: 20px; padding: 15px; border-radius: 5px; background-color: #e3f2fd; border-left: 4px solid #2196f3; color: #1565c0;">
-                    <strong>${__('info') || 'Info'}:</strong> 
-                    ${__('resignation_info_message') || 'After submitting this form, you will be asked to complete an exit interview. Please answer the questions honestly.'}
-                </div>
-            </form>
+            </div>
+
+            <div class="sr-notice tone-sky">
+                <i class="mdi mdi-information-outline"></i>
+                <div><strong>${__('info') || 'Info'}:</strong> ${__('resignation_info_message') || 'After submitting this form, you will be asked to complete an exit interview. Please answer the questions honestly.'}</div>
+            </div>
+        </form>
         </div>
     `;
 }
@@ -479,67 +477,41 @@ function exitInterviewStep2_HTML() {
         { id: 'q8_recommend', label: __('q8_recommend') || 'Would you recommend the company to other candidates? (Why yes - why not)' },
         { id: 'q9_additional', label: __('q9_additional') || 'Do you need to add anything else you would like to share before you leave?' }
     ];
-    
+
     let html = `
-        <div class="exit-interview-step2" style="text-align: left; padding: 20px; max-height: 500px; overflow-y: auto;">
-            <form id="exitInterviewForm">
+        <div class="sr-page exit-interview-step2">
+        <form id="exitInterviewForm" class="sr-form">
+            <div class="sr-fsec">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-comment-question-outline"></i> ${__('exit_interview_questions') || 'Exit Interview'}</span><span class="sr-chip">${questions.length}</span></div>
+                <div class="sr-scroll">
+                <div class="sr-fgrid">
     `;
-    
+
     questions.forEach((question, index) => {
         const isLongAnswer = ['q1_reasons', 'q7_different', 'q8_recommend', 'q9_additional'].includes(question.id);
-        
+
         html += `
-            <div class="form-group mb-4">
-                <label for="${question.id}" class="form-label" style="font-weight: 600; color: #2c3e50; margin-bottom: 10px;">
-                    <span style="display: inline-block; background: #3498db; color: white; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; margin-right: 8px; font-size: 12px; font-weight: bold;">
-                        ${index + 1}
-                    </span>
-                    ${question.label}
-                </label>
+                    <div class="sr-fcol c-12">
+                        <label for="${question.id}" class="sr-qlabel"><span class="sr-qnum">${index + 1}</span><span>${question.label}</span></label>
+                        <textarea id="${question.id}" name="${question.id}" class="form-control" rows="${isLongAnswer ? 3 : 2}"
+                            placeholder="${__('enter_your_answer') || 'Enter your answer here...'}"${isLongAnswer ? ' maxlength="500"' : ''} required></textarea>
+                        ${isLongAnswer ? `<span class="sr-qcount"><span id="${question.id}_count">0/500</span> ${__('characters') || 'characters'}</span>` : ''}
+                    </div>
         `;
-        
-        if (isLongAnswer) {
-            html += `
-                <textarea 
-                    id="${question.id}" 
-                    name="${question.id}" 
-                    class="form-control" 
-                    rows="3" 
-                    placeholder="${__('enter_your_answer') || 'Enter your answer here...'}"
-                    style="padding: 12px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px; resize: vertical;"
-                    maxlength="500"
-                    required
-                ></textarea>
-                <small class="form-text text-muted" style="display: block; margin-top: 5px;">
-                    <span id="${question.id}_count">0/500</span> ${__('characters') || 'characters'}
-                </small>
-            `;
-        } else {
-            html += `
-                <textarea 
-                    id="${question.id}" 
-                    name="${question.id}" 
-                    class="form-control" 
-                    rows="2" 
-                    placeholder="${__('enter_your_answer') || 'Enter your answer here...'}"
-                    style="padding: 12px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px; resize: vertical;"
-                    required
-                ></textarea>
-            `;
-        }
-        
-        html += `</div>`;
     });
-    
+
     html += `
-            </form>
-            
-            <div class="alert alert-warning" style="margin-top: 20px; padding: 15px; border-radius: 5px; background-color: #fff3cd; border-left: 4px solid #ffc107; color: #856404;">
-                <strong>${__('important') || 'Important'}:</strong> 
-                ${__('exit_interview_importance') || 'Your honest feedback is valuable and will help us improve our workplace environment.'}
+                </div>
+                </div>
             </div>
+
+            <div class="sr-notice tone-amber">
+                <i class="mdi mdi-alert"></i>
+                <div><strong>${__('important') || 'Important'}:</strong> ${__('exit_interview_importance') || 'Your honest feedback is valuable and will help us improve our workplace environment.'}</div>
+            </div>
+        </form>
         </div>
     `;
-    
+
     return html;
 }

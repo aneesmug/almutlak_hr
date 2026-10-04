@@ -3215,7 +3215,7 @@ if (mysqli_num_rows($query) == 1) {
 		<script src="./plugins/summernote/summernote.min.js"></script>
 		<!-- <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-bs4.min.js"></script> -->
 		<script src="assets/js/loanHandling.js?t=<?= time() ?>"></script>
-		<script src="assets/js/resignationWizard.js"></script>
+		<script src="assets/js/resignationWizard.js?v=<?= @filemtime(__DIR__ . '/assets/js/resignationWizard.js') ?>"></script>
 
 		<script type="text/javascript">
 			// ============================================================================

@@ -1,5 +1,24 @@
 <?php
 header('Content-Type: application/json');
+// Fatal errors (timeouts, out-of-memory, missing functions) bypass try/catch and would
+// otherwise send a blank response, which the UI can only show as a generic error.
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if (!$err || !in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        return;
+    }
+    error_log('leaveHandler fatal: ' . $err['message'] . ' @ ' . $err['file'] . ':' . $err['line']);
+    while (ob_get_level()) ob_end_clean();
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode([
+        'title'   => 'Error',
+        'message' => 'Server error: ' . $err['message'] . ' (' . basename($err['file']) . ':' . $err['line'] . ')',
+        'type'    => 'error',
+    ], JSON_INVALID_UTF8_SUBSTITUTE);
+});
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
 include("./../../includes/helper_functions.php"); // --- Helper Function ---
@@ -1708,7 +1727,9 @@ elseif ($ajaxType == 'applyVacation') {
         }
         
         send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success");
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
+        // Throwable (not just Exception) so PHP Errors/TypeErrors return JSON instead of a blank 500
+        error_log('applyVacation failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
         send_json_response("Error", __("an_error_occurred") . ": " . $e->getMessage(), "error", 500);
     }
     exit;

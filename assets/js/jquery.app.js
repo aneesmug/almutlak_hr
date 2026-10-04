@@ -3359,8 +3359,38 @@ $(document).on('click', '.addPortfolio', function (e) {
     })
 });
 
+// New GUI popups need smart_request.css - load it on pages that do not link it yet.
+window.srEnsureCss = window.srEnsureCss || function () {
+    if (document.querySelector('link[href*="smart_request.css"]')) return;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = 'assets/css/smart_request.css';
+    document.head.appendChild(l);
+};
+// Shows the chosen file name inside a label.sr-filepick (drag & drop too).
+window.srBindFilePick = window.srBindFilePick || function ($scope) {
+    if (window.SRForm && SRForm.bindFilePicker) { SRForm.bindFilePicker($scope); return; }
+    $scope.find('.sr-filepick').each(function () {
+        var $pick = $(this), $input = $pick.find('input[type=file]'), $name = $pick.find('.js-file-name'), emptyText = $name.text();
+        function show() {
+            var f = $input[0].files && $input[0].files[0];
+            $pick.toggleClass('has-file', !!f);
+            $name.text(f ? f.name + ' (' + (f.size / 1048576).toFixed(2) + ' MB)' : emptyText);
+        }
+        $input.on('change', show);
+        $pick.on('dragover dragenter', function (e) { e.preventDefault(); $pick.addClass('is-drag'); })
+            .on('dragleave dragend drop', function () { $pick.removeClass('is-drag'); })
+            .on('drop', function (e) {
+                e.preventDefault();
+                var dt = e.originalEvent.dataTransfer;
+                if (dt && dt.files && dt.files.length) { $input[0].files = dt.files; $input.trigger('change'); }
+            });
+    });
+};
+
 $(document).on('click', '.addEmpDocuAtter', function (e) {
     e.preventDefault();
+    srEnsureCss();
     var id                  = $(this).data('id');
     var emp_id              = $(this).data('emp_id');
     var emptype             = $(this).data('emptype');
@@ -3376,12 +3406,11 @@ $(document).on('click', '.addEmpDocuAtter', function (e) {
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
         rtl: true,
-        allowOutsideClick: () => {
-            if (hasUserInteracted) {return false;}
-            return !Swal.isLoading();
-        },
-        width: "30%",
+        allowOutsideClick: false,
+        width: "560px",
+        customClass: { popup: 'sr-addline-popup' },
         willOpen: function(){
+            srBindFilePick($('#submitDocumentsForm'));
             $('input[name="emp_id"]').val(emp_id);
             $('input[name="id"]').val(id);
             $.ajax({
@@ -4624,10 +4653,12 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
         }
     });
 
+    srEnsureCss();
     Swal.fire({
         title: __('loading_employee_info'),
         html: generateLeaveFormHTML(employeeGender),
-        width: '50rem',
+        width: '760px',
+        customClass: { popup: 'sr-addline-popup' },
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
         confirmButtonColor: APP_COLORS.primary,
@@ -4657,7 +4688,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                         var currentLang = getCurrentLanguage();
                         translateName(employeeName, 'en', currentLang, function(translatedName) {
                             // Update the modal title with the translated employee's name
-                            $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:${APP_COLORS.primary};">${translatedName}</span>`);
+                            $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:var(--sr-accent-strong, ${APP_COLORS.primary});">${$('<div>').text(translatedName).html()}</span>`);
                         });
                         Swal.hideLoading();
                     } else {
@@ -5186,11 +5217,12 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     ? `${htmlTop}${chainHtml}<hr/><p style="margin-top:15px;"><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}</p>`
                     : `${htmlTop}<br/><br/><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}`;
                 
-                Swal.fire({ 
-                    title: __('cannot_apply_now') || 'Cannot Apply', 
-                    html: fullHtml, 
-                    icon: 'info', 
+                if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
+                Swal.fire({
+                    title: __('cannot_apply_now') || 'Cannot Apply',
+                    html: '<div class="sr-notice tone-sky" style="text-align:start;margin-bottom:0;"><i class="mdi mdi-information-outline"></i><div>' + fullHtml + '</div></div>',
                     allowOutsideClick: false,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
                     showCancelButton: true,
                     confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
@@ -5233,6 +5265,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         ? __('apply_emergency_vacation')
         : (preferAnotherTitle ? (__('apply_another_vacation') || 'Apply Another Vacation') : __('apply_vacation_info_title'));
 
+    if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
     Swal.fire({
         title: '<i class="fa fa-umbrella-beach"></i> ' + modalTitleText,
         html: vacationApply_HTML(country),
@@ -5243,14 +5276,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
-        customClass: {
-            popup: 'vacation-modal-popup',
-            title: 'vacation-modal-title',
-            confirmButton: 'btn-modern-confirm',
-            cancelButton: 'btn-modern-cancel'
-        },
-        width: '95%',
-        padding: '20px',
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '960px',
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
             
@@ -5936,7 +5963,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         resolve();
                     })
                     .fail(function (jqXHR, textStatus, errorThrown) {
-                        let errorMsg = 'An error occurred. Please try again.';
+                        let errorMsg = 'An error occurred. Please try again. (HTTP ' + jqXHR.status + (textStatus ? ' ' + textStatus : '') + ')';
                         try {
                             let jsonResponse = JSON.parse(jqXHR.responseText);
                             if (jsonResponse && jsonResponse.message) {
@@ -5964,6 +5991,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
 // --- Main Script Logic
 function add_noties() {
     const empid = $(this).data('emp_id');
+    srEnsureCss();
     Swal.fire({
         title: __('add_note_to_employee_title'),
         html: add_note_HTML(),
@@ -5974,6 +6002,8 @@ function add_noties() {
         confirmButtonText: __('yes_register'),
         showLoaderOnConfirm: true,
         width: '600px',
+        customClass: { popup: 'sr-addline-popup' },
+        didOpen: () => { srBindFilePick($('#addNoteForm')); },
         preConfirm: () => {
             const note = $('#note').val();
             const noteType = $('#note_type').val();
@@ -6466,100 +6496,79 @@ function generateLeaveFormHTML(employeeGender) {
     ];
 
     // Filter leave types based on employee gender
-    const leaveTypes = allLeaveTypes.filter(type => 
+    const leaveTypes = allLeaveTypes.filter(type =>
         type.gender === null || type.gender === employeeGender
     );
-    
-    let leaveOptions = leaveTypes.map(type => 
+
+    let leaveOptions = leaveTypes.map(type =>
         `<option value="${type.value}">${type.label}</option>`
     ).join('');
 
     return `
-        <form id="applyLeaveForm" class="text-left" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
-                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
-                    <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
-                    ${leaveOptions}
-                </select>
+        <div class="sr-page">
+        <form id="applyLeaveForm" class="sr-form" enctype="multipart/form-data">
+            <div class="sr-fsec">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-format-list-bulleted"></i> ${__('leave_type')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
+                        <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
+                            <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
+                            ${leaveOptions}
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <!-- Date Section - Always shown for all leave types -->
-            <div id="dateSection" class="d-none">
-                <div class="form-row">
-                    <div class="form-group col-md-4">
+            <div id="dateSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-range"></i> ${__('start_date')} / ${__('end_date')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-4">
                         <label for="start_date">${__('start_date')} <span class="text-danger">*</span></label>
                         <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
-                    <div class="form-group col-md-4">
+                    <div class="sr-fcol c-4">
                         <label for="end_date">${__('end_date')} <span class="text-danger">*</span></label>
                         <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
-                    <div class="form-group col-md-4">
+                    <div class="sr-fcol c-4">
                         <label for="total_days">${__('total_days')}</label>
-                        <input type="text" name="total_days" id="total_days" class="form-control" placeholder="${__('auto_calculated_placeholder')}" readonly style="cursor: not-allowed; background-color: #e9ecef;">
+                        <input type="text" name="total_days" id="total_days" class="form-control" placeholder="${__('auto_calculated_placeholder')}" readonly style="cursor: not-allowed;">
                     </div>
                 </div>
             </div>
 
             <!-- Reason/Notes - Required for ALL leave types -->
-            <div id="reasonSection" class="form-group d-none">
-                <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
-                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
+            <div id="reasonSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-comment-text-outline"></i> ${__('reason_notes')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
+                        <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
+                    </div>
+                </div>
             </div>
 
             <!-- Attachment - Required for ALL leave types -->
-            <div id="attachmentSection" class="form-group d-none">
-                <label for="attachment">${__('attach_document_required')} <span class="text-danger">*</span></label>
-                <div id="leaveDropzone" class="dropzone" style="border: 2px dashed #4e73df; border-radius: 8px; padding: 20px; min-height: 150px; background: #f8f9fc; cursor: pointer; transition: all 0.3s ease;">
-                    <div class="dz-message" style="margin: 20px 0; text-align: center;">
-                        <i class="fa fa-cloud-upload-alt" style="font-size: 48px; color: #4e73df; margin-bottom: 15px; display: block;"></i>
-                        <h4 style="margin: 15px 0 10px 0; color: #495057; font-weight: 600;">${__('drag_drop_files') || 'Drag & Drop files here'}</h4>
-                        <p style="color: #6c757d; margin: 10px 0; font-size: 14px;">${__('or_click_to_browse') || 'or click to browse'}</p>
-                        <small style="color: #858796; display: block; margin-top: 10px; font-size: 12px;">
-                            <i class="fa fa-info-circle"></i> ${__('attachment_dropzone_help') || '1-10 files • Max 5MB each • PDF, JPG, PNG'}
-                        </small>
+            <div id="attachmentSection" class="sr-fsec mb-0 d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-paperclip"></i> ${__('attach_document_required')} <span class="text-danger">*</span></span></div>
+                <div class="sr-fsec-body">
+                    <div id="leaveDropzone" class="dropzone sr-dropzone">
+                        <div class="dz-message">
+                            <i class="mdi mdi-cloud-upload"></i>
+                            <b>${__('drag_drop_files') || 'Drag & Drop files here'}</b>
+                            <small>${__('or_click_to_browse') || 'or click to browse'}</small>
+                            <small>${__('attachment_dropzone_help') || '1-10 files • Max 5MB each • PDF, JPG, PNG'}</small>
+                        </div>
                     </div>
+                    <span class="sr-fhint"><i class="mdi mdi-information-outline"></i> ${__('attachment_multiple_help') || 'You can upload 1-10 files. Each file must be less than 5MB. Accepted formats: PDF, JPG, PNG'}</span>
                 </div>
-                <small class="form-text text-muted mt-2" style="display: block; margin-top: 8px;">
-                    <i class="fa fa-info-circle"></i> ${__('attachment_multiple_help') || 'You can upload 1-10 files. Each file must be less than 5MB. Accepted formats: PDF, JPG, PNG'}
-                </small>
-                <style>
-                    #leaveDropzone:hover {
-                        border-color: #2e59d9;
-                        background: #eef2ff;
-                    }
-                    #leaveDropzone .dz-preview {
-                        margin: 10px;
-                    }
-                    #leaveDropzone .dz-preview .dz-image {
-                        border-radius: 8px;
-                    }
-                    #leaveDropzone .dz-preview .dz-details {
-                        background: #fff;
-                        padding: 8px;
-                        border-radius: 4px;
-                    }
-                    #leaveDropzone .dz-preview .dz-remove {
-                        color: #e74a3b;
-                        font-size: 12px;
-                        text-decoration: none;
-                        cursor: pointer;
-                    }
-                    #leaveDropzone .dz-preview .dz-remove:hover {
-                        color: #c9302c;
-                        text-decoration: underline;
-                    }
-                    #leaveDropzone.dz-drag-hover {
-                        border-color: #2e59d9;
-                        background: #e3f2fd;
-                    }
-                </style>
             </div>
         </form>
+        </div>
     `;
 }
-
 
 function item_HTML(sts){
     var statusView = 
@@ -7251,25 +7260,33 @@ function id_exp_HTML(){
 }
 
 function empDocuments_HTML(){
-    var strView = 
-    `<form id="submitDocumentsForm" enctype="multipart/form-data">
-        <div class="form-row customSweetAlertMLR">
-            <div class="form-group col-md-12">
-                <label for="docu_typ">${__('type_of_document')}<span class="text-danger">*</span></label>
-                <select class="form-control" name="docu_typ" id="docu_typ">
-                    <option value="">${__('select')}</option>
-                </select>
-            </div>
-            <div class="form-group col-md-12">
-                <label for="checkatt">${__('attachment')}<span class="text-danger">*</span></label>
-                <div class="input_container" style="margin-top: 0 !important">
-                    <input type="file" id="checkatt" class="checkatt">
+    var strView =
+    `<div class="sr-page">
+    <form id="submitDocumentsForm" class="sr-form" enctype="multipart/form-data">
+        <div class="sr-fsec mb-0">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i> ${__('documents', 'Documents')}</span></div>
+            <div class="sr-fgrid">
+                <div class="sr-fcol c-12">
+                    <label for="docu_typ">${__('type_of_document')} <span class="text-danger">*</span></label>
+                    <select class="form-control" name="docu_typ" id="docu_typ">
+                        <option value="">${__('select')}</option>
+                    </select>
+                </div>
+                <div class="sr-fcol c-12">
+                    <label for="checkatt">${__('attachment')} <span class="text-danger">*</span></label>
+                    <label class="sr-filepick is-lg" for="checkatt">
+                        <input type="file" id="checkatt" class="checkatt" accept=".pdf,.jpg,.jpeg,.png">
+                        <i class="mdi mdi-cloud-upload"></i>
+                        <span><b class="js-file-name">${__('choose_file', 'Choose a file or drop it here')}</b>
+                        <small>PDF, JPG, PNG &middot; max 8 MB</small></span>
+                    </label>
                 </div>
             </div>
             <input type="hidden" class="id" name="id">
             <input type="hidden" class="emp_id" name="emp_id">
         </div>
-    </form>`;
+    </form>
+    </div>`;
     return strView;
 }
 
@@ -7616,10 +7633,12 @@ function eos_select_date_HTML(){
 
 function add_note_HTML(){
     var strView =
-    `<form class="contact-input" id="addNoteForm" enctype="multipart/form-data">
-        <div class="modal-body">
-            <div class="form-row">
-                <div class="form-group col-md-12">
+    `<div class="sr-page">
+    <form class="sr-form contact-input" id="addNoteForm" enctype="multipart/form-data">
+        <div class="sr-fsec mb-0">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-note-text"></i> ${__('add_note_to_employee_title')}</span></div>
+            <div class="sr-fgrid">
+                <div class="sr-fcol c-12">
                     <label for="note_type">${__('note_type')} <span class="text-danger">*</span></label>
                     <select id="note_type" name="note_type" class="form-control" required>
                         <option value="">${__('select')}</option>
@@ -7639,20 +7658,23 @@ function add_note_HTML(){
                         <option value="other">${__('other')}</option>
                     </select>
                 </div>
-                <div class="form-group col-md-12">
+                <div class="sr-fcol c-12">
                     <label for="note">${__('enter_note')} <span class="text-danger">*</span></label>
                     <textarea id="note" name="note" class="form-control" rows="3" required placeholder="${__('enter_note_details')}"></textarea>
                 </div>
-                <div class="form-group col-md-12">
-                    <label for="attachment">${__('attachment')} <span class="text-muted">(${__('optional')})</span></label>
-                    <input type="file" id="attachment" name="attachment" class="form-control-file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
-                    <small class="form-text text-muted">
-                        <i class="fa fa-info-circle"></i> ${__('allowed_formats')}: PDF, DOC, DOCX, JPG, PNG (Max 5MB)
-                    </small>
+                <div class="sr-fcol c-12">
+                    <label for="attachment">${__('attachment')} <span class="sr-fhint d-inline">(${__('optional')})</span></label>
+                    <label class="sr-filepick" for="attachment">
+                        <input type="file" id="attachment" name="attachment" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+                        <i class="mdi mdi-cloud-upload"></i>
+                        <span><b class="js-file-name">${__('choose_file', 'Choose a file or drop it here')}</b>
+                        <small>${__('allowed_formats')}: PDF, DOC, DOCX, JPG, PNG (Max 5MB)</small></span>
+                    </label>
                 </div>
             </div>
         </div>
     </form>
+    </div>
     `;
     return strView;
 }

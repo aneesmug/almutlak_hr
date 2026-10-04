@@ -27,6 +27,36 @@ window.APP_COLORS = {}; // Initialize empty, will be populated by fetch
 })();
 
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
+
+// New GUI popups need smart_request.css - load it on pages that do not link it yet.
+window.srEnsureCss = window.srEnsureCss || function () {
+    if (!document.querySelector('link[href*="smart_request.css"]')) {
+        $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">');
+    }
+    if (!document.querySelector('link[href*="icons.css"]')) {
+        $('head').append('<link rel="stylesheet" href="assets/css/icons.css">');
+    }
+};
+// Shows the chosen file name inside a label.sr-filepick (drag & drop too).
+window.srBindFilePick = window.srBindFilePick || function ($scope) {
+    $scope.find('.sr-filepick').each(function () {
+        var $pick = $(this), $input = $pick.find('input[type=file]'), $name = $pick.find('.js-file-name'), emptyText = $name.text();
+        function show() {
+            var f = $input[0].files && $input[0].files[0];
+            $pick.toggleClass('has-file', !!f);
+            $name.text(f ? f.name + ' (' + (f.size / 1048576).toFixed(2) + ' MB)' : emptyText);
+        }
+        $input.on('change', show);
+        $pick.on('dragover dragenter', function (e) { e.preventDefault(); $pick.addClass('is-drag'); })
+            .on('dragleave dragend drop', function () { $pick.removeClass('is-drag'); })
+            .on('drop', function (e) {
+                e.preventDefault();
+                var dt = e.originalEvent.dataTransfer;
+                if (dt && dt.files && dt.files.length) { $input[0].files = dt.files; $input.trigger('change'); }
+            });
+    });
+};
+function srEsc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
 // Include shared AJAX error handling utilities
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
 
@@ -162,11 +192,17 @@ $(document).on('click', '.applyvacationAtter', function (e) {
                     ? `${htmlTop}${chainHtml}<hr/><p style="margin-top:15px;"><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}</p>`
                     : `${htmlTop}<br/><br/><strong>${__('note') || 'Note'}:</strong> ${nextApplyNote}`;
                 
-                Swal.fire({ 
-                    title: __('cannot_apply_now') || 'Cannot Apply', 
-                    html: fullHtml, 
-                    icon: 'info', 
+                srEnsureCss();
+                
+                Swal.fire({
+                
+                    title: __('cannot_apply_now') || 'Cannot Apply',
+                
+                    html: '<div class="sr-notice tone-sky" style="text-align:start;margin-bottom:0;"><i class="mdi mdi-information-outline"></i><div>' + fullHtml + '</div></div>',
+                
                     allowOutsideClick: false,
+                
+                    customClass: { popup: 'sr-addline-popup sr-page' },
                     showCancelButton: true,
                     confirmButtonText: __('apply_another_vacation') || 'Apply Another Vacation',
                     cancelButtonText: __('cancel') || 'Cancel',
@@ -209,6 +245,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         ? __('apply_emergency_vacation')
         : (preferAnotherTitle ? (__('apply_another_vacation') || 'Apply Another Vacation') : __('apply_vacation_info_title'));
 
+    srEnsureCss();
     Swal.fire({
         title: '<i class="fa fa-umbrella-beach"></i> ' + modalTitleText,
         html: vacationApply_HTML(country),
@@ -219,14 +256,8 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
-        customClass: {
-            popup: 'vacation-modal-popup',
-            title: 'vacation-modal-title',
-            confirmButton: 'btn-modern-confirm',
-            cancelButton: 'btn-modern-cancel'
-        },
-        width: '95%',
-        padding: '20px',
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '960px',
         willOpen: () => {
             const swalModal = Swal.getHtmlContainer();
             
@@ -907,7 +938,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         resolve();
                     })
                     .fail(function (jqXHR, textStatus, errorThrown) {
-                        let errorMsg = 'An error occurred. Please try again.';
+                        let errorMsg = 'An error occurred. Please try again. (HTTP ' + jqXHR.status + (textStatus ? ' ' + textStatus : '') + ')';
                         try {
                             let jsonResponse = JSON.parse(jqXHR.responseText);
                             if (jsonResponse && jsonResponse.message) {
@@ -965,10 +996,12 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
         }
     });
 
+    srEnsureCss();
     Swal.fire({
         title: __('loading_employee_info'),
         html: generateLeaveFormHTML(employeeGender),
-        width: '50rem',
+        width: '760px',
+        customClass: { popup: 'sr-addline-popup' },
         showCancelButton: true,
         confirmButtonText: __('submit_request'),
         confirmButtonColor: APP_COLORS.primary,
@@ -996,7 +1029,7 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
                     if (res.status == 200 && res.data.length > 0) {
                         const employeeName = res.data[0].name;
                         // Update the modal title with the employee's name
-                        $('.swal2-title').html(`${__('leave_application_for')} <br><span style="colorAPP_COLORS.primary">${employeeName}</span>`);
+                        $('.swal2-title').html(`${__('leave_application_for')} <br><span style="color:var(--sr-accent-strong);">${srEsc(employeeName)}</span>`);
                         Swal.hideLoading();
                     } else {
                         // Handle case where employee is not found
@@ -1259,93 +1292,42 @@ $(document).on('click', '#startUpdateRequest', function() {
 // Extracted function to show the update request modal
 function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passport_number, passport_exp) {
     // --- First Modal: Ask WHAT to update ---
+    srEnsureCss();
     Swal.fire({
         title: '<i class="fa fa-edit"></i> ' + __('what_to_update_title'),
         html: `
-            <style>
-                .update-request-form {
-                    padding: 20px 10px;
-                    text-align: left;
-                }
-                .update-form-group {
-                    margin-bottom: 20px;
-                }
-                .update-label {
-                    display: block;
-                    font-weight: 600;
-                    color: #2c3e50;
-                    margin-bottom: 8px;
-                    font-size: 14px;
-                }
-                .update-select {
-                    width: 100%;
-                    padding: 12px 15px;
-                    border: 2px solid #e0e6ed;
-                    border-radius: 8px;
-                    font-size: 14px;
-                    transition: all 0.3s ease;
-                    background: #f8f9fa;
-                    cursor: pointer;
-                }
-                .update-select:focus {
-                    border-color: #4e73df;
-                    background: #fff;
-                    outline: none;
-                    box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.1);
-                }
-                .update-select option {
-                    padding: 10px;
-                }
-                .update-help-text {
-                    display: flex;
-                    align-items: center;
-                    margin-top: 10px;
-                    padding: 10px 12px;
-                    background: #e8f4f8;
-                    border-left: 4px solid #3498db;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    color: #2980b9;
-                }
-                .update-help-text i {
-                    margin-right: 8px;
-                    font-size: 14px;
-                }
-            </style>
-            <form class="update-request-form">
-                <div class="update-form-group">
-                    <label class="update-label">
-                        <i class="fa fa-list-ul"></i> ${__('select_field_to_update')}<span class="text-danger"> *</span>
-                    </label>
-                    <select class="update-select" id="field_select" name="field_select" required>
-                        <option value="">${__('select_an_item_placeholder')}</option>
-                        <option value="Mobile">${__('mobile')}</option>
-                        <option value="Email">${__('email')}</option>
-                        <option value="Address">${__('address')}</option>
-                        <option value="Passport No">${__('passport_number')}</option>
-                        <option value="Passport Exp">${__('passport_expiry_date')}</option>
-                        <option value="Profile Picture">${__('profile_picture')}</option>
-                        <option value="Upload Documents">${__('upload_documents')}</option>
-                    </select>
-                    <div class="update-help-text">
-                        <i class="fa fa-info-circle"></i>
-                        <span>${__('select_what_you_want_to_update') || 'Select the field you want to update'}</span>
+            <div class="sr-page">
+            <form class="sr-form update-request-form">
+                <div class="sr-fsec mb-0">
+                    <div class="sr-fsec-head"><span><i class="mdi mdi-format-list-bulleted"></i> ${__('select_field_to_update')}</span></div>
+                    <div class="sr-fgrid">
+                        <div class="sr-fcol c-12">
+                            <label for="field_select">${__('select_field_to_update')} <span class="text-danger">*</span></label>
+                            <select class="form-control" id="field_select" name="field_select" required>
+                                <option value="">${__('select_an_item_placeholder')}</option>
+                                <option value="Mobile">${__('mobile')}</option>
+                                <option value="Email">${__('email')}</option>
+                                <option value="Address">${__('address')}</option>
+                                <option value="Passport No">${__('passport_number')}</option>
+                                <option value="Passport Exp">${__('passport_expiry_date')}</option>
+                                <option value="Profile Picture">${__('profile_picture')}</option>
+                                <option value="Upload Documents">${__('upload_documents')}</option>
+                            </select>
+                            <span class="sr-fhint"><i class="mdi mdi-information-outline"></i> ${__('select_what_you_want_to_update') || 'Select the field you want to update'}</span>
+                        </div>
                     </div>
                 </div>
             </form>
+            </div>
         `,
         width: '550px',
         allowOutsideClick: false,
         showCancelButton: true,
         confirmButtonText: '<i class="fa fa-arrow-right"></i> ' + __('next'),
         cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
-        customClass: {
-            confirmButton: 'btn btn-primary waves-effect waves-light',
-            cancelButton: 'btn btn-secondary waves-effect waves-light ml-2',
-            popup: 'update-modal-popup'
-        },
-        allowOutsideClick: false,
-        buttonsStyling: false,
+        customClass: { popup: 'sr-addline-popup update-modal-popup' },
+        confirmButtonColor: APP_COLORS.primary,
+        cancelButtonColor: APP_COLORS.danger_dark,
         inputValidator: (value) => {
             const selectedField = document.getElementById('field_select').value;
             if (!selectedField) {
@@ -1370,10 +1352,9 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
                     if (response.has_pending) {
                         Swal.fire({
                             title: __('pending_request_title', 'Request Pending'),
-                            html: __('pending_request_message', 'You already have a modification request for this field sent and waiting for approval.') + 
-                                  '<br><br><strong>' + __('pending_type', 'Field') + ':</strong> ' + response.pending_type + 
-                                  '<br><strong>' + __('submitted_on', 'Submitted On') + ':</strong> ' + response.created_at,
-                            icon: 'info',
+                            html: '<div class="sr-form"><div class="sr-notice tone-amber" style="margin-bottom:12px;"><i class="mdi mdi-clock"></i><div>' + __('pending_request_message', 'You already have a modification request for this field sent and waiting for approval.') + '</div></div>' + '<dl class="sr-kv"><div class="row-kv"><dt>' + __('pending_type', 'Field') + '</dt><dd>' + srEsc(response.pending_type) + '</dd></div>' + '<div class="row-kv"><dt>' + __('submitted_on', 'Submitted On') + '</dt><dd>' + srEsc(response.created_at) + '</dd></div></dl></div>',
+                            customClass: { popup: 'sr-addline-popup sr-page' },
+                            confirmButtonColor: APP_COLORS.primary,
                             confirmButtonText: __('ok'),
                             allowOutsideClick: false
                         }).then(() => {
@@ -1405,14 +1386,21 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                 Swal.fire({
                     title: __('change_profile_picture_title'),
                     html: `
-                        <div class="row" >
-                            <div class="col-md-12 text-center">
-                                <p>${__('current_picture')}</p>
-                                <img src="${empData.img}" class="img-fluid rounded-circle mb-3" style="width:150px;height:150px" />
-                                <p>${__('new_picture')}</p>
-                                <div id="emp-img-cropper" style="width:300px; height:300px; margin:auto;"></div>
+                        <div class="sr-form">
+                            <div class="sr-fsec">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-account-circle"></i> ${__('current_picture')}</span></div>
+                                <div class="sr-fsec-body text-center">
+                                    <img src="${empData.img}" class="img-fluid rounded-circle" style="width:120px;height:120px;object-fit:cover;" />
+                                </div>
+                            </div>
+                            <div class="sr-fsec mb-0">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-crop"></i> ${__('new_picture')}</span></div>
+                                <div class="sr-fsec-body">
+                                    <div id="emp-img-cropper" style="width:300px; height:300px; margin:auto;"></div>
+                                </div>
                             </div>
                         </div>`,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
                     showCancelButton: true,
                     confirmButtonColor: APP_COLORS.primary,
                     cancelButtonColor: APP_COLORS.danger_dark,
@@ -1501,18 +1489,26 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                 Swal.fire({
                     title: `${__('update_field_title')} ${field}`,
                     html: `
-                        <p class="text-muted">${__('your_current_value_is')} <strong>${currentValue}</strong></p>
-                        <form id="updateRequestForm" class="mt-3">
-                                <input type="hidden" name="type" value="${field}">
-                                <input type="hidden" name="emp_id" value="${empid}">
-                                <input type="${inputType}" id="swal-input" name="new_value" class="form-control" placeholder="${__('enter_new_field_placeholder')} ${field.toLowerCase()}" required>
+                        <form id="updateRequestForm" class="sr-form">
+                            <input type="hidden" name="type" value="${srEsc(field)}">
+                            <input type="hidden" name="emp_id" value="${srEsc(empid)}">
+                            <div class="sr-fsec mb-0">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-pencil"></i> ${srEsc(field)}</span></div>
+                                <div class="sr-fgrid">
+                                    <div class="sr-fcol c-12">
+                                        <dl class="sr-kv"><div class="row-kv"><dt>${__('your_current_value_is')}</dt><dd>${srEsc(currentValue) || '-'}</dd></div></dl>
+                                    </div>
+                                    <div class="sr-fcol c-12">
+                                        <label for="swal-input">${__('enter_new_field_placeholder')} ${srEsc(field.toLowerCase())} <span class="text-danger">*</span></label>
+                                        <input type="${inputType}" id="swal-input" name="new_value" class="form-control" placeholder="${__('enter_new_field_placeholder')} ${srEsc(field.toLowerCase())}" required>
+                                    </div>
+                                </div>
+                            </div>
                         </form>`,
                     confirmButtonText: __('submit_request'),
-                    customClass: {
-                        confirmButton: 'btn btn-success waves-effect waves-light',
-                        cancelButton: 'btn btn-danger waves-effect waves-light ml-2'
-                    },
-                    buttonsStyling: false,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
+                    confirmButtonColor: APP_COLORS.primary,
+                    cancelButtonColor: APP_COLORS.danger_dark,
                     showCancelButton: true,
                     focusConfirm: false,
                     showLoaderOnConfirm: true,
@@ -1559,136 +1555,44 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                             Swal.fire({
                                 title: '<i class="fa fa-upload"></i> ' + __('upload_documents'),
                                 html: `
-                                    <style>
-                                        .upload-document-form {
-                                            padding: 20px 10px;
-                                            text-align: left;
-                                        }
-                                        .upload-form-group {
-                                            margin-bottom: 25px;
-                                        }
-                                        .upload-label {
-                                            display: block;
-                                            font-weight: 600;
-                                            color: #2c3e50;
-                                            margin-bottom: 8px;
-                                            font-size: 14px;
-                                        }
-                                        .upload-select, .upload-file-input {
-                                            width: 100%;
-                                            padding: 12px 15px;
-                                            border: 2px solid #e0e6ed;
-                                            border-radius: 8px;
-                                            font-size: 14px;
-                                            transition: all 0.3s ease;
-                                            background: #f8f9fa;
-                                        }
-                                        .upload-select:focus, .upload-file-input:focus {
-                                            border-color: #4e73df;
-                                            background: #fff;
-                                            outline: none;
-                                            box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.1);
-                                        }
-                                        .upload-file-wrapper {
-                                            position: relative;
-                                            overflow: hidden;
-                                            display: inline-block;
-                                            width: 100%;
-                                        }
-                                        .upload-file-input {
-                                            cursor: pointer;
-                                        }
-                                        .upload-file-input::-webkit-file-upload-button {
-                                            padding: 8px 16px;
-                                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                            color: white;
-                                            border: none;
-                                            border-radius: 6px;
-                                            cursor: pointer;
-                                            font-weight: 600;
-                                            margin-right: 10px;
-                                            transition: all 0.3s ease;
-                                        }
-                                        .upload-file-input::-webkit-file-upload-button:hover {
-                                            transform: translateY(-2px);
-                                            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-                                        }
-                                        .upload-help-text {
-                                            display: flex;
-                                            align-items: center;
-                                            margin-top: 8px;
-                                            padding: 10px 12px;
-                                            background: #e8f4f8;
-                                            border-left: 4px solid #3498db;
-                                            border-radius: 4px;
-                                            font-size: 12px;
-                                            color: #2980b9;
-                                        }
-                                        .upload-help-text i {
-                                            margin-right: 8px;
-                                            font-size: 14px;
-                                        }
-                                        .file-type-badges {
-                                            display: flex;
-                                            gap: 6px;
-                                            margin-top: 10px;
-                                            flex-wrap: wrap;
-                                        }
-                                        .file-badge {
-                                            padding: 4px 10px;
-                                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                            color: white;
-                                            border-radius: 12px;
-                                            font-size: 11px;
-                                            font-weight: 600;
-                                            letter-spacing: 0.5px;
-                                        }
-                                    </style>
-                                    <form id="uploadDocumentForm" enctype="multipart/form-data" class="upload-document-form">
-                                        <div class="upload-form-group">
-                                            <label class="upload-label">
-                                                <i class="fa fa-file-alt"></i> ${__('document_type')}<span class="text-danger"> *</span>
-                                            </label>
-                                            <select class="upload-select" id="document_type_select" name="document_type" required>
-                                                ${docTypeOptions}
-                                            </select>
-                                        </div>
-                                        <div class="upload-form-group">
-                                            <label class="upload-label">
-                                                <i class="fa fa-paperclip"></i> ${__('select_file')}<span class="text-danger"> *</span>
-                                            </label>
-                                            <div class="upload-file-wrapper">
-                                                <input type="file" class="upload-file-input" id="document_file_input" name="document_file" accept=".pdf,.jpg,.jpeg,.png" required>
-                                            </div>
-                                            <div class="upload-help-text">
-                                                <i class="fa fa-info-circle"></i>
-                                                <span>${__('allowed_formats')}: <strong>PDF, JPG, JPEG, PNG</strong> (Max 5MB)</span>
-                                            </div>
-                                            <div class="file-type-badges">
-                                                <span class="file-badge">📄 PDF</span>
-                                                <span class="file-badge">🖼️ JPG</span>
-                                                <span class="file-badge">🖼️ JPEG</span>
-                                                <span class="file-badge">🖼️ PNG</span>
+                                    <div class="sr-page">
+                                    <form id="uploadDocumentForm" enctype="multipart/form-data" class="sr-form upload-document-form">
+                                        <div class="sr-fsec mb-0">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i> ${__('upload_documents')}</span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-12">
+                                                    <label for="document_type_select">${__('document_type')} <span class="text-danger">*</span></label>
+                                                    <select class="form-control" id="document_type_select" name="document_type" required>
+                                                        ${docTypeOptions}
+                                                    </select>
+                                                </div>
+                                                <div class="sr-fcol c-12">
+                                                    <label for="document_file_input">${__('select_file')} <span class="text-danger">*</span></label>
+                                                    <label class="sr-filepick is-lg" for="document_file_input">
+                                                        <input type="file" id="document_file_input" name="document_file" accept=".pdf,.jpg,.jpeg,.png" required>
+                                                        <i class="mdi mdi-cloud-upload"></i>
+                                                        <span><b class="js-file-name">${__('choose_file', 'Choose a file or drop it here')}</b>
+                                                        <small>${__('allowed_formats')}: PDF, JPG, JPEG, PNG (Max 5MB)</small></span>
+                                                    </label>
+                                                </div>
                                             </div>
                                         </div>
-                                        <input type="hidden" name="emp_id" value="${empid}">
+                                        <input type="hidden" name="emp_id" value="${srEsc(empid)}">
                                         <input type="hidden" name="emptype" value="employee">
                                         <input type="hidden" name="type" value="Upload Documents">
                                     </form>
+                                    </div>
                                 `,
                                 width: '550px',
                                 confirmButtonText: '<i class="fa fa-check"></i> ' + __('submit_request'),
                                 cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),
-                                customClass: {
-                                    confirmButton: 'btn btn-success waves-effect waves-light',
-                                    cancelButton: 'btn btn-danger waves-effect waves-light ml-2',
-                                    popup: 'upload-modal-popup'
-                                },
-                                buttonsStyling: false,
+                                customClass: { popup: 'sr-addline-popup upload-modal-popup' },
+                                confirmButtonColor: APP_COLORS.primary,
+                                didOpen: () => { srBindFilePick($('#uploadDocumentForm')); },
                                 showCancelButton: true,
                                 focusConfirm: false,
                                 showLoaderOnConfirm: true,
-                                allowOutsideClick: () => !Swal.isLoading(),
+                                allowOutsideClick: false,
                                 preConfirm: () => {
                                     const docType = document.getElementById('document_type_select').value;
                                     const fileInput = document.getElementById('document_file_input');
@@ -1982,133 +1886,106 @@ function generateLeaveFormHTML(employeeGender) {
     ];
 
     // Filter leave types based on employee gender
-    const leaveTypes = allLeaveTypes.filter(type => 
+    const leaveTypes = allLeaveTypes.filter(type =>
         type.gender === null || type.gender === employeeGender
     );
-    
-    let leaveOptions = leaveTypes.map(type => 
+
+    let leaveOptions = leaveTypes.map(type =>
         `<option value="${type.value}">${type.label}</option>`
     ).join('');
 
+    const yesNo = (name) => `
+                    <div class="sr-attach-choice" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+                        <label class="sr-choice"><input type="radio" id="${name.split('_')[0]}_yes" name="${name}" value="yes" required><span><i class="mdi mdi-check-circle"></i> ${__('yes')}</span></label>
+                        <label class="sr-choice"><input type="radio" id="${name.split('_')[0]}_no" name="${name}" value="no" required><span><i class="mdi mdi-close-circle"></i> ${__('no')}</span></label>
+                    </div>`;
+
     return `
-        <form id="applyLeaveForm" class="text-left" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
-                <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
-                    <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
-                    ${leaveOptions}
-                </select>
+        <div class="sr-page">
+        <form id="applyLeaveForm" class="sr-form" enctype="multipart/form-data">
+            <div class="sr-fsec">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-format-list-bulleted"></i> ${__('leave_type')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="leave_type_select">${__('leave_type')} <span class="text-danger">*</span></label>
+                        <select id="leave_type_select" name="leave_type" class="form-control" style="width: 100%;" required>
+                            <option value="" selected disabled>${__('select_leave_type_placeholder')}</option>
+                            ${leaveOptions}
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <!-- Date Section - Always shown for all leave types -->
-            <div id="dateSection" class="d-none">
-                <div class="form-row">
-                    <div class="form-group col-md-4">
+            <div id="dateSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-range"></i> ${__('start_date')} / ${__('end_date')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-4">
                         <label for="start_date">${__('start_date')} <span class="text-danger">*</span></label>
                         <input type="text" name="start_date" id="start_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
-                    <div class="form-group col-md-4">
+                    <div class="sr-fcol c-4">
                         <label for="end_date">${__('end_date')} <span class="text-danger">*</span></label>
                         <input type="text" name="end_date" id="end_date" class="form-control datepicker" placeholder="YYYY-MM-DD" readonly required>
                     </div>
-                    <div class="form-group col-md-4">
+                    <div class="sr-fcol c-4">
                         <label for="total_days">${__('total_days')}</label>
-                        <input type="text" name="total_days" id="total_days" class="form-control" placeholder="${__('auto_calculated_placeholder')}" readonly style="cursor: not-allowed; background-color: #e9ecef;">
+                        <input type="text" name="total_days" id="total_days" class="form-control" placeholder="${__('auto_calculated_placeholder')}" readonly style="cursor: not-allowed;">
                     </div>
                 </div>
             </div>
 
             <!-- Trip Destination - Only for Business Trip -->
-            <div id="tripSection" class="form-group d-none">
-                <label for="trip_destination">${__('destination')} <span class="text-danger">*</span></label>
-                <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}" required>
+            <div id="tripSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-map-marker"></i> ${__('destination')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="trip_destination">${__('destination')} <span class="text-danger">*</span></label>
+                        <input type="text" name="trip_destination" id="trip_destination" class="form-control" placeholder="${__('destination_placeholder')}" required>
+                    </div>
+                </div>
             </div>
 
             <!-- Accommodation Question - Only for Business Trip -->
-            <div id="accommodationSection" class="form-group d-none">
-                <label>${__('accommodation_provided')} <span class="text-danger">*</span></label>
-                <div class="d-flex" style="gap: 20px;">
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="accommodation_yes" name="accommodation_provided" value="yes" required>
-                        <label class="custom-control-label" for="accommodation_yes">${__('yes')}</label>
-                    </div>
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="accommodation_no" name="accommodation_provided" value="no" required>
-                        <label class="custom-control-label" for="accommodation_no">${__('no')}</label>
-                    </div>
-                </div>
+            <div id="accommodationSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-hotel"></i> ${__('accommodation_provided')} <span class="text-danger">*</span></span></div>
+                <div class="sr-fsec-body">${yesNo('accommodation_provided')}</div>
             </div>
 
             <!-- Transportation Question - Only for Business Trip -->
-            <div id="transportationSection" class="form-group d-none">
-                <label>${__('transportation_provided')} <span class="text-danger">*</span></label>
-                <div class="d-flex" style="gap: 20px;">
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="transportation_yes" name="transportation_provided" value="yes" required>
-                        <label class="custom-control-label" for="transportation_yes">${__('yes')}</label>
-                    </div>
-                    <div class="custom-control custom-radio">
-                        <input type="radio" class="custom-control-input" id="transportation_no" name="transportation_provided" value="no" required>
-                        <label class="custom-control-label" for="transportation_no">${__('no')}</label>
+            <div id="transportationSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-car"></i> ${__('transportation_provided')} <span class="text-danger">*</span></span></div>
+                <div class="sr-fsec-body">${yesNo('transportation_provided')}</div>
+            </div>
+
+            <!-- Reason/Notes - Required for ALL leave types -->
+            <div id="reasonSection" class="sr-fsec d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-comment-text-outline"></i> ${__('reason_notes')}</span></div>
+                <div class="sr-fgrid">
+                    <div class="sr-fcol c-12">
+                        <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
+                        <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Reason/Notes - Required for ALL leave types -->
-            <div id="reasonSection" class="form-group d-none">
-                <label for="reason">${__('reason_notes')} <span class="text-danger">*</span></label>
-                <textarea name="reason" id="reason" class="form-control" rows="3" placeholder="${__('reason_placeholder')}" required></textarea>
             </div>
 
             <!-- Attachment - Required for ALL leave types -->
-            <div id="attachmentSection" class="form-group d-none">
-                <label for="attachment">${__('attach_document_required')} <span class="text-danger">*</span></label>
-                <div id="leaveDropzone" class="dropzone" style="border: 2px dashed #4e73df; border-radius: 8px; padding: 20px; min-height: 150px; background: #f8f9fc; cursor: pointer; transition: all 0.3s ease;">
-                    <div class="dz-message" style="margin: 20px 0; text-align: center;">
-                        <i class="fa fa-cloud-upload-alt" style="font-size: 48px; color: #4e73df; margin-bottom: 15px; display: block;"></i>
-                        <h4 style="margin: 15px 0 10px 0; color: #495057; font-weight: 600;">${__('drag_drop_files') || 'Drag & Drop files here'}</h4>
-                        <p style="color: #6c757d; margin: 10px 0; font-size: 14px;">${__('or_click_to_browse') || 'or click to browse'}</p>
-                        <small style="color: #858796; display: block; margin-top: 10px; font-size: 12px;">
-                            <i class="fa fa-info-circle"></i> ${__('attachment_dropzone_help') || '1-10 files • Max 5MB each • PDF, JPG, PNG'}
-                        </small>
+            <div id="attachmentSection" class="sr-fsec mb-0 d-none">
+                <div class="sr-fsec-head"><span><i class="mdi mdi-paperclip"></i> ${__('attach_document_required')} <span class="text-danger">*</span></span></div>
+                <div class="sr-fsec-body">
+                    <div id="leaveDropzone" class="dropzone sr-dropzone">
+                        <div class="dz-message">
+                            <i class="mdi mdi-cloud-upload"></i>
+                            <b>${__('drag_drop_files') || 'Drag & Drop files here'}</b>
+                            <small>${__('or_click_to_browse') || 'or click to browse'}</small>
+                            <small>${__('attachment_dropzone_help') || '1-10 files • Max 5MB each • PDF, JPG, PNG'}</small>
+                        </div>
                     </div>
+                    <span class="sr-fhint"><i class="mdi mdi-information-outline"></i> ${__('attachment_multiple_help') || 'You can upload 1-10 files. Each file must be less than 5MB. Accepted formats: PDF, JPG, PNG'}</span>
                 </div>
-                <small class="form-text text-muted mt-2" style="display: block; margin-top: 8px;">
-                    <i class="fa fa-info-circle"></i> ${__('attachment_multiple_help') || 'You can upload 1-10 files. Each file must be less than 5MB. Accepted formats: PDF, JPG, PNG'}
-                </small>
-                <style>
-                    #leaveDropzone:hover {
-                        border-color: #2e59d9;
-                        background: #eef2ff;
-                    }
-                    #leaveDropzone .dz-preview {
-                        margin: 10px;
-                    }
-                    #leaveDropzone .dz-preview .dz-image {
-                        border-radius: 8px;
-                    }
-                    #leaveDropzone .dz-preview .dz-details {
-                        background: #fff;
-                        padding: 8px;
-                        border-radius: 4px;
-                    }
-                    #leaveDropzone .dz-preview .dz-remove {
-                        color: #e74a3b;
-                        font-size: 12px;
-                        text-decoration: none;
-                        cursor: pointer;
-                    }
-                    #leaveDropzone .dz-preview .dz-remove:hover {
-                        color: #c9302c;
-                        text-decoration: underline;
-                    }
-                    #leaveDropzone.dz-drag-hover {
-                        border-color: #2e59d9;
-                        background: #e3f2fd;
-                    }
-                </style>
             </div>
         </form>
+        </div>
     `;
 }
 
@@ -2204,34 +2081,18 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                     icon: 'warning',
                     title: checkResponse.title || __('active_rejoin_request_exists'),
                     html: `
-                        <div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('request_number')}:</strong> 
-                                <span style="color: #d32f2f;">${checkResponse.active_request.request_inv_no}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('status')}:</strong> 
-                                <span class="status" style="color: #d32f2f; font-weight: bold;">${checkResponse.active_request.status.toUpperCase()}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('requested_rejoin_date')}:</strong> 
-                                <span>${checkResponse.active_request.requested_rejoin_date}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('submitted_at')}:</strong> 
-                                <span>${checkResponse.active_request.requested_at}</span>
-                            </div>
-                            <hr style="margin: 10px 0;">
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('associated_vacation')}:</strong> 
-                                <span>${checkResponse.active_request.vacation_inv_no}</span>
-                            </div>
-                            <div>
-                                <strong>${__('vacation_type')}:</strong> 
-                                <span class="vacType">${checkResponse.active_request.vac_type}</span>
-                            </div>
+                        <div class="sr-form">
+                            <dl class="sr-kv">
+                                <div class="row-kv"><dt>${__('request_number')}</dt><dd class="sr-mono">${srEsc(checkResponse.active_request.request_inv_no)}</dd></div>
+                                <div class="row-kv"><dt>${__('status')}</dt><dd><span class="sr-pill sr-pill-xs tone-amber status">${srEsc(String(checkResponse.active_request.status || '').toUpperCase())}</span></dd></div>
+                                <div class="row-kv"><dt>${__('requested_rejoin_date')}</dt><dd>${srEsc(checkResponse.active_request.requested_rejoin_date)}</dd></div>
+                                <div class="row-kv"><dt>${__('submitted_at')}</dt><dd>${srEsc(checkResponse.active_request.requested_at)}</dd></div>
+                                <div class="row-kv"><dt>${__('associated_vacation')}</dt><dd class="sr-mono">${srEsc(checkResponse.active_request.vacation_inv_no)}</dd></div>
+                                <div class="row-kv"><dt>${__('vacation_type')}</dt><dd class="vacType">${srEsc(checkResponse.active_request.vac_type)}</dd></div>
+                            </dl>
                         </div>
                     `,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
                     didOpen: () => {
                         var vacType = checkResponse.active_request.vac_type;
                         var statusCkh = checkResponse.active_request.status.toUpperCase();
@@ -2261,18 +2122,13 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                 icon: 'question',
                 title: '<i class="fa fa-redo-alt"></i> ' + __('rejoin_request'),
                 html: `
-                    <div style="text-align: left; padding: 20px 0;">
-                        <p style="font-size: 16px; margin-bottom: 15px;">
-                            ${__('are_you_sure_rejoin')}
-                        </p>
-                        <div style="background-color: #e8f4f8; border-left: 4px solid #17a2b8; padding: 12px; border-radius: 4px;">
-                            <p style="margin: 0; color: #555;">
-                                <strong>${__('this_action_will_submit_rejoin_request')}</strong>
-                            </p>
-                        </div>
+                    <div class="sr-form">
+                        <p style="font-size: 14px; color: var(--sr-text); margin-bottom: 12px;">${__('are_you_sure_rejoin')}</p>
+                        <div class="sr-notice tone-sky mb-0"><i class="mdi mdi-information-outline"></i><div>${__('this_action_will_submit_rejoin_request')}</div></div>
                     </div>
                 `,
-                width: '450px',
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                width: '480px',
                 showCancelButton: true,
                 confirmButtonText: '<i class="fa fa-check"></i> ' + __('confirm'),
                 cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel'),

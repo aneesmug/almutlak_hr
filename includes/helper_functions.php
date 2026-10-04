@@ -1337,13 +1337,16 @@ if (!function_exists('send_json_response')) {
             $response = array_merge($response, $additional_data);
         }
 
+        // Substitute invalid UTF-8 so json_encode never returns false (blank response)
+        $json = json_encode($response, JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+
         if (headers_sent($file, $line)) {
             // Still try to output JSON, but status code might be wrong
-            echo json_encode($response);
+            echo $json;
         } else {
             http_response_code($http_status_code);
             header('Content-Type: application/json; charset=utf-8'); // Ensure charset
-            echo json_encode($response);
+            echo $json;
         }
         exit(); // Terminate script after sending JSON response
     }

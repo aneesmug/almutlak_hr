@@ -35,6 +35,7 @@ $(document).on('click', '.applyLoan', async function(e) {
     e.preventDefault();
     const emp_id = $(this).data('emp_id');
     const user_type = $(this).data('user_type');
+    if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
 
     // Build new requirement form without EOS/40% blocks
     Swal.fire({
@@ -77,22 +78,16 @@ $(document).on('click', '.applyLoan', async function(e) {
                         }
                     </style>
                 </div>
-                <div id="eligibility_info" class="alert alert-info" style="display:none; margin-bottom: 20px;"></div>
+                <div id="eligibility_info" class="alert alert-info" style="display:none; margin-bottom: 12px;"></div>
                 <div class="vacation-card" id="eos_info_card" style="display:none; margin-bottom: 20px;">
                     <div class="vacation-card-header">
                         <i class="fa fa-briefcase"></i>
                         ${__('end_of_service_details') || 'End of Service Details'}
                     </div>
-                    <div style="padding:15px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                            <span><i class="fa fa-dollar-sign"></i> ${__('eos_total_benefit') || 'Calculated EOS Benefit'}:</span>
-                            <strong id="eos_total_span">-</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between;">
-                            <span><i class="fa fa-percent"></i> ${__('eos_max_40pct') || 'Max Allowed (40%)'}:</span>
-                            <strong id="eos_max_span">-</strong>
-                        </div>
-                    </div>
+                    <dl class="sr-kv">
+                        <div class="row-kv"><dt><i class="fa fa-dollar-sign"></i> ${__('eos_total_benefit') || 'Calculated EOS Benefit'}</dt><dd id="eos_total_span">-</dd></div>
+                        <div class="row-kv"><dt><i class="fa fa-percent"></i> ${__('eos_max_40pct') || 'Max Allowed (40%)'}</dt><dd id="eos_max_span">-</dd></div>
+                    </dl>
                 </div>
                 <div class="vacation-card" id="housing_months_group" style="display:none; margin-bottom: 20px;">
                     <div class="vacation-card-header">
@@ -139,14 +134,8 @@ $(document).on('click', '.applyLoan', async function(e) {
         allowOutsideClick: false,
         confirmButtonColor: '#4e73df',
         cancelButtonColor: '#e74a3b',
-        customClass: {
-            popup: 'vacation-modal-popup',
-            title: 'vacation-modal-title',
-            confirmButton: 'btn-modern-confirm',
-            cancelButton: 'btn-modern-cancel'
-        },
-        width: '95%',
-        padding: '20px',
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        width: (window.innerWidth && window.innerWidth < 768) ? '95%' : '760px',
         showLoaderOnConfirm: true,
         didOpen: () => {
             const confirmButton = Swal.getConfirmButton();
@@ -592,12 +581,7 @@ $(document).on('click', '.addManualPayment', async function(e) {
                 confirmButtonColor: '#4e73df',
                 cancelButtonColor: '#e74a3b',
                 allowOutsideClick: false,
-                customClass: {
-                    popup: 'vacation-modal-popup',
-                    title: 'vacation-modal-title',
-                    confirmButton: 'btn-modern-confirm',
-                    cancelButton: 'btn-modern-cancel'
-                },
+                customClass: { popup: 'sr-addline-popup sr-page' },
                 width: '600px',
                 showLoaderOnConfirm: true,
                 didOpen: () => {

@@ -193,6 +193,8 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <!-- Latest compiled and minified CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/css/bootstrap-datepicker.min.css" rel="stylesheet" />
@@ -2693,10 +2695,9 @@ RTL Support
                         modalContainer.find('.applyLoan').on('click', function(e) {
                             e.preventDefault();
                             var emp_id = $(this).data('emp_id');
-                            var user_type = $(this).data('user_type');
                             Swal.close();
                             setTimeout(function() {
-                                openLoanWizard(emp_id, user_type);
+                                $('.applyLoan[data-emp_id="' + emp_id + '"]').not('.swal2-html-container *').first().trigger('click');
                             }, 100);
                         });
 
@@ -2922,74 +2923,54 @@ RTL Support
             const firstVacation = vacations[0]; // Must rejoin this one first
             
             // Build vacation cards HTML
-            let vacationsHtml = '<div class=\"vacations-list-container\" style=\"max-height: 400px; overflow-y: auto; padding: 10px;\">';
-            
+            const srEsc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
+            let vacationsHtml = '<div class="vacations-list-container sr-rj-list">';
+
             vacations.forEach((vac, index) => {
                 const isFirst = (index === 0);
                 const vacType = vac.fly_type ? `${vac.vac_type} (${vac.fly_type})` : vac.vac_type;
                 const startDate = new Date(vac.start_date).toLocaleDateString();
                 const returnDate = vac.return_date ? new Date(vac.return_date).toLocaleDateString() : 'N/A';
-                
+
                 // Check if rejoin request already submitted
                 const hasRejoinRequest = vac.rejoin_request_id && vac.rejoin_status;
                 const isRejoinPending = hasRejoinRequest && vac.rejoin_status === 'pending';
                 const isRejoinApproved = hasRejoinRequest && vac.rejoin_status === 'approved';
-                
-                // Determine card styling based on status
-                let borderColor = '#e9ecef';
-                let backgroundColor = '#f8f9fa';
+
+                // Card tone + status pill
+                let tone = 'is-slate';
                 let statusBadge = '';
-                
                 if (isFirst && !hasRejoinRequest) {
-                    borderColor = '#ffc107';
-                    backgroundColor = '#fffbf0';
-                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #ffc107; color: #000; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">⚠️ REJOIN FIRST</div>';
+                    tone = 'is-amber';
+                    statusBadge = '<span class="sr-pill sr-pill-xs tone-amber"><i class="fa fa-exclamation-triangle"></i> <?= __('rejoin_first', 'Rejoin first') ?></span>';
                 } else if (isRejoinPending) {
-                    borderColor = '#17a2b8';
-                    backgroundColor = '#e7f6f8';
-                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #17a2b8; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">⏳ PENDING APPROVAL</div>';
+                    tone = 'is-sky';
+                    statusBadge = '<span class="sr-pill sr-pill-xs tone-sky"><i class="fa fa-hourglass-half"></i> <?= __('pending_approval', 'Pending approval') ?></span>';
                 } else if (isRejoinApproved) {
-                    borderColor = '#28a745';
-                    backgroundColor = '#e8f5e9';
-                    statusBadge = '<div style=\"position: absolute; top: 10px; right: 10px; background: #28a745; color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;\">✓ APPROVED</div>';
+                    tone = 'is-green';
+                    statusBadge = '<span class="sr-pill sr-pill-xs tone-green"><i class="fa fa-check"></i> <?= __('approved', 'Approved') ?></span>';
                 }
-                
+
                 vacationsHtml += `
-                    <div class=\"vacation-card\" style=\"
-                        border: 2px solid ${borderColor}; 
-                        border-radius: 8px; 
-                        padding: 15px; 
-                        margin-bottom: 10px;
-                        background: ${backgroundColor};
-                        position: relative;
-                    \">
-                        ${statusBadge}
-                        <div style=\"display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;\">
+                    <div class="vacation-item sr-rj-item ${tone}">
+                        <div class="sr-rj-top">
                             <div>
-                                <div style=\"font-weight: 600; font-size: 16px; color: #212529;\">#${index + 1} - ${vac.request_inv_no}</div>
-                                <div style=\"color: #6c757d; font-size: 13px; margin-top: 4px;\">
-                                    <i class=\"fa fa-calendar\"></i> ${vacType} 
-                                    <span style=\"margin-left: 10px;\"><i class=\"fa fa-clock\"></i> ${vac.vacdays} ${vac.vacdays > 1 ? '<?= __('days') ?>' : '<?= __('day') ?>'}</span>
-                                </div>
+                                <div class="sr-rj-title">#${index + 1} &middot; ${srEsc(vac.request_inv_no)}</div>
+                                <div class="sr-rj-sub"><i class="fa fa-calendar"></i> ${srEsc(vacType)} &nbsp; <i class="fa fa-clock"></i> ${srEsc(vac.vacdays)} ${vac.vacdays > 1 ? '<?= __('days') ?>' : '<?= __('day') ?>'}</div>
                             </div>
+                            ${statusBadge}
                         </div>
-                        <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;\">
-                            <div>
-                                <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('start_date') ?></div>
-                                <div style=\"font-weight: 500;\">${startDate}</div>
-                            </div>
-                            <div>
-                                <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('return_date') ?></div>
-                                <div style=\"font-weight: 500;\">${returnDate}</div>
-                            </div>
-                        </div>
-                        ${isRejoinPending ? '<div style=\"margin-top: 10px; padding: 8px; background: #d1ecf1; border-radius: 4px; font-size: 12px; color: #0c5460;\"><i class=\"fa fa-hourglass-half\"></i> <?= __('rejoin_request_submitted_waiting', 'Rejoin request submitted and waiting for approval') ?></div>' : ''}
-                        ${isRejoinApproved ? '<div style=\"margin-top: 10px; padding: 8px; background: #d4edda; border-radius: 4px; font-size: 12px; color: #155724;\"><i class=\"fa fa-check-circle\"></i> <?= __('rejoin_request_approved', 'Rejoin request has been approved') ?></div>' : ''}
-                        ${!isFirst && !hasRejoinRequest ? '<div style=\"margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 12px; color: #856404;\"><i class=\"fa fa-lock\"></i> <?= __('locked_rejoin_first_vacation', 'Complete rejoin for previous vacation first') ?></div>' : ''}
+                        <dl class="sr-kv">
+                            <div class="row-kv"><dt><?= __('start_date') ?></dt><dd>${srEsc(startDate)}</dd></div>
+                            <div class="row-kv"><dt><?= __('return_date') ?></dt><dd>${srEsc(returnDate)}</dd></div>
+                        </dl>
+                        ${isRejoinPending ? '<div class="sr-notice tone-sky is-compact mb-0 mt-2"><i class="fa fa-hourglass-half"></i><div><?= __('rejoin_request_submitted_waiting', 'Rejoin request submitted and waiting for approval') ?></div></div>' : ''}
+                        ${isRejoinApproved ? '<div class="sr-notice tone-green is-compact mb-0 mt-2"><i class="fa fa-check-circle"></i><div><?= __('rejoin_request_approved', 'Rejoin request has been approved') ?></div></div>' : ''}
+                        ${!isFirst && !hasRejoinRequest ? '<div class="sr-notice tone-amber is-compact mb-0 mt-2"><i class="fa fa-lock"></i><div><?= __('locked_rejoin_first_vacation', 'Complete rejoin for previous vacation first') ?></div></div>' : ''}
                     </div>
                 `;
             });
-            
+
             vacationsHtml += '</div>';
             
             // Determine if we can show rejoin button
@@ -2999,35 +2980,25 @@ RTL Support
             Swal.fire({
                 title: `<i class=\"fa fa-plane-arrival\"></i> <?= __('active_vacations') ?>`,
                 html: `
-                    <div style=\"text-align: left; margin-bottom: 20px;\">
-                        <div style=\"background: #e7f3ff; border-left: 4px solid #0066cc; padding: 12px; border-radius: 4px; margin-bottom: 15px;\">
-                            <div style=\"font-weight: 600; color: #0066cc; margin-bottom: 4px;\">
-                                <i class=\"fa fa-info-circle\"></i> <?= __('sequential_rejoin_required', 'Sequential Rejoin Required') ?>
-                            </div>
-                            <div style=\"font-size: 13px; color: #495057;\">
-                                <?= __('rejoin_order_message', 'You have {count} active vacation(s). Please rejoin them in order starting from the oldest.') ?>
-                            </div>
+                    <div class="sr-form">
+                        <div class="sr-notice tone-sky" style="margin-bottom:12px;">
+                            <i class="mdi mdi-information-outline"></i>
+                            <div><strong><?= __('sequential_rejoin_required', 'Sequential Rejoin Required') ?></strong><br>
+                            <?= __('rejoin_order_message', 'You have {count} active vacation(s). Please rejoin them in order starting from the oldest.') ?></div>
                         </div>
-                        <div style=\"text-align: center; margin-bottom: 15px;\">
-                            <div style=\"display: inline-block; background: #28a745; color: white; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600;\">
-                                ${empName}
-                            </div>
-                        </div>
+                        <div class="mb-2"><span class="sr-chip"><i class="fa fa-user"></i> ${srEsc(empName)}</span></div>
+                        ${vacationsHtml}
                     </div>
-                    ${vacationsHtml}
                 `.replace('{count}', totalCount),
                 showCancelButton: true,
                 confirmButtonText: canRejoin ? `<i class=\"fa fa-check\"></i> <?= __('rejoin_first_vacation', 'Rejoin First Vacation') ?>` : `<i class=\"fa fa-times\"></i> <?= __('close') ?>`,
                 cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
-                confirmButtonColor: canRejoin ? '#ffc107' : APP_COLORS.secondary,
+                confirmButtonColor: canRejoin ? APP_COLORS.primary : APP_COLORS.secondary,
                 cancelButtonColor: APP_COLORS.secondary,
                 showCancelButton: canRejoin,
                 allowOutsideClick: false,
                 width: '650px',
-                customClass: {
-                    confirmButton: canRejoin ? 'btn btn-warning' : 'btn btn-secondary',
-                    cancelButton: 'btn btn-secondary'
-                }
+                customClass: { popup: 'sr-addline-popup sr-page' }
             }).then((result) => {
                 if (result.isConfirmed && canRejoin) {
                     // Start rejoin process for first vacation
@@ -3047,57 +3018,47 @@ RTL Support
             const defaultRejoinDate = normalizedReturn || todayIso;
             
             Swal.fire({
-                title: `<i class=\"fa fa-plane-arrival\"></i> <?= __('rejoin_request') ?>`,
+                title: `<i class="fa fa-plane-arrival"></i> <?= __('rejoin_request') ?>`,
                 html: `
-                    <div style=\"text-align: left;\">
-                        <div style=\"background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;\">
-                            <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;\">
-                                <div>
-                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('request_number') ?></div>
-                                    <div style=\"font-weight: 600;\">${vacation.request_inv_no}</div>
-                                </div>
-                                <div>
-                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('vacation_type') ?></div>
-                                    <div style=\"font-weight: 600;\">${vacType}</div>
-                                </div>
-                                <div>
-                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('days') ?></div>
-                                    <div style=\"font-weight: 600;\">${vacation.vacdays}</div>
-                                </div>
-                                <div>
-                                    <div style=\"color: #6c757d; font-size: 11px; text-transform: uppercase; margin-bottom: 4px;\"><?= __('expected_return') ?></div>
-                                    <div style=\"font-weight: 600;\">${returnDate || 'N/A'}</div>
-                                </div>
+                    <div class="sr-form">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-airplane-landing"></i> <?= __('vacation_details', 'Vacation Details') ?></span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-6"><dl class="sr-kv">
+                                    <div class="row-kv"><dt><?= __('request_number') ?></dt><dd class="sr-mono">${$('<div>').text(vacation.request_inv_no || '').html()}</dd></div>
+                                    <div class="row-kv"><dt><?= __('days') ?></dt><dd>${$('<div>').text(vacation.vacdays || '').html()}</dd></div>
+                                </dl></div>
+                                <div class="sr-fcol c-6"><dl class="sr-kv">
+                                    <div class="row-kv"><dt><?= __('vacation_type') ?></dt><dd>${$('<div>').text(vacType || '').html()}</dd></div>
+                                    <div class="row-kv"><dt><?= __('expected_return') ?></dt><dd>${$('<div>').text(returnDate || 'N/A').html()}</dd></div>
+                                </dl></div>
                             </div>
                         </div>
-                        
+
                         ${remainingCount > 1 ? `
-                            <div style=\"background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; border-radius: 4px; margin-bottom: 20px;\">
-                                <div style=\"font-size: 13px; color: #856404;\">
-                                    <i class=\"fa fa-exclamation-triangle\"></i> 
-                                    <?= __('more_vacations_pending', 'You have {count} more vacation(s) pending after this one.') ?>
-                                </div>
+                            <div class="sr-notice tone-amber" style="margin-bottom:12px;">
+                                <i class="mdi mdi-alert"></i>
+                                <div><?= __('more_vacations_pending', 'You have {count} more vacation(s) pending after this one.') ?></div>
                             </div>
                         `.replace('{count}', remainingCount - 1) : ''}
-                        
-                        <div class="form-group">
-                            <label for="rejoinDate" style="font-weight: 600; color: #212529; margin-bottom: 8px; display: block;">
-                                <i class="fa fa-calendar"></i> <?= __('actual_rejoin_date') ?> <span style="color: red;">*</span>
-                            </label>
-                            <input type="text" id="rejoinDate" class="form-control" value="${defaultRejoinDate}" placeholder="YYYY-MM-DD" required style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
-                            <small class="text-muted" style="display:block; margin-top:6px;">
-                                <?= __('expected_return') ?>: ${normalizedReturn || '—'}
-                            </small>
-                        </div>
-                        
-                        <div class=\"form-group\" style=\"margin-top: 15px;\">
-                            <label for=\"rejoinReason\" style=\"font-weight: 600; color: #212529; margin-bottom: 8px; display: block;\">
-                                <i class=\"fa fa-comment\"></i> <?= __('reason_notes') ?>
-                            </label>
-                            <textarea id=\"rejoinReason\" class=\"form-control\" rows=\"3\" placeholder=\"<?= __('optional_notes', 'Optional notes...') ?>\" style=\"width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;\"></textarea>
+
+                        <div class="sr-fsec mb-0">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-check"></i> <?= __('actual_rejoin_date') ?></span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-12">
+                                    <label for="rejoinDate"><?= __('actual_rejoin_date') ?> <span class="text-danger">*</span></label>
+                                    <input type="text" id="rejoinDate" class="form-control" value="${defaultRejoinDate}" placeholder="YYYY-MM-DD" autocomplete="off" required>
+                                    <span class="sr-fhint"><?= __('expected_return') ?>: ${normalizedReturn || '—'}</span>
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <label for="rejoinReason"><?= __('reason_notes') ?></label>
+                                    <textarea id="rejoinReason" class="form-control" rows="3" placeholder="<?= __('optional_notes', 'Optional notes...') ?>"></textarea>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `,
+                customClass: { popup: 'sr-addline-popup sr-page' },
                 showCancelButton: true,
                 confirmButtonText: `<i class=\"fa fa-paper-plane\"></i> <?= __('submit_rejoin') ?>`,
                 cancelButtonText: `<i class=\"fa fa-times\"></i> <?= __('cancel') ?>`,
