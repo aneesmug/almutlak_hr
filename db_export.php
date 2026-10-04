@@ -31,36 +31,20 @@ if ($exportKey === '') {
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .db-export-header { display:flex; align-items:center; gap:14px; margin-bottom:24px; }
-        .db-export-header .icon-circle {
-            width:48px; height:48px; border-radius:50%; background:#eef2ff; color:#4f5cd4;
-            display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+        .dbx-key { display: flex; gap: 8px; align-items: stretch; }
+        .dbx-key .form-control { flex: 1 1 auto; font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; letter-spacing: .02em; }
+        .dbx-cmd {
+            background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 12px 16px;
+            font-family: "SFMono-Regular", Consolas, monospace; font-size: 13px; overflow-x: auto; margin-bottom: 8px;
         }
-        .db-export-header h4 { margin:0; }
-        .db-export-header p { margin:2px 0 0; color:#6c757d; font-size:0.9rem; }
-        .section-card {
-            background:#fff; border:1px solid #eef0f5; border-radius:10px;
-            padding:22px 24px; margin-bottom:20px;
-        }
-        .section-card h6 {
-            font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:.04em;
-            color:#8892a3; margin-bottom:16px; display:flex; align-items:center; gap:8px;
-        }
-        .section-card h6 i { color:#4f5cd4; }
-        .key-display {
-            font-family: 'Consolas', monospace; word-break: break-all; background:#f7f8fb !important;
-            font-size:0.92rem; letter-spacing:.02em;
-        }
-        .key-input-group .btn { font-size:0.85rem; }
-        .import-cmd {
-            background:#282c34; color:#e6e6e6; border-radius:8px; padding:12px 16px;
-            font-family:'Consolas', monospace; font-size:0.85rem; overflow-x:auto; margin-bottom:8px;
-        }
+        .dbx-max { max-width: 980px; }
     </style>
     <?php if ($is_rtl ?? false) : ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -84,95 +68,86 @@ if ($exportKey === '') {
 
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
-                <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="db-export-header">
-                                <div class="icon-circle"><i class="fa fa-database"></i></div>
-                                <div>
-                                    <h4>Database Export <span class="text-muted font-weight-normal">&middot; Live &rarr; Local</span></h4>
-                                    <p>Pull a diff-friendly copy of this server's data down to your local environment.</p>
-                                </div>
-                            </div>
+            <div class="content sr-page">
+                <div class="container-fluid dbx-max">
 
-                            <div class="alert alert-info d-flex align-items-start" role="alert">
-                                <i class="fa fa-info-circle mt-1 mr-2"></i>
-                                <div>
-                                    Generates a <code>.sql</code> file of this server's database. Every row is written as
-                                    <code>INSERT ... ON DUPLICATE KEY UPDATE</code>, so running the file against your
-                                    local database only changes what's different: existing local rows sharing a
-                                    primary/unique key get updated to match the live values, new rows are inserted,
-                                    and anything that only exists locally (test data) is left untouched.
-                                </div>
-                            </div>
-                            <div class="alert alert-warning d-flex align-items-start" role="alert">
-                                <i class="fa fa-exclamation-triangle mt-1 mr-2"></i>
-                                <div>
-                                    <span class="badge badge-warning mr-1">System admin only</span>
-                                    Contains full employee data including salaries and ID numbers. Keep the
-                                    exported file and the key below private.
-                                </div>
-                            </div>
-
-                            <div class="section-card">
-                                <h6><i class="fa fa-key"></i> Export Key</h6>
-                                <div class="form-group mb-2">
-                                    <div class="input-group input-group-lg key-input-group">
-                                        <input type="text" class="form-control key-display" id="exportKeyField" value="<?= htmlspecialchars($exportKey) ?>" readonly>
-                                        <div class="input-group-append">
-                                            <button type="button" class="btn btn-outline-secondary" id="copyKeyBtn" title="Copy key to clipboard">
-                                                <i class="fa fa-copy"></i> Copy
-                                            </button>
-                                            <button type="button" class="btn btn-outline-danger" id="regenKeyBtn" title="Generate a new key">
-                                                <i class="fa fa-sync-alt"></i> Regenerate
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <small class="form-text text-muted">
-                                    <i class="fa fa-clock"></i> One-time use - this key stops working right after your next successful export/import. Come back here for a new one each time.
-                                </small>
-                            </div>
-
-                            <div class="section-card">
-                                <h6><i class="fa fa-download"></i> Download Export</h6>
-                                <form method="POST" action="download_db_export.php" target="_blank" id="exportForm">
-                                    <input type="hidden" name="export_key" value="<?= htmlspecialchars($exportKey) ?>">
-
-                                    <div class="row">
-                                        <div class="col-md-7">
-                                            <div class="form-group">
-                                                <label>Only these tables <span class="text-muted font-weight-normal">(optional)</span></label>
-                                                <input type="text" class="form-control" name="tables"
-                                                    placeholder="e.g. employees, emp_salary, emp_vacation, payrolls">
-                                                <small class="form-text text-muted">Comma-separated. Leave blank for the entire database.</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-5">
-                                            <div class="form-group">
-                                                <label>Only rows changed since <span class="text-muted font-weight-normal">(optional)</span></label>
-                                                <input type="datetime-local" class="form-control" name="since">
-                                                <small class="form-text text-muted">
-                                                    Only tables with <code>updated_at</code>/<code>created_at</code>; others export in full.
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button type="submit" class="btn btn-primary waves-effect waves-light">
-                                        <i class="fa fa-download"></i> Download Export
-                                    </button>
-                                </form>
-                            </div>
-
-                            <div class="section-card mb-0">
-                                <h6><i class="fa fa-terminal"></i> Importing Locally</h6>
-                                <div class="import-cmd">mysql -u root your_local_db_name &lt; almutlak_export_....sql</div>
-                                <p class="text-muted mb-0">Or use phpMyAdmin &rarr; Import on your local database.</p>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1>Database Export <span style="color: var(--sr-muted); font-weight: 500;">&middot; Live &rarr; Local</span></h1>
+                            <p>Pull a diff-friendly copy of this server's data down to your local environment.</p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <span class="sr-pill tone-amber"><i class="mdi mdi-lock"></i> System admin only</span>
                         </div>
                     </div>
+
+                    <div class="sr-notice tone-sky">
+                        <i class="mdi mdi-information-outline"></i>
+                        <div>
+                            Generates a <code>.sql</code> file of this server's database. Every row is written as
+                            <code>INSERT ... ON DUPLICATE KEY UPDATE</code>, so running the file against your
+                            local database only changes what's different: existing local rows sharing a
+                            primary/unique key get updated to match the live values, new rows are inserted,
+                            and anything that only exists locally (test data) is left untouched.
+                        </div>
+                    </div>
+                    <div class="sr-notice tone-amber">
+                        <i class="mdi mdi-alert"></i>
+                        <div>
+                            Contains full employee data including salaries and ID numbers. Keep the
+                            exported file and the key below private.
+                        </div>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-key"></i> Export Key</h5>
+                            <span class="sr-card-sub"><i class="mdi mdi-clock"></i> One-time use</span>
+                        </div>
+                        <div class="sr-card-body sr-form">
+                            <div class="dbx-key">
+                                <input type="text" class="form-control" id="exportKeyField" value="<?= htmlspecialchars($exportKey) ?>" readonly>
+                                <button type="button" class="sr-btn" id="copyKeyBtn" title="Copy key to clipboard"><i class="mdi mdi-content-copy"></i> Copy</button>
+                                <button type="button" class="sr-btn sr-btn-danger" id="regenKeyBtn" title="Generate a new key"><i class="mdi mdi-refresh"></i> Regenerate</button>
+                            </div>
+                            <small class="sr-fhint">This key stops working right after your next successful export/import. Come back here for a new one each time.</small>
+                        </div>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-download"></i> Download Export</h5>
+                        </div>
+                        <form method="POST" action="download_db_export.php" target="_blank" id="exportForm" class="sr-form">
+                            <input type="hidden" name="export_key" value="<?= htmlspecialchars($exportKey) ?>">
+                            <div class="sr-fgrid" style="padding: 18px;">
+                                <div class="sr-fcol c-7">
+                                    <label>Only these tables <span style="font-weight: 400;">(optional)</span></label>
+                                    <input type="text" class="form-control" name="tables" placeholder="e.g. employees, emp_salary, emp_vacation, payrolls">
+                                    <small class="sr-fhint">Comma-separated. Leave blank for the entire database.</small>
+                                </div>
+                                <div class="sr-fcol c-5">
+                                    <label>Only rows changed since <span style="font-weight: 400;">(optional)</span></label>
+                                    <input type="datetime-local" class="form-control" name="since">
+                                    <small class="sr-fhint">Only tables with <code>updated_at</code>/<code>created_at</code>; others export in full.</small>
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <button type="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-download"></i> Download Export</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-console"></i> Importing Locally</h5>
+                        </div>
+                        <div class="sr-card-body">
+                            <div class="dbx-cmd">mysql -u root your_local_db_name &lt; almutlak_export_....sql</div>
+                            <p class="mb-0" style="color: var(--sr-muted);">Or use phpMyAdmin &rarr; Import on your local database.</p>
+                        </div>
+                    </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -193,7 +168,7 @@ if ($exportKey === '') {
             field.select();
             navigator.clipboard.writeText(field.value);
             const original = this.innerHTML;
-            this.innerHTML = '<i class="fa fa-check"></i> Copied';
+            this.innerHTML = '<i class="mdi mdi-check"></i> Copied';
             setTimeout(() => { this.innerHTML = original; }, 1500);
         });
 

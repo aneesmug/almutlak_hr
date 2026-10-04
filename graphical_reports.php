@@ -281,64 +281,28 @@ if (mysqli_num_rows($query) == 1) {
 
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
     <script src="assets/js/modernizr.min.js"></script>
 
     <style>
-        .filter-section {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
+        .gr-chart-body { padding: 20px 22px; min-height: 420px; }
 
-        .chart-card {
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 24px;
-            min-height: 460px;
+        /* Summary row (filled by JS: .summary-item > .summary-value + .summary-label) */
+        .sr-page .chart-summary {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+            margin-bottom: 18px;
         }
+        .sr-page .chart-summary .summary-item {
+            position: relative; padding: 12px 16px 12px 20px; border-radius: 12px; overflow: hidden;
+            border: 1px solid var(--sr-border); background: var(--sr-surface-2);
+        }
+        .sr-page .chart-summary .summary-item::before { content: ''; position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 4px; background: var(--sr-accent); }
+        .sr-page .chart-summary .summary-item:nth-child(2)::before { background: #0ea5e9; }
+        .sr-page .chart-summary .summary-value { font-size: 22px; font-weight: 800; color: var(--sr-text); line-height: 1.2; font-variant-numeric: tabular-nums; }
+        .sr-page .chart-summary .summary-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--sr-muted); }
 
-        .chart-card .chart-summary {
-            display: flex;
-            gap: 24px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #eef0f2;
-        }
-
-        .chart-card .chart-summary .summary-item {
-            min-width: 140px;
-        }
-
-        .chart-card .chart-summary .summary-item .summary-value {
-            font-size: 22px;
-            font-weight: 700;
-            color: #343a40;
-        }
-
-        .chart-card .chart-summary .summary-item .summary-label {
-            font-size: 12.5px;
-            color: #74788d;
-            text-transform: uppercase;
-        }
-
-        #graphEmptyState {
-            display: none;
-            text-align: center;
-            color: #74788d;
-            padding: 60px 0;
-        }
-
-        #graphEmptyState i {
-            font-size: 42px;
-            margin-bottom: 12px;
-            display: block;
-            opacity: 0.5;
-        }
+        #graphEmptyState { display: none; }
 
         /* Slice/bar hover "pop" - same bounce-style scale + lift shadow as Dashboard's
            demographic pie charts (chart-level states.hover is turned off so this CSS
@@ -358,6 +322,8 @@ if (mysqli_num_rows($query) == 1) {
         #graphChartContainer .apexcharts-pie-series:hover .apexcharts-pie-area:not(:hover) {
             opacity: .85;
         }
+        #graphDataTableFilterBadge { cursor: pointer; }
+        .sr-page .select2-container--default .select2-selection--multiple { min-height: 38px; border-radius: 10px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); }
 
         <?php if ($is_rtl): ?>
         body { direction: rtl; text-align: right; }
@@ -397,150 +363,150 @@ if (mysqli_num_rows($query) == 1) {
                 <?php include './includes/topbar.php'; ?>
             </div>
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="page-title-box">
-                                <h4 class="page-title float-left">
-                                    <i class="fa fa-chart-pie mr-2"></i><?= __('graphical_reports', 'Graphical Reports') ?>
-                                </h4>
-                                <div class="clearfix"></div>
-                            </div>
+
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('graphical_reports', 'Graphical Reports') ?></h1>
+                            <p><?= __('graphical_reports_subtitle', 'Pick a report and how to group it, then generate a chart with the records behind it.') ?></p>
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="filter-section">
-                                <h5 class="mb-3"><?= __('report_configuration') ?></h5>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphReportType"><?= __('report_type') ?></label>
-                                        <select class="form-control" id="graphReportType">
-                                            <option value=""><?= __('select_report_type') ?></option>
-                                            <?php foreach ($graph_report_types as $type_key => $type_cfg): ?>
-                                                <option value="<?= htmlspecialchars($type_key) ?>"><?= htmlspecialchars($type_cfg['label']) ?></option>
-                                            <?php endforeach; ?>
-                                            <?php if ($graph_custom_tables_enabled): ?>
-                                                <option value="custom"><?= __('custom_report') ?></option>
-                                            <?php endif; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3" id="graphCustomTablesWrapper" style="display:none;">
-                                        <label for="graphCustomTables"><?= __('select_tables_multiselect') ?></label>
-                                        <select class="form-control" id="graphCustomTables" multiple="multiple" style="width: 100%;">
-                                            <?php if ($graph_custom_tables_enabled): foreach ($graph_table_names as $table_key => $table_label): ?>
-                                                <option value="<?= htmlspecialchars($table_key) ?>"><?= htmlspecialchars($table_label) ?></option>
-                                            <?php endforeach; endif; ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphGroupBy"><?= __('group_by', 'Group By') ?></label>
-                                        <select class="form-control" id="graphGroupBy" disabled>
-                                            <option value=""><?= __('select_report_type') ?></option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphChartType"><?= __('chart_type', 'Chart Type') ?></label>
-                                        <select class="form-control" id="graphChartType">
-                                            <option value="pie"><?= __('pie_chart', 'Pie Chart') ?></option>
-                                            <option value="donut"><?= __('donut_chart', 'Donut Chart') ?></option>
-                                            <option value="bar"><?= __('bar_chart', 'Bar Chart') ?></option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphDeptFilter"><?= __('department') ?></label>
-                                        <select class="form-control" id="graphDeptFilter">
-                                            <option value=""><?= __('all_departments', 'All Departments') ?></option>
-                                            <?php
-                                            $dept_query_graph = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
-                                            while ($d = mysqli_fetch_assoc($dept_query_graph)) {
-                                                $dLabel = ($is_rtl && !empty($d['dep_nme_ar'])) ? $d['dep_nme_ar'] : $d['dep_nme'];
-                                                echo '<option value="' . htmlspecialchars($d['id']) . '">' . htmlspecialchars($dLabel) . '</option>';
-                                            }
-                                            ?>
-                                        </select>
-                                    </div>
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-tune"></i> <?= __('report_configuration') ?></h5>
+                        </div>
+                        <div class="sr-form">
+                            <div class="sr-fgrid" style="padding: 18px;">
+                                <div class="sr-fcol c-3">
+                                    <label for="graphReportType"><?= __('report_type') ?></label>
+                                    <select class="form-control" id="graphReportType">
+                                        <option value=""><?= __('select_report_type') ?></option>
+                                        <?php foreach ($graph_report_types as $type_key => $type_cfg): ?>
+                                            <option value="<?= htmlspecialchars($type_key) ?>"><?= htmlspecialchars($type_cfg['label']) ?></option>
+                                        <?php endforeach; ?>
+                                        <?php if ($graph_custom_tables_enabled): ?>
+                                            <option value="custom"><?= __('custom_report') ?></option>
+                                        <?php endif; ?>
+                                    </select>
                                 </div>
-                                <div class="row" id="graphEmployeeScopeRow">
-                                    <div class="col-md-4 mb-3">
-                                        <label for="graphCompanyFilter"><?= __('company', 'Company') ?></label>
-                                        <select class="form-control" id="graphCompanyFilter" multiple="multiple" style="width: 100%;">
-                                            <?php
-                                            $company_query_graph = mysqli_query($conDB, "SELECT DISTINCT comp_id, comp_name, comp_name_ar FROM companies ORDER BY comp_name");
-                                            while ($c = mysqli_fetch_assoc($company_query_graph)) {
-                                                $cLabel = ($is_rtl && !empty($c['comp_name_ar'])) ? $c['comp_name_ar'] : $c['comp_name'];
-                                                echo '<option value="' . htmlspecialchars($c['comp_id']) . '">' . htmlspecialchars($cLabel) . '</option>';
-                                            }
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4 mb-3">
-                                        <label for="graphCountryFilter"><?= __('country', 'Country') ?></label>
-                                        <select class="form-control" id="graphCountryFilter" multiple="multiple" style="width: 100%;">
-                                            <?php
-                                            $country_query_graph = mysqli_query($conDB, "SELECT DISTINCT id, name, name_ar FROM countries ORDER BY name");
-                                            while ($c = mysqli_fetch_assoc($country_query_graph)) {
-                                                $cLabel = ($is_rtl && !empty($c['name_ar'])) ? $c['name_ar'] : $c['name'];
-                                                echo '<option value="' . htmlspecialchars($c['id']) . '">' . htmlspecialchars($cLabel) . '</option>';
-                                            }
-                                            ?>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4 mb-3" id="graphStatusWrapper" style="display:none;">
-                                        <label for="graphStatusFilter"><?= __('status') ?></label>
-                                        <select class="form-control" id="graphStatusFilter">
-                                            <option value=""><?= __('all_status') ?></option>
-                                        </select>
-                                    </div>
+                                <div class="sr-fcol c-3" id="graphCustomTablesWrapper" style="display:none;">
+                                    <label for="graphCustomTables"><?= __('select_tables_multiselect') ?></label>
+                                    <select class="form-control" id="graphCustomTables" multiple="multiple" style="width: 100%;">
+                                        <?php if ($graph_custom_tables_enabled): foreach ($graph_table_names as $table_key => $table_label): ?>
+                                            <option value="<?= htmlspecialchars($table_key) ?>"><?= htmlspecialchars($table_label) ?></option>
+                                        <?php endforeach; endif; ?>
+                                    </select>
                                 </div>
-                                <div class="row">
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphDateFrom"><?= __('date_from') ?></label>
-                                        <input type="text" class="form-control" id="graphDateFrom" placeholder="YYYY-MM-DD" autocomplete="off">
-                                    </div>
-                                    <div class="col-md-3 mb-3">
-                                        <label for="graphDateTo"><?= __('date_to') ?></label>
-                                        <input type="text" class="form-control" id="graphDateTo" placeholder="YYYY-MM-DD" autocomplete="off">
-                                    </div>
-                                    <div class="col-md-6 mb-3 d-flex align-items-end">
-                                        <button type="button" id="generateGraphBtn" class="btn btn-primary" disabled>
-                                            <i class="fa fa-chart-pie mr-1"></i><?= __('generate_report') ?>
-                                        </button>
-                                    </div>
+                                <div class="sr-fcol c-3">
+                                    <label for="graphGroupBy"><?= __('group_by', 'Group By') ?></label>
+                                    <select class="form-control" id="graphGroupBy" disabled>
+                                        <option value=""><?= __('select_report_type') ?></option>
+                                    </select>
+                                </div>
+                                <div class="sr-fcol c-3">
+                                    <label for="graphChartType"><?= __('chart_type', 'Chart Type') ?></label>
+                                    <select class="form-control" id="graphChartType">
+                                        <option value="pie"><?= __('pie_chart', 'Pie Chart') ?></option>
+                                        <option value="donut"><?= __('donut_chart', 'Donut Chart') ?></option>
+                                        <option value="bar"><?= __('bar_chart', 'Bar Chart') ?></option>
+                                    </select>
+                                </div>
+                                <div class="sr-fcol c-3">
+                                    <label for="graphDeptFilter"><?= __('department') ?></label>
+                                    <select class="form-control" id="graphDeptFilter">
+                                        <option value=""><?= __('all_departments', 'All Departments') ?></option>
+                                        <?php
+                                        $dept_query_graph = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                        while ($d = mysqli_fetch_assoc($dept_query_graph)) {
+                                            $dLabel = ($is_rtl && !empty($d['dep_nme_ar'])) ? $d['dep_nme_ar'] : $d['dep_nme'];
+                                            echo '<option value="' . htmlspecialchars($d['id']) . '">' . htmlspecialchars($dLabel) . '</option>';
+                                        }
+                                        ?>
+                                    </select>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="chart-card">
-                                <div class="chart-summary" id="graphSummary" style="display:none;"></div>
-                                <div id="graphChartContainer"></div>
-                                <div id="graphEmptyState">
-                                    <i class="fa fa-chart-pie"></i>
-                                    <div><?= __('select_report_type_and_generate', 'Select a report type and group-by, then click Generate') ?></div>
+                            <div class="sr-fgrid" id="graphEmployeeScopeRow" style="padding: 0 18px 18px;">
+                                <div class="sr-fcol c-4">
+                                    <label for="graphCompanyFilter"><?= __('company', 'Company') ?></label>
+                                    <select class="form-control" id="graphCompanyFilter" multiple="multiple" style="width: 100%;">
+                                        <?php
+                                        $company_query_graph = mysqli_query($conDB, "SELECT DISTINCT comp_id, comp_name, comp_name_ar FROM companies ORDER BY comp_name");
+                                        while ($c = mysqli_fetch_assoc($company_query_graph)) {
+                                            $cLabel = ($is_rtl && !empty($c['comp_name_ar'])) ? $c['comp_name_ar'] : $c['comp_name'];
+                                            echo '<option value="' . htmlspecialchars($c['comp_id']) . '">' . htmlspecialchars($cLabel) . '</option>';
+                                        }
+                                        ?>
+                                    </select>
+                                </div>
+                                <div class="sr-fcol c-4">
+                                    <label for="graphCountryFilter"><?= __('country', 'Country') ?></label>
+                                    <select class="form-control" id="graphCountryFilter" multiple="multiple" style="width: 100%;">
+                                        <?php
+                                        $country_query_graph = mysqli_query($conDB, "SELECT DISTINCT id, name, name_ar FROM countries ORDER BY name");
+                                        while ($c = mysqli_fetch_assoc($country_query_graph)) {
+                                            $cLabel = ($is_rtl && !empty($c['name_ar'])) ? $c['name_ar'] : $c['name'];
+                                            echo '<option value="' . htmlspecialchars($c['id']) . '">' . htmlspecialchars($cLabel) . '</option>';
+                                        }
+                                        ?>
+                                    </select>
+                                </div>
+                                <div class="sr-fcol c-4" id="graphStatusWrapper" style="display:none;">
+                                    <label for="graphStatusFilter"><?= __('status') ?></label>
+                                    <select class="form-control" id="graphStatusFilter">
+                                        <option value=""><?= __('all_status') ?></option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="sr-fgrid" style="padding: 0 18px 18px; align-items: end;">
+                                <div class="sr-fcol c-3">
+                                    <label for="graphDateFrom"><?= __('date_from') ?></label>
+                                    <input type="text" class="form-control" id="graphDateFrom" placeholder="YYYY-MM-DD" autocomplete="off">
+                                </div>
+                                <div class="sr-fcol c-3">
+                                    <label for="graphDateTo"><?= __('date_to') ?></label>
+                                    <input type="text" class="form-control" id="graphDateTo" placeholder="YYYY-MM-DD" autocomplete="off">
+                                </div>
+                                <div class="sr-fcol c-6">
+                                    <button type="button" id="generateGraphBtn" class="sr-btn sr-btn-primary" disabled>
+                                        <i class="mdi mdi-chart-pie"></i> <?= __('generate_report') ?>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="row" id="graphDataTableRow" style="display:none;">
-                        <div class="col-12">
-                            <div class="chart-card">
-                                <h5 class="mb-3">
-                                    <?= __('generated_data', 'Generated Data') ?>
-                                    <span id="graphDataTableFilterBadge" class="badge badge-primary ml-2" style="display:none; font-size:12.5px; font-weight:600; cursor:pointer;"></span>
-                                </h5>
-                                <div class="table-responsive">
-                                    <table class="table table-hover mb-0" id="graphDataTable" style="width:100%;">
-                                        <thead><tr></tr></thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-chart-pie"></i> <?= __('chart', 'Chart') ?></h5>
+                        </div>
+                        <div class="gr-chart-body">
+                            <div class="chart-summary" id="graphSummary" style="display:none;"></div>
+                            <div id="graphChartContainer"></div>
+                            <div id="graphEmptyState" class="sr-empty">
+                                <i class="mdi mdi-chart-pie"></i>
+                                <div><?= __('select_report_type_and_generate', 'Select a report type and group-by, then click Generate') ?></div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="sr-card" id="graphDataTableRow" style="display:none;">
+                        <div class="sr-toolbar">
+                            <h5 class="sr-card-title">
+                                <i class="mdi mdi-table"></i> <?= __('generated_data', 'Generated Data') ?>
+                                <span id="graphDataTableFilterBadge" class="sr-pill sr-pill-xs tone-indigo" style="display:none;"></span>
+                            </h5>
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="graphTableSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                        </div>
+                        <div class="sr-table-wrap" style="overflow-x: auto;">
+                            <table class="table sr-table" id="graphDataTable" style="width:100%;">
+                                <thead><tr></tr></thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -626,6 +592,10 @@ if (mysqli_num_rows($query) == 1) {
             });
 
             lockSelectedSelect2Options('#graphCustomTables, #graphCompanyFilter, #graphCountryFilter');
+
+            $('#graphTableSearch').on('input', function() {
+                if (graphDataTableInstance) { graphDataTableInstance.search(this.value).draw(); }
+            });
 
             $(document).on('click', '#graphDataTableFilterBadge', function() {
                 if (clearChartFilterFn) { clearChartFilterFn(); }
@@ -951,6 +921,7 @@ if (mysqli_num_rows($query) == 1) {
                     });
 
                     graphDataTableInstance = $('#graphDataTable').DataTable({
+                        dom: 'rti',
                         paging: false,
                         searching: true,
                         info: true,
@@ -962,6 +933,8 @@ if (mysqli_num_rows($query) == 1) {
                             zeroRecords: (typeof __ === 'function') ? __('no_matching_records_found') : 'No matching records found'
                         }
                     });
+                    // Own search box (#graphTableSearch) survives the table being rebuilt
+                    graphDataTableInstance.search($('#graphTableSearch').val() || '').draw();
                 }
 
                 clearChartFilterFn = function() {

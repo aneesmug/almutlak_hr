@@ -18,19 +18,23 @@ if (!($is_system_admin ?? false)) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .info-box { background:#e7f3ff; border-left:4px solid #007bff; padding:12px; margin-bottom:16px; }
-        .warn-box { background:#fff3cd; border-left:4px solid #ffc107; padding:12px; margin-bottom:16px; }
-        .conn-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
-        .conn-dot.ok { background:#28a745; }
-        .conn-dot.fail { background:#dc3545; }
-        #tableListWrap { max-height:400px; overflow-y:auto; border:1px solid #dee2e6; border-radius:6px; padding:10px; }
-        .table-row:hover { background:#f8f9fa; }
-        .table-row small { color:#6c757d; }
+        .dbi-max { max-width: 1100px; }
+        #tableListWrap { max-height: 440px; overflow-y: auto; }
+        #tableListWrap thead th { position: sticky; top: 0; background: var(--sr-surface) !important; z-index: 1; }
+        #tableListWrap .table-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--sr-accent); }
+        .dbi-check { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--sr-text-2); cursor: pointer; }
+        .dbi-check input { margin-top: 3px; accent-color: var(--sr-accent); }
+        .dbi-check small { display: block; font-weight: 400; color: var(--sr-muted); margin-top: 2px; }
+        .dbi-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .dbi-tools .form-control { height: 34px; max-width: 220px; border-radius: 8px; font-size: 13px; }
+        .dbi-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 18px; border-top: 1px solid var(--sr-border); }
     </style>
     <?php if ($is_rtl ?? false) : ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -54,98 +58,106 @@ if (!($is_system_admin ?? false)) {
 
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
-                <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30">Import From Live Server</h4>
+            <div class="content sr-page">
+                <div class="container-fluid dbi-max">
 
-                                <div class="info-box">
-                                    Pulls data directly from the live server's export API into this local database.
-                                    Every row is upserted: matching rows are updated, new rows inserted, and anything
-                                    that only exists locally is left untouched.
+                    <div class="sr-head">
+                        <div>
+                            <h1>Import From Live Server</h1>
+                            <p>Pull data directly from the live server's export API into this local database.</p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <span class="sr-pill tone-amber"><i class="mdi mdi-lock"></i> System admin only</span>
+                        </div>
+                    </div>
+
+                    <div class="sr-notice tone-sky">
+                        <i class="mdi mdi-information-outline"></i>
+                        <div>
+                            Every row is upserted: matching rows are updated, new rows inserted, and anything
+                            that only exists locally is left untouched.
+                        </div>
+                    </div>
+                    <div class="sr-notice tone-amber">
+                        <i class="mdi mdi-alert"></i>
+                        <div>
+                            This writes directly to your local database. Only use with a live server URL and
+                            key you trust.
+                        </div>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-card-head">
+                            <h5 class="sr-card-title"><i class="mdi mdi-server-network"></i> Live Server</h5>
+                            <span id="connStatus"></span>
+                        </div>
+                        <div class="sr-form">
+                            <div class="sr-fgrid" style="padding: 18px;">
+                                <div class="sr-fcol c-8">
+                                    <label for="baseUrl">Live Server URL</label>
+                                    <input type="text" class="form-control" id="baseUrl" placeholder="https://your-live-domain.com">
                                 </div>
-                                <div class="warn-box">
-                                    This writes directly to your local database. Only use with a live server URL and
-                                    key you trust - System admin only.
+                                <div class="sr-fcol c-4">
+                                    <label for="exportKey">Export Key</label>
+                                    <input type="password" class="form-control" id="exportKey" placeholder="Key from db_export.php on live">
                                 </div>
-
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <div class="form-group">
-                                            <label>Live Server URL</label>
-                                            <input type="text" class="form-control" id="baseUrl" placeholder="https://your-live-domain.com">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-group">
-                                            <label>Export Key</label>
-                                            <input type="password" class="form-control" id="exportKey" placeholder="Key from db_export.php on live">
-                                        </div>
-                                    </div>
+                                <div class="sr-fcol c-12">
+                                    <label class="dbi-check" for="rememberUrl">
+                                        <input type="checkbox" id="rememberUrl">
+                                        <span>Remember this URL on this browser <small>The key is never saved.</small></span>
+                                    </label>
                                 </div>
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="rememberUrl">
-                                    <label class="form-check-label" for="rememberUrl">Remember this URL on this browser (key is never saved)</label>
-                                </div>
-
-                                <button type="button" class="btn btn-secondary" id="testConnBtn">
-                                    <i class="fa fa-plug"></i> Test Connection
-                                </button>
-                                <span id="connStatus" class="ml-2"></span>
-
-                                <div id="pickerSection" style="display:none;" class="mt-4">
-                                    <hr>
-                                    <div class="row align-items-end mb-2">
-                                        <div class="col-md-6">
-                                            <label class="mb-0">Tables (<span id="tableCount">0</span> shown of <span id="tableTotalCount">0</span>)</label>
-                                            <div class="form-check d-inline-block ml-3">
-                                                <input class="form-check-input" type="checkbox" id="showAllTables">
-                                                <label class="form-check-label" for="showAllTables">Show all tables</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 text-md-end">
-                                            <input type="text" class="form-control form-control-sm d-inline-block" style="max-width:200px;" id="tableFilter" placeholder="Filter tables...">
-                                            <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-link btn-sm" id="selectAllBtn">Select All</button>
-                                                <button type="button" class="btn btn-link btn-sm" id="selectNoneBtn">Select None</button>
-                                                <button type="button" class="btn btn-link btn-sm" id="selectDiffBtn">Select Diff Only</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div id="tableListWrap"></div>
-
-                                    <div class="form-group mt-3" style="max-width:320px;">
-                                        <label>Only rows changed since (optional)</label>
-                                        <input type="datetime-local" class="form-control" id="sinceInput">
-                                        <small class="form-text text-muted">Applies only to tables with an <code>updated_at</code>/<code>created_at</code> column.</small>
-                                    </div>
-
-                                    <div class="form-check mt-3">
-                                        <input class="form-check-input" type="checkbox" id="truncateFirst">
-                                        <label class="form-check-label" for="truncateFirst">
-                                            Truncate selected tables before import (full replace)
-                                        </label>
-                                        <small class="form-text text-muted">
-                                            Deletes all local rows in the selected tables first, then imports live data.
-                                            Use this when local and live have the same row count but different data -
-                                            a plain upsert won't catch that. Cannot be combined with "changed since".
-                                        </small>
-                                    </div>
-
-                                    <div class="btn-group mt-2" role="group">
-                                        <button type="button" class="btn btn-outline-secondary waves-effect waves-light" id="checkSchemaBtn">
-                                            <i class="fa fa-list-alt"></i> Check Schema Differences
-                                        </button>
-                                        <button type="button" class="btn btn-primary waves-effect waves-light" id="importBtn">
-                                            <i class="fa fa-download"></i> Import Selected Into Local DB
-                                        </button>
-                                    </div>
+                                <div class="sr-fcol c-12">
+                                    <button type="button" class="sr-btn sr-btn-primary" id="testConnBtn"><i class="mdi mdi-lan"></i> Test Connection</button>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <div id="pickerSection" style="display:none;">
+                        <div class="sr-card">
+                            <div class="sr-card-head" style="flex-wrap: wrap;">
+                                <h5 class="sr-card-title"><i class="mdi mdi-database"></i> Tables <span class="sr-count"><span id="tableCount">0</span> / <span id="tableTotalCount">0</span></span></h5>
+                                <div class="dbi-tools">
+                                    <label class="dbi-check" for="showAllTables" style="margin-inline-end: 6px;">
+                                        <input type="checkbox" id="showAllTables"><span>Show all tables</span>
+                                    </label>
+                                    <input type="text" class="form-control" id="tableFilter" placeholder="Filter tables...">
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectAllBtn">Select All</button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectNoneBtn">Select None</button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectDiffBtn">Select Diff Only</button>
+                                </div>
+                            </div>
+                            <div class="sr-table-wrap" id="tableListWrap"></div>
+
+                            <div class="sr-form">
+                                <div class="sr-fgrid" style="padding: 18px; border-top: 1px solid var(--sr-border);">
+                                    <div class="sr-fcol c-4">
+                                        <label for="sinceInput">Only rows changed since (optional)</label>
+                                        <input type="datetime-local" class="form-control" id="sinceInput">
+                                        <small class="sr-fhint">Applies only to tables with an <code>updated_at</code>/<code>created_at</code> column.</small>
+                                    </div>
+                                    <div class="sr-fcol c-8">
+                                        <label>&nbsp;</label>
+                                        <label class="dbi-check" for="truncateFirst">
+                                            <input type="checkbox" id="truncateFirst">
+                                            <span>Truncate selected tables before import (full replace)
+                                                <small>Deletes all local rows in the selected tables first, then imports live data.
+                                                Use this when local and live have the same row count but different data -
+                                                a plain upsert won't catch that. Cannot be combined with "changed since".</small>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="dbi-actions">
+                                <button type="button" class="sr-btn" id="checkSchemaBtn"><i class="mdi mdi-format-list-bulleted"></i> Check Schema Differences</button>
+                                <button type="button" class="sr-btn sr-btn-primary" id="importBtn"><i class="mdi mdi-download"></i> Import Selected Into Local DB</button>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -176,7 +188,7 @@ if (!($is_system_admin ?? false)) {
             liveTables = tables;
             $('#tableTotalCount').text(tables.length);
             const $wrap = $('#tableListWrap').empty();
-            const $table = $('<table class="table table-sm mb-0"><thead><tr>' +
+            const $table = $('<table class="table sr-table" style="width:100%;"><thead><tr>' +
                 '<th></th><th>Table</th><th class="text-right">Local</th>' +
                 '<th class="text-right">Live</th><th class="text-right">Diff</th>' +
                 '</tr></thead><tbody></tbody></table>');
@@ -184,19 +196,19 @@ if (!($is_system_admin ?? false)) {
 
             tables.forEach(t => {
                 const diff = t.diff || 0;
-                const localLabel = t.exists_locally ? t.local_rows.toLocaleString() : '<span class="text-muted">missing</span>';
+                const localLabel = t.exists_locally ? t.local_rows.toLocaleString() : '<span class="sr-pill sr-pill-xs tone-red">missing</span>';
                 let diffLabel = '0';
-                let diffClass = 'text-muted';
-                if (diff > 0) { diffLabel = '+' + diff.toLocaleString(); diffClass = 'text-success'; }
-                else if (diff < 0) { diffLabel = diff.toLocaleString(); diffClass = 'text-danger'; }
+                let diffClass = 'slate';
+                if (diff > 0) { diffLabel = '+' + diff.toLocaleString(); diffClass = 'green'; }
+                else if (diff < 0) { diffLabel = diff.toLocaleString(); diffClass = 'red'; }
 
                 const $row = $(`
                     <tr class="table-row" data-diff="${diff}">
                         <td><input type="checkbox" class="table-check" value="${t.name}" ${diff !== 0 ? 'checked' : ''}></td>
-                        <td>${t.name}</td>
+                        <td><span class="sr-cell-title sr-mono">${t.name}</span></td>
                         <td class="text-right">${localLabel}</td>
                         <td class="text-right">${t.live_rows.toLocaleString()}</td>
-                        <td class="text-right ${diffClass}">${diffLabel}</td>
+                        <td class="text-right"><span class="sr-pill sr-pill-xs tone-${diffClass}">${diffLabel}</span></td>
                     </tr>
                 `);
                 $tbody.append($row);
@@ -253,7 +265,7 @@ if (!($is_system_admin ?? false)) {
         // Shared by the "Test Connection" button and the post-import refresh below - both
         // just need the current Local/Live/Diff counts re-pulled and re-rendered.
         function refreshConnectionAndTables(baseUrl, exportKey, onDone) {
-            $('#connStatus').html('<span class="text-muted">Connecting...</span>');
+            $('#connStatus').html('<span class="sr-pill tone-slate"><i class="mdi mdi-loading mdi-spin"></i>Connecting...</span>');
 
             $.ajax({
                 url: './includes/ajaxFile/ajaxDbImportRemote.php',
@@ -262,14 +274,14 @@ if (!($is_system_admin ?? false)) {
                 data: { action: 'test_connection', base_url: baseUrl, export_key: exportKey }
             }).done(function(res) {
                 if (res.status === 'success') {
-                    $('#connStatus').html('<span class="conn-dot ok"></span>Connected - ' + res.database);
+                    $('#connStatus').html('<span class="sr-pill tone-green"><span class="sr-dot"></span>Connected - ' + $('<div>').text(res.database).html() + '</span>');
                     renderTableList(res.tables || []);
                 } else {
-                    $('#connStatus').html('<span class="conn-dot fail"></span>' + (res.message || 'Connection failed'));
+                    $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>' + $('<div>').text(res.message || 'Connection failed').html() + '</span>');
                     $('#pickerSection').hide();
                 }
             }).fail(function() {
-                $('#connStatus').html('<span class="conn-dot fail"></span>Request failed');
+                $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>Request failed</span>');
                 $('#pickerSection').hide();
             }).always(function() {
                 if (onDone) onDone();

@@ -369,6 +369,87 @@
             color: #fff;
         }
     </style>
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+    <style>
+        /* ---------- New GUI shell (sr-* design system). The tab contents are built by
+           assets/js/app_settings.js with Bootstrap markup, so they are re-skinned here. ---------- */
+        .sr-page .loader { border-color: var(--sr-surface-3); border-top-color: var(--sr-accent); }
+        .as-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+        @media (max-width: 991px) { .as-layout { grid-template-columns: 1fr; } }
+        .as-nav-card { position: sticky; top: 86px; padding: 10px; max-height: calc(100vh - 110px); overflow-y: auto; }
+        @media (max-width: 991px) { .as-nav-card { position: static; max-height: 320px; } }
+        .as-nav-search { max-width: none; margin-bottom: 8px; }
+        .as-nav-search input { height: 34px; }
+        .sr-page #settings-nav { gap: 2px; }
+        .sr-page #settings-nav .nav-link {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 9px;
+            font-size: 13px; font-weight: 600; color: var(--sr-text-2); background: transparent; transition: background .15s, color .15s;
+        }
+        .sr-page #settings-nav .nav-link:hover { background: var(--sr-surface-3); color: var(--sr-text); }
+        .sr-page #settings-nav .nav-link.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: inset 3px 0 0 var(--sr-accent); }
+        [dir="rtl"] .sr-page #settings-nav .nav-link.active { box-shadow: inset -3px 0 0 var(--sr-accent); }
+        .as-main-card { padding: 18px 20px; min-width: 0; }
+        .sr-page #settings-container { min-height: 300px; max-height: none; overflow: visible; padding: 0; border: 0; }
+
+        /* Sub-tab pills inside a settings tab */
+        .sr-page #settings-container .nav-pills:not(.flex-column),
+        .sr-page #settings-container .nav-tabs {
+            display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; margin-bottom: 16px !important;
+            border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2);
+        }
+        .sr-page #settings-container .nav-pills:not(.flex-column) .nav-link,
+        .sr-page #settings-container .nav-tabs .nav-link {
+            border: 0; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--sr-muted); background: transparent;
+        }
+        .sr-page #settings-container .nav-pills:not(.flex-column) .nav-link:hover,
+        .sr-page #settings-container .nav-tabs .nav-link:hover { color: var(--sr-text); background: var(--sr-surface-3); }
+        .sr-page #settings-container .nav-pills:not(.flex-column) .nav-link.active,
+        .sr-page #settings-container .nav-tabs .nav-link.active { color: var(--sr-accent-strong); background: var(--sr-surface); box-shadow: var(--sr-shadow); }
+
+        /* Forms */
+        .sr-page #settings-container label { font-size: 12.5px; font-weight: 600; color: var(--sr-text-2); }
+        .sr-page #settings-container .form-control,
+        .sr-page #settings-container .custom-select {
+            min-height: 38px; border-radius: 10px; font-size: 13px;
+            border: 1px solid var(--sr-border-strong); background-color: var(--sr-surface-2); color: var(--sr-text);
+        }
+        .sr-page #settings-container .form-control:focus,
+        .sr-page #settings-container .custom-select:focus { background-color: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+        .sr-page #settings-container textarea.form-control { min-height: 76px; }
+        .sr-page #settings-container .form-text, .sr-page #settings-container small.text-muted { color: var(--sr-muted) !important; font-size: 11.5px; }
+        .sr-page #settings-container .custom-control-input:checked ~ .custom-control-label::before { background-color: var(--sr-accent); border-color: var(--sr-accent); }
+        .sr-page #settings-container h4, .sr-page #settings-container h5, .sr-page #settings-container h6 { color: var(--sr-text); font-weight: 700; }
+        .sr-page #settings-container hr { border-color: var(--sr-border); }
+        .sr-page .select2-container .select2-selection--single,
+        .sr-page .select2-container--default .select2-selection--multiple { border-color: var(--sr-border-strong) !important; border-radius: 10px !important; background: var(--sr-surface-2); }
+
+        /* Cards / tables built by the JS */
+        .sr-page #settings-container .card { border: 1px solid var(--sr-border); border-radius: 12px; box-shadow: none; background: var(--sr-surface); overflow: hidden; }
+        .sr-page #settings-container .card-header { background: var(--sr-surface-2) !important; border-bottom: 1px solid var(--sr-border); font-weight: 700; color: var(--sr-text); }
+        .sr-page #settings-container .table { color: var(--sr-text-2); margin-bottom: 0; }
+        .sr-page #settings-container .table thead th {
+            border: 0 !important; border-bottom: 1px solid var(--sr-border) !important; background: var(--sr-surface-2);
+            color: var(--sr-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+        }
+        .sr-page #settings-container .table td { border-color: var(--sr-border) !important; vertical-align: middle; font-size: 13px; }
+        .sr-page #settings-container .table-bordered { border-color: var(--sr-border); }
+        .sr-page #settings-container .table-hover tbody tr:hover { background: var(--sr-surface-2); }
+        .sr-page #settings-container .table-responsive { border: 1px solid var(--sr-border); border-radius: 12px; }
+
+        /* Buttons */
+        .sr-page #settings-container .btn { border-radius: 9px; font-weight: 600; }
+        .sr-page #settings-container .btn-primary { background: var(--sr-accent); border-color: var(--sr-accent); }
+        .sr-page #settings-container .btn-primary:hover { background: var(--sr-accent-strong); border-color: var(--sr-accent-strong); }
+        .sr-page #settings-container .btn-outline-primary { color: var(--sr-accent-strong); border-color: var(--sr-accent); }
+        .sr-page #settings-container .btn-outline-primary:hover { background: var(--sr-accent); color: #fff; }
+        .sr-page #settings-container .alert { border-radius: 12px; font-size: 13px; }
+        .sr-page .special-access-category, .sr-page .special-access-user-card { border-color: var(--sr-border); background: var(--sr-surface); }
+        .sr-page .special-access-category-header { background: var(--sr-surface-2); border-color: var(--sr-border); color: var(--sr-text); }
+        .sr-page .special-access-user-card { border-left-color: var(--sr-accent); }
+        .sr-page .special-access-category-header i, .sr-page .page-access-group-label { color: var(--sr-accent); }
+        .sr-page .page-access-group-label { border-bottom-color: var(--sr-accent-soft); }
+        html.app-dark .sr-page #special-access-loading-overlay { background: rgba(15, 23, 42, .6); }
+    </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
@@ -432,55 +513,55 @@
             <!-- Top Bar End -->
 
             <!-- Start Page content -->
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="m-t-0 header-title"><?= __("application_settings") ?></h4>
-                                <p class="text-muted m-b-30 font-14"><?= __("manage_your_application_s_configuration") ?></p>
 
-                                <form id="settingsForm">
-                                    <div class="row">
-                                        <div class="col-md-3">
-                                            <ul id="settings-nav" class="nav nav-pills flex-column" role="tablist">
-                                                <!-- Nav items will be injected here by JavaScript -->
-                                                <div class="d-flex justify-content-center align-items-center" style="height: 100px;">
-                                                    <div class="loader"></div>
-                                                </div>
-                                            </ul>
-                                        </div>
-                                        <div class="col-md-9">
-                                            <div id="settings-container" class="tab-content p-3 border">
-                                                <!-- Tab content will be injected here by JavaScript -->
-                                                <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
-                                                    <div class="loader"></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Persistent (not tab-content) so it survives switching to another
-                                         settings tab before Save - see loadSettings()/renderSpecialAccessSettings(). -->
-                                    <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
-                                    <!-- Report access is now managed from inside the Special Access tab too (see
-                                         "Report Access" group in renderSpecialAccessSettings) instead of its own tab,
-                                         so this hidden field must survive tab switches the same way. -->
-                                    <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
-                                    <!-- Screen Settings self-saves straight to its own dedicated actions
-                                         (get_screen_settings_data/update_screen_settings_map/update_own_screen_settings)
-                                         - no hidden field needed here, unlike special_access_by_user above. -->
-
-
-                                    <div class="form-group text-right m-t-20" id="saveBtnWrapper">
-                                        <button type="submit" id="saveBtn" class="btn btn-primary waves-effect waves-light">
-                                            <?= __("save_changes") ?>
-                                        </button>
-                                    </div>
-                                </form>
+                    <form id="settingsForm">
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __("application_settings") ?></h1>
+                                <p><?= __("manage_your_application_s_configuration") ?></p>
+                            </div>
+                            <div class="sr-head-actions" id="saveBtnWrapper">
+                                <button type="submit" id="saveBtn" class="sr-btn sr-btn-primary"><i class="mdi mdi-content-save"></i> <?= __("save_changes") ?></button>
                             </div>
                         </div>
-                    </div>
+
+                        <div class="as-layout">
+                            <div class="sr-card as-nav-card">
+                                <div class="sr-search as-nav-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="asNavFilter" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                                </div>
+                                <ul id="settings-nav" class="nav nav-pills flex-column" role="tablist">
+                                    <!-- Nav items will be injected here by JavaScript -->
+                                    <div class="d-flex justify-content-center align-items-center" style="height: 100px;">
+                                        <div class="loader"></div>
+                                    </div>
+                                </ul>
+                            </div>
+                            <div class="sr-card as-main-card">
+                                <div id="settings-container" class="tab-content">
+                                    <!-- Tab content will be injected here by JavaScript -->
+                                    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
+                                        <div class="loader"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Persistent (not tab-content) so it survives switching to another
+                             settings tab before Save - see loadSettings()/renderSpecialAccessSettings(). -->
+                        <input type="hidden" id="setting-special_access_by_user" name="special_access_by_user" value="{}">
+                        <!-- Report access is now managed from inside the Special Access tab too (see
+                             "Report Access" group in renderSpecialAccessSettings) instead of its own tab,
+                             so this hidden field must survive tab switches the same way. -->
+                        <input type="hidden" id="setting-report_visibility_by_user" name="report_visibility_by_user" value="{}">
+                        <!-- Screen Settings self-saves straight to its own dedicated actions
+                             (get_screen_settings_data/update_screen_settings_map/update_own_screen_settings)
+                             - no hidden field needed here, unlike special_access_by_user above. -->
+                    </form>
+
                 </div> <!-- container -->
             </div> <!-- content -->
 
@@ -520,5 +601,13 @@
     </script>
     <script src="assets/js/app_settings.js?v=<?= filemtime(__DIR__ . '/assets/js/app_settings.js') ?>"></script>
 
+    <script>
+    $('#asNavFilter').on('input', function() {
+        var q = this.value.toLowerCase();
+        $('#settings-nav > li').each(function() {
+            $(this).toggle($(this).text().toLowerCase().indexOf(q) !== -1);
+        });
+    });
+    </script>
 </body>
 </html>

@@ -21,7 +21,13 @@ if ($result) {
     }
 }
 ?>
-
+<?php
+$h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES); };
+$zk_count = ['online' => 0, 'offline' => 0];
+foreach ($devices as $d) {
+    $zk_count[$d['state'] === 'online' ? 'online' : 'offline']++;
+}
+?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 
@@ -41,14 +47,16 @@ if ($result) {
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <?php if ($is_rtl ?? false): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .device-state-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
-        .device-state-online { background-color: #1abc9c; }
-        .device-state-offline { background-color: #f1556c; }
+        .sr-page .sr-tiles.zk-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .zk-avatar { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
+        .zk-avatar.is-offline { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+        .zk-avatar.is-online { background: var(--tone-green-bg); color: var(--tone-green-fg); }
     </style>
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
@@ -73,74 +81,109 @@ if ($result) {
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
 
-            <div class="content">
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="card-box table-responsive">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h4 class="m-t-0 header-title"><?= __('zk_devices', 'Biometric Devices') ?></h4>
-                                    <button id="btn-add-device" type="button" class="btn btn-primary btn-sm waves-effect waves-light">
-                                        <i class="mdi mdi-plus-circle mr-2"></i><?= __('add_device', 'Add Device') ?>
-                                    </button>
-                                </div>
-                                <p class="text-muted small">
-                                    <?= __('device_offline_note', 'A device is marked Offline after') ?> <?= (int)$thresholdMinutes ?> <?= __('minutes_of_silence', 'minute(s) of silence.') ?>
-                                </p>
 
-                                <table id="zk_devices_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
-                                    <thead>
-                                        <tr>
-                                            <th><?= __('device_name', 'Device Name') ?></th>
-                                            <th><?= __('serial_number', 'Serial Number') ?></th>
-                                            <th><?= __('area', 'Area') ?></th>
-                                            <th><?= __('device_ip', 'Device IP') ?></th>
-                                            <th><?= __('pull_port', 'Socket Check Port') ?></th>
-                                            <th><?= __('state', 'State') ?></th>
-                                            <th><?= __('last_activity', 'Last Activity') ?></th>
-                                            <th><?= __('transaction_qty', 'Transactions') ?></th>
-                                            <th width="60"><?= __('action_header', 'Action') ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($devices as $device): ?>
-                                            <tr data-serial="<?= htmlspecialchars($device['serial_number'], ENT_QUOTES) ?>">
-                                                <td><?= htmlspecialchars($device['device_name'], ENT_QUOTES) ?></td>
-                                                <td><?= htmlspecialchars($device['serial_number'], ENT_QUOTES) ?></td>
-                                                <td><?= htmlspecialchars($device['area'] ?? '', ENT_QUOTES) ?></td>
-                                                <td><?= htmlspecialchars($device['device_ip'] ?? '', ENT_QUOTES) ?></td>
-                                                <td><?= htmlspecialchars($device['pull_host'] ?? '', ENT_QUOTES) ?><?= $device['pull_port'] ? ':' . (int)$device['pull_port'] : '' ?></td>
-                                                <td class="js-device-state">
-                                                    <span class="device-state-dot device-state-<?= $device['state'] ?>"></span><?= ucfirst($device['state']) ?>
-                                                </td>
-                                                <td class="js-device-last-activity"><?= htmlspecialchars($device['last_activity'] ?? '-', ENT_QUOTES) ?></td>
-                                                <td class="js-device-tx-qty"><?= (int)$device['transaction_qty'] ?></td>
-                                                <td>
-                                                    <div class='btn-group dropdown'>
-                                                        <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                                                        <div class='dropdown-menu dropdown-menu-right'>
-                                                            <a class='dropdown-item text-dark btn-edit-device' href='javascript:void(0);'
-                                                                data-id="<?= (int)$device['id'] ?>"
-                                                                data-name="<?= htmlspecialchars($device['device_name'], ENT_QUOTES) ?>"
-                                                                data-area="<?= htmlspecialchars($device['area'] ?? '', ENT_QUOTES) ?>"
-                                                                data-ip="<?= htmlspecialchars($device['device_ip'] ?? '', ENT_QUOTES) ?>"
-                                                                data-pull-host="<?= htmlspecialchars($device['pull_host'] ?? '', ENT_QUOTES) ?>"
-                                                                data-pull-port="<?= htmlspecialchars((string)($device['pull_port'] ?? ''), ENT_QUOTES) ?>">
-                                                                <i class='mdi mdi-pencil mr-2'></i><?= __('edit_link', 'Edit') ?>
-                                                            </a>
-                                                            <a class='dropdown-item text-danger deleteAjax' href='javascript:void(0);' data-id='<?= (int)$device['id'] ?>' data-tbl='zk_devices' data-file='0'>
-                                                                <i class='fa fa-trash mr-2'></i><?= __('delete_link', 'Delete') ?>
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('zk_devices', 'Biometric Devices') ?></h1>
+                            <p><?= __('device_offline_note', 'A device is marked Offline after') ?> <?= (int)$thresholdMinutes ?> <?= __('minutes_of_silence', 'minute(s) of silence.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <button id="btn-add-device" type="button" class="sr-btn sr-btn-primary"><i class="mdi mdi-plus"></i> <?= __('add_device', 'Add Device') ?></button>
                         </div>
                     </div>
+
+                    <div class="sr-tiles zk-tiles" id="zkTiles">
+                        <button type="button" class="sr-tile active" data-key="">
+                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
+                            <span class="sr-tile-value"><?= count($devices) ?></span>
+                        </button>
+                        <button type="button" class="sr-tile" data-key="online">
+                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('online', 'Online') ?></span>
+                            <span class="sr-tile-value" id="zkOnlineCount"><?= $zk_count['online'] ?></span>
+                        </button>
+                        <button type="button" class="sr-tile" data-key="offline">
+                            <span class="sr-tile-label"><span class="sr-dot dot-red"></span><?= __('offline', 'Offline') ?></span>
+                            <span class="sr-tile-value" id="zkOfflineCount"><?= $zk_count['offline'] ?></span>
+                        </button>
+                    </div>
+
+                    <div class="sr-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="zkSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <span class="sr-active-filter"><i class="mdi mdi-refresh"></i> <?= __('live_refresh_15s', 'State refreshes every 15 seconds') ?></span>
+                            </div>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table id="zk_devices_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?= __('device_name', 'Device Name') ?></th>
+                                        <th><?= __('area', 'Area') ?></th>
+                                        <th><?= __('device_ip', 'Device IP') ?></th>
+                                        <th><?= __('pull_port', 'Socket Check Port') ?></th>
+                                        <th><?= __('state', 'State') ?></th>
+                                        <th><?= __('last_activity', 'Last Activity') ?></th>
+                                        <th><?= __('transaction_qty', 'Transactions') ?></th>
+                                        <th class="text-right"><?= __('action_header', 'Action') ?></th>
+                                        <th>state</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($devices as $device):
+                                        $on = ($device['state'] === 'online');
+                                    ?>
+                                        <tr data-serial="<?= $h($device['serial_number']) ?>">
+                                            <td data-order="<?= $h($device['device_name']) ?>">
+                                                <div class="sr-person">
+                                                    <span class="sr-avatar zk-avatar js-device-avatar <?= $on ? 'is-online' : 'is-offline' ?>"><i class="mdi mdi-fingerprint"></i></span>
+                                                    <div style="min-width: 0;">
+                                                        <span class="sr-cell-title"><?= $h($device['device_name']) ?></span>
+                                                        <span class="sr-cell-sub sr-mono"><?= $h($device['serial_number']) ?></span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><?= $device['area'] ? '<span class="sr-chip"><i class="mdi mdi-map-marker"></i>' . $h($device['area']) . '</span>' : '<span class="text-muted">&ndash;</span>' ?></td>
+                                            <td class="sr-mono"><?= $h($device['device_ip'] ?: '–') ?></td>
+                                            <td class="sr-mono"><?= $h($device['pull_host'] ?? '') ?><?= $device['pull_port'] ? ':' . (int)$device['pull_port'] : '' ?></td>
+                                            <td class="js-device-state">
+                                                <span class="sr-pill tone-<?= $on ? 'green' : 'red' ?>"><span class="sr-dot"></span><?= $h(__($device['state'], ucfirst($device['state']))) ?></span>
+                                            </td>
+                                            <td class="js-device-last-activity"><?= $h($device['last_activity'] ?? '-') ?></td>
+                                            <td class="js-device-tx-qty"><span class="sr-chip"><?= (int)$device['transaction_qty'] ?></span></td>
+                                            <td class="text-right">
+                                                <div class="sr-actions">
+                                                    <a href="javascript:void(0);" class="sr-open-btn btn-edit-device"
+                                                        data-id="<?= (int)$device['id'] ?>"
+                                                        data-name="<?= $h($device['device_name']) ?>"
+                                                        data-area="<?= $h($device['area'] ?? '') ?>"
+                                                        data-ip="<?= $h($device['device_ip'] ?? '') ?>"
+                                                        data-pull-host="<?= $h($device['pull_host'] ?? '') ?>"
+                                                        data-pull-port="<?= $h((string)($device['pull_port'] ?? '')) ?>">
+                                                        <i class="mdi mdi-pencil"></i> <?= __('edit_link', 'Edit') ?>
+                                                    </a>
+                                                    <div class="btn-group dropdown">
+                                                        <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                        <div class="dropdown-menu dropdown-menu-right">
+                                                            <a class="dropdown-item text-danger deleteAjax" href="javascript:void(0);" data-id="<?= (int)$device['id'] ?>" data-tbl="zk_devices" data-file="0"><i class="fa fa-trash mr-2"></i><?= __('delete_link', 'Delete') ?></a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="js-device-key"><?= $on ? 'online' : 'offline' ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </div>
 
                 <footer class="footer">
@@ -163,150 +206,103 @@ if ($result) {
 
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
 
     <script>
     $(document).ready(function() {
-        $('#zk_devices_table').DataTable({
+        const F = window.SRForm, esc = F.esc;
+        const KEY_COL = 8;
+
+        const table = $('#zk_devices_table').DataTable({
+            dom: 'rtip',
+            pageLength: 15,
             order: [[0, 'asc']],
+            columnDefs: [
+                { targets: [KEY_COL], visible: false },
+                { targets: [7], orderable: false }
+            ],
             language: {
-                search: `<span>${__('search')}:</span> _INPUT_`,
-                searchPlaceholder: `${__('search')}...`,
-                lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                 info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                paginate: { first: __('first'), last: __('last'), next: __('next'), previous: __('previous') },
-                emptyTable: __('no_data_available_in_table'),
-                zeroRecords: __('no_matching_records_found'),
+                infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                infoFiltered: '',
+                paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                emptyTable: `<div class="sr-empty"><i class="mdi mdi-fingerprint"></i>${__('no_data_available_in_table')}</div>`,
+                zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
             }
         });
 
-        function deviceFormHtml(name, area, ip, pullHost, pullPort) {
-            return `
-                <input type="hidden" id="zkDeviceId" value="">
-                <div class="form-group text-left">
-                    <label>${__('serial_number', 'Serial Number')} *</label>
-                    <input type="text" id="zkSerialNumber" class="form-control" placeholder="e.g. CKJW204960084">
-                    <small class="text-muted">${__('device_serial_hint', "Must exactly match the device's own Serial Number - it's how the device identifies itself when it phones home.")}</small>
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('device_name', 'Device Name')} *</label>
-                    <input type="text" id="zkDeviceName" class="form-control" value="${name || ''}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('area', 'Area')}</label>
-                    <input type="text" id="zkArea" class="form-control" value="${area || ''}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('device_ip', 'Device IP (LAN, informational only)')}</label>
-                    <input type="text" id="zkDeviceIp" class="form-control" value="${ip || ''}">
-                </div>
-                <hr>
-                <div class="form-group text-left">
-                    <label>${__('pull_host', 'Socket Check Host')}</label>
-                    <input type="text" id="zkPullHost" class="form-control" value="${pullHost || '185.137.245.28'}">
-                </div>
-                <div class="form-group text-left">
-                    <label>${__('pull_port', 'Socket Check Port')}</label>
-                    <input type="number" id="zkPullPort" class="form-control" value="${pullPort || ''}" placeholder="e.g. 14370 (router-forwarded to this device's port 4370)">
-                    <small class="text-muted">${__('pull_port_hint', 'Leave blank to skip live socket state checking for this device.')}</small>
-                </div>
-            `;
+        let activeKey = '';
+        function applyKey() {
+            table.column(KEY_COL).search(activeKey ? '^' + activeKey + '$' : '', true, false).draw(false);
+        }
+        $('#zkTiles').on('click', '.sr-tile', function() {
+            $('#zkTiles .sr-tile').removeClass('active');
+            $(this).addClass('active');
+            activeKey = $(this).data('key') || '';
+            applyKey();
+        });
+        $('#zkSearch').on('input', function() { table.search(this.value).draw(); });
+
+        /* ---------- add / edit popup ---------- */
+        function deviceFormHtml(d, isEdit) {
+            return '<form id="zkForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                F.section('mdi-fingerprint', __('device', 'Device'),
+                    F.field({ col: 6, name: 'serial_number', id: 'zkSerialNumber', label: __('serial_number', 'Serial Number'), req: !isEdit,
+                        ph: isEdit ? __('serial_locked_after_create', 'Locked after creation') : 'e.g. CKJW204960084',
+                        attrs: isEdit ? ' disabled' : '',
+                        hint: esc(__('device_serial_hint', "Must exactly match the device's own Serial Number - it's how the device identifies itself when it phones home.")) }) +
+                    F.field({ col: 6, name: 'device_name', id: 'zkDeviceName', label: __('device_name', 'Device Name'), req: true, value: d.name || '' }) +
+                    F.field({ col: 6, name: 'area', id: 'zkArea', label: __('area', 'Area'), value: d.area || '' }) +
+                    F.field({ col: 6, name: 'device_ip', id: 'zkDeviceIp', label: __('device_ip', 'Device IP (LAN, informational only)'), value: d.ip || '' })
+                ) +
+                F.section('mdi-lan', __('socket_check', 'Socket check'),
+                    F.field({ col: 7, name: 'pull_host', id: 'zkPullHost', label: __('pull_host', 'Socket Check Host'), value: d.pullHost || '185.137.245.28' }) +
+                    F.field({ col: 5, name: 'pull_port', id: 'zkPullPort', type: 'number', label: __('pull_port', 'Socket Check Port'), value: d.pullPort || '',
+                        ph: 'e.g. 14370', hint: esc(__('pull_port_hint', 'Leave blank to skip live socket state checking for this device.')) })
+                ) +
+            '</form>';
         }
 
-        $('#btn-add-device').on('click', function() {
-            Swal.fire({
-                title: __('add_device', 'Add Device'),
-                html: deviceFormHtml('', '', '', '', ''),
-                showCancelButton: true,
-                confirmButtonColor: APP_COLORS.primary,
-                cancelButtonColor: APP_COLORS.danger_dark,
-                confirmButtonText: __('save', 'Save'),
-                cancelButtonText: __('cancel'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
+        function openDeviceForm(d) {
+            const isEdit = !!d.id;
+            F.open({
+                title: isEdit ? __('edit_device', 'Edit Device') : __('add_device', 'Add Device'),
+                html: deviceFormHtml(d, isEdit),
+                confirm: __('save', 'Save'),
+                didOpen: function() { F.liveClear($('#zkForm')); },
                 preConfirm: function() {
-                    return new Promise(function(resolve, reject) {
-                        $.ajax({
-                            url: './includes/ajaxFile/zkDeviceAjax.php',
-                            type: 'POST',
-                            dataType: 'json',
-                            data: {
-                                action: 'add_device',
-                                serial_number: $('#zkSerialNumber').val(),
-                                device_name: $('#zkDeviceName').val(),
-                                area: $('#zkArea').val(),
-                                device_ip: $('#zkDeviceIp').val(),
-                                pull_host: $('#zkPullHost').val(),
-                                pull_port: $('#zkPullPort').val(),
-                            },
-                        }).done(function(res) {
-                            if (res.status !== 'success') {
-                                reject(res.message);
-                                return;
-                            }
-                            resolve(res);
-                        }).fail(function() {
-                            reject(__('unexpected_error', 'Unexpected error.'));
+                    const msg = F.validate($('#zkForm'));
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    const data = {
+                        action: isEdit ? 'update_device' : 'add_device',
+                        device_name: $('#zkDeviceName').val(),
+                        area: $('#zkArea').val(),
+                        device_ip: $('#zkDeviceIp').val(),
+                        pull_host: $('#zkPullHost').val(),
+                        pull_port: $('#zkPullPort').val()
+                    };
+                    if (isEdit) data.id = d.id; else data.serial_number = $('#zkSerialNumber').val();
+                    return $.ajax({ url: './includes/ajaxFile/zkDeviceAjax.php', type: 'POST', dataType: 'json', data: data })
+                        .then(function(res) {
+                            if (!res || res.status !== 'success') throw new Error((res && res.message) || 'Error');
+                            return res;
+                        })
+                        .catch(function(err) {
+                            Swal.showValidationMessage((err && err.message) || __('unexpected_error', 'Unexpected error.'));
                         });
-                    });
-                },
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    location.reload();
                 }
+            }).then(function(result) {
+                F.done(result.isConfirmed && result.value ? { isConfirmed: true, value: { type: 'success', message: result.value.message } } : null);
             });
-        });
+        }
+
+        $('#btn-add-device').on('click', function() { openDeviceForm({}); });
 
         $(document).on('click', '.btn-edit-device', function() {
-            var id = $(this).data('id');
-            var name = $(this).data('name');
-            var area = $(this).data('area');
-            var ip = $(this).data('ip');
-            var pullHost = $(this).data('pull-host');
-            var pullPort = $(this).data('pull-port');
-
-            Swal.fire({
-                title: __('edit_device', 'Edit Device'),
-                html: deviceFormHtml(name, area, ip, pullHost, pullPort),
-                showCancelButton: true,
-                confirmButtonColor: APP_COLORS.primary,
-                cancelButtonColor: APP_COLORS.danger_dark,
-                confirmButtonText: __('save', 'Save'),
-                cancelButtonText: __('cancel'),
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
-                didOpen: function() {
-                    $('#zkSerialNumber').val('').prop('disabled', true).attr('placeholder', __('serial_locked_after_create', 'Locked after creation'));
-                },
-                preConfirm: function() {
-                    return new Promise(function(resolve, reject) {
-                        $.ajax({
-                            url: './includes/ajaxFile/zkDeviceAjax.php',
-                            type: 'POST',
-                            dataType: 'json',
-                            data: {
-                                action: 'update_device',
-                                id: id,
-                                device_name: $('#zkDeviceName').val(),
-                                area: $('#zkArea').val(),
-                                device_ip: $('#zkDeviceIp').val(),
-                                pull_host: $('#zkPullHost').val(),
-                                pull_port: $('#zkPullPort').val(),
-                            },
-                        }).done(function(res) {
-                            if (res.status !== 'success') {
-                                reject(res.message);
-                                return;
-                            }
-                            resolve(res);
-                        }).fail(function() {
-                            reject(__('unexpected_error', 'Unexpected error.'));
-                        });
-                    });
-                },
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    location.reload();
-                }
+            const $b = $(this);
+            openDeviceForm({
+                id: $b.data('id'), name: $b.data('name'), area: $b.data('area'), ip: $b.data('ip'),
+                pullHost: $b.data('pull-host'), pullPort: $b.data('pull-port')
             });
         });
 
@@ -323,18 +319,25 @@ if ($result) {
                 if (res.status !== 'success') {
                     return;
                 }
-                $('#zk_devices_table tbody tr').each(function() {
-                    var serial = $(this).data('serial');
-                    var info = res.devices[serial];
+                let online = 0, offline = 0;
+                table.rows().every(function() {
+                    const $row = $(this.node());
+                    const info = res.devices[$row.data('serial')];
                     if (!info) {
                         return;
                     }
-                    var $row = $(this);
-                    var stateLabel = info.state.charAt(0).toUpperCase() + info.state.slice(1);
-                    $row.find('.js-device-state').html('<span class="device-state-dot device-state-' + info.state + '"></span>' + stateLabel);
+                    const on = info.state === 'online';
+                    on ? online++ : offline++;
+                    const stateLabel = __(info.state, info.state.charAt(0).toUpperCase() + info.state.slice(1));
+                    $row.find('.js-device-state').html(`<span class="sr-pill tone-${on ? 'green' : 'red'}"><span class="sr-dot"></span>${esc(stateLabel)}</span>`);
+                    $row.find('.js-device-avatar').toggleClass('is-online', on).toggleClass('is-offline', !on);
                     $row.find('.js-device-last-activity').text(info.last_activity || '-');
-                    $row.find('.js-device-tx-qty').text(info.transaction_qty);
+                    $row.find('.js-device-tx-qty').html(`<span class="sr-chip">${esc(info.transaction_qty)}</span>`);
+                    table.cell(this.index(), KEY_COL).data(on ? 'online' : 'offline');
                 });
+                $('#zkOnlineCount').text(online);
+                $('#zkOfflineCount').text(offline);
+                if (activeKey) applyKey();
             });
         }
         setInterval(pollDeviceState, 15000);
