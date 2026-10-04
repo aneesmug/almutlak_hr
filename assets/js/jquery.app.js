@@ -2261,7 +2261,7 @@ function loadCompanyAccess(userId, userType) {
                 toggleCompanyAccessSection(userType);
                 
                 // Toggle when user type changes
-                $('#user_type').off('change').on('change', function() {
+                $('#user_type').off('change.comp').on('change.comp', function() {
                     toggleCompanyAccessSection($(this).val());
                 });
             }
@@ -2573,178 +2573,156 @@ $(document).on('change', '#user_type', function() {
     toggleEmailFieldVisibility();
 });
 
+// ---- Add / edit system user popups (all_users.php, the employee pages' "Create login") ----
+// Markup/styling: assets/css/smart_request.css (.sr-form ... and .usr-pop). The stylesheet is
+// added on demand because the employee pages that open "Create login" don't load it.
+function usrEnsureFormCss() {
+    if (!document.querySelector('link[href*="smart_request.css"]')) {
+        $('head').append('<link rel="stylesheet" type="text/css" href="assets/css/smart_request.css">');
+    }
+}
+function usrEsc(s) {
+    return $('<div>').text(s == null ? '' : String(s)).html();
+}
+// Shows the "no access scope needed" note when the role hides all three access blocks.
+function usrSyncScopeNote() {
+    setTimeout(function () {
+        var any = $('#company-access-group, #department-access-group, #employee-access-group').filter(function () {
+            return this.style.display !== 'none';
+        }).length;
+        $('#usrScopeNone').toggle(!any);
+        $('#usrScopeBlocks').toggle(!!any);
+    }, 0);
+}
+// Collects the access-scope part of the form into FormData (same fields ajaxUser.php always read).
+function usrAppendScope(formData) {
+    [
+        ['#fullAccessCheckbox', '#allowed_companies', 'allowed_companies', 'full_access'],
+        ['#fullDeptAccessCheckbox', '#allowed_departments', 'allowed_departments', 'full_dept_access'],
+        ['#fullEmpAccessCheckbox', '#allowed_employees', 'allowed_employees', 'full_emp_access']
+    ].forEach(function (s) {
+        var full = $(s[0]).is(':checked');
+        var picked = $(s[1]).val() || [];
+        formData.delete(s[2]);
+        formData.delete(s[3]);
+        if (full) {
+            formData.append(s[3], '1');
+        } else if (picked.length) {
+            picked.forEach(function (v) { formData.append(s[2] + '[]', v); });
+            formData.append(s[3], '0');
+        }
+    });
+}
+// Shared checks for role / email / access scope. Returns an error message or ''.
+function usrValidateScope() {
+    var type = $('#user_type').val();
+    if (!type) return __('select_employee_type');
+    var email = $.trim($('#email').val() || '');
+    if (type !== 'employee' && !email) return __('enter_valid_email');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return __('enter_valid_email');
+    var checks = [
+        ['#company-access-group', '#fullAccessCheckbox', '#allowed_companies', __('select_at_least_one_company') || 'Please select at least one company or grant full access'],
+        ['#department-access-group', '#fullDeptAccessCheckbox', '#allowed_departments', __('select_at_least_one_department') || 'Please select at least one department or grant full access'],
+        ['#employee-access-group', '#fullEmpAccessCheckbox', '#allowed_employees', __('select_at_least_one_employee') || 'Please select at least one employee or grant full access']
+    ];
+    for (var i = 0; i < checks.length; i++) {
+        var c = checks[i];
+        if ($(c[0]).is(':visible') && !$(c[1]).is(':checked') && !($(c[2]).val() || []).length) return c[3];
+    }
+    return '';
+}
+function usrPostForm(formData) {
+    return $.ajax({
+        url: './includes/ajaxFile/ajaxUser.php',
+        type: 'POST',
+        data: formData,
+        cache: false,
+        contentType: false,
+        processData: false,
+        dataType: 'json'
+    }).then(function (r) {
+        if (!r || r.type === 'error') {
+            Swal.showValidationMessage((r && r.message) || __('request_failed'));
+            return false;
+        }
+        return r;
+    }, function (jqXHR, textStatus) {
+        var msg = (jqXHR.responseJSON && jqXHR.responseJSON.message) || handleAjaxFailure(jqXHR, textStatus).message;
+        Swal.showValidationMessage(__('request_failed') + ' ' + msg);
+        return false;
+    });
+}
+function usrDestroySelects() {
+    ['#allowed_companies', '#allowed_departments', '#allowed_employees', '#emp_id'].forEach(function (id) {
+        if ($(id).data('select2')) $(id).select2('destroy');
+    });
+}
+function usrPopupTitle(name, sub, icon, useIcon) {
+    var ini = String(name || '').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase();
+    return '<div class="usr-pop-title">' +
+        ((ini && !useIcon) ? '<span class="sr-avatar">' + usrEsc(ini) + '</span>' : '<span class="sr-avatar"><i class="mdi ' + icon + '"></i></span>') +
+        '<div><b>' + usrEsc(name) + '</b><small>' + usrEsc(sub) + '</small></div></div>';
+}
+
 $(document).on('click', '.updateUserAjax', function (e) {
     e.preventDefault();
-    var e_iduser        = $(this).data('id'); 
-    var e_fullname      = $(this).data('fullname');
-    var e_dept          = $(this).data('dept');
-    var e_email         = $(this).data('email');
-    var user_type       = $(this).data('user_type');
-    var user_status     = $(this).data('status');
+    var $b = $(this);
+    var e_iduser = $b.data('id');
+    var e_fullname = $b.data('fullname');
+    var e_dept = $b.data('dept');
+    var e_email = $b.data('email');
+    var user_type = $b.data('user_type');
+    var user_status = $b.data('status');
+    usrEnsureFormCss();
     Swal.fire({
-        title: e_fullname, // Show user's name in title
+        title: usrPopupTitle(e_fullname, __('edit_user', 'Edit user') + (e_dept ? ' · ' + e_dept : ''), 'mdi-account-edit'),
         html: edit_user_HTML(),
-        customClass: 'swal-landscape',
+        width: '900px',
+        customClass: { popup: 'sr-addline-popup sr-page usr-pop' },
         showCancelButton: true,
         confirmButtonColor: APP_COLORS.primary,
         cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
-        confirmButtonText: __('yes_update'),
+        confirmButtonText: '<i class="mdi mdi-content-save"></i> ' + (__('yes_update') || 'Update'),
         showLoaderOnConfirm: true,
-        willOpen: function() {
-            // Give DOM time to render
-            setTimeout(function() {
-                $('#iduser').val(e_iduser); 
-                $('#dept').val(e_dept);
-                $('#email').val(e_email);
-                $('#user_status').prop('checked', user_status == 1);
-
-                // Set the select value properly using .val() and then trigger the toggle
-                $('#user_type').val(user_type);
-                toggleEmailFieldVisibility();  // Call immediately after setting value
-
-                // Load companies and set current user's allowed companies
-                loadCompanyAccess(e_iduser, user_type);
-                
-                // Load departments and set current user's allowed departments
-                loadDepartmentAccess(e_iduser, user_type);
-                
-                // Load employees and set current user's allowed employees
-                loadEmployeeAccess(e_iduser, user_type);
-            }, 100);
-        },
-        didClose: function() {
-            // Destroy Select2 instances when modal closes
-            if ($('#allowed_companies').data('select2')) {
-                $('#allowed_companies').select2('destroy');
-            }
-            if ($('#allowed_departments').data('select2')) {
-                $('#allowed_departments').select2('destroy');
-            }
-            if ($('#allowed_employees').data('select2')) {
-                $('#allowed_employees').select2('destroy');
-            }
-        },
-        preConfirm: function() {
-            var selectedType = $('#user_type').val();
-            var fullAccess = $('#fullAccessCheckbox').is(':checked');
-            var selectedCompanies = $('#allowed_companies').val();
-            var fullDeptAccess = $('#fullDeptAccessCheckbox').is(':checked');
-            var selectedDepartments = $('#allowed_departments').val();
-            var fullEmpAccess = $('#fullEmpAccessCheckbox').is(':checked');
-            var selectedEmployees = $('#allowed_employees').val();
-            
-            // Validate user type
-            if($('#user_type').val() == "") {
-                Swal.showValidationMessage(__("select_employee_type"));
-                return false;
-            }
-            
-            // Only validate email if user type is not 'employee'
-            if(selectedType !== 'employee' && $('#email').val() == "") {
-                Swal.showValidationMessage(__("enter_valid_email"));
-                return false;
-            }
-            
-            // Validate company access (only for non-admin, non-employee users)
-            if($('#company-access-group').is(':visible')) {
-                if(!fullAccess && (!selectedCompanies || selectedCompanies.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_company") || "Please select at least one company or grant full access");
-                    return false;
-                }
-            }
-            
-            // Validate department access (only for non-admin, non-employee users)
-            if($('#department-access-group').is(':visible')) {
-                if(!fullDeptAccess && (!selectedDepartments || selectedDepartments.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_department") || "Please select at least one department or grant full access");
-                    return false;
-                }
-            }
-            
-            // Validate employee access (only for non-admin, non-employee users)
-            if($('#employee-access-group').is(':visible')) {
-                if(!fullEmpAccess && (!selectedEmployees || selectedEmployees.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_employee") || "Please select at least one employee or grant full access");
-                    return false;
-                }
-            }
-            
-            return new Promise(function(reject) {
-                // Build form data with proper company and department handling
-                var formData = new FormData($('#submitEditUserForm')[0]);
-                
-                // Handle company access
-                // Remove allowed_companies field if full access is checked
-                if(fullAccess) {
-                    formData.delete('allowed_companies');
-                    formData.append('full_access', '1');
-                } else if(selectedCompanies && selectedCompanies.length > 0) {
-                    // Remove default serialized companies and rebuild as array
-                    formData.delete('allowed_companies');
-                    selectedCompanies.forEach(function(companyId) {
-                        formData.append('allowed_companies[]', companyId);
-                    });
-                    formData.append('full_access', '0');
-                }
-                
-                // Handle department access
-                // Remove allowed_departments field if full access is checked
-                if(fullDeptAccess) {
-                    formData.delete('allowed_departments');
-                    formData.append('full_dept_access', '1');
-                } else if(selectedDepartments && selectedDepartments.length > 0) {
-                    // Remove default serialized departments and rebuild as array
-                    formData.delete('allowed_departments');
-                    selectedDepartments.forEach(function(deptId) {
-                        formData.append('allowed_departments[]', deptId);
-                    });
-                    formData.append('full_dept_access', '0');
-                }
-                
-                // Handle employee access
-                // Remove allowed_employees field if full access is checked
-                if(fullEmpAccess) {
-                    formData.delete('allowed_employees');
-                    formData.append('full_emp_access', '1');
-                } else if(selectedEmployees && selectedEmployees.length > 0) {
-                    // Remove default serialized employees and rebuild as array
-                    formData.delete('allowed_employees');
-                    selectedEmployees.forEach(function(empId) {
-                        formData.append('allowed_employees[]', empId);
-                    });
-                    formData.append('full_emp_access', '0');
-                }
-                
-                // Add AJAX action type
-                formData.append('ajaxType', 'user_upate');
-                
-                $.ajax({
-                        url: './includes/ajaxFile/ajaxUser.php',
-                        type: 'POST',
-                        data: formData,
-                        cache: false,
-                        contentType: false,
-                        processData: false,
-                        dataType: "json",
-                })
-                .done(function(response){
-                    Swal.fire({
-                        title:response.title,text:response.message,icon:response.type,allowOutsideClick:false, confirmButtonText: __("ok")
-                    }).then(function(result){
-                        // Refresh AJAX table instead of reloading page
-                        if(result.isConfirmed && typeof userTable !== 'undefined') {
-                            userTable.draw(false);
-                        }
-                    });
-                })
-                .fail(function(jqXHR, textStatus, errorThrown) {
-                    reject(handleAjaxFailure(jqXHR, textStatus).message);
-                });
+        allowOutsideClick: false,
+        didOpen: function () {
+            $('#iduser').val(e_iduser);
+            $('#dept').val(e_dept);
+            $('#email').val(e_email);
+            $('#user_status').prop('checked', user_status == 1);
+            $('#user_type').val(user_type);
+            toggleEmailFieldVisibility();
+            loadCompanyAccess(e_iduser, user_type);
+            loadDepartmentAccess(e_iduser, user_type);
+            loadEmployeeAccess(e_iduser, user_type);
+            $('#user_type').on('change.usr', function () {
+                $(this).toggleClass('is-invalid', !this.value);
+                usrSyncScopeNote();
             });
+            usrSyncScopeNote();
+            $(document).one('ajaxStop.usrScope', usrSyncScopeNote);
         },
-        allowOutsideClick: false
-    })
+        didClose: usrDestroySelects,
+        preConfirm: function () {
+            var msg = usrValidateScope();
+            if (msg) {
+                Swal.showValidationMessage(msg);
+                return false;
+            }
+            var formData = new FormData($('#submitEditUserForm')[0]);
+            usrAppendScope(formData);
+            formData.append('ajaxType', 'user_upate');
+            return usrPostForm(formData);
+        }
+    }).then(function (result) {
+        if (!(result.isConfirmed && result.value)) return;
+        var r = result.value;
+        Swal.fire({ title: r.title, text: r.message, icon: r.type, allowOutsideClick: false, confirmButtonText: __('ok') }).then(function () {
+            if (typeof userTable !== 'undefined' && userTable) userTable.draw(false);
+            else location.reload();
+        });
+    });
 });
 
 $(document).on('click', '.updatePasswordAjax', function (e) {
@@ -2825,248 +2803,112 @@ $(document).on('click', '.showPasswordAjax', function (e) {
 $(document).on('click', '.createUserDeptAjax', function(e) {
     e.preventDefault();
     var emp_id = $(this).data('emp_id');
-    let hasUserInteracted = false;
+    usrEnsureFormCss();
+
+    function updateButtonState() {
+        var ok = !!($('#emp_id').val() && $('#user_type').val());
+        var btn = Swal.getConfirmButton();
+        if (btn) {
+            btn.disabled = !ok;
+            btn.style.opacity = ok ? '1' : '.5';
+        }
+    }
 
     Swal.fire({
-        title: __('create_new_user'),
+        title: usrPopupTitle(__('create_new_user'), __('create_user_hint', 'Give an employee a login and choose what they can see'), 'mdi-account-plus', true),
         html: create_user_HTML(),
+        width: '900px',
+        customClass: { popup: 'sr-addline-popup sr-page usr-pop' },
         showCancelButton: true,
         confirmButtonColor: APP_COLORS.primary,
         cancelButtonColor: APP_COLORS.danger_dark,
         cancelButtonText: __('cancel'),
-        confirmButtonText: __('create_user'),
+        confirmButtonText: '<i class="mdi mdi-account-plus"></i> ' + (__('create_user') || 'Create user'),
         showLoaderOnConfirm: true,
-        allowOutsideClick: () => {
-            if (hasUserInteracted) {return false;}
-            return !Swal.isLoading();
-        },
+        allowOutsideClick: false,
         didOpen: () => {
-            setupInputValidations();
-            
-            // Function to update button state
-            function updateButtonState() {
-                var empIdVal = $('#emp_id').val();
-                var userTypeVal = $('#user_type').val();
-                var confirmBtn = Swal.getConfirmButton();
-                
-                // Enable button only if both fields have values
-                if (empIdVal && userTypeVal) {
-                    confirmBtn.disabled = false;
-                    confirmBtn.style.opacity = '1';
-                } else {
-                    confirmBtn.disabled = true;
-                    confirmBtn.style.opacity = '0.5';
-                }
-            }
-            
-            // Load available employees (those not in admin_login)
+            updateButtonState();
+
+            // Employees without a login yet
             $.ajax({
                 url: './includes/ajaxFile/getAvailableEmployees.php',
                 type: 'GET',
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success' && response.data.length > 0) {
-                        let empOptions = '<option value="">' + (__('select_employee') || 'Select Employee') + '</option>';
-                        
-                        response.data.forEach(function(emp) {
-                            empOptions += `<option value="${emp.emp_id}">${emp.display_text}</option>`;
-                        });
-                        
-                        $('#emp_id').html(empOptions);
-                        
-                        // If emp_id is passed, select it
-                        if (emp_id) {
-                            $('#emp_id').val(emp_id);
-                        }
-                        
-                        // Initialize Select2 for employee dropdown
-                        $('#emp_id').select2({
-                            placeholder: __('select_employee') || 'Select Employee',
-                            allowClear: true,
-                            width: '100%'
-                        });
-                        
-                        // Add change listener for employee selection
-                        $('#emp_id').on('change', function() {
-                            updateButtonState();
-                        });
-                        
-                        // Initial button state check
-                        updateButtonState();
-                    } else {
-                        $('#emp_id').html('<option value="">' + (__('no_available_employees') || 'No available employees') + '</option>');
-                        $('#emp_id').prop('disabled', true);
-                        Swal.getConfirmButton().disabled = true;
-                        Swal.showValidationMessage(__('no_available_employees') || 'No employees available for user creation');
+                dataType: 'json'
+            }).done(function(response) {
+                if (response.status === 'success' && response.data.length > 0) {
+                    var opts = '<option value=""></option>';
+                    response.data.forEach(function(emp) {
+                        opts += '<option value="' + usrEsc(emp.emp_id) + '">' + usrEsc(emp.display_text) + '</option>';
+                    });
+                    $('#emp_id').html(opts);
+                    if (emp_id) {
+                        $('#emp_id').val(emp_id);
                     }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading employees:', error);
-                    $('#emp_id').html('<option value="">' + (__('error_loading_employees') || 'Error loading employees') + '</option>');
-                    Swal.getConfirmButton().disabled = true;
-                }
-            });
-            
-            // Function to toggle email field requirement based on user type
-            function toggleEmailField() {
-                var selectedType = $('#user_type').val();
-                if (selectedType === 'employee') {
-                    $('#email').parent().hide();
+                    $('#emp_id').select2({
+                        placeholder: __('select_employee') || 'Select Employee',
+                        allowClear: true,
+                        width: '100%',
+                        dropdownParent: $(Swal.getPopup())
+                    }).on('change', function() {
+                        $(this).toggleClass('is-invalid', !this.value);
+                        updateButtonState();
+                    });
+                    $('#usrEmpCount').text(response.data.length);
+                    updateButtonState();
                 } else {
-                    $('#email').parent().show();
+                    $('#emp_id').html('<option value="">' + usrEsc(__('no_available_employees') || 'No available employees') + '</option>').prop('disabled', true);
+                    Swal.showValidationMessage(__('no_available_employees') || 'No employees available for user creation');
                 }
-            }
-            
-            // Initial toggle on load
-            toggleEmailField();
-            
-            // Load access control lists for create flow
+            }).fail(function() {
+                $('#emp_id').html('<option value="">' + usrEsc(__('error_loading_employees') || 'Error loading employees') + '</option>');
+            });
+
+            toggleEmailFieldVisibility();
             loadCompanyAccess(0, $('#user_type').val());
             loadDepartmentAccess(0, $('#user_type').val());
             loadEmployeeAccess(0, $('#user_type').val());
-            
-            // Toggle on change and update button state
-            $('#user_type').on('change', function() {
-                toggleEmailField();
+
+            $('#user_type').on('change.usr', function() {
+                $(this).toggleClass('is-invalid', !this.value);
                 updateButtonState();
                 loadCompanyAccess(0, $(this).val());
                 loadDepartmentAccess(0, $(this).val());
                 loadEmployeeAccess(0, $(this).val());
+                $(document).one('ajaxStop.usrScope', usrSyncScopeNote);
+                usrSyncScopeNote();
             });
-            
-            const onFirstInteraction = () => { hasUserInteracted = true; };
-            setupDynamicValidation([
-                { id: 'emp_id', event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee') },
-                { id: 'user_type', event: 'change', validation: (value) => value !== "", requiredMessage: __('select_employee_type') }
-            ], onFirstInteraction);
-            
-            // Disable button initially
-            Swal.getConfirmButton().disabled = true;
-            Swal.getConfirmButton().style.opacity = '0.5';
+            usrSyncScopeNote();
+            $(document).one('ajaxStop.usrScope', usrSyncScopeNote);
         },
+        didClose: usrDestroySelects,
         preConfirm: () => {
             var selectedEmpId = $('#emp_id').val();
-            var selectedType = $('#user_type').val();
-            var fullAccess = $('#fullAccessCheckbox').is(':checked');
-            var selectedCompanies = $('#allowed_companies').val();
-            var fullDeptAccess = $('#fullDeptAccessCheckbox').is(':checked');
-            var selectedDepartments = $('#allowed_departments').val();
-            var fullEmpAccess = $('#fullEmpAccessCheckbox').is(':checked');
-            var selectedEmployees = $('#allowed_employees').val();
-            
-            // Validate employee selection (always required)
-            if(!selectedEmpId || selectedEmpId == "") {
+            if (!selectedEmpId) {
+                $('#emp_id').addClass('is-invalid');
                 Swal.showValidationMessage(__('select_employee') || 'Please select an employee');
                 return false;
             }
-            
-            // Validate user type (always required)
-            if(!selectedType || selectedType == "") {
-                Swal.showValidationMessage(__('select_employee_type'));
+            var msg = usrValidateScope();
+            if (msg) {
+                Swal.showValidationMessage(msg);
                 return false;
             }
-            
-            // Only validate email if user type is not 'employee'
-            if(selectedType !== 'employee' && !$('#email').val()) {
-                Swal.showValidationMessage(__('enter_valid_email'));
-                return false;
-            }
-            
-            // Validate email format if provided
-            if($('#email').val() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test($('#email').val())) {
-                Swal.showValidationMessage(__('enter_valid_email'));
-                return false;
-            }
-            
-            // Validate company access (only for non-admin, non-employee users)
-            if($('#company-access-group').is(':visible')) {
-                if(!fullAccess && (!selectedCompanies || selectedCompanies.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_company") || "Please select at least one company or grant full access");
-                    return false;
-                }
-            }
-            
-            // Validate department access (only for non-admin, non-employee users)
-            if($('#department-access-group').is(':visible')) {
-                if(!fullDeptAccess && (!selectedDepartments || selectedDepartments.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_department") || "Please select at least one department or grant full access");
-                    return false;
-                }
-            }
-            
-            // Validate employee access (only for non-admin, non-employee users)
-            if($('#employee-access-group').is(':visible')) {
-                if(!fullEmpAccess && (!selectedEmployees || selectedEmployees.length === 0)) {
-                    Swal.showValidationMessage(__("select_at_least_one_employee") || "Please select at least one employee or grant full access");
-                    return false;
-                }
-            }
-            
             var formData = new FormData($('#createUserForm')[0]);
-            formData.append('emp_id', selectedEmpId);
-            formData.append('email', $('#email').val());
-            formData.append('user_type', selectedType);
-            
-            // Handle company access
-            if(fullAccess) {
-                formData.delete('allowed_companies');
-                formData.append('full_access', '1');
-            } else if(selectedCompanies && selectedCompanies.length > 0) {
-                formData.delete('allowed_companies');
-                selectedCompanies.forEach(function(companyId) {
-                    formData.append('allowed_companies[]', companyId);
-                });
-                formData.append('full_access', '0');
-            }
-            
-            // Handle department access
-            if(fullDeptAccess) {
-                formData.delete('allowed_departments');
-                formData.append('full_dept_access', '1');
-            } else if(selectedDepartments && selectedDepartments.length > 0) {
-                formData.delete('allowed_departments');
-                selectedDepartments.forEach(function(deptId) {
-                    formData.append('allowed_departments[]', deptId);
-                });
-                formData.append('full_dept_access', '0');
-            }
-            
-            // Handle employee access
-            if(fullEmpAccess) {
-                formData.delete('allowed_employees');
-                formData.append('full_emp_access', '1');
-            } else if(selectedEmployees && selectedEmployees.length > 0) {
-                formData.delete('allowed_employees');
-                selectedEmployees.forEach(function(empId) {
-                    formData.append('allowed_employees[]', empId);
-                });
-                formData.append('full_emp_access', '0');
-            }
-            
+            formData.set('emp_id', selectedEmpId);
+            formData.set('email', $('#email').val() || '');
+            formData.set('user_type', $('#user_type').val());
+            usrAppendScope(formData);
             formData.append('ajaxType', 'create_user');
-            
-            return $.ajax({
-                url: './includes/ajaxFile/ajaxUser.php',
-                type: 'POST',
-                data: formData,
-                cache: false,
-                contentType: false,
-                processData: false,
-                dataType: "json",
-            })
-            .done(function(response){
-                Swal.fire({
-                    title:response.title,text:response.message,icon:response.type,allowOutsideClick:false
-                }).then(function(isConfirm){(isConfirm)?location.reload():""});
-            })
-            .fail(function(jqXHR, textStatus) {
-                const error = handleAjaxFailure(jqXHR, textStatus);
-                Swal.showValidationMessage(`${__('request_failed')} ${error.message}`);
-            });
+            return usrPostForm(formData);
         }
-    })
+    }).then(function(result) {
+        if (!(result.isConfirmed && result.value)) return;
+        var r = result.value;
+        Swal.fire({ title: r.title, text: r.message, icon: r.type, allowOutsideClick: false, confirmButtonText: __('ok') }).then(function() {
+            location.reload();
+        });
+    });
 });
-
 
 ////////////////////////////////////////////////////////////////////
 ////////////            End Users Handling            //////////////
@@ -7038,280 +6880,154 @@ function edit_password_HTML(){
 }
 
 
-function create_user_HTML() {
-    // Define all available user roles/permissions based on admin_login.user_type ENUM
-    const roleTypes = [
-        // Primary Roles
-        { value: 'administrator', label: __('administrator') || 'System Administrator', group: 'primary' },
-        { value: 'gm', label: __('general_manager') || 'General Manager', group: 'primary' },
-        { value: 'employee', label: __('employee') || 'Regular Employee', group: 'primary' },
-        
-        // HR Roles
-        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior Business Partner', group: 'hr' },
-        { value: 'hr_operations', label: __('hr_operations') || 'HR Operations', group: 'hr' },
-        { value: 'hr_supervisor', label: __('hr_supervisor') || 'HR Supervisor', group: 'hr' },
-        { value: 'hr_recruitment', label: __('hr_recruitment') || 'HR Recruitment', group: 'hr' },
-        { value: 'hr_payroll', label: __('hr_payroll') || 'HR Payroll', group: 'hr' },
-        
-        // Department Roles
-        { value: 'dept_user', label: __('dept_user') || 'Department User', group: 'dept' },
-        { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
-        { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
-        { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
-        { value: 'archiving', label: __('archiving') || 'Archiving', group: 'dept' },
+// __() returns the key itself when a translation is missing; fall back to readable text then.
+function usrT(key, fallback) {
+    var v = __(key);
+    return (v && v !== key) ? v : fallback;
+}
 
-        // Legacy Roles (for backward compatibility)
-        { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
-        { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },
-        { value: 'finance', label: __('finance') || 'Finance (Legacy)', group: 'legacy' },
-        { value: 'assistant', label: __('assistant') || 'Assistant (Legacy)', group: 'legacy' }
+// Role list for the add / edit user popups (admin_login.user_type ENUM), grouped.
+function usrRoleOptions() {
+    const groups = [
+        [usrT('primary_roles', 'Primary Roles'), [
+            ['administrator', usrT('administrator', 'System Administrator')],
+            ['gm', usrT('general_manager', 'General Manager')],
+            ['employee', usrT('employee', 'Regular Employee')]
+        ]],
+        [usrT('hr_roles', 'HR Department Roles'), [
+            ['hr_senior_bp', usrT('hr_senior_bp', 'HR Senior Business Partner')],
+            ['hr_operations', usrT('hr_operations', 'HR Operations')],
+            ['hr_supervisor', usrT('hr_supervisor', 'HR Supervisor')],
+            ['hr_recruitment', usrT('hr_recruitment', 'HR Recruitment')],
+            ['hr_payroll', usrT('hr_payroll', 'HR Payroll')]
+        ]],
+        [usrT('department_roles', 'Department Roles'), [
+            ['dept_user', usrT('dept_user', 'Department User')],
+            ['finance_officer', usrT('finance_officer', 'Finance Officer')],
+            ['auditor', usrT('auditor', 'Auditor')],
+            ['gr_officer', usrT('gr_officer', 'Government Relations Officer')],
+            ['archiving', usrT('archiving', 'Archiving')]
+        ]],
+        [usrT('legacy_roles', 'Legacy Roles (Not Recommended)'), [
+            ['hr', usrT('hr', 'HR (Legacy)')],
+            ['it', usrT('it', 'IT (Legacy)')],
+            ['finance', usrT('finance', 'Finance (Legacy)')],
+            ['assistant', usrT('assistant', 'Assistant (Legacy)')]
+        ]]
     ];
-    
-    // Group roles for better UI organization
-    let roleOptions = '';
-    
-    // Primary roles
-    roleOptions += `<optgroup label="${__('primary_roles') || 'Primary Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'primary').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // HR roles
-    roleOptions += `<optgroup label="${__('hr_roles') || 'HR Department Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'hr').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // Department roles
-    roleOptions += `<optgroup label="${__('department_roles') || 'Department Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'dept').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // Legacy roles (commented out or shown separately)
-    roleOptions += `<optgroup label="${__('legacy_roles') || 'Legacy Roles (Not Recommended)'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'legacy').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
+    return groups.map(g => `<optgroup label="${usrEsc(g[0])}">` +
+        g[1].map(r => `<option value="${r[0]}">${usrEsc(r[1])}</option>`).join('') + '</optgroup>').join('');
+}
+
+// One access-scope block: "full access" switch + multi select. IDs are what load*Access() expect.
+function usrScopeBlock(o) {
     return `
-    <form class="contact-input" id="createUserForm" style="text-align: left;">
-        <div class="modal-body">
-            <div class="form-row">
-                <div class="form-group col-md-12">
-                    <label for="emp_id">${__('employee') || 'Select Employee'}<span class="text-danger">*</span></label>
-                    <select id="emp_id" name="emp_id" class="form-control select2-single">
-                        <option value="">${__('loading_employees') || 'Loading employees...'}</option>
-                    </select>
-                    <small class="form-text text-muted">${__('select_employee_note') || 'Note: Only employees without existing system access are shown.'}</small>
-                </div>
-                <div class="form-group col-md-12">
-                    <label for="user_type">${__('type_of_permission') || 'User Role / Permission'}<span class="text-danger">*</span></label>
-                    <select id="user_type" name="user_type" class="form-control">
-                        <option value="">${__('select_type')}</option>
-                        ${roleOptions}
-                    </select>
-                    <small class="form-text text-muted">${__('user_role_note') || 'Note: User role determines system access permissions. Employee type is automatically inherited from employee record.'}</small>
-                </div>
-                <div class="form-group col-md-12">
-                    <label for="email">${__('email')}</label>
-                    <input type="email" id="email" name="email" class="form-control email-validation">
-                    <small class="form-text text-muted">${__('admin_email_note') || 'Note: Email is optional for regular employees. Required for administrative roles.'}</small>
-                </div>
+        <div class="usr-scope form-group" id="${o.group}">
+            <div class="usr-scope-head">
+                <label for="${o.select}"><i class="mdi ${o.icon}"></i> ${usrEsc(o.label)} <span class="text-danger">*</span></label>
+                <label class="usr-switch-sm" for="${o.check}">
+                    <input type="checkbox" id="${o.check}" name="${o.checkName}" value="1">
+                    <span class="track"></span><span class="txt">${usrEsc(o.full)}</span>
+                </label>
+            </div>
+            <div id="${o.container}"></div>
+            <select class="form-control select2-multi" name="${o.name}" id="${o.select}" multiple="multiple" style="width: 100%"></select>
+            <small class="form-text sr-fhint">${usrEsc(o.note)}</small>
+        </div>`;
+}
 
-                <!-- Company Access Control Section -->
-                <div class="form-group col-md-6" id="company-access-group">
-                    <label for="allowed_companies">${__('allowed_companies') || 'Allowed Companies'}<span class="text-danger">*</span></label>
-                    <div id="company-select-container">
-                        <div class="d-flex align-items-center mb-2">
-                            <input type="checkbox" id="fullAccessCheckbox" name="full_access" value="1">
-                            <label class="ml-2 mb-0" for="fullAccessCheckbox">${__('full_access_to_all_companies') || 'Full Access to All Companies'}</label>
-                        </div>
-                    </div>
-                    <select class="form-control select2-multi" name="allowed_companies" id="allowed_companies" multiple="multiple" style="width: 100%">
-                        <!-- Companies will be loaded dynamically -->
-                    </select>
-                    <small class="form-text text-muted d-block mt-1">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+function usrScopeSection() {
+    return `
+        <div class="sr-fsec">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-shield"></i> ${usrEsc(__('access_scope', 'Access scope'))}</span></div>
+            <div class="usr-scope-body">
+                <div class="usr-scope-none" id="usrScopeNone" style="display:none;"><i class="mdi mdi-information"></i> ${usrEsc(__('access_scope_not_needed', 'Administrators, general managers and regular employees do not need an access scope.'))}</div>
+                <div class="usr-scope-grid" id="usrScopeBlocks">
+                    ${usrScopeBlock({ group: 'company-access-group', container: 'company-select-container', icon: 'mdi-domain', label: __('allowed_companies') || 'Allowed Companies',
+                        check: 'fullAccessCheckbox', checkName: 'full_access', full: __('full_access_to_all_companies') || 'Full access to all companies',
+                        select: 'allowed_companies', name: 'allowed_companies', note: __('company_access_note_short', 'Search and pick companies, or switch on full access.') })}
+                    ${usrScopeBlock({ group: 'department-access-group', container: 'department-select-container', icon: 'mdi-sitemap', label: __('allowed_departments') || 'Allowed Departments',
+                        check: 'fullDeptAccessCheckbox', checkName: 'full_dept_access', full: __('full_access_to_all_departments') || 'Full access to all departments',
+                        select: 'allowed_departments', name: 'allowed_departments', note: __('department_access_note_short', 'Search and pick departments, or switch on full access.') })}
+                    ${usrScopeBlock({ group: 'employee-access-group', container: 'employee-select-container', icon: 'mdi-account-multiple', label: __('allowed_employees') || 'Allowed Employees',
+                        check: 'fullEmpAccessCheckbox', checkName: 'full_emp_access', full: __('full_access_to_all_employees') || 'Full access to all employees',
+                        select: 'allowed_employees', name: 'allowed_employees', note: __('employee_access_note_short', 'Search and pick employees, or switch on full access.') })}
                 </div>
+            </div>
+        </div>`;
+}
 
-                <!-- Department Access Control Section -->
-                <div class="form-group col-md-6" id="department-access-group">
-                    <label for="allowed_departments">${__('allowed_departments') || 'Allowed Departments'}<span class="text-danger">*</span></label>
-                    <div id="department-select-container">
-                        <div class="d-flex align-items-center mb-2">
-                            <input type="checkbox" id="fullDeptAccessCheckbox" name="full_dept_access" value="1">
-                            <label class="ml-2 mb-0" for="fullDeptAccessCheckbox">${__('full_access_to_all_departments') || 'Full Access to All Departments'}</label>
-                        </div>
-                    </div>
-                    <select class="form-control select2-multi" name="allowed_departments" id="allowed_departments" multiple="multiple" style="width: 100%">
-                        <!-- Departments will be loaded dynamically -->
-                    </select>
-                    <small class="form-text text-muted d-block mt-1">${__('department_access_note') || 'Type to search and select departments. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
-                </div>
-
-                <!-- Employee Access Control Section -->
-                <div class="form-group col-md-6" id="employee-access-group">
-                    <label for="allowed_employees">${__('allowed_employees') || 'Allowed Employees'}<span class="text-danger">*</span></label>
-                    <div id="employee-select-container">
-                        <div class="d-flex align-items-center mb-2">
-                            <input type="checkbox" id="fullEmpAccessCheckbox" name="full_emp_access" value="1">
-                            <label class="ml-2 mb-0" for="fullEmpAccessCheckbox">${__('full_access_to_all_employees') || 'Full Access to All Employees'}</label>
-                        </div>
-                    </div>
-                    <select class="form-control select2-multi" name="allowed_employees" id="allowed_employees" multiple="multiple" style="width: 100%">
-                        <!-- Employees will be loaded dynamically -->
-                    </select>
-                    <small class="form-text text-muted d-block mt-1">${__('employee_access_note') || 'Type to search and select employees. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
+function create_user_HTML() {
+    return `
+    <form class="sr-form" id="createUserForm" autocomplete="off" novalidate>
+        <div class="sr-fsec">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-account"></i> ${usrEsc(__('employee') || 'Employee')}</span><span class="sr-chip"><i class="mdi mdi-account-multiple"></i><span id="usrEmpCount">...</span></span></div>
+            <div class="sr-fgrid">
+                <div class="sr-fcol c-12">
+                    <label for="emp_id">${usrEsc(__('employee') || 'Select Employee')} <span class="text-danger">*</span></label>
+                    <select id="emp_id" name="emp_id" class="form-control"><option value="">${usrEsc(__('loading_employees') || 'Loading employees...')}</option></select>
+                    <small class="sr-fhint">${usrEsc(__('select_employee_note') || 'Only employees without a login are shown.')}</small>
                 </div>
             </div>
         </div>
+        <div class="sr-fsec">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-account-key"></i> ${usrEsc(__('account', 'Account'))}</span></div>
+            <div class="sr-fgrid">
+                <div class="sr-fcol c-6">
+                    <label for="user_type">${usrEsc(__('type_of_permission') || 'User Role / Permission')} <span class="text-danger">*</span></label>
+                    <select id="user_type" name="user_type" class="form-control">
+                        <option value="">${usrEsc(__('select_type'))}</option>
+                        ${usrRoleOptions()}
+                    </select>
+                    <small class="sr-fhint">${usrEsc(__('user_role_note_short', 'The role decides which pages and actions the user gets.'))}</small>
+                </div>
+                <div class="sr-fcol c-6" id="email-group">
+                    <label for="email">${usrEsc(__('email'))}</label>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="name@company.com">
+                    <small class="sr-fhint">${usrEsc(__('admin_email_note_short', 'Required for every role except regular employees.'))}</small>
+                </div>
+            </div>
+        </div>
+        ${usrScopeSection()}
     </form>`;
 }
 
-
-function edit_user_HTML(){
-    // Define all available user roles/permissions based on admin_login.user_type ENUM
-    const roleTypes = [
-        // Primary Roles
-        { value: 'administrator', label: __('administrator') || 'System Administrator', group: 'primary' },
-        { value: 'gm', label: __('general_manager') || 'General Manager', group: 'primary' },
-        { value: 'employee', label: __('employee') || 'Regular Employee', group: 'primary' },
-        
-        // HR Roles
-        { value: 'hr_senior_bp', label: __('hr_senior_bp') || 'HR Senior Business Partner', group: 'hr' },
-        { value: 'hr_operations', label: __('hr_operations') || 'HR Operations', group: 'hr' },
-        { value: 'hr_supervisor', label: __('hr_supervisor') || 'HR Supervisor', group: 'hr' },
-        { value: 'hr_recruitment', label: __('hr_recruitment') || 'HR Recruitment', group: 'hr' },
-        { value: 'hr_payroll', label: __('hr_payroll') || 'HR Payroll', group: 'hr' },
-        
-        // Department Roles
-        { value: 'dept_user', label: __('dept_user') || 'Department User', group: 'dept' },
-        { value: 'finance_officer', label: __('finance_officer') || 'Finance Officer', group: 'dept' },
-        { value: 'auditor', label: __('auditor') || 'Auditor', group: 'dept' },
-        { value: 'gr_officer', label: __('gr_officer') || 'Government Relations Officer', group: 'dept' },
-        { value: 'archiving', label: __('archiving') || 'Archiving', group: 'dept' },
-
-        // Legacy Roles (for backward compatibility)
-        { value: 'hr', label: __('hr') || 'HR (Legacy)', group: 'legacy' },
-        { value: 'it', label: __('it') || 'IT (Legacy)', group: 'legacy' },
-        { value: 'finance', label: __('finance') || 'Finance (Legacy)', group: 'legacy' },
-        { value: 'assistant', label: __('assistant') || 'Assistant (Legacy)', group: 'legacy' }
-    ];
-    
-    // Group roles for better UI organization
-    let roleOptions = '';
-    
-    // Primary roles
-    roleOptions += `<optgroup label="${__('primary_roles') || 'Primary Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'primary').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // HR roles
-    roleOptions += `<optgroup label="${__('hr_roles') || 'HR Department Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'hr').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // Department roles
-    roleOptions += `<optgroup label="${__('department_roles') || 'Department Roles'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'dept').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-    
-    // Legacy roles
-    roleOptions += `<optgroup label="${__('legacy_roles') || 'Legacy Roles (Not Recommended)'}">`;
-    roleOptions += roleTypes.filter(r => r.group === 'legacy').map(role => 
-        `<option value="${role.value}">${role.label}</option>`
-    ).join('');
-    roleOptions += '</optgroup>';
-
-    var strView =
-    `<form id="submitEditUserForm">
-    <div class="form-row customSweetAlertMLR">
-        <div class="form-group col-md-6">
-            <label for="dept">${__('department')}</label>
-            <input type="text" id="dept" name="dept" class="form-control" readonly>
-        </div>
-        <div class="form-group col-md-6">
-            <label for="user_type">${__('type_of_permission')}<span class="text-danger">*</span></label>
-            <select class="custom-select" name="user_type" id="user_type" required>
-                <option value="">${__('select_type')}</option>
-                ${roleOptions}
-            </select>
-            <small class="form-text text-muted">${__('user_role_note') || 'User role determines system access permissions.'}</small>
-        </div>
-        <div class="form-group col-md-6" id="email-group">
-            <label for="email">${__('email')}</label>
-            <input type="email" id="email" name="email" class="form-control" required>
-            <small class="form-text text-muted">${__('admin_email_note') || 'Email is optional for regular employees. Required for administrative roles.'}</small>
-        </div>
-        
-        <!-- Company Access Control Section -->
-        <div class="form-group col-md-6" id="company-access-group">
-            <label for="allowed_companies">${__('allowed_companies') || 'Allowed Companies'}<span class="text-danger">*</span></label>
-            <div id="company-select-container">
-                <div class="d-flex align-items-center mb-2">
-                    <input type="checkbox" id="fullAccessCheckbox" name="full_access" value="1">
-                    <label class="ml-2 mb-0" for="fullAccessCheckbox">${__('full_access_to_all_companies') || 'Full Access to All Companies'}</label>
+function edit_user_HTML() {
+    return `
+    <form class="sr-form" id="submitEditUserForm" autocomplete="off" novalidate>
+        <div class="sr-fsec">
+            <div class="sr-fsec-head"><span><i class="mdi mdi-account-key"></i> ${usrEsc(__('account', 'Account'))}</span></div>
+            <div class="sr-fgrid">
+                <div class="sr-fcol c-6">
+                    <label for="user_type">${usrEsc(__('type_of_permission'))} <span class="text-danger">*</span></label>
+                    <select class="form-control" name="user_type" id="user_type">
+                        <option value="">${usrEsc(__('select_type'))}</option>
+                        ${usrRoleOptions()}
+                    </select>
+                    <small class="sr-fhint">${usrEsc(__('user_role_note_short', 'The role decides which pages and actions the user gets.'))}</small>
+                </div>
+                <div class="sr-fcol c-6">
+                    <label for="dept">${usrEsc(__('department'))}</label>
+                    <input type="text" id="dept" name="dept" class="form-control" readonly>
+                </div>
+                <div class="sr-fcol c-6" id="email-group">
+                    <label for="email">${usrEsc(__('email'))}</label>
+                    <input type="email" id="email" name="email" class="form-control" placeholder="name@company.com">
+                    <small class="sr-fhint">${usrEsc(__('admin_email_note_short', 'Required for every role except regular employees.'))}</small>
+                </div>
+                <div class="sr-fcol c-6">
+                    <label>${usrEsc(__('status'))}</label>
+                    <label class="usr-status-card" for="user_status">
+                        <input type="checkbox" id="user_status" name="user_status" value="1">
+                        <span class="track"></span>
+                        <span class="txt"><b>${usrEsc(__('active_user') || 'Active user')}</b><small>${usrEsc(__('user_status_note_short', 'Switch off to block this login.'))}</small></span>
+                    </label>
                 </div>
             </div>
-            <select class="form-control select2-multi" name="allowed_companies" id="allowed_companies" multiple="multiple" style="width: 100%">
-                <!-- Companies will be loaded dynamically -->
-            </select>
-            <small class="form-text text-muted d-block mt-1">${__('company_access_note') || 'Type to search and select companies. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
         </div>
-
-        <!-- Department Access Control Section -->
-        <div class="form-group col-md-6" id="department-access-group">
-            <label for="allowed_departments">${__('allowed_departments') || 'Allowed Departments'}<span class="text-danger">*</span></label>
-            <div id="department-select-container">
-                <div class="d-flex align-items-center mb-2">
-                    <input type="checkbox" id="fullDeptAccessCheckbox" name="full_dept_access" value="1">
-                    <label class="ml-2 mb-0" for="fullDeptAccessCheckbox">${__('full_access_to_all_departments') || 'Full Access to All Departments'}</label>
-                </div>
-            </div>
-            <select class="form-control select2-multi" name="allowed_departments" id="allowed_departments" multiple="multiple" style="width: 100%">
-                <!-- Departments will be loaded dynamically -->
-            </select>
-            <small class="form-text text-muted d-block mt-1">${__('department_access_note') || 'Type to search and select departments. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
-        </div>
-
-        <!-- Employee Access Control Section -->
-        <div class="form-group col-md-6" id="employee-access-group">
-            <label for="allowed_employees">${__('allowed_employees') || 'Allowed Employees'}<span class="text-danger">*</span></label>
-            <div id="employee-select-container">
-                <div class="d-flex align-items-center mb-2">
-                    <input type="checkbox" id="fullEmpAccessCheckbox" name="full_emp_access" value="1">
-                    <label class="ml-2 mb-0" for="fullEmpAccessCheckbox">${__('full_access_to_all_employees') || 'Full Access to All Employees'}</label>
-                </div>
-            </div>
-            <select class="form-control select2-multi" name="allowed_employees" id="allowed_employees" multiple="multiple" style="width: 100%">
-                <!-- Employees will be loaded dynamically -->
-            </select>
-            <small class="form-text text-muted d-block mt-1">${__('employee_access_note') || 'Type to search and select employees. Hold Ctrl/Cmd to select multiple. Leave empty for full access.'}</small>
-        </div>
-
-        <div class="form-group col-md-6">
-            <div class="custom-control custom-checkbox">
-                <input type="checkbox" class="custom-control-input" id="user_status" name="user_status" value="1">
-                <label class="custom-control-label" for="user_status">${__('active_user') || 'Active User'}</label>
-            </div>
-            <small class="form-text text-muted d-block mt-2">${__('user_status_note') || 'Check to activate this user account, uncheck to deactivate.'}</small>
-        </div>
-        
+        ${usrScopeSection()}
         <input type="hidden" id="iduser" name="id">
-    </div>
-    </form>
-    `;
-    return strView;
+    </form>`;
 }
 
 function endOfService_HTML(){

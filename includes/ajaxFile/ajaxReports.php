@@ -654,6 +654,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
         'position' => 'position',
         'sub_department' => 'sub_department',
         'location' => 'location',
+        'city' => 'city',
         'location_code' => 'location_code',
         'department_code' => 'department_code',
         'direct_manager_id' => 'direct_manager_id',
@@ -1654,6 +1655,7 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
             d.id AS dept_code, d.dep_nme, d.dep_nme_ar,
             sd.name_en AS subdept_name_en, sd.name_ar AS subdept_name_ar,
             loc.id AS location_code, loc.name_en AS location_name_en, loc.name_ar AS location_name_ar,
+            city.name_en AS city_name_en, city.name_ar AS city_name_ar,
             co.name AS country_name, co.name_ar AS country_name_ar,
             sp.sponsor, sp.sponsor_ar,
             cp.period AS contract_period_label, cp.vac_period AS contract_vac_period,
@@ -1668,6 +1670,7 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
         LEFT JOIN department AS d ON e.dept = d.id
         LEFT JOIN sub_departments AS sd ON e.sub_dept_id = sd.id
         LEFT JOIN locations AS loc ON e.location_id = loc.id
+        LEFT JOIN saudi_cities AS city ON e.city_id = city.id
         LEFT JOIN countries AS co ON e.country = co.id
         LEFT JOIN sponsorship AS sp ON e.emp_sup_type = sp.id
         LEFT JOIN contract_period AS cp ON e.vac_period = cp.id
@@ -1767,6 +1770,7 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
             'years_contract' => $yearsContract ?? '-',
             'sub_department' => $useAr ? ($srcRow['subdept_name_ar'] ?? $srcRow['subdept_name_en'] ?? '') : ($srcRow['subdept_name_en'] ?? ''),
             'location' => $useAr ? ($srcRow['location_name_ar'] ?? $srcRow['location_name_en'] ?? '') : ($srcRow['location_name_en'] ?? ''),
+            'city' => $useAr ? ($srcRow['city_name_ar'] ?? $srcRow['city_name_en'] ?? '') : ($srcRow['city_name_en'] ?? ''),
             'country' => $useAr ? ($srcRow['country_name_ar'] ?? $srcRow['country_name'] ?? '') : ($srcRow['country_name'] ?? ''),
             'no_of_dependents' => display_or_na($srcRow['dependants_count'] ?? null),
             'basic' => number_format((float)($srcRow['basic'] ?? 0), 2),

@@ -1,8 +1,18 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
 	require_once __DIR__ . '/../../includes/session_check.php';
+	require_once __DIR__ . '/../../includes/page_access_helper.php';
 
-$ajaxType = $_POST['ajaxType'];
+$ajaxType = $_POST['ajaxType'] ?? '';
+
+// Creating users and changing a user's role / access scope / password is limited to all_users.php users.
+if (in_array($ajaxType, ['user_upate', 'password_update', 'create_user'], true)
+    && !page_role_allowed($conDB, 'all_users.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['type' => 'error', 'title' => 'Error', 'message' => 'Access denied.']);
+    exit;
+}
 
 if ($ajaxType == 'add_customer') {
     

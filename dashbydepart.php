@@ -85,6 +85,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -457,6 +458,26 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 border-color: rgba(67, 97, 238, 0.5);
                 box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.12);
             }
+
+            /* ---- New GUI view: tabs, employee list, online users ---- */
+            .dbd-card .sr-table-wrap { overflow-x: auto; }
+            .dbd-card .tab-content { margin-top: 0; }
+            .dbd-card .sr-card-head { border-bottom: 0; padding-bottom: 4px; }
+            .dbd-card .sr-tabs { padding: 6px 14px 10px; }
+            .dbd-card .sr-tabs .nav-link { display: inline-flex; align-items: center; gap: 6px; }
+            .dbd-card .sr-tabs .sr-dot-live { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, .18); }
+            .dbd-card .tab-content > .dbd-pad { padding: 16px; }
+            .dbd-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+            .dbd-filters select.form-control { height: 36px; width: 160px; font-size: 12.5px; padding: 4px 10px; border-radius: 9px; }
+            .sr-page table.dbd-table tbody tr { cursor: default; }
+            .sr-page table.dbd-table tbody td { vertical-align: middle; }
+            .dbd-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+            .dbd-person img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; border: 2px solid var(--sr-surface); box-shadow: 0 0 0 1px var(--sr-border); }
+            .dbd-person .sr-cell-title { display: block; }
+            .dbd-copy { cursor: copy; }
+            .dbd-copy:hover { color: var(--sr-accent-strong); text-decoration: underline dotted; }
+            .sr-page #online_users_table img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin-inline-end: 8px; }
+            .dbd-live { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sr-muted); }
         </style>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -514,12 +535,17 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                 <?php include("./includes/topbar.php"); ?>
                 <!-- Top Bar End -->
                 <!-- Start Page content -->
-                <div class="content">
+                <div class="content sr-page">
                     <div class="container-fluid">
 
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('all_employees_grouping') ?></h4>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('all_employees_grouping') ?></h1>
+                                <p><?= __('dbd_subtitle', 'Browse employees by company and department, search the full list or see who is online.') ?></p>
+                            </div>
+                        </div>
+
+                        <div class="sr-card dbd-card">
                                 <?php
                                 if ($is_system_admin) {
                                     $online_count_res = mysqli_query($conDB, "SELECT COUNT(*) AS `total` FROM `user_activity_log` WHERE `status` = 'active'");
@@ -527,33 +553,33 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                     $online_count = $online_count_row ? (int)$online_count_row['total'] : 0;
                                 }
                                 ?>
-                                <ul class="nav nav-tabs tabs-bordered">
+                                <ul class="nav sr-tabs" role="tablist">
                                     <li class="nav-item">
                                         <a href="#bycompany-b1" data-toggle="tab" aria-expanded="false" class="nav-link active show">
-                                            <i class="fa fa-layer-group mr-2"></i> <?= __('companies') ?>
+                                            <i class="mdi mdi-domain"></i> <?= __('companies') ?>
                                         </a>
                                     </li>
                                     <li class="nav-item">
                                         <a href="#bydepartment-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
-                                            <i class="fi-monitor mr-2"></i> <?= __('departments') ?>
+                                            <i class="mdi mdi-sitemap"></i> <?= __('departments') ?>
                                         </a>
                                     </li>
                                     <li class="nav-item">
                                         <a href="#bylist-b1" data-toggle="tab" aria-expanded="true" class="nav-link">
-                                            <i class="fi-head mr-2"></i> <?= __('employees_list') ?>
+                                            <i class="mdi mdi-account-multiple"></i> <?= __('employees_list') ?>
                                         </a>
                                     </li>
                                     <?php if ($is_system_admin): ?>
                                     <li class="nav-item">
                                         <a href="#onlineusers-b1" data-toggle="tab" aria-expanded="false" class="nav-link">
-                                            <i class="fa fa-circle text-success mr-2" style="font-size:10px;"></i> <?= __('online_users', 'Online Users') ?>
-                                            <span class="badge badge-success badge-pill ml-1" id="onlineUsersTabBadge"><?= $online_count ?></span>
+                                            <span class="sr-dot-live"></span> <?= __('online_users', 'Online Users') ?>
+                                            <span class="sr-count" id="onlineUsersTabBadge"><?= $online_count ?></span>
                                         </a>
                                     </li>
                                     <?php endif; ?>
                                 </ul>
                                 <div class="tab-content">
-                                    <div class="tab-pane" id="bydepartment-b1">
+                                    <div class="tab-pane dbd-pad" id="bydepartment-b1">
                                         <!-- <div class="tab-pane" id="bydepartment-b1"> -->
                                         <?php  ?><div class="row text-center">
 
@@ -641,7 +667,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
 
                                         </div>
                                     </div>
-                                    <div class="tab-pane active show" id="bycompany-b1">
+                                    <div class="tab-pane active show dbd-pad" id="bycompany-b1">
                                         <div id="drilldownBreadcrumb" class="drilldown-breadcrumb mb-3">
                                             <span class="drilldown-crumb drilldown-crumb-root drilldown-crumb-current" data-level="companies"><i class="mdi mdi-home-variant-outline"></i> <?= __('companies') ?></span>
                                         </div>
@@ -728,7 +754,18 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                         </div>
                                     </div>
                                     <div class="tab-pane" id="bylist-b1">
-                                        <table id="employee_vac" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+                                        <div class="sr-toolbar">
+                                            <div class="sr-search">
+                                                <i class="mdi mdi-magnify"></i>
+                                                <input type="search" id="empListSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                                            </div>
+                                            <div class="sr-toolbar-right">
+                                                <div class="dbd-filters" id="empListFilters"></div>
+                                                <div id="empListButtons"></div>
+                                            </div>
+                                        </div>
+                                        <div class="sr-table-wrap">
+                                        <table id="employee_vac" class="table sr-table dbd-table nowrap" style="width: 100%;">
                                             <thead>
                                                 <tr>
                                                     <th width="50"><?= __('emp_id') ?></th>
@@ -815,58 +852,35 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                     $emp_avatar = (file_exists("./assets/emp_pics/" . explode("/", $emp_avatar)[3])) ? $emp_avatar : $checkGander;
                                                 ?>
                                                     <tr>
-                                                        <td><?= $emp_id; ?></td>
+                                                        <td><span class="sr-mono"><?= htmlspecialchars($emp_id) ?></span></td>
                                                         <td>
-                                                            <img src="<?= $emp_avatar; ?>" class="rounded-circle bx-shadow-lg" width="50">
-                                                             <span class='copyToClipboard'><?= getDisplayName(parseName($rec["name"])); ?></span> <i class='fa fa-clipboard'></i>
-                                                        </td>
-                                                        <td><?= ($is_rtl ?? false) ? $dept_ar : $dept ?></td>
-                                                        <td><span class='copyToClipboard'><?= $iqama; ?></span> <i class='fa fa-clipboard'></i></td>
-                                                        <td><span class='copyToClipboard'><?= $mobile; ?></span> <i class='fa fa-clipboard'></i></td>
-                                                        <td><?= $date_dob_get; ?></td>
-                                                        <td><?= ($is_rtl ?? false) ? $emp_sup_type_ar : $emp_sup_type; ?></td>
-                                                        <td><?= $blood_type; ?></td>
-                                                        <td><?= __($sex_get); ?></td>
-                                                        <td><?= ($is_rtl ?? false) ? $country_get_ar : $country_get; ?></td>
-                                                        <td><?= $joining_date; ?></td>
-                                                        <td>
-                                                            <div class='btn-group dropdown'>
-                                                                <a href='javascript: void(0);' class='table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-horizontal'></i></a>
-                                                                <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                                                    <a class='dropdown-item text-dark' href='view_employee.php?emp_id=<?= $emp_id ?>'><i class='mdi mdi-eye-outline mr-2 font-18 vertical-middle'></i><?= __('open') ?></a>
-                                                                    <?php
-                                                                    if ($emp_status == "1") {
-                                                                        // Only system_admin, hr_operations, hr_recruitment can edit employees
-                                                                        if ($is_system_admin || $user_type === 'hr_operations' || $user_type === 'hr_recruitment') {
-                                                                    ?>
-                                                                            <a href='edit_employee.php?emp_id=<?= $emp_id ?>' class='dropdown-item text-custom'><i class='fa fa-edit mr-2 font-18 vertical-middle'></i><?= __('edit') ?></a>
-                                                                        <?php }
-                                                                    }
-                                                                    ?>
-                                                                </div>
+                                                            <div class="dbd-person">
+                                                                <img src="<?= htmlspecialchars($emp_avatar) ?>" alt="" loading="lazy">
+                                                                <span class="sr-cell-title copyToClipboard dbd-copy" title="<?= __('copy', 'Copy') ?>"><?= htmlspecialchars(getDisplayName(parseName($rec["name"]))) ?></span>
                                                             </div>
-
+                                                        </td>
+                                                        <td><?= htmlspecialchars((($is_rtl ?? false) ? $dept_ar : $dept) ?? '') ?></td>
+                                                        <td><span class="sr-mono copyToClipboard dbd-copy" title="<?= __('copy', 'Copy') ?>"><?= htmlspecialchars($iqama) ?></span></td>
+                                                        <td><span class="sr-mono copyToClipboard dbd-copy" title="<?= __('copy', 'Copy') ?>"><?= htmlspecialchars($mobile) ?></span></td>
+                                                        <td><?= htmlspecialchars($date_dob_get) ?></td>
+                                                        <td><?= htmlspecialchars((($is_rtl ?? false) ? $emp_sup_type_ar : $emp_sup_type) ?? '') ?></td>
+                                                        <td><?= htmlspecialchars($blood_type ?? '') ?></td>
+                                                        <td><?= __($sex_get) ?></td>
+                                                        <td><?= htmlspecialchars((($is_rtl ?? false) ? $country_get_ar : $country_get) ?? '') ?></td>
+                                                        <td><?= htmlspecialchars($joining_date) ?></td>
+                                                        <td class="text-right">
+                                                            <div class="sr-actions">
+                                                                <a class="sr-open-btn" href="view_employee.php?emp_id=<?= urlencode($emp_id) ?>"><i class="mdi mdi-eye"></i> <?= __('open') ?></a>
+                                                                <?php if ($emp_status == "1" && ($is_system_admin || $user_type === 'hr_operations' || $user_type === 'hr_recruitment')): ?>
+                                                                    <a class="sr-more-btn" href="edit_employee.php?emp_id=<?= urlencode($emp_id) ?>" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></a>
+                                                                <?php endif; ?>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 <?php } ?>
                                             </tbody>
-                                            <tfoot>
-                                                <tr>
-                                                    <th width="50"><?= __('emp_id') ?></th>
-                                                    <th><?= __('employee_name') ?></th>
-                                                    <th><?= __('department') ?></th>
-                                                    <th><?= __('iqama_id') ?></th>
-                                                    <th><?= __('mobile') ?></th>
-                                                    <th><?= __('date_of_birth') ?></th>
-                                                    <th><?= __('sponsorship') ?></th>
-                                                    <th><?= __('blood_group') ?></th>
-                                                    <th><?= __('gender') ?></th>
-                                                    <th width="80"><?= __('country') ?></th>
-                                                    <th><?= __('joining_date') ?></th>
-                                                    <th width="80"><?= __('action') ?></th>
-                                                </tr>
-                                            </tfoot>
                                         </table>
+                                        </div>
                                     </div>
                                     <?php if ($is_system_admin): ?>
                                     <div class="tab-pane" id="onlineusers-b1">
@@ -877,12 +891,18 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                             WHERE `ua`.`status` = 'active'
                                             ORDER BY `ua`.`last_activity` DESC");
                                         ?>
-                                        <div class="d-flex align-items-center mb-3">
-                                            <span class="badge badge-success badge-pill" style="font-size:13px;"><span id="onlineNowCount"><?= $online_count ?></span> <?= __('online_now', 'Online Now') ?></span>
-                                            <span class="text-muted small ml-2"><i class="fa fa-sync-alt"></i> <?= __('auto_refreshes', 'Auto-refreshes every 10s') ?></span>
+                                        <div class="sr-toolbar">
+                                            <div class="sr-search">
+                                                <i class="mdi mdi-magnify"></i>
+                                                <input type="search" id="onlineSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                                            </div>
+                                            <div class="sr-toolbar-right">
+                                                <span class="sr-pill tone-green"><span class="sr-dot"></span><span id="onlineNowCount"><?= $online_count ?></span>&nbsp;<?= __('online_now', 'Online Now') ?></span>
+                                                <span class="dbd-live"><i class="mdi mdi-refresh"></i> <?= __('auto_refreshes', 'Auto-refreshes every 10s') ?></span>
+                                            </div>
                                         </div>
-                                        <div class="table-responsive">
-                                            <table id="online_users_table" class="table table-striped table-bordered dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+                                        <div class="sr-table-wrap">
+                                            <table id="online_users_table" class="table sr-table dbd-table nowrap" style="width: 100%;">
                                                 <thead>
                                                     <tr>
                                                         <th><?= __('employee_name') ?></th>
@@ -917,7 +937,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                         <td><?= htmlspecialchars($orow['ip_address'] ?? '-') ?></td>
                                                         <td><?= htmlspecialchars(trim(($orow['city'] ?? '') . ', ' . ($orow['country'] ?? ''), ', ') ?: '-') ?></td>
                                                         <td><?= htmlspecialchars(trim(($orow['browser'] ?? '') . ' / ' . ($orow['os'] ?? ''), ' / ') ?: '-') ?> <span class="text-muted small">(<?= htmlspecialchars($orow['device_type'] ?? '-') ?>)</span></td>
-                                                        <td class="small text-muted"><?= htmlspecialchars($orow['current_page'] ?? '-') ?></td>
+                                                        <td><span class="sr-chip"><?= htmlspecialchars($orow['current_page'] ?? '-') ?></span></td>
                                                         <td><?= htmlspecialchars($orow['login_time'] ?? '-') ?></td>
                                                         <td><?= htmlspecialchars($orow['last_activity'] ?? '-') ?></td>
                                                     </tr>
@@ -928,7 +948,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                     </div>
                                     <?php endif; ?>
                                 </div>
-                            </div>
                         </div>
 
                         <div class="card-box">
@@ -1022,124 +1041,72 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
 
         <script type="text/javascript">
             $(document).ready(function() {
-                // --- 1. Your Button Configuration ---
-                // This section defines the export buttons (Excel, PDF, Print) for the table.
-                var buttonConfig = [];
-                var exportTitle = "Employee List"; // A title for the exported files.
-                buttonConfig.push({
-                    extend: 'excel',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] // All columns except 'Action'
-                    },
-                    title: exportTitle,
-                    className: 'btn-success'
-                });
-                buttonConfig.push({
-                    extend: 'pdf',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                    },
-                    title: exportTitle,
-                    className: 'btn-danger'
-                });
-                buttonConfig.push({
-                    extend: 'print',
-                    exportOptions: {
-                        columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                    },
-                    title: exportTitle,
-                    className: 'btn-dark'
-                });
+                var dtLang = {
+                    info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+                    infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+                    infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
+                    paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+                    emptyTable: `<div class="sr-empty"><i class="mdi mdi-account-off"></i>${__('no_data_available_in_table')}</div>`,
+                    zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`
+                };
+                var exportTitle = "Employee List";
+                var exportCols = { columns: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }; // all except Action
 
-                // --- 2. Initialize the DataTable ---
                 var table = $('#employee_vac').DataTable({
-                    // --- ALL OPTIONS ARE NOW CORRECTLY PLACED INSIDE THIS OBJECT ---
-
-                    lengthChange: false, // Hides the "Show X entries" dropdown.
-                    buttons: buttonConfig, // Assigns the button configuration from above.
-
-                    // --- MERGED AND CORRECTED initComplete ---
-                    // All initialization logic is now in a single, correct function.
+                    dom: 'Brtip',
+                    pageLength: 15,
+                    order: [[0, 'asc']],
+                    columnDefs: [{ targets: 11, orderable: false, searchable: false }],
+                    buttons: [
+                        { extend: 'excel', text: '<i class="mdi mdi-file-excel"></i> Excel', exportOptions: exportCols, title: exportTitle },
+                        { extend: 'pdf', text: '<i class="mdi mdi-file-pdf"></i> PDF', exportOptions: exportCols, title: exportTitle },
+                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + __('print'), exportOptions: exportCols, title: exportTitle }
+                    ],
                     initComplete: function() {
                         var api = this.api();
-
-                        // A) Create Column Filtering Dropdowns
-                        // Targets Department, Sponsorship, Blood G., and Gender columns.
+                        // Exact-match dropdown filters: Department, Sponsorship, Blood group, Gender, Country
                         api.columns([2, 6, 7, 8, 9]).every(function() {
                             var column = this;
-                            // The text from the <tfoot> is used as a placeholder initially.
-                            var title = $(column.footer()).text();
-                            var select = $('<select class="form-control form-control-sm"><option value="">' + title + ' (' + __('all') + ')</option></select>')
-                                .appendTo($(column.footer()).empty()) // Clears the footer cell and adds the select dropdown.
+                            var title = $(column.header()).text().trim();
+                            var $sel = $('<select class="form-control"><option value="">' + $('<div>').text(title).html() + ' (' + __('all') + ')</option></select>')
+                                .appendTo('#empListFilters')
                                 .on('change', function() {
-                                    // Perform an exact-match search on column change.
                                     var val = $.fn.dataTable.util.escapeRegex($(this).val());
                                     column.search(val ? '^' + val + '$' : '', true, false).draw();
                                 });
-
-                            // B) Populate the Select Options from table data.
-                            column.data().unique().sort().each(function(d, j) {
-                                if (d) { // Make sure data is not empty
-                                    select.append('<option value="' + d + '">' + d + '</option>');
-                                }
+                            column.data().map(function(d) { return $('<div>').html(d).text().trim(); }).unique().sort().each(function(d) {
+                                if (d) $sel.append($('<option>').val(d).text(d));
                             });
                         });
-
-                        // C) Adjust columns after initialization.
-                        api.columns.adjust().draw();
                     },
-                    language: {
-                        search: `<span>${__('search')}:</span> _INPUT_`,
-                        searchPlaceholder: `${__('search')}...`,
-                        lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                        info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                        infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                        infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                        paginate: {
-                            first: __('first'),
-                            last: __('last'),
-                            next: __('next'),
-                            previous: __('previous')
-                        },
-                        emptyTable: __('no_data_available_in_table'),
-                        zeroRecords: __('no_matching_records_found'),
-                        processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                    }
+                    language: dtLang
                 });
+                table.buttons().container().appendTo('#empListButtons');
 
-                // --- 3. Place the Buttons in the DOM ---
-                // Moves the generated buttons container to the top-left of the table wrapper.
-                table.buttons().container()
-                    .appendTo('#employee_vac_wrapper .col-md-6:eq(0)');
+                var empSearchTimer;
+                $('#empListSearch').on('input', function() {
+                    var v = this.value;
+                    clearTimeout(empSearchTimer);
+                    empSearchTimer = setTimeout(function() { table.search(v).draw(); }, 250);
+                });
+                $('a[href="#bylist-b1"]').on('shown.bs.tab', function() { table.columns.adjust(); });
 
                 // Online Users table (sys_admin tab) - paginated, searchable.
                 if ($('#online_users_table').length) {
                     var onlineTable = $('#online_users_table').DataTable({
+                        dom: 'rtip',
+                        pageLength: 15,
                         order: [
                             [8, 'desc']
                         ],
-                        language: {
-                            search: `<span>${__('search')}:</span> _INPUT_`,
-                            searchPlaceholder: `${__('search')}...`,
-                            lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                            info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                            infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                            infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                            paginate: {
-                                first: __('first'),
-                                last: __('last'),
-                                next: __('next'),
-                                previous: __('previous')
-                            },
-                            emptyTable: __('no_data_available_in_table'),
-                            zeroRecords: __('no_matching_records_found')
-                        }
+                        language: dtLang
                     });
                     // DataTables mis-measures column widths when initialized inside a
                     // hidden Bootstrap tab pane - re-adjust once the tab is actually shown.
                     $('a[href="#onlineusers-b1"]').on('shown.bs.tab', function() {
                         onlineTable.columns.adjust().draw();
                     });
+                    $('#onlineSearch').on('input', function() { onlineTable.search(this.value).draw(); });
 
                     // Live refresh - poll the same active-sessions feed every 10s so a
                     // login/logout shows up here without reloading the page. draw(false)

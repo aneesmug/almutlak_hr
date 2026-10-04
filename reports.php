@@ -104,6 +104,7 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -119,289 +120,134 @@ if (mysqli_num_rows($query) == 1) {
         <script src="assets/js/modernizr.min.js"></script>
 
         <style>
-            .column-selector {
-                max-height: 300px;
-                overflow-y: auto;
-                border: 1px solid #dee2e6;
-                padding: 15px;
-                border-radius: 4px;
-                background-color: #f8f9fa;
+            /* ---- Report type picker ---- */
+            .rp-group + .rp-group { margin-top: 16px; }
+            .rp-group-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--sr-muted); margin-bottom: 8px; }
+            .rp-type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+            .rp-type {
+                display: flex; align-items: center; gap: 12px; width: 100%; text-align: start;
+                padding: 12px 14px; border-radius: 12px; cursor: pointer;
+                background: var(--sr-surface); border: 1px solid var(--sr-border); color: var(--sr-text-2);
+                transition: border-color .15s, box-shadow .15s, transform .15s, background .15s;
             }
-
-            .column-checkbox {
-                display: block;
-                margin-bottom: 8px;
+            .rp-type:hover { border-color: var(--sr-accent); transform: translateY(-1px); }
+            .rp-type:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 2px; }
+            .rp-type.active { border-color: var(--sr-accent); background: var(--sr-accent-soft); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
+            .rp-type-ico {
+                flex: 0 0 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+                font-size: 19px; background: var(--sr-surface-3); color: var(--sr-accent-strong);
             }
+            .rp-type.active .rp-type-ico { background: var(--sr-accent); color: #fff; }
+            .rp-type-text { min-width: 0; display: flex; flex-direction: column; }
+            .rp-type-text b { font-size: 13px; font-weight: 700; color: var(--sr-text); line-height: 1.3; }
+            .rp-type-text small { font-size: 11.5px; color: var(--sr-muted); line-height: 1.35; margin-top: 2px; }
 
-            .filter-section {
-                background-color: #fff;
-                padding: 20px;
-                border-radius: 4px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                margin-bottom: 20px;
-            }
+            .rp-step { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 700; background: var(--sr-accent-soft); color: var(--sr-accent-strong); margin-inline-end: 4px; }
 
-            .report-actions {
-                margin-top: 15px;
-            }
+            /* ---- Filters ---- */
+            .rp-filters .row { margin-left: -8px; margin-right: -8px; }
+            .rp-filters .row > [class*="col-"] { padding-left: 8px; padding-right: 8px; }
+            .rp-filters label { display: block; font-size: 12px; font-weight: 600; color: var(--sr-text-2); margin-bottom: 6px; }
+            .rp-filters label .badge { font-size: 10px; padding: 2px 7px; border-radius: 999px; margin-inline-start: 6px; background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: none; }
+            .rp-filters small.text-muted { font-size: 11px; color: var(--sr-muted) !important; }
+            .rp-filters .rp-ico-input { position: relative; }
+            .rp-filters .rp-ico-input .form-control { padding-inline-end: 36px; cursor: pointer; }
+            .rp-filters .rp-ico-input i { position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); pointer-events: none; font-size: 16px; }
+            .rp-empty-hint { display: flex; align-items: center; gap: 10px; color: var(--sr-muted); font-size: 13px; padding: 4px 0; }
+            .rp-empty-hint i { font-size: 20px; color: var(--sr-accent); }
 
-            #reportTableContainer {
-                margin-top: 30px;
-            }
-
-            /* Draggable Column Styles */
-            .column-item {
-                display: flex;
-                align-items: center;
-                padding: 8px 10px;
-                margin-bottom: 0;
-                background-color: #fff;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                cursor: move;
-                transition: all 0.2s ease;
-                user-select: none;
-                font-size: 13px;
-            }
-
-            .column-item:hover {
-                background-color: #f8f9fa;
-                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-                border-color: #007bff;
-            }
-
-            .column-item.dragging {
-                opacity: 0.5;
-                background-color: #e7f3ff;
-                border-color: #007bff;
-                box-shadow: 0 3px 8px rgba(0, 123, 255, 0.3);
-            }
-
-            .column-item.drag-over {
-                background-color: #d4edff;
-                border-color: #0056b3;
-                border-top: 2px solid #0056b3;
-            }
-
-            .column-item input[type="checkbox"] {
-                margin: 0 8px 0 0;
-                cursor: pointer;
-                width: 16px;
-                height: 16px;
-                flex-shrink: 0;
-            }
-
-            .column-item .drag-handle {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #999;
-                font-size: 14px;
-                margin-right: 6px;
-                cursor: grab;
-                flex-shrink: 0;
-            }
-
-            .column-item .drag-handle:active {
-                cursor: grabbing;
-            }
-
-            .column-item label {
-                flex-grow: 1;
-                margin: 0;
-                cursor: pointer;
-                font-size: 13px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
+            /* ---- Column picker ---- */
+            .rp-col-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+            .rp-col-tools select.form-control { height: 32px; padding: 4px 10px; font-size: 12px; min-width: 180px; width: auto; }
             #columnSortableContainer {
-                scrollbar-width: thin;
-                scrollbar-color: #007bff #f1f1f1;
+                display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;
+                max-height: 360px; overflow-y: auto; padding: 2px;
+                scrollbar-width: thin; scrollbar-color: var(--sr-border-strong) transparent;
             }
-
-            #columnSortableContainer::-webkit-scrollbar {
-                width: 8px;
+            .column-item {
+                display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 0;
+                background: var(--sr-surface); border: 1px solid var(--sr-border); border-radius: 10px;
+                cursor: move; user-select: none; font-size: 12.5px; transition: border-color .15s, background .15s;
             }
+            .column-item:hover { border-color: var(--sr-border-strong); }
+            .column-item:has(input:checked) { background: var(--sr-accent-soft); border-color: var(--sr-accent); }
+            .column-item.dragging { opacity: .45; }
+            .column-item.drag-over { border-color: var(--sr-accent); box-shadow: 0 -2px 0 var(--sr-accent); }
+            .column-item .drag-handle { color: var(--sr-muted); font-size: 13px; cursor: grab; flex-shrink: 0; }
+            .column-item .drag-handle:active { cursor: grabbing; }
+            .column-item input[type="checkbox"] { margin: 0; width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; accent-color: var(--sr-accent); }
+            .column-item label { flex: 1; min-width: 0; margin: 0; cursor: pointer; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .rp-col-hint { display: block; margin-top: 10px; font-size: 11.5px; color: var(--sr-muted); }
 
-            #columnSortableContainer::-webkit-scrollbar-track {
-                background: #f1f1f1;
-                border-radius: 4px;
+            /* ---- Action bar ---- */
+            .rp-actionbar { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; }
+            .rp-actionbar .rp-summary { font-size: 12.5px; color: var(--sr-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+            .rp-actionbar .rp-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+            /* ---- Results ---- */
+            .rp-results .sr-card-head { flex-wrap: wrap; }
+            .rp-dt-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--sr-border); }
+            .rp-dt-top .dt-buttons { display: flex; gap: 6px; flex-wrap: wrap; float: none; }
+            .rp-dt-top .dt-buttons .btn {
+                display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px !important;
+                font-size: 12px; font-weight: 600; background: var(--sr-surface) !important; color: var(--sr-text-2) !important;
+                border: 1px solid var(--sr-border-strong) !important; box-shadow: none !important; margin: 0 !important;
             }
-
-            #columnSortableContainer::-webkit-scrollbar-thumb {
-                background: #007bff;
-                border-radius: 4px;
+            .rp-dt-top .dt-buttons .btn:hover { border-color: var(--sr-accent) !important; color: var(--sr-accent-strong) !important; }
+            .rp-dt-top .dt-buttons .btn span { color: inherit; display: inline-flex; align-items: center; gap: 6px; }
+            .rp-filters .select2-search--inline:first-child, .rp-filters .select2-search--inline:first-child .select2-search__field { width: 100% !important; }
+            .rp-dt-top .dataTables_filter { float: none; margin: 0; }
+            .rp-dt-top .dataTables_filter label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0; }
+            .rp-dt-top .dataTables_filter input {
+                font-size: 13px; height: 34px; width: 240px; max-width: 100%; margin: 0 !important; border-radius: 10px;
+                background: var(--sr-surface-2); border: 1px solid var(--sr-border); color: var(--sr-text); padding: 0 12px;
             }
+            .rp-dt-top .dataTables_filter input:focus { outline: none; border-color: var(--sr-accent); }
+            .rp-dt-scroll { overflow-x: auto; }
+            .rp-dt-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--sr-border); }
+            .rp-dt-bottom .dataTables_info, .rp-dt-bottom .dataTables_paginate { padding: 0 !important; margin: 0 !important; }
+            .sr-page table.rp-table tbody tr { cursor: default; }
+            .sr-page table.rp-table tbody td { vertical-align: middle; }
+            .sr-page table.rp-table .btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: 12px; font-weight: 600; border-radius: 8px; box-shadow: none; }
+            .sr-page table.rp-table tfoot td { font-weight: 700; color: var(--sr-text); background: var(--sr-surface-3); border-top: 2px solid var(--sr-border-strong); padding: 10px 14px; white-space: nowrap; }
 
-            #columnSortableContainer::-webkit-scrollbar-thumb:hover {
-                background: #0056b3;
+            /* Expand control */
+            .sr-page table.rp-table td.dt-control { cursor: pointer; width: 40px; text-align: center; user-select: none; }
+            .sr-page table.rp-table td.dt-control:before {
+                content: "+"; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+                border-radius: 7px; font-weight: 700; font-size: 14px; line-height: 1;
+                background: var(--sr-accent-soft); color: var(--sr-accent-strong);
             }
+            .sr-page table.rp-table tr.shown td.dt-control:before { content: "\2212"; background: var(--sr-accent); color: #fff; }
+            .sr-page table.rp-table tr.shown td { background: var(--sr-surface-2) !important; }
 
-            #selectByTable {
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                padding: 5px 10px;
-                font-size: 13px;
-            }
+            /* Detail row */
+            .details-content { padding: 6px 4px 10px; }
+            .details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+            .detail-column { background: var(--sr-surface); border: 1px solid var(--sr-border); border-radius: 10px; padding: 9px 12px; min-width: 0; }
+            .detail-label { font-size: 10.5px; font-weight: 700; color: var(--sr-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .detail-value { font-size: 13px; color: var(--sr-text); font-weight: 500; white-space: normal; word-break: break-word; }
+            /* Detail cards: soft tint so they stand apart from the table rows */
+            .detail-column { background: #f4f6fb; border-color: #e1e6f0; border-inline-start: 3px solid #a5b4fc; }
+            .detail-column .detail-label { color: #64748b; }
+            .detail-column .detail-value { color: #1e293b; font-weight: 600; }
+            html.app-dark .detail-column { background: #1f2638; border-color: #2c3550; border-inline-start-color: #6366f1; }
+            html.app-dark .detail-column .detail-label { color: #8b98ad; }
+            html.app-dark .detail-column .detail-value { color: #e2e8f0; }
 
-            #selectByTable:focus {
-                border-color: #007bff;
-                outline: none;
-                box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-            }
-
-            /* Badge styling for selected count */
-            .badge-success {
-                background-color: #28a745;
-                padding: 4px 10px;
-                border-radius: 12px;
-                font-size: 12px;
-                font-weight: 600;
-                margin-left: 8px;
-                box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
-            }
-
-            /* DataTables Responsive Hidden Columns */
-            .dtr-hidden {
-                display: none !important;
-            }
-
-            /* DataTables Control Column Styling */
-            td.dt-control {
-                cursor: pointer;
-                padding: 5px 12px !important;
-                text-align: center;
-                user-select: none;
-            }
-
-            td.dt-control:before {
-                content: "▶";
-                display: inline-block;
-                padding: 4px 8px;
-                font-size: 11px;
-                color: #007bff;
-                transition: all 0.3s ease;
-                background-color: #e7f3ff;
-                border-radius: 3px;
-                font-weight: bold;
-                min-width: 24px;
-            }
-
-            tr.shown td.dt-control:before {
-                content: "▼";
-                background-color: #e8f5e9;
-                color: #28a745;
-            }
-
-            tr.shown {
-                background-color: #f0f8ff !important;
-            }
-
-            /* Detail Row Styling */
-            .details-content {
-                padding: 15px;
-                background-color: #f9f9f9;
-                border-radius: 4px;
-                margin: 10px 0;
-                border-left: 3px solid #007bff;
-            }
-
-            .details-content table {
-                margin-bottom: 0 !important;
-            }
-
-            /* Horizontal Column Layout for Details */
-            .details-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin-top: 10px;
-            }
-
-            .detail-column {
-                background-color: white;
-                padding: 10px 12px;
-                border-radius: 3px;
-                border: 1px solid #e0e0e0;
-            }
-
-            .detail-label {
-                font-size: 12px;
-                font-weight: 600;
-                color: #555;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 5px;
-                white-space: nowrap;
-            }
-
-            .detail-value {
-                font-size: 14px;
-                color: #333;
-                word-wrap: break-word;
-                font-weight: 500;
-            }
-
-            .details-content table td {
-                padding: 8px 0 !important;
-            }
-
-            .dtr-data {
-                padding: 12px 0 !important;
-            }
-
-            .dtr-title {
-                font-weight: 600;
-                color: #333;
-                padding: 5px 0;
-                min-width: 150px;
-            }
-
-            @media (max-width: 768px) {
-                td.dt-control {
-                    display: table-cell !important;
-                }
-
-                .dtr-hidden {
-                    display: none !important;
-                }
-
-                .details-content {
-                    background-color: #f5f5f5;
-                    border-left: 3px solid #007bff;
-                    padding: 12px 15px;
-                }
-
-                .details-content table tr:last-child td {
-                    border-bottom: none;
-                }
-            }
-            
             /* Wide month picker for payroll filter */
-            .payroll-month-picker {
-                min-width: 280px !important;
-                width: 280px !important;
-            }
-            .payroll-month-picker .datepicker-months table {
-                width: 100%;
-            }
-            .payroll-month-picker .datepicker-months table tr td span {
-                width: 22% !important;
-                margin: 1% !important;
-            }
-            .payroll-month-picker .datepicker-switch {
-                font-size: 15px;
-                font-weight: 600;
+            .payroll-month-picker { min-width: 280px !important; width: 280px !important; }
+            .payroll-month-picker .datepicker-months table { width: 100%; }
+            .payroll-month-picker .datepicker-months table tr td span { width: 22% !important; margin: 1% !important; }
+            .payroll-month-picker .datepicker-switch { font-size: 15px; font-weight: 600; }
+
+            @media (max-width: 575px) {
+                .rp-type-grid { grid-template-columns: 1fr; }
+                .rp-actionbar .rp-btns, .rp-actionbar .rp-btns .sr-btn { width: 100%; }
+                .rp-dt-top .dataTables_filter input { width: 100%; }
             }
 
             <?php if ($is_rtl): ?>
-            /* RTL overrides */
-            body { direction: rtl; text-align: right; }
-            .column-item { direction: rtl; }
-            .column-item .drag-handle { margin-right: 0; margin-left: 6px; }
-            .column-item input[type="checkbox"] { margin: 0 0 0 8px; }
             #reportTable th, #reportTable td { text-align: right; }
             <?php endif; ?>
         </style>
@@ -460,300 +306,338 @@ if (mysqli_num_rows($query) == 1) {
                 <!-- Top Bar End -->
 
                 <!-- Start Page content -->
-                <div class="content">
+                <?php
+                // Report picker: icon, group and one-line description per report type.
+                $report_meta = [
+                    'employee'                   => ['mdi-account-card-details', 'people', __('rpt_desc_employee', 'Employee master data and contract details')],
+                    'attendance'                 => ['mdi-calendar-clock', 'people', __('rpt_desc_attendance', 'Punches, late arrivals and worked hours')],
+                    'vacation'                   => ['mdi-beach', 'people', __('rpt_desc_vacation', 'Vacation requests by type and status')],
+                    'document'                   => ['mdi-file-document', 'people', __('rpt_desc_document', 'Employee documents and expiry dates')],
+                    'evaluation'                 => ['mdi-star-circle', 'people', __('rpt_desc_evaluation', 'Monthly performance evaluations')],
+                    'resignation'                => ['mdi-logout', 'people', __('rpt_desc_resignation', 'Resignation requests and their progress')],
+                    'terminated_employees'       => ['mdi-account-remove', 'people', __('rpt_desc_terminated', 'Exit settlements for employees who left')],
+                    'salary'                     => ['mdi-cash', 'pay', __('rpt_desc_salary', 'Current salary and allowances')],
+                    'salary_increment'           => ['mdi-trending-up', 'pay', __('rpt_desc_increment', 'Salary increment requests')],
+                    'payroll'                    => ['mdi-cash-multiple', 'pay', __('rpt_desc_payroll', 'Monthly payroll with totals')],
+                    'loan'                       => ['mdi-bank', 'pay', __('rpt_desc_loan', 'Loans, approvals and repayments')],
+                    'eos'                        => ['mdi-calculator', 'pay', __('rpt_desc_eos', 'End-of-service calculation to a date')],
+                    'ctc'                        => ['mdi-wallet', 'pay', __('rpt_desc_ctc', 'Full cost to company per employee')],
+                    'assets'                     => ['mdi-package-variant', 'assets', __('rpt_desc_assets', 'Assets assigned to employees')],
+                    'assets_list'                => ['mdi-laptop', 'assets', __('rpt_desc_assets_list', 'Asset items and their history')],
+                    'dept_comparison'            => ['mdi-chart-bar', 'analysis', __('rpt_desc_dept', 'Compare departments side by side')],
+                    'country_company_comparison' => ['mdi-earth', 'analysis', __('rpt_desc_country', 'Compare companies and nationalities')],
+                    'custom'                     => ['mdi-table-edit', 'analysis', __('rpt_desc_custom', 'Build your own report from tables')],
+                ];
+                $report_groups = [
+                    'people'   => __('rpt_group_people', 'Employees & HR'),
+                    'pay'      => __('rpt_group_pay', 'Pay & finance'),
+                    'assets'   => __('rpt_group_assets', 'Assets'),
+                    'analysis' => __('rpt_group_analysis', 'Analysis'),
+                ];
+                $visible_reports = [];
+                foreach ($all_report_options as $report_key => $report_label) {
+                    if (!isset($allowed_report_types_map[$report_key])) continue;
+                    if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) continue;
+                    if ($report_key === 'ctc' && !$can_view_ctc_report) continue;
+                    $visible_reports[$report_key] = $report_label;
+                }
+                $grouped_reports = [];
+                foreach ($visible_reports as $report_key => $report_label) {
+                    $m = $report_meta[$report_key] ?? ['mdi-file-chart', 'analysis', ''];
+                    $grouped_reports[$m[1]][$report_key] = [$report_label, $m[0], $m[2]];
+                }
+                $rh = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+                ?>
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="page-title-box">
-                                    <h4 class="page-title float-left">
-                                        <i class="fa fa-chart-simple mr-2"></i><?= __('reports') ?>
-                                    </h4>
-                                    <div class="clearfix"></div>
-                                </div>
+
+                        <div class="sr-head">
+                            <div>
+                                <h1><?= __('reports') ?></h1>
+                                <p><?= __('reports_subtitle', 'Pick a report, narrow it down with filters, choose the columns, then generate and export.') ?></p>
+                            </div>
+                            <div class="sr-head-actions">
+                                <span class="sr-chip"><i class="mdi mdi-file-chart"></i><?= count($visible_reports) ?> <?= __('report_types_available', 'report types available') ?></span>
                             </div>
                         </div>
 
-                        <!-- Filter Section -->
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="filter-section">
-                                    <h5 class="mb-3"><?= __('report_configuration') ?></h5>
+                        <!-- 1. Report type -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><span class="rp-step">1</span> <?= __('report_type') ?></h5>
+                                <span class="sr-card-sub"><?= __('select_report_type') ?></span>
+                            </div>
+                            <div class="sr-card-body">
+                                <select id="reportType" class="d-none" aria-hidden="true" tabindex="-1">
+                                    <option value=""><?= __('select_report_type') ?></option>
+                                    <?php foreach ($visible_reports as $report_key => $report_label): ?>
+                                        <option value="<?= $rh($report_key) ?>"><?= $rh($report_label) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php if (empty($visible_reports)): ?>
+                                    <div class="sr-empty"><i class="mdi mdi-lock"></i><?= __('no_report_types_assigned_for_your_account') ?></div>
+                                <?php endif; ?>
+                                <?php foreach ($report_groups as $group_key => $group_label): if (empty($grouped_reports[$group_key])) continue; ?>
+                                    <div class="rp-group">
+                                        <div class="rp-group-title"><?= $rh($group_label) ?></div>
+                                        <div class="rp-type-grid">
+                                            <?php foreach ($grouped_reports[$group_key] as $report_key => $r): ?>
+                                                <button type="button" class="rp-type" data-type="<?= $rh($report_key) ?>">
+                                                    <span class="rp-type-ico"><i class="mdi <?= $rh($r[1]) ?>"></i></span>
+                                                    <span class="rp-type-text"><b><?= $rh($r[0]) ?></b><?php if ($r[2] !== ''): ?><small><?= $rh($r[2]) ?></small><?php endif; ?></span>
+                                                </button>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
 
-                                    <div class="row">
-                                        <!-- Report Type -->
-                                        <div class="col-md-4 mb-3">
-                                            <label for="reportType"><?= __('report_type') ?></label>
-                                            <select class="form-control" id="reportType">
-                                                <option value=""><?= __('select_report_type') ?></option>
-                                                <?php foreach ($all_report_options as $report_key => $report_label): ?>
-                                                    <?php
-                                                        if (!isset($allowed_report_types_map[$report_key])) {
-                                                            continue;
-                                                        }
-                                                        if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) {
-                                                            continue;
-                                                        }
-                                                        if ($report_key === 'ctc' && !$can_view_ctc_report) {
-                                                            continue;
-                                                        }
-                                                    ?>
-                                                    <option value="<?= htmlspecialchars($report_key, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($report_label, ENT_QUOTES, 'UTF-8') ?></option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <?php if (empty($allowed_report_types)): ?>
-                                                <small class="text-danger d-block mt-1"><?= __('no_report_types_assigned_for_your_account') ?></small>
-                                            <?php endif; ?>
-                                        </div> <!-- Department Filter (if authorized) -->
-                                        <?php if ($has_full_access): ?>
-                                            <div class="col-md-4 mb-3" id="singleDeptFilter">
-                                                <label for="deptFilter"><?= __('department') ?></label>
-                                                <select class="form-control" id="deptFilter">
-                                                    <option value=""><?= __('all_departments') ?></option>
-                                                    <?php
-                                                    $dept_query = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
-                                                    while ($dept = mysqli_fetch_assoc($dept_query)) {
-                                                        echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
-                                                    }
-                                                    ?>
-                                                </select>
-                                            </div>
-                                            <div class="col-md-4 mb-3" id="multiDeptFilter" style="display:none;">
-                                                <label for="deptMultiFilter"><?= __('select_departments') ?></label>
-                                                <select class="form-control" id="deptMultiFilter" multiple="multiple" size="8" style="height: auto;">
-                                                    <option value="all" data-select-all="true">✓ <?= __('all_departments') ?></option>
-                                                    <?php
-                                                    $dept_query2 = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
-                                                    while ($dept = mysqli_fetch_assoc($dept_query2)) {
-                                                        echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
-                                                    }
-                                                    ?>
-                                                </select>
-                                                <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
-                                            </div>
-                                        <?php endif; ?>
-
-                                        <!-- Company Filter (for country/company comparison report) -->
-                                        <div class="col-md-4 mb-3" id="companyFilterWrapper" style="display:none;">
-                                            <label for="companyMultiFilter"><?= __('select_companies') ?></label>
-                                            <select class="form-control" id="companyMultiFilter" multiple="multiple" size="8" style="height: auto;">
-                                                <option value="all" data-select-all="true">✓ <?= __('all_companies') ?></option>
+                        <!-- 2. Filters -->
+                        <div class="sr-card rp-filters">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><span class="rp-step">2</span> <?= __('filters', 'Filters') ?></h5>
+                                <span class="sr-chip" id="rpTypeChip" style="display:none;"><i class="mdi mdi-file-chart"></i><span></span></span>
+                            </div>
+                            <div class="sr-card-body">
+                                <div class="rp-empty-hint" id="rpFilterEmpty"><i class="mdi mdi-arrow-up-bold-circle"></i><?= __('choose_report_type_first', 'Choose a report type above to see its filters.') ?></div>
+                                <div class="row" id="rpFilterRow" style="display:none;">
+                                    <?php if ($has_full_access): ?>
+                                        <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="singleDeptFilter">
+                                            <label for="deptFilter"><?= __('department') ?></label>
+                                            <select class="form-control" id="deptFilter">
+                                                <option value=""><?= __('all_departments') ?></option>
                                                 <?php
-                                                $company_query = mysqli_query($conDB, "SELECT DISTINCT comp_id, comp_name, comp_name_ar FROM companies ORDER BY comp_name");
-                                                while ($comp = mysqli_fetch_assoc($company_query)) {
-                                                    echo '<option value="' . $comp['comp_id'] . '">' . htmlspecialchars($current_lang == 'en' ? $comp['comp_name'] : $comp['comp_name_ar'], ENT_QUOTES, 'UTF-8') . '</option>';
-                                                }
-                                                ?>
-                                            </select>
-                                            <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_companies') ?></small>
-                                        </div>
-
-                                        <!-- Employee Filter (for employee-related reports) -->
-                                        <div class="col-md-4 mb-3" id="employeeFilterWrapper" style="display:none;">
-                                            <label for="employeeFilter"><?= __('employee') ?></label>
-                                            <select class="form-control" id="employeeFilter" style="width: 100%;">
-                                                <option value=""><?= __('all_employees') ?: 'All Employees' ?></option>
-                                            </select>
-                                            <small class="text-muted d-block mt-1"><?= __('type_to_search_employees') ?: 'Type employee ID or name to search' ?></small>
-                                        </div>
-
-                                        <!-- Date Range -->
-                                        <div class="col-md-4 mb-3">
-                                            <label for="dateFrom"><?= __('date_from') ?></label>
-                                            <input type="text" class="form-control datepicker" id="dateFrom" placeholder="<?= __('select_start_date') ?>">
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <label for="dateTo"><?= __('date_to') ?></label>
-                                            <input type="text" class="form-control datepicker" id="dateTo" placeholder="<?= __('select_end_date') ?>">
-                                        </div>
-
-                                        <div class="col-md-4 mb-3" id="payrollMonthFilterWrapper" style="display:none;">
-                                            <label for="payrollMonthFilter"><?= __('month') ?></label>
-                                            <div class="input-group">
-                                                <input type="text" class="form-control" id="payrollMonthFilter" placeholder="YYYY-MM" readonly style="background:#fff;cursor:pointer;">
-                                                <div class="input-group-append">
-                                                    <span class="input-group-text" style="cursor:pointer;" onclick="$('#payrollMonthFilter').datepicker('show');"><i class="mdi mdi-calendar"></i></span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Status Filter (contextual per report) -->
-                                        <div class="col-md-4 mb-3" id="statusFilterWrapper">
-                                            <label for="statusFilter"><?= __('status') ?></label>
-                                            <select class="form-control" id="statusFilter">
-                                                <option value=""><?= __('all_status') ?></option>
-                                            </select>
-                                        </div>
-
-                                        <!-- Asset Item Filter (for assets_list) -->
-                                        <div class="col-md-4 mb-3" id="assetItemFilterWrapper" style="display:none;">
-                                            <label for="assetItemFilter"><?= __('asset') ?: 'Asset' ?></label>
-                                            <select id="assetItemFilter" style="width:100%;"></select>
-                                            <small class="text-muted d-block mt-1"><?= __('type_to_search_assets') ?: 'Type to search assets by name, tracking or serial' ?></small>
-                                        </div>
-
-                                        <!-- Vacation Type Filter -->
-                                        <div class="col-md-4 mb-3" id="vacationTypeFilterWrapper" style="display:none;">
-                                            <label for="vacationTypeFilter"><?= __('vac_type') ?></label>
-                                            <select class="form-control" id="vacationTypeFilter">
-                                                <option value=""><?= __('all_types') ?></option>
-                                                <?php
-                                                $vacTypeQuery = mysqli_query($conDB, "SELECT DISTINCT vac_type FROM emp_vacation WHERE vac_type <> '' ORDER BY vac_type");
-                                                while ($vacType = mysqli_fetch_assoc($vacTypeQuery)) {
-                                                    $value = htmlspecialchars($vacType['vac_type'], ENT_QUOTES, 'UTF-8');
-                                                    echo '<option value="' . $value . '">' . __(strtolower(str_replace(' ', '_', ucfirst($value)))) . '</option>';
+                                                $dept_query = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                                while ($dept = mysqli_fetch_assoc($dept_query)) {
+                                                    echo '<option value="' . $rh($dept['id']) . '">' . $rh($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
                                                 }
                                                 ?>
                                             </select>
                                         </div>
-
-                                        <!-- Custom Report Table Selection -->
-                                        <div class="col-md-4 mb-3" id="customTableSelection" style="display:none;">
-                                            <label for="customTables"><?= __('select_tables_multiselect') ?></label>
-                                            <select class="form-control" id="customTables" multiple="multiple" style="width: 100%; height: auto;">
-                                                <?php
-                                                // User-friendly table names mapping - only these tables will be available
-                                                $table_names = [
-                                                    'employees' => __('employees'),
-                                                    'department' => __('departments'),
-                                                    'section' => __('sections'),
-                                                    'ac_jobs' => __('job_titles'),
-                                                    'countries' => __('countries'),
-                                                    'companies' => __('companies') ?: 'Companies',
-                                                    'bank_list' => __('banks'),
-                                                    'emp_vacation' => __('employee_vacations'),
-                                                    'emp_loan' => __('employee_loans'),
-                                                    'emp_loan_payments' => __('loan_payments'),
-                                                    'emp_loan_approvals' => __('loan_approvals'),
-                                                    'emp_loan_monthly_status' => __('loan_monthly_status'),
-                                                    'emp_salary' => __('employee_salaries'),
-                                                    'emp_docu' => __('employee_documents'),
-                                                    'emp_eos' => __('end_of_service'),
-                                                    'emp_vacation_balance' => __('vacation_balance'),
-                                                    'emp_notice' => __('employee_notices'),
-                                                    'emp_resignations' => __('resignations'),
-                                                    'emp_resignation_history' => __('resignation_history'),
-                                                    'emp_resignation_attachments' => __('resignation_attachments'),
-                                                    'emp_resignation_clearance' => __('resignation_clearance'),
-                                                    'emp_exit_interviews' => __('exit_interviews'),
-                                                    'payrolls' => __('payrolls'),
-                                                    'attendance' => __('attendance_records'),
-                                                    'gender' => __('gender'),
-                                                    'user_type' => __('user_types'),
-                                                    'locations' => __('locations'),
-                                                    'machines' => __('machines'),
-                                                    'cars' => __('vehicles'),
-                                                    'brands' => __('brands'),
-                                                    'activity_log' => __('activity_log')
-                                                ];
-
-                                                // Add emp_evaluations only for authorized users
-                                                if (can_acknowledge_evaluations($user_type, $user_role)) {
-                                                    $table_names['emp_evaluations'] = __('employee_evaluations');
-                                                }
-
-                                                // Display only the tables defined in $table_names array
-                                                foreach ($table_names as $table_key => $table_display_name) {
-                                                    echo '<option value="' . $table_key . '">' . $table_display_name . '</option>';
-                                                }
-                                                ?>
-                                            </select>
-                                            <small class="text-muted d-block mt-1"><?= __('select_one_or_more_tables') ?></small>
-                                        </div>
-
-                                        <!-- Department Filter for Custom Report -->
-                                        <div class="col-md-4 mb-3" id="customDeptFilter" style="display:none;">
-                                            <label for="customDeptMultiFilter"><?= __('select_departments') ?></label>
-                                            <select class="form-control" id="customDeptMultiFilter" multiple="multiple" style="width: 100%; height: auto;">
+                                        <div class="col-md-8 col-xl-6 mb-3" id="multiDeptFilter" style="display:none;">
+                                            <label for="deptMultiFilter"><?= __('select_departments') ?></label>
+                                            <select class="form-control" id="deptMultiFilter" multiple="multiple" style="width: 100%;">
                                                 <option value="all" data-select-all="true">✓ <?= __('all_departments') ?></option>
                                                 <?php
-                                                $dept_query_custom = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
-                                                while ($dept = mysqli_fetch_assoc($dept_query_custom)) {
-                                                    echo '<option value="' . $dept['id'] . '">' . ($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
+                                                $dept_query2 = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                                while ($dept = mysqli_fetch_assoc($dept_query2)) {
+                                                    echo '<option value="' . $rh($dept['id']) . '">' . $rh($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
                                                 }
                                                 ?>
                                             </select>
                                             <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
                                         </div>
+                                    <?php endif; ?>
 
-                                        <!-- Date Range Filter for Custom Report -->
-                                        <div class="col-md-4 mb-3" id="customDateFromFilter" style="display:none;">
-                                            <label for="customDateFrom"><?= __('from_date') ?></label>
-                                            <input type="text" class="form-control datepicker" id="customDateFrom" placeholder="<?= __('select_start_date') ?>">
-                                            <small class="text-muted"><?= __('optional_filter_from_date') ?></small>
+                                    <!-- Company Filter -->
+                                    <div class="col-md-8 col-xl-6 mb-3" id="companyFilterWrapper" style="display:none;">
+                                        <label for="companyMultiFilter"><?= __('select_companies') ?></label>
+                                        <select class="form-control" id="companyMultiFilter" multiple="multiple" style="width: 100%;">
+                                            <option value="all" data-select-all="true">✓ <?= __('all_companies') ?></option>
+                                            <?php
+                                            $company_query = mysqli_query($conDB, "SELECT DISTINCT comp_id, comp_name, comp_name_ar FROM companies ORDER BY comp_name");
+                                            while ($comp = mysqli_fetch_assoc($company_query)) {
+                                                echo '<option value="' . $rh($comp['comp_id']) . '">' . $rh($current_lang == 'en' ? $comp['comp_name'] : $comp['comp_name_ar']) . '</option>';
+                                            }
+                                            ?>
+                                        </select>
+                                        <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_companies') ?></small>
+                                    </div>
+
+                                    <!-- Employee Filter -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="employeeFilterWrapper" style="display:none;">
+                                        <label for="employeeFilter"><?= __('employee') ?></label>
+                                        <select class="form-control" id="employeeFilter" style="width: 100%;">
+                                            <option value=""><?= __('all_employees') ?: 'All Employees' ?></option>
+                                        </select>
+                                        <small class="text-muted d-block mt-1"><?= __('type_to_search_employees') ?: 'Type employee ID or name to search' ?></small>
+                                    </div>
+
+                                    <!-- Date Range (the JS toggles these through .closest('.col-md-4')) -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3">
+                                        <label for="dateFrom"><?= __('date_from') ?></label>
+                                        <div class="rp-ico-input">
+                                            <input type="text" class="form-control datepicker" id="dateFrom" placeholder="<?= __('select_start_date') ?>" autocomplete="off">
+                                            <i class="mdi mdi-calendar"></i>
                                         </div>
-                                        <div class="col-md-4 mb-3" id="customDateToFilter" style="display:none;">
-                                            <label for="customDateTo"><?= __('to_date') ?></label>
-                                            <input type="text" class="form-control datepicker" id="customDateTo" placeholder="<?= __('select_end_date') ?>">
-                                            <small class="text-muted"><?= __('optional_filter_to_date') ?></small>
+                                    </div>
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3">
+                                        <label for="dateTo"><?= __('date_to') ?></label>
+                                        <div class="rp-ico-input">
+                                            <input type="text" class="form-control datepicker" id="dateTo" placeholder="<?= __('select_end_date') ?>" autocomplete="off">
+                                            <i class="mdi mdi-calendar"></i>
                                         </div>
                                     </div>
 
-                                    <!-- Column Selection -->
-                                    <div class="row mt-3" id="columnSelectionRow" style="display:none;">
-                                        <div class="col-12">
-                                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">
-                                                <label for="columnMultiSelect" class="mb-0 mb-md-0"><strong><?= __('select_columns_to_display') ?></strong> <span id="selectedColumnCount" class="badge badge-primary">0 selected</span></label>
-                                                <div class="d-flex align-items-center flex-wrap">
-                                                    <div class="mr-2 mb-2 mb-md-0" id="selectByTableContainer" style="display:none;">
-                                                        <select class="form-control form-control-sm" id="selectByTable" style="width: auto; min-width: 200px;">
-                                                            <option value=""><?= __('select_by_table') ?></option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <div class="btn-group" role="group">
-                                                            <button type="button" class="btn btn-sm btn-info" id="selectAllColumnsBtn">
-                                                                <i class="mdi mdi-check-all mr-1"></i><?= __('select_all') ?>
-                                                            </button>
-                                                            <button type="button" class="btn btn-sm btn-warning" id="deselectAllColumnsBtn">
-                                                                <i class="mdi mdi-close-circle mr-1"></i><?= __('deselect_all') ?>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div id="columnSortableContainer" style="border: 1px solid #ddd; border-radius: 4px; padding: 15px; background-color: #f9f9f9; max-height: 400px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px;">
-                                                <!-- Sortable columns will be rendered here -->
-                                            </div>
-                                            <small class="text-muted d-block mt-2"><i class="mdi mdi-information mr-1"></i><?= __('drag_columns_to_reorder_click_checkbox_to_select_deselect_scroll_to_see_more') ?></small>
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="payrollMonthFilterWrapper" style="display:none;">
+                                        <label for="payrollMonthFilter"><?= __('month') ?></label>
+                                        <div class="rp-ico-input" onclick="$('#payrollMonthFilter').datepicker('show');">
+                                            <input type="text" class="form-control" id="payrollMonthFilter" placeholder="YYYY-MM" readonly>
+                                            <i class="mdi mdi-calendar"></i>
                                         </div>
                                     </div>
 
-                                    <!-- Report Actions -->
-                                    <div class="report-actions">
-                                        <div class="btn-group" role="group">
-                                            <button type="button" class="btn btn-primary" id="generateReportBtn">
-                                                <i class="mdi mdi-file-chart mr-1"></i><?= __('generate_report') ?>
-                                            </button>
-                                            <button type="button" class="btn btn-success" id="exportExcelBtn" style="display:none;">
-                                                <i class="mdi mdi-file-excel mr-1"></i><?= __('export_to_excel') ?>
-                                            </button>
-                                            <button type="button" class="btn btn-secondary" id="resetBtn">
-                                                <i class="mdi mdi-refresh mr-1"></i><?= __('reset') ?>
-                                            </button>
+                                    <!-- Status Filter (contextual per report) -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="statusFilterWrapper">
+                                        <label for="statusFilter"><?= __('status') ?></label>
+                                        <select class="form-control" id="statusFilter">
+                                            <option value=""><?= __('all_status') ?></option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Asset Item Filter (for assets_list) -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="assetItemFilterWrapper" style="display:none;">
+                                        <label for="assetItemFilter"><?= __('asset') ?: 'Asset' ?></label>
+                                        <select id="assetItemFilter" style="width:100%;"></select>
+                                        <small class="text-muted d-block mt-1"><?= __('type_to_search_assets') ?: 'Type to search assets by name, tracking or serial' ?></small>
+                                    </div>
+
+                                    <!-- Vacation Type Filter -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="vacationTypeFilterWrapper" style="display:none;">
+                                        <label for="vacationTypeFilter"><?= __('vac_type') ?></label>
+                                        <select class="form-control" id="vacationTypeFilter">
+                                            <option value=""><?= __('all_types') ?></option>
+                                            <?php
+                                            $vacTypeQuery = mysqli_query($conDB, "SELECT DISTINCT vac_type FROM emp_vacation WHERE vac_type <> '' ORDER BY vac_type");
+                                            while ($vacType = mysqli_fetch_assoc($vacTypeQuery)) {
+                                                $value = htmlspecialchars($vacType['vac_type'], ENT_QUOTES, 'UTF-8');
+                                                echo '<option value="' . $value . '">' . __(strtolower(str_replace(' ', '_', ucfirst($value)))) . '</option>';
+                                            }
+                                            ?>
+                                        </select>
+                                    </div>
+
+                                    <!-- Custom Report Table Selection -->
+                                    <div class="col-md-8 col-xl-6 mb-3" id="customTableSelection" style="display:none;">
+                                        <label for="customTables"><?= __('select_tables_multiselect') ?></label>
+                                        <select class="form-control" id="customTables" multiple="multiple" style="width: 100%;">
+                                            <?php
+                                            // User-friendly table names mapping - only these tables will be available
+                                            $table_names = [
+                                                'employees' => __('employees'),
+                                                'department' => __('departments'),
+                                                'section' => __('sections'),
+                                                'ac_jobs' => __('job_titles'),
+                                                'countries' => __('countries'),
+                                                'companies' => __('companies') ?: 'Companies',
+                                                'bank_list' => __('banks'),
+                                                'emp_vacation' => __('employee_vacations'),
+                                                'emp_loan' => __('employee_loans'),
+                                                'emp_loan_payments' => __('loan_payments'),
+                                                'emp_loan_approvals' => __('loan_approvals'),
+                                                'emp_loan_monthly_status' => __('loan_monthly_status'),
+                                                'emp_salary' => __('employee_salaries'),
+                                                'emp_docu' => __('employee_documents'),
+                                                'emp_eos' => __('end_of_service'),
+                                                'emp_vacation_balance' => __('vacation_balance'),
+                                                'emp_notice' => __('employee_notices'),
+                                                'emp_resignations' => __('resignations'),
+                                                'emp_resignation_history' => __('resignation_history'),
+                                                'emp_resignation_attachments' => __('resignation_attachments'),
+                                                'emp_resignation_clearance' => __('resignation_clearance'),
+                                                'emp_exit_interviews' => __('exit_interviews'),
+                                                'payrolls' => __('payrolls'),
+                                                'attendance' => __('attendance_records'),
+                                                'gender' => __('gender'),
+                                                'user_type' => __('user_types'),
+                                                'locations' => __('locations'),
+                                                'machines' => __('machines'),
+                                                'cars' => __('vehicles'),
+                                                'brands' => __('brands'),
+                                                'activity_log' => __('activity_log')
+                                            ];
+
+                                            // Add emp_evaluations only for authorized users
+                                            if (can_acknowledge_evaluations($user_type, $user_role)) {
+                                                $table_names['emp_evaluations'] = __('employee_evaluations');
+                                            }
+
+                                            foreach ($table_names as $table_key => $table_display_name) {
+                                                echo '<option value="' . $table_key . '">' . $table_display_name . '</option>';
+                                            }
+                                            ?>
+                                        </select>
+                                        <small class="text-muted d-block mt-1"><?= __('select_one_or_more_tables') ?></small>
+                                    </div>
+
+                                    <!-- Department Filter for Custom Report -->
+                                    <div class="col-md-8 col-xl-6 mb-3" id="customDeptFilter" style="display:none;">
+                                        <label for="customDeptMultiFilter"><?= __('select_departments') ?></label>
+                                        <select class="form-control" id="customDeptMultiFilter" multiple="multiple" style="width: 100%;">
+                                            <option value="all" data-select-all="true">✓ <?= __('all_departments') ?></option>
+                                            <?php
+                                            $dept_query_custom = mysqli_query($conDB, "SELECT DISTINCT id, dep_nme, dep_nme_ar FROM department ORDER BY dep_nme");
+                                            while ($dept = mysqli_fetch_assoc($dept_query_custom)) {
+                                                echo '<option value="' . $rh($dept['id']) . '">' . $rh($current_lang == 'en' ? $dept['dep_nme'] : $dept['dep_nme_ar']) . '</option>';
+                                            }
+                                            ?>
+                                        </select>
+                                        <small class="text-muted d-block mt-1"><?= __('select_all_or_specific_departments') ?></small>
+                                    </div>
+
+                                    <!-- Date Range Filter for Custom Report -->
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="customDateFromFilter" style="display:none;">
+                                        <label for="customDateFrom"><?= __('from_date') ?></label>
+                                        <div class="rp-ico-input">
+                                            <input type="text" class="form-control datepicker" id="customDateFrom" placeholder="<?= __('select_start_date') ?>" autocomplete="off">
+                                            <i class="mdi mdi-calendar"></i>
                                         </div>
+                                        <small class="text-muted"><?= __('optional_filter_from_date') ?></small>
+                                    </div>
+                                    <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="customDateToFilter" style="display:none;">
+                                        <label for="customDateTo"><?= __('to_date') ?></label>
+                                        <div class="rp-ico-input">
+                                            <input type="text" class="form-control datepicker" id="customDateTo" placeholder="<?= __('select_end_date') ?>" autocomplete="off">
+                                            <i class="mdi mdi-calendar"></i>
+                                        </div>
+                                        <small class="text-muted"><?= __('optional_filter_to_date') ?></small>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Report Table Container -->
-                        <div class="row" id="reportTableContainer" style="display:none;">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h5 class="card-title" id="reportTitle">Report Results</h5>
-                                        <div class="table-responsive">
-                                            <table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" style="width:100%">
-                                                <thead id="reportTableHead">
-                                                    <!-- Dynamic headers -->
-                                                </thead>
-                                                <tbody id="reportTableBody">
-                                                    <!-- Dynamic rows -->
-                                                </tbody>
-                                            </table>
-                                        </div>
+                        <!-- 3. Columns -->
+                        <div class="sr-card" id="columnSelectionRow" style="display:none;">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><span class="rp-step">3</span> <?= __('select_columns_to_display') ?> <span id="selectedColumnCount" class="sr-chip">0 selected</span></h5>
+                                <div class="rp-col-tools">
+                                    <div id="selectByTableContainer" style="display:none;">
+                                        <select class="form-control" id="selectByTable">
+                                            <option value=""><?= __('select_by_table') ?></option>
+                                        </select>
                                     </div>
+                                    <button type="button" class="sr-btn sr-btn-sm" id="selectAllColumnsBtn"><i class="mdi mdi-check-all"></i> <?= __('select_all') ?></button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="deselectAllColumnsBtn"><i class="mdi mdi-close-circle"></i> <?= __('deselect_all') ?></button>
                                 </div>
+                            </div>
+                            <div class="sr-card-body">
+                                <div id="columnSortableContainer"></div>
+                                <small class="rp-col-hint"><i class="mdi mdi-information"></i> <?= __('drag_columns_to_reorder_click_checkbox_to_select_deselect_scroll_to_see_more') ?></small>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="sr-card rp-actionbar">
+                            <div class="rp-summary" id="rpSummary"><i class="mdi mdi-information"></i> <?= __('choose_report_type_first', 'Choose a report type above to see its filters.') ?></div>
+                            <div class="rp-btns">
+                                <button type="button" class="sr-btn sr-btn-ghost" id="resetBtn"><i class="mdi mdi-refresh"></i> <?= __('reset') ?></button>
+                                <button type="button" class="sr-btn sr-btn-success" id="exportExcelBtn" style="display:none;"><i class="mdi mdi-file-excel"></i> <?= __('export_to_excel') ?></button>
+                                <button type="button" class="sr-btn sr-btn-primary" id="generateReportBtn"><i class="mdi mdi-file-chart"></i> <?= __('generate_report') ?></button>
+                            </div>
+                        </div>
+
+                        <!-- Results -->
+                        <div class="sr-card rp-results" id="reportTableContainer" style="display:none;">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-table-large"></i> <span id="reportTitle"><?= __('report_results', 'Report results') ?></span></h5>
+                                <span class="sr-card-sub"><?= __('click_plus_for_details', 'Use + on a row to see all its columns') ?></span>
+                            </div>
+                            <div id="reportTableHolder">
+                                <table id="reportTable" class="table sr-table rp-table nowrap" style="width:100%">
+                                    <thead id="reportTableHead"></thead>
+                                    <tbody id="reportTableBody"></tbody>
+                                </table>
                             </div>
                         </div>
 
@@ -808,6 +692,8 @@ if (mysqli_num_rows($query) == 1) {
 
         <script>
             $(document).ready(function() {
+                const escH = v => $('<div>').text(v == null ? '' : String(v)).html();
+
                 // Hide department and date filters by default until a report type is selected
                 $('#singleDeptFilter').hide();
                 $('#multiDeptFilter').hide();
@@ -1565,6 +1451,7 @@ if (mysqli_num_rows($query) == 1) {
                         { id: 'position', label: (typeof __ === 'function') ? __('position') : 'Position', default: false },
                         { id: 'sub_department', label: (typeof __ === 'function') ? __('sub_department') : 'Sub-Department', default: false },
                         { id: 'location', label: (typeof __ === 'function') ? __('location') : 'Location', default: true },
+                        { id: 'city', label: (typeof __ === 'function') ? __('city_label', 'City') : 'City', default: true },
                         { id: 'location_code', label: (typeof __ === 'function') ? __('location_code') : 'Location Code', default: false },
                         { id: 'department_code', label: (typeof __ === 'function') ? __('department_code') : 'Department Code', default: false },
                         { id: 'direct_manager_id', label: (typeof __ === 'function') ? __('direct_manager_id') : 'Direct Manager ID', default: false },
@@ -2516,6 +2403,7 @@ if (mysqli_num_rows($query) == 1) {
                         { id: 'years_contract', label: (typeof __ === 'function') ? __('years_contract') : 'Years Contract', default: true },
                         { id: 'sub_department', label: (typeof __ === 'function') ? __('sub_department') : 'Sub-Department', default: true },
                         { id: 'location', label: (typeof __ === 'function') ? __('location') : 'Location', default: true },
+                        { id: 'city', label: (typeof __ === 'function') ? __('city_label', 'City') : 'City', default: true },
                         { id: 'country', label: (typeof __ === 'function') ? __('country') : 'Country', default: true },
                         { id: 'no_of_dependents', label: (typeof __ === 'function') ? __('no_of_dependents') : 'No. of Dependents', default: true },
                         { id: 'basic', label: (typeof __ === 'function') ? __('basic') : 'BASIC', default: true },
@@ -3204,10 +3092,8 @@ if (mysqli_num_rows($query) == 1) {
 
                     if ($(this).is(':checked')) {
                         $option.attr('selected', 'selected');
-                        $(this).closest('.column-item').css('background-color', '#fff9e6');
                     } else {
                         $option.removeAttr('selected');
-                        $(this).closest('.column-item').css('background-color', '#fff');
                     }
 
                     $select.val($select.val()).trigger('change');
@@ -3432,6 +3318,10 @@ if (mysqli_num_rows($query) == 1) {
                             .replace(/>/g, '&gt;');
                     }
 
+                    // Server-built HTML (buttons/links, already escaped server side)
+                    const rawHtmlColumns = ['actions', 'attachment'];
+                    const toneByBadge = { success: 'green', danger: 'red', warning: 'amber', secondary: 'slate', primary: 'indigo', info: 'sky' };
+
                     // Helper: translate status keys using global __()
                     function translateStatusKey(key) {
                         if (!key) return '';
@@ -3559,7 +3449,7 @@ if (mysqli_num_rows($query) == 1) {
                                 // Escape raw text before deciding on status-badge formatting -
                                 // badge markup below is built from controlled strings, so it's
                                 // applied after this and is safe as-is.
-                                if (cell !== null && cell !== undefined && cell !== '') {
+                                if (cell !== null && cell !== undefined && cell !== '' && !rawHtmlColumns.includes(columnId)) {
                                     cell = escapeCellHtml(cell);
                                 }
 
@@ -3603,7 +3493,7 @@ if (mysqli_num_rows($query) == 1) {
                                             
                                             .replace(/\b\w/g, char => char.toUpperCase());
 
-                                        cell = `<span class="badge badge-${badgeClass}">${formattedText}</span>`;
+                                        cell = `<span class="sr-pill tone-${toneByBadge[badgeClass] || 'slate'}"><span class="sr-dot"></span>${formattedText}</span>`;
                                     }
                                 }
 
@@ -3703,11 +3593,11 @@ if (mysqli_num_rows($query) == 1) {
                         // Rebuild single clean table markup - no <tfoot> here, see the
                         // footerCells comment above for why it's appended after DataTables
                         // has finished initializing instead.
-                        const tableMarkup = '<table id="reportTable" class="table table-bordered table-striped dt-responsive nowrap" width="100%">' +
+                        const tableMarkup = '<table id="reportTable" class="table sr-table rp-table nowrap" width="100%">' +
                             '<thead id="reportTableHead">' + headerHtml + '</thead>' +
                             '<tbody id="reportTableBody">' + bodyHtml + '</tbody>' +
                             '</table>';
-                        $('#reportTableContainer').html(tableMarkup);
+                        $('#reportTableHolder').html(tableMarkup);
 
                         // Generate filename with report name and timestamp
                         const reportName = $('#reportType').val();
@@ -3781,12 +3671,15 @@ if (mysqli_num_rows($query) == 1) {
                                                 const colId = window.reportColumnIds[colIdx];
                                                 
                                                 // Get value from row data - should match keys from data object
-                                                let value = d[colId] || '-';
+                                                let value = d[colId];
+                                                if (value === undefined) value = d[colId.replace(/\./g, '_')];
+                                                value = (value === null || value === undefined || value === '') ? '-'
+                                                    : (rawHtmlColumns.includes(colId) ? value : escapeCellHtml(value));
                                                 
                                                 // Create column-based layout
                                                 detailHtml += `
                                                     <div class="detail-column">
-                                                        <div class="detail-label">${label}</div>
+                                                        <div class="detail-label">${escapeCellHtml(label)}</div>
                                                         <div class="detail-value">${value}</div>
                                                     </div>
                                                 `;
@@ -3799,11 +3692,12 @@ if (mysqli_num_rows($query) == 1) {
                                 }
 
                                 const table = $('#reportTable').DataTable({
-                                    dom: 'Bfrtip',
+                                    dom: '<"rp-dt-top"Bf>r<"rp-dt-scroll"t><"rp-dt-bottom"ip>',
                                     buttons: [
-                                        'copy',
+                                        { extend: 'copy', text: '<i class="mdi mdi-content-copy"></i> ' + __('copy', 'Copy') },
                                         {
                                             extend: 'excel',
+                                            text: '<i class="mdi mdi-file-excel"></i> Excel',
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
@@ -3832,6 +3726,7 @@ if (mysqli_num_rows($query) == 1) {
                                         },
                                         {
                                             extend: 'pdf',
+                                            text: '<i class="mdi mdi-file-pdf"></i> PDF',
                                             filename: filename,
                                             exportOptions: {
                                                 columns: function(idx, data, node) {
@@ -3854,7 +3749,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 }
                                             }
                                         },
-                                        'print'
+                                        { extend: 'print', text: '<i class="mdi mdi-printer"></i> ' + __('print', 'Print') }
                                     ],
                                     responsive: false,
                                     pageLength: 50,
@@ -3869,8 +3764,8 @@ if (mysqli_num_rows($query) == 1) {
                                         paginate: {
                                             first: __('first'),
                                             last: __('last'),
-                                            next: __('next'),
-                                            previous: __('previous')
+                                            next: '<i class="mdi mdi-chevron-right"></i>',
+                                            previous: '<i class="mdi mdi-chevron-left"></i>'
                                         },
                                         emptyTable: __('no_data_available_in_table'),
                                         zeroRecords: __('no_matching_records_found'),
@@ -3882,7 +3777,7 @@ if (mysqli_num_rows($query) == 1) {
                                 // initializing - purely visual, DataTables never parses/manages
                                 // it (see footerCells comment above for why).
                                 if (footerCells) {
-                                    let footerRowHtml = '<tr class="report-totals-row" style="background-color:#eaf7ee;font-weight:600;">';
+                                    let footerRowHtml = '<tr class="report-totals-row">';
                                     if (showControlColumn) {
                                         footerRowHtml += '<td></td>';
                                     }
@@ -3986,13 +3881,13 @@ if (mysqli_num_rows($query) == 1) {
                                     <div class="evaluation-details-print" id="evaluationDetailsPrint" style="padding: 20px;">
                                         <div style="display: flex; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #dee2e6;">
                                             <div style="flex: 1;">
-                                                <p style="margin-bottom: 10px;"><strong>${__('employee_name', 'Employee Name')}:</strong> <span>${eval.employee_name}</span></p>
-                                                <p style="margin-bottom: 10px;"><strong>${__('employee_id', 'Employee ID')}:</strong> ${eval.employee_emp_id_display || eval.employee_emp_id}</p>
-                                                <p style="margin-bottom: 10px;"><strong>${__('department', 'Department')}:</strong> <span class="dept-name">${eval.department}</span></p>
-                                                <p style="margin-bottom: 10px;"><strong>${__('position', 'Position')}:</strong> <span class="emp-position">${eval.position || 'IT'}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('employee_name', 'Employee Name')}:</strong> <span>${escH(eval.employee_name)}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('employee_id', 'Employee ID')}:</strong> ${escH(eval.employee_emp_id_display || eval.employee_emp_id)}</p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('department', 'Department')}:</strong> <span class="dept-name">${escH(eval.department)}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('position', 'Position')}:</strong> <span class="emp-position">${escH(eval.position || 'IT')}</span></p>
                                             </div>
                                             <div style="flex: 1; text-align: right;">
-                                                <p style="margin-bottom: 10px;"><strong>${__('evaluated_by', 'Evaluated By')}:</strong> <span class="manager-name">${eval.manager_name}</span></p>
+                                                <p style="margin-bottom: 10px;"><strong>${__('evaluated_by', 'Evaluated By')}:</strong> <span class="manager-name">${escH(eval.manager_name)}</span></p>
                                                 <p style="margin-bottom: 10px;"><strong>${__('evaluation_date', 'Evaluation Date')}:</strong> ${eval.created_at ? eval.created_at.substring(0, 16).replace('T', ' ') : 'N/A'}</p>
                                                 <p style="margin-bottom: 10px;"><strong>${__('total_score', 'Total Score')}:</strong> <span class="badge badge-${totalScoreBadge}" style="font-size: 14px; padding: 5px 10px;">${eval.total_score || '0'}/100</span></p>
                                             </div>
@@ -4051,7 +3946,7 @@ if (mysqli_num_rows($query) == 1) {
                                         </table>
                                         
                                         ${eval.observation 
-                                            ? `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;">${__('observationremarks', 'Observation/Remarks')}</h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">${eval.observation}</p>` 
+                                            ? `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;">${__('observationremarks', 'Observation/Remarks')}</h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">${escH(eval.observation)}</p>` 
                                             : `<h5 style="margin-top: 30px; margin-bottom: 15px; color: #333;">${__('observationremarks', 'Observation/Remarks')}</h5><p style="padding: 15px; background-color: #f8f9fa; border-radius: 5px;">${__('no_observation_provided', 'No observation provided.')}</p>`}
                                         
                                         <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #dee2e6;">
@@ -4063,14 +3958,14 @@ if (mysqli_num_rows($query) == 1) {
                                                 : eval.manager_acknowledgment_status === 'acknowledged'
                                                     ? `<div class="alert alert-success" style="border-left: 4px solid #28a745;">
                                                         <p style="margin-bottom: 5px;"><i class="mdi mdi-check-circle"></i> <strong>${__('status', 'Status')}:</strong> ${__('acknowledged', 'Acknowledged')}</p>
-                                                        ${eval.acknowledged_by_name ? `<span style="margin-bottom: 5px;"><strong>${__('acknowledged_by', 'Acknowledged By')}:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></span></p>` : ''}
+                                                        ${eval.acknowledged_by_name ? `<span style="margin-bottom: 5px;"><strong>${__('acknowledged_by', 'Acknowledged By')}:</strong> <span class="acknow_by_name">${escH(eval.acknowledged_by_name)}</span></span></p>` : ''}
                                                         ${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong>${__('date', 'Date')}:</strong> ${eval.acknowledgment_date}</p>` : ''}
                                                     </div>`
                                                     : eval.manager_acknowledgment_status === 'objected'
                                                         ? `<div class="alert alert-danger" style="border-left: 4px solid #dc3545;">
                                                             <p style="margin-bottom: 10px;"><i class="mdi mdi-close-circle"></i> <strong>${__('status', 'Status')}:</strong> ${__('objected', 'Objected')}</p>
-                                                            ${eval.manager_objection_note ? `<p style="margin-bottom: 10px;"><strong>${__('objection_note', 'Objection Note')}:</strong></p><p style="padding: 10px; background-color: #fff; border-radius: 4px; white-space: pre-wrap;">${eval.manager_objection_note}</p>` : ''}
-                                                            ${eval.acknowledged_by_name ? `<p style="margin-bottom: 5px;"><strong>${__('objected_by', 'Objected By')}:</strong> <span class="acknow_by_name">${eval.acknowledged_by_name}</span></p>` : ''}
+                                                            ${eval.manager_objection_note ? `<p style="margin-bottom: 10px;"><strong>${__('objection_note', 'Objection Note')}:</strong></p><p style="padding: 10px; background-color: #fff; border-radius: 4px; white-space: pre-wrap;">${escH(eval.manager_objection_note)}</p>` : ''}
+                                                            ${eval.acknowledged_by_name ? `<p style="margin-bottom: 5px;"><strong>${__('objected_by', 'Objected By')}:</strong> <span class="acknow_by_name">${escH(eval.acknowledged_by_name)}</span></p>` : ''}
                                                             ${eval.acknowledgment_date ? `<p style="margin-bottom: 0;"><strong>${__('date', 'Date')}:</strong> ${eval.acknowledgment_date}</p>` : ''}
                                                         </div>`
                                                         : `<div class="alert alert-secondary"><i class="mdi mdi-information-outline"></i> <strong>${__('status', 'Status')}:</strong> ${__('unknown', 'Unknown')}</div>`
@@ -4207,23 +4102,23 @@ if (mysqli_num_rows($query) == 1) {
                                     rowsHtml += `
                                         <tr>
                                             <td>${h.id || ''}</td>
-                                            <td>${h.serial_number || ''}</td>
-                                            <td>${emp || ''}</td>
-                                            <td>${h.employee_department || ''}</td>
+                                            <td>${escH(h.serial_number)}</td>
+                                            <td>${escH(emp)}</td>
+                                            <td>${escH(h.employee_department)}</td>
                                             <td>${h.assigned_date || ''}</td>
                                             <td>${h.return_date || ''}</td>
-                                            <td>${h.status || ''}</td>
-                                            <td>${h.description ? h.description : ''}</td>
+                                            <td>${escH(h.status)}</td>
+                                            <td>${escH(h.description)}</td>
                                         </tr>`;
                                 });
                             }
 
                             const html = `
-                                <div id="assetActivityModal"">
+                                <div id="assetActivityModal">
                                     <div style="margin-bottom: 15px;">
-                                        <h5 style="margin:0;">${(typeof __ === 'function') ? __('asset_name') : 'Asset Name'}: ${asset.name || '-'}</h5>
-                                        <div style="color:#555;">${(typeof __ === 'function') ? __('asset_type') : 'Asset Type'}: ${asset.asset_type || '-'}</div>
-                                        <div style="color:#555;">${(typeof __ === 'function') ? __('department') : 'Department'}: ${asset.asset_department || '-'}</div>
+                                        <h5 style="margin:0;">${(typeof __ === 'function') ? __('asset_name') : 'Asset Name'}: ${escH(asset.name || '-')}</h5>
+                                        <div style="color:#555;">${(typeof __ === 'function') ? __('asset_type') : 'Asset Type'}: ${escH(asset.asset_type || '-')}</div>
+                                        <div style="color:#555;">${(typeof __ === 'function') ? __('department') : 'Department'}: ${escH(asset.asset_department || '-')}</div>
                                         <div style="color:#555;">${(typeof __ === 'function') ? __('purchase_date') : 'Purchase Date'}: ${asset.created_at || '-'}</div>
                                     </div>
                                     <div class="table-responsive">
@@ -4337,6 +4232,55 @@ if (mysqli_num_rows($query) == 1) {
 
                     // console.log('Reset completed');
                 });
+            });
+        </script>
+
+        <script>
+            // Report picker cards + step state. The report logic above still reads #reportType.
+            $(function() {
+                var $type = $('#reportType');
+
+                function syncReportUi() {
+                    var v = $type.val() || '';
+                    var label = v ? $type.find('option:selected').text() : '';
+                    $('.rp-type').removeClass('active').attr('aria-pressed', 'false');
+                    if (v) {
+                        $('.rp-type[data-type="' + v + '"]').addClass('active').attr('aria-pressed', 'true');
+                    }
+                    $('#rpFilterEmpty').toggle(!v);
+                    $('#rpFilterRow').toggle(!!v);
+                    $('#rpTypeChip').toggle(!!v).find('span').text(label);
+                    $('#rpSummary').html(v
+                        ? '<i class="mdi mdi-file-chart"></i> <b></b> <span>' + __('set_filters_then_generate', 'Set the filters and columns, then generate.') + '</span>'
+                        : '<i class="mdi mdi-information"></i> ' + __('choose_report_type_first', 'Choose a report type above to see its filters.'));
+                    if (v) {
+                        $('#rpSummary b').text(label);
+                    }
+                }
+
+                $(document).on('click', '.rp-type', function() {
+                    var v = $(this).data('type');
+                    if ($type.val() === v) {
+                        return;
+                    }
+                    $type.val(v).trigger('change');
+                });
+
+                $type.on('change', syncReportUi);
+                // The reset handler clears #reportType without firing change.
+                $('#resetBtn').on('click', function() {
+                    setTimeout(syncReportUi, 0);
+                });
+
+                // Scroll to the results once a report has been drawn.
+                $(document).on('init.dt', function(e, settings) {
+                    if (settings.nTable && settings.nTable.id === 'reportTable') {
+                        var top = $('#reportTableContainer').offset().top - 80;
+                        $('html, body').animate({ scrollTop: top }, 250);
+                    }
+                });
+
+                syncReportUi();
             });
         </script>
 

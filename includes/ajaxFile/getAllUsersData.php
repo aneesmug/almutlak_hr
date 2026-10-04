@@ -63,15 +63,17 @@ try {
     }
     
     // Apply global search filter
-    if (!empty($search)) {
-        $search = mysqli_real_escape_string($conDB, $search);
+    // Each word must match one of the columns, so "first last" finds "first middle last".
+    $searchWords = preg_split('/\s+/', trim((string)$search), -1, PREG_SPLIT_NO_EMPTY);
+    foreach (array_slice($searchWords, 0, 6) as $word) {
+        $w = mysqli_real_escape_string($conDB, addcslashes($word, '%_'));
         $sql .= " AND (
-            `admin_login`.`id` LIKE '%$search%' OR
-            `admin_login`.`id_iqama` LIKE '%$search%' OR
-            `admin_login`.`emp_id` LIKE '%$search%' OR
-            `employees`.`name` LIKE '%$search%' OR
-            `employees`.`mobile` LIKE '%$search%' OR
-            `department`.`dep_nme` LIKE '%$search%'
+            `admin_login`.`id` LIKE '%$w%' OR
+            `admin_login`.`id_iqama` LIKE '%$w%' OR
+            `admin_login`.`emp_id` LIKE '%$w%' OR
+            `employees`.`name` LIKE '%$w%' OR
+            `employees`.`mobile` LIKE '%$w%' OR
+            `department`.`dep_nme` LIKE '%$w%'
         )";
     }
     
