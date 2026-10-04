@@ -293,31 +293,17 @@ if ($can_see_all_depts) {
         <!-- Select2 -->
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
         <style>
-            .filter-controls { max-width: 800px; }
-            .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; position: relative; }
-            .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); z-index: 50; }
-            .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
-            .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
-            .request-card .card-body { padding: 1.5rem; }
             .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
             .detail-item i.fad { margin-right: 15px; width: 20px; text-align: center; font-size: 1.2em; }
             .detail-item i.duotone-info { --fa-primary-color: #4a90e2; --fa-secondary-color: #a8d0ff; --fa-secondary-opacity: 0.4; }
             .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
-            .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; overflow: visible; padding: 1rem; }
-            .request-time-footer {
-                display: flex; justify-content: space-between; align-items: center; gap: 8px;
-                font-size: 0.78em; color: #6c757d;
-            }
-            .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-            .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-            .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-            .request-time-footer i { color: #a0a8c0; }
-            .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
 
             /* --- Resignation: "View" details modal --- */
             .et-report { text-align: left; }
@@ -338,14 +324,6 @@ if ($can_see_all_depts) {
             .et-report-row-label i { width: 16px; margin-right: 6px; color: #4e73df; }
             .et-report-row-value { color: #3a3b45; font-weight: 600; text-align: right; }
 
-            /* Action Buttons Layout */
-            .request-card .card-footer .btn { flex: 1; margin: 0; }
-            .request-card .card-footer .btn-group { position: relative; }
-            .request-card .card-footer .dropdown-menu { z-index: 2000; min-width: 180px; }
-            .request-card .card-footer .dropdown-item { padding: 10px 15px; transition: all 0.2s; }
-            .request-card .card-footer .dropdown-item:hover { background-color: #f8f9fa; padding-left: 20px; }
-            .request-card .card-footer .dropdown-item i { width: 20px; margin-right: 8px; }
-            
             /* Resignation Approval Wizard Custom Styles */
             .resignation-wizard-popup .swal2-popup { font-family: inherit; }
             .resignation-approval-wizard { text-align: left; padding: 10px; }
@@ -391,51 +369,36 @@ if ($can_see_all_depts) {
 
             <div class="content-page">
                 <?php include("./includes/topbar.php"); ?>
-                <div class="content">
+                <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-xl-12">
-                                <div class="card-box">
-                                    <h4 class="header-title m-t-0 m-b-30"><?=__('resignation_approval_center')?></h4>
 
-                                    <div class="row filter-controls mx-auto mb-5">
-                                        <div class="col-md-6 mb-3 mb-md-0">
-                                            <div class="form-group">
-                                                <label for="statusFilter" class="font-weight-bold"><?=__('filter_by_status')?></label>
-                                                <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                    <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                        <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                            <?=htmlspecialchars($status_value); ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label for="searchFilter" class="font-weight-bold"><?=__('search_by_name_id')?></label>
-                                                <div class="input-group">
-                                                    <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>">
-                                                    <div class="input-group-append">
-                                                        <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?=__('resignation_approval_center')?></h1>
+                                <p><?= str_replace('{0}', (string)(int)$total_items, __('showing_requests')) ?></p>
+                            </div>
+                        </div>
 
-                                    <div class="d-flex justify-content-between align-items-center mb-4">
-                                        <?php 
-                                            // Replace placeholder {0} in translation with the total count
-                                            $showing_text = str_replace('{0}', (string)(int)$total_items, __('showing_requests'));
-                                        ?>
-                                        <h4 class="mb-0 text-muted"><?=$showing_text?></h4>
-                                        <span class="badge badge-light p-2"><?=__('total_found')?>: <?=$total_items; ?></span>
-                                    </div>
+                        <div class="sr-card">
+                            <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
+                            <?= sr_list_toolbar($search_term) ?>
 
-                                    <?php if (!empty($requests)): ?>
-                                        <div class="row">
-                                            <?php foreach ($requests as $resignation): 
+                            <?php if (!empty($requests)): ?>
+                                <div class="sr-table-wrap sr-list-wrap">
+                                    <table class="table sr-table sr-list" style="width: 100%;">
+                                        <thead>
+                                            <tr>
+                                                <th><?= __('employee', 'Employee') ?></th>
+                                                <th><?=__('department')?></th>
+                                                <th><?=__('last_working_day')?></th>
+                                                <th><?=__('status')?></th>
+                                                <th><?=__('submitted')?></th>
+                                                <th class="text-right"><?=__('actions')?></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($requests as $resignation):
                                                 // Get approval chain details
                                                 $approval_chain = [];
                                                 $approver_stmt = $conDB->prepare("
@@ -454,7 +417,7 @@ if ($can_see_all_depts) {
                                                     }
                                                     $approver_stmt->close();
                                                 }
-                                                
+
                                                 // Determine if current user has pending approval
                                                 $user_has_pending_approval = false;
                                                 foreach ($approval_chain as $approval) {
@@ -467,7 +430,7 @@ if ($can_see_all_depts) {
                                                         }
                                                     }
                                                 }
-                                                
+
                                                 // Only show action buttons if current user has pending approval
                                                 $can_take_action = $user_has_pending_approval;
                                                 $can_cancel_this_resignation = $can_cancel_resignation_requests && in_array($resignation['status'], $cancellable_resignation_statuses, true);
@@ -475,162 +438,103 @@ if ($can_see_all_depts) {
                                                 // Prepare JS-safe variables - remove line breaks and escape quotes
                                                 $employee_name_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['employee_name'])), ENT_QUOTES);
                                                 $employee_id_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', $resignation['employee_id']), ENT_QUOTES);
+                                                $iqama_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['iqama'])), ENT_QUOTES);
+                                                $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
+                                                $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
+
+                                                // Status + current/next approver
+                                                $status_tone = 'slate';
+                                                switch ($resignation['status']) {
+                                                    case 'pending':
+                                                        $status_tone = 'amber';
+                                                        $status_text = __('pending');
+                                                        foreach ($approval_chain as $approval) {
+                                                            if ($approval['status'] === 'pending' || $approval['status'] === 'awaiting') {
+                                                                $status_text .= " - Level " . $approval['approval_level'] . ": " . ($approval['approver_name'] ?? 'N/A');
+                                                                break;
+                                                            }
+                                                        }
+                                                        break;
+                                                    case 'approved':
+                                                        $status_tone = 'green';
+                                                        $status_text = __('approved');
+                                                        break;
+                                                    case 'rejected':
+                                                        $status_tone = 'red';
+                                                        $status_text = __('rejected');
+                                                        break;
+                                                    case 'cancelled':
+                                                        $status_tone = 'slate';
+                                                        $status_text = __('cancelled');
+                                                        break;
+                                                    default:
+                                                        $status_text = __($resignation['status']);
+                                                        break;
+                                                }
+                                                $report_url = 'resignation_report_details.php?id=' . (int)$resignation['id'] . '&emp_id=' . urlencode($resignation['employee_id']);
+                                                $view_attrs = 'data-id="' . (int)$resignation['id'] . '"'
+                                                    . ' data-emp-id="' . sr_h($resignation['employee_id']) . '"'
+                                                    . ' data-iqama="' . sr_h($resignation['iqama']) . '"'
+                                                    . ' data-name="' . sr_h($resignation['employee_name']) . '"'
+                                                    . ' data-designation="' . sr_h($resignation['designation'] ?? 'N/A') . '"'
+                                                    . ' data-department="' . sr_h($resignation['department'] ?? 'N/A') . '"'
+                                                    . ' data-last-day="' . sr_h($resignation['last_working_day']) . '"'
+                                                    . ' data-status="' . sr_h($resignation['status']) . '"';
                                             ?>
-                                                <div class="col-lg-4 col-md-6 mb-4">
-                                                    <div class="card request-card h-100">
-                                                        <div class="card-header d-flex justify-content-between align-items-center">
-                                                            <span><?= htmlspecialchars($resignation['employee_name']) ?></span>
-                                                            <div class="d-flex align-items-center" style="gap: 8px;">
-                                                                <span><?=__('emp_id')?>: <?= htmlspecialchars($resignation['employee_id']) ?></span>
-                                                                <div class="btn-group" role="group">
-                                                                    <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="<?=__('actions')?>">
-                                                                        <?=__('actions')?>
-                                                                    </button>
-                                                                    <div class="dropdown-menu dropdown-menu-right">
-                                                                        <?php
-                                                                        // Escape all parameters for JavaScript onclick - remove line breaks
-                                                                        $iqama_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['iqama'])), ENT_QUOTES);
-                                                                        $designation_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['designation'] ?? 'N/A')), ENT_QUOTES);
-                                                                        $department_js = htmlspecialchars(str_replace(["\r", "\n"], ' ', addslashes($resignation['department'] ?? 'N/A')), ENT_QUOTES);
-                                                                        ?>
-                                                                        <button type="button" class="dropdown-item viewResignation"
-                                                                                style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;"
-                                                                                data-id="<?= $resignation['id'] ?>"
-                                                                                data-emp-id="<?= $resignation['employee_id'] ?>"
-                                                                                data-iqama="<?= $resignation['iqama'] ?>"
-                                                                                data-name="<?= htmlspecialchars($resignation['employee_name']) ?>"
-                                                                                data-designation="<?= htmlspecialchars($resignation['designation'] ?? 'N/A') ?>"
-                                                                                data-department="<?= htmlspecialchars($resignation['department'] ?? 'N/A') ?>"
-                                                                                data-last-day="<?= $resignation['last_working_day'] ?>"
-                                                                                data-status="<?= $resignation['status'] ?>">
-                                                                            <i class="fa fa-eye"></i> <?=__('view')?>
-                                                                        </button>
+                                                <tr>
+                                                    <td><?= sr_person_cell($resignation['employee_name'], $resignation['employee_id']) ?></td>
+                                                    <td>
+                                                        <span class="sr-cell-title"><?= sr_h($resignation['department'] ?? 'N/A') ?></span>
+                                                        <span class="sr-cell-sub"><i class="mdi mdi-briefcase"></i> <?= sr_h($resignation['designation'] ?? 'N/A') ?></span>
+                                                    </td>
+                                                    <td class="sr-nowrap"><?= sr_pill('red', format_safe_date($resignation['last_working_day'] ?? null, 'd M Y'), true, 'mdi-calendar-remove') ?></td>
+                                                    <td><?= sr_pill($status_tone, $status_text) ?></td>
+                                                    <td><?= sr_time_cell($resignation['created_at'] ?? '') ?></td>
+                                                    <td class="text-right">
+                                                        <div class="sr-actions">
+                                                            <?php if ($can_take_action): ?>
+                                                                <a href="javascript:void(0);" class="sr-open-btn" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')"><i class="mdi mdi-check"></i> <?=__('approve')?></a>
+                                                            <?php else: ?>
+                                                                <a href="javascript:void(0);" class="sr-open-btn viewResignation" <?= $view_attrs ?>><i class="mdi mdi-eye"></i> <?=__('view')?></a>
+                                                            <?php endif; ?>
+                                                            <div class="btn-group dropdown">
+                                                                <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                                <div class="dropdown-menu dropdown-menu-right">
+                                                                    <?php if ($can_take_action): ?>
+                                                                        <a class="dropdown-item viewResignation" href="javascript:void(0);" <?= $view_attrs ?>><i class="mdi mdi-eye"></i><?=__('view')?></a>
+                                                                    <?php endif; ?>
+                                                                    <a class="dropdown-item" href="<?= sr_h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?=__('report')?></a>
+                                                                    <?php if ($can_take_action): ?>
                                                                         <div class="dropdown-divider"></div>
-                                                                        <a class="dropdown-item" href="resignation_report_details.php?id=<?= $resignation['id'] ?>&emp_id=<?= $resignation['employee_id'] ?>" target="_blank">
-                                                                            <i class="fa fa-file-pdf"></i> <?=__('report')?>
-                                                                        </a>
-                                                                        <?php if ($can_take_action): ?>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="rejectResignation(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')"><i class="mdi mdi-close text-danger"></i><?=__('reject')?></a>
+                                                                    <?php endif; ?>
+                                                                    <?php if ($can_cancel_this_resignation): ?>
                                                                         <div class="dropdown-divider"></div>
-                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="approveResignation(<?=$resignation['id']; ?>, '<?=$employee_id_js; ?>', '<?=$employee_name_js; ?>', '<?=$iqama_js; ?>', '<?=$designation_js; ?>', '<?=$department_js; ?>', '<?=$resignation['last_working_day']; ?>')">
-                                                                            <i class="fa fa-check text-success"></i> <?=__('approve')?>
-                                                                        </a>
-                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="rejectResignation(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
-                                                                            <i class="fa fa-times text-danger"></i> <?=__('reject')?>
-                                                                        </a>
-                                                                        <?php endif; ?>
-                                                                        <?php if ($can_cancel_this_resignation): ?>
-                                                                        <div class="dropdown-divider"></div>
-                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="cancelResignationAdmin(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')">
-                                                                            <i class="fa fa-ban text-danger"></i> <?=__('cancel', 'Cancel')?>
-                                                                        </a>
-                                                                        <?php endif; ?>
-                                                                    </div>
+                                                                        <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelResignationAdmin(<?=$resignation['id']; ?>, '<?=$employee_name_js; ?>')"><i class="mdi mdi-cancel"></i><?=__('cancel', 'Cancel')?></a>
+                                                                    <?php endif; ?>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div class="card-body">
-                                                            <div class="detail-item"><i class="fad fa-paper-plane duotone-info"></i><strong><?=__('submitted')?>:</strong> <?= htmlspecialchars(format_safe_date($resignation['created_at'] ?? null, 'd M Y')) ?></div>
-                                                            <div class="detail-item"><i class="fad fa-building duotone-info"></i><strong><?=__('department')?>:</strong> <?= htmlspecialchars($resignation['department'] ?? 'N/A') ?></div>
-                                                            <div class="detail-item"><i class="fad fa-briefcase duotone-info"></i><strong><?=__('designation')?>:</strong> <?= htmlspecialchars($resignation['designation'] ?? 'N/A') ?></div>
-                                                            <div class="detail-item"><i class="fad fa-calendar-times duotone-info"></i><strong><?=__('last_working_day')?>:</strong> <span class="text-danger font-weight-bold"><?= format_safe_date($resignation['last_working_day'] ?? null, 'd M Y') ?></span></div>
-                                                            
-                                                            <div class="detail-item">
-                                                                <?php 
-                                                                    // Dynamic status logic with approval chain info
-                                                                    $badge_class = 'secondary';
-                                                                    $status_text = '';
-                                                                    $status_icon = '';
-
-                                                                    // Fetch approval chain info from request_approvers table
-                                                                    $approval_query = mysqli_query($conDB, "
-                                                                        SELECT ra.approval_level, ra.status, ra.approver_id, e.name as approver_name
-                                                                        FROM request_approvers ra
-                                                                        LEFT JOIN employees e ON ra.approver_id = e.emp_id
-                                                                        WHERE ra.request_inv_no = '" . mysqli_real_escape_string($conDB, $resignation['request_inv_no']) . "'
-                                                                        ORDER BY ra.approval_level ASC
-                                                                    ");
-                                                                    
-                                                                    $approval_statuses = [];
-                                                                    if ($approval_query && mysqli_num_rows($approval_query) > 0) {
-                                                                        while ($app = mysqli_fetch_assoc($approval_query)) {
-                                                                            $approval_statuses[] = $app;
-                                                                        }
-                                                                        mysqli_free_result($approval_query);
-                                                                    }
-
-                                                                    switch ($resignation['status']) {
-                                                                        case 'pending':
-                                                                            $badge_class = 'warning';
-                                                                            $status_text = __('pending');
-                                                                            $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
-                                                                            
-                                                                            // Find current/next pending or awaiting approver
-                                                                            if (!empty($approval_statuses)) {
-                                                                                foreach ($approval_statuses as $approval) {
-                                                                                    if ($approval['status'] === 'pending' || $approval['status'] === 'awaiting') {
-                                                                                        $approver_name = $approval['approver_name'] ?? 'N/A';
-                                                                                        $status_text .= " - Level " . $approval['approval_level'] . ": " . htmlspecialchars($approver_name);
-                                                                                        break;
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                            break;
-                                                                        case 'approved':
-                                                                            $badge_class = 'success';
-                                                                            $status_text = __('approved');
-                                                                            $status_icon = "<i class='fa fa-solid fa-check text-white'></i>";
-                                                                            break;
-                                                                        case 'rejected':
-                                                                            $badge_class = 'danger';
-                                                                            $status_text = __('rejected');
-                                                                            $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
-                                                                            break;
-                                                                        case 'cancelled':
-                                                                            $badge_class = 'secondary';
-                                                                            $status_text = __('cancelled');
-                                                                            $status_icon = "<i class='fa fa-solid fa-ban text-white'></i>";
-                                                                            break;
-                                                                        default:
-                                                                            $status_text = __($resignation['status']);
-                                                                            $status_icon = "";
-                                                                            break;
-                                                                    }
-                                                                ?>
-                                                                <i class="fad fa-info-circle duotone-info"></i>
-                                                                <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$badge_class; ?> p-2"><?=$status_icon." ".htmlspecialchars($status_text); ?></span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="card-footer">
-                                                            <div class="request-time-footer">
-                                                                <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($resignation['created_at'] ?? '') : timeAgo($resignation['created_at'] ?? '')) ?></span>
-                                                                <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($resignation['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                    </td>
+                                                </tr>
                                             <?php endforeach; ?>
-                                        </div>
-
-                                        <?php
-                                            $pagination_params = [];
-                                            if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                            if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                            echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
-                                        ?>
-                                    <?php else: ?>
-                                        <div class="row justify-content-center">
-                                            <div class="col-md-8">
-                                                <div class="no-requests text-center">
-                                                    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-                                                    <h5><?=__('no_resignations_found')?></h5>
-                                                    <p class="text-muted"><?=__('try_changing_filters')?></p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
+                                        </tbody>
+                                    </table>
                                 </div>
-                            </div>
+
+                                <div class="sr-pager">
+                                    <?php
+                                        $pagination_params = [];
+                                        if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                        if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                        echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <?= sr_empty_state(__('no_resignations_found'), __('try_changing_filters')) ?>
+                            <?php endif; ?>
                         </div>
+
                     </div>
                 </div>
                 <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -647,6 +551,7 @@ if ($can_see_all_depts) {
         <script src="./plugins/select2/js/select2.min.js"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
         <script src="assets/js/resignationApprovalWizard.js"></script>
         <script src="assets/js/resignationApproval.js"></script>
         <script>
@@ -658,9 +563,6 @@ if ($can_see_all_depts) {
                 const baseUrl = window.location.href.split('?')[0];
                 window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
             }
-            document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') { applyFilters(); }
-            });
         </script>
     </body>
     </html>

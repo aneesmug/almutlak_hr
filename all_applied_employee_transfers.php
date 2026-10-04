@@ -202,32 +202,13 @@ if ($total_items > 0) {
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls { max-width: 800px; }
-        .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-        .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
-        .request-card .card-body { padding: 1.5rem; }
-        .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
-        .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
-        .detail-item strong { color: #8a94a6; min-width: 160px; display: inline-block; }
-        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
-        .request-time-footer {
-            display: flex; justify-content: space-between; align-items: center; gap: 8px;
-            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-        .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-        .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
-
         /* --- Employee Transfer: "View Report" modal --- */
         .et-report { text-align: left; }
         .et-report-header { display: flex; align-items: center; gap: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 10px; padding: 18px 20px; margin-bottom: 18px; }
@@ -298,148 +279,135 @@ if ($total_items > 0) {
 
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
-                                    <h4 class="header-title m-t-0 m-b-0"><?= __('employee_transfer_approval_center', 'Employee Transfer Approval Center') ?></h4>
-                                </div>
-                                <p class="text-muted mb-4"><i class="fa fa-info-circle"></i> <?= __('request_employee_transfer_hint', 'To request an employee transfer, open that employee\'s profile and use "More Actions" > "Request Employee Transfer".') ?></p>
 
-                                <div class="row filter-controls mx-auto mb-5 mt-4">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <div class="form-group">
-                                            <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                            <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                        <?= htmlspecialchars($status_value); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($search_term); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('employee_transfer_approval_center', 'Employee Transfer Approval Center') ?></h1>
+                            <p><?= sr_h($page_title) ?> &middot; <?= __('total_found') ?>: <?= (int)$total_items ?></p>
+                        </div>
+                    </div>
 
-                                <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <h4 class="mb-0 text-muted"><?= __('showing') ?>: <?= htmlspecialchars($page_title); ?></h4>
-                                    <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $total_items; ?></span>
-                                </div>
+                    <div class="sr-notice tone-sky">
+                        <i class="mdi mdi-information-outline"></i>
+                        <div><?= __('request_employee_transfer_hint', 'To request an employee transfer, open that employee\'s profile and use "More Actions" > "Request Employee Transfer".') ?></div>
+                    </div>
 
-                                <?php if (!empty($requests)): ?>
-                                    <div class="row">
+                    <div class="sr-card">
+                        <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
+                        <?= sr_list_toolbar($search_term) ?>
+
+                        <?php if (!empty($requests)): ?>
+                            <div class="sr-table-wrap sr-list-wrap">
+                                <table class="table sr-table sr-list" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee', 'Employee') ?></th>
+                                            <th><?= __('transfer_type') ?></th>
+                                            <th><?= __('new_supervisor', 'New supervisor') ?></th>
+                                            <th><?= __('transfer_dates') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th><?= __('applied') ?></th>
+                                            <th class="text-right"><?= __('actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php foreach ($requests as $req): ?>
                                             <?php
-                                            $status_badge_class = 'secondary';
+                                            $status_tone = 'slate';
                                             $status_text = '';
                                             $current_level_display = '';
 
                                             if (!empty($req['current_approver_name']) && $req['current_status'] === 'pending_approval') {
                                                 $status_text = __('pending_with') . ' ' . getDisplayName(parseName($req['current_approver_name']));
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                                 if (!empty($req['current_approval_level'])) {
                                                     $current_level_display = ' (Level ' . (int)$req['current_approval_level'] . ')';
                                                 }
                                             } elseif ($req['current_status'] === 'completed') {
                                                 $status_text = __('completed');
-                                                $status_badge_class = 'primary';
+                                                $status_tone = 'indigo';
                                             } elseif ($req['current_status'] === 'rejected') {
                                                 $status_text = __('rejected');
-                                                $status_badge_class = 'danger';
+                                                $status_tone = 'red';
                                             } else {
                                                 $status_text = __('pending_approval');
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                             }
 
                                             $can_take_action = ((string)($req['current_approver_id'] ?? '') === (string)$empid || ($delegatedFromEmpId !== null && (string)($req['current_approver_id'] ?? '') === (string)$delegatedFromEmpId)) && (($req['current_status'] ?? '') === 'pending_approval');
-                                            $type_label = ($req['transfer_type'] === 'temporary') ? __('temporary', 'Temporary') : __('permanent', 'Permanent');
-                                            $dates_text = htmlspecialchars((string)$req['start_date']) . (!empty($req['end_date']) ? ' → ' . htmlspecialchars((string)$req['end_date']) : '');
+                                            $is_temp = ($req['transfer_type'] === 'temporary');
+                                            $type_label = $is_temp ? __('temporary', 'Temporary') : __('permanent', 'Permanent');
+                                            $inv_js = htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES);
+                                            $name_js = htmlspecialchars(getDisplayName(parseName($req['target_name'])), ENT_QUOTES);
                                             ?>
-                                            <div class="col-lg-4 col-md-6 mb-4">
-                                                <div class="card request-card h-100">
-                                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                                        <span><?= getDisplayName(parseName($req['target_name'])); ?></span>
-                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars((string)$req['target_emp_id']); ?></span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <div class="detail-item"><i class="fa fa-hashtag"></i><strong><?= __('request_id') ?>:</strong> <?= htmlspecialchars((string)$req['request_inv_no']); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-exchange-alt"></i><strong><?= __('transfer_type') ?>:</strong> <?= htmlspecialchars($type_label); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-calendar-alt"></i><strong><?= __('transfer_dates') ?>:</strong> <?= $dates_text; ?></div>
-                                                        <div class="detail-item"><i class="fa fa-stream"></i><strong><?= __('status') ?>:</strong> <span class="badge badge-<?= $status_badge_class; ?> p-2"><?= htmlspecialchars($status_text . $current_level_display); ?></span></div>
-
-                                                        <?php if (($req['current_status'] ?? '') === 'rejected' && !empty($req['rejection_note'])): ?>
-                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
-                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i>
-                                                                <strong><?= __('rejection_reason') ?>:</strong>
-                                                                <?= nl2br(htmlspecialchars(getDisplayName((string)$req['rejection_note']))); ?>
+                                            <tr>
+                                                <td><?= sr_person_cell(getDisplayName(parseName($req['target_name'])), $req['target_emp_id']) ?></td>
+                                                <td>
+                                                    <?= sr_pill($is_temp ? 'sky' : 'indigo', $type_label, true) ?>
+                                                    <span class="sr-cell-sub sr-mono"><?= sr_h($req['request_inv_no']) ?></span>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($req['to_supervisor_name'])): ?>
+                                                        <span class="sr-cell-title"><?= sr_h(getDisplayName(parseName($req['to_supervisor_name']))) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($req['from_supervisor_name'])): ?>
+                                                        <span class="sr-cell-sub"><?= __('from', 'From') ?>: <?= sr_h(getDisplayName(parseName($req['from_supervisor_name']))) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if (empty($req['to_supervisor_name']) && empty($req['from_supervisor_name'])): ?>
+                                                        <span class="text-muted">&ndash;</span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="sr-period">
+                                                    <span class="sr-cell-title"><?= sr_h(format_safe_date($req['start_date'] ?? null, 'd M Y', 'N/A')) ?><?php if (!empty($req['end_date'])): ?><i class="mdi mdi-arrow-right"></i><?= sr_h(format_safe_date($req['end_date'], 'd M Y', 'N/A')) ?><?php endif; ?></span>
+                                                </td>
+                                                <td>
+                                                    <?= sr_pill($status_tone, $status_text . $current_level_display) ?>
+                                                    <?php if (($req['current_status'] ?? '') === 'rejected' && !empty($req['rejection_note'])): ?>
+                                                        <div class="sr-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br(sr_h(getDisplayName((string)$req['rejection_note']))) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><?= sr_time_cell($req['created_at'] ?? '') ?></td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($can_take_action): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveEmployeeTransferRequest('<?= $inv_js ?>', '<?= $name_js ?>')"><i class="mdi mdi-check"></i> <?= __('approve') ?></a>
+                                                        <?php else: ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="viewEmployeeTransferDetails('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i> <?= __('report') ?></a>
+                                                        <?php endif; ?>
+                                                        <?php if ($can_take_action): ?>
+                                                            <div class="btn-group dropdown">
+                                                                <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                                <div class="dropdown-menu dropdown-menu-right">
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewEmployeeTransferDetails('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i><?= __('report') ?></a>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectEmployeeTransferRequest('<?= $inv_js ?>', '<?= $name_js ?>')"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
+                                                                </div>
                                                             </div>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <div class="card-footer">
-                                                        <div class="request-time-footer">
-                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></span>
-                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                        </div>
-                                                        <div class="btn-group flex-fill" style="display:flex;">
-                                                            <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                <?= __('actions') ?> <span class="caret"></span>
-                                                            </button>
-                                                            <div class="dropdown-menu dropdown-menu-right">
-                                                                <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="viewEmployeeTransferDetails('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>')">
-                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
-                                                                </button>
-                                                                <?php if ($can_take_action): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveEmployeeTransferRequest('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars(getDisplayName(parseName($req['target_name'])), ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-check text-success"></i> <?= __('approve') ?>
-                                                                    </a>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectEmployeeTransferRequest('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars(getDisplayName(parseName($req['target_name'])), ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                    </a>
-                                                                <?php endif; ?>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
-                                    </div>
-
-                                    <?php
-                                    $pagination_params = [];
-                                    if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                    if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                    echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $total_items);
-                                    ?>
-                                <?php else: ?>
-                                    <div class="row justify-content-center">
-                                        <div class="col-md-8">
-                                            <div class="text-center no-requests">
-                                                <i class="fas fa-people-arrows fa-3x text-muted mb-3"></i>
-                                                <h2><?= __('no_employee_transfer_requests_found', 'No employee transfer requests found') ?></h2>
-                                                <p class="text-muted"><?= __('no_requests_matching_filters') ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
-                        </div>
+
+                            <div class="sr-pager">
+                                <?php
+                                $pagination_params = [];
+                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $total_items);
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <?= sr_empty_state(__('no_employee_transfer_requests_found', 'No employee transfer requests found'), __('no_requests_matching_filters')) ?>
+                        <?php endif; ?>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -457,39 +425,14 @@ if ($total_items > 0) {
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
     <script>
-        // Move the footer's Actions dropdown up into the card header, next to the emp id -
-        // matches the pattern used on all_applied_vac.php / all_applied_business_trip.php / etc.
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.request-card').forEach(function(card) {
-                const footer = card.querySelector('.card-footer');
-                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-                const headerSlot = card.querySelector('.card-header-actions');
-                if (!actionsGroup || !headerSlot) {
-                    return;
-                }
-                actionsGroup.classList.remove('flex-fill');
-                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
-                    toggleBtn.classList.add('btn-sm', 'btn-light');
-                }
-                headerSlot.appendChild(actionsGroup);
-            });
-        });
-
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
             const search = document.getElementById('searchFilter').value;
             const baseUrl = window.location.href.split('?')[0];
             window.location.href = `${baseUrl}?status=${status}&search=${encodeURIComponent(search)}&page=1`;
         }
-
-        document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                applyFilters();
-            }
-        });
 
         function viewEmployeeTransferDetails(requestInvNo) {
             Swal.fire({

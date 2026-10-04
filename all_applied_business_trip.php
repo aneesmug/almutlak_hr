@@ -246,33 +246,16 @@ if ($can_see_all_depts) {
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls { max-width: 800px; }
-        .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-        .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
-        .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
-        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
-        .request-card .card-body { padding: 1.5rem; }
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
-        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
-        .request-time-footer {
-            display: flex; justify-content: space-between; align-items: center; gap: 8px;
-            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-        .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-        .btn-block + .btn-block { margin-top: 0rem !important; }
         .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
     </style>
     <?php if ($is_rtl): ?>
@@ -294,59 +277,44 @@ if ($can_see_all_depts) {
                 <div class="clearfix"></div>
             </div>
         </div>
-
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('business_trip_approval_center') ?></h4>
 
-                                <div class="row filter-controls mx-auto mb-5">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <div class="form-group">
-                                            <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                            <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                        <?= htmlspecialchars($status_value); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($search_term); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('business_trip_approval_center') ?></h1>
+                            <p><?= sr_h($page_title) ?> &middot; <?= __('total_found') ?>: <?= (int)$total_items ?></p>
+                        </div>
+                    </div>
 
-                                <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <h4 class="mb-0 text-muted"><?= __('showing') ?>: <?= htmlspecialchars($page_title); ?></h4>
-                                    <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $total_items; ?></span>
-                                </div>
+                    <div class="sr-card">
+                        <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
+                        <?= sr_list_toolbar($search_term, (!empty($search_term) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
-                                <?php if (!empty($requests)): ?>
-                                    <div class="row">
+                        <?php if (!empty($requests)): ?>
+                            <div class="sr-table-wrap sr-list-wrap">
+                                <table class="table sr-table sr-list" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee', 'Employee') ?></th>
+                                            <th><?= __('destination') ?></th>
+                                            <th><?= __('trip_dates') ?></th>
+                                            <th><?= __('purpose') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th><?= __('applied') ?></th>
+                                            <th class="text-right"><?= __('actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php foreach ($requests as $trip): ?>
                                             <?php
-                                            $trip_type_text = ($trip['trip_type'] === 'international') ? __('international') : __('domestic');
+                                            $is_intl = ($trip['trip_type'] === 'international');
+                                            $trip_type_text = $is_intl ? __('international') : __('domestic');
                                             $route_text = '';
-                                            if ($trip['trip_type'] === 'international') {
+                                            if ($is_intl) {
                                                 $route_text = ($trip['destination_country'] ?? 'N/A');
                                             } else {
                                                 $from_name = ($is_rtl ?? false) ? ($trip['from_city_name_ar'] ?? '') : ($trip['from_city_name_en'] ?? '');
@@ -354,141 +322,129 @@ if ($can_see_all_depts) {
                                                 $route_text = trim((string)$from_name) . ' → ' . trim((string)$to_name);
                                             }
 
-                                            $status_badge_class = 'secondary';
+                                            $status_tone = 'slate';
                                             $status_text = '';
                                             $current_level_display = '';
 
                                             if (!empty($trip['current_approver_name']) && $trip['current_status'] === 'pending_approval') {
                                                 $status_text = __('pending_with') . ' ' . getDisplayName(parseName($trip['current_approver_name']));
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                                 if (!empty($trip['current_approval_level'])) {
                                                     $current_level_display = ' (Level ' . (int)$trip['current_approval_level'] . ')';
                                                 }
                                             } elseif ($trip['current_status'] === 'approved') {
                                                 $status_text = __('approved');
-                                                $status_badge_class = 'success';
+                                                $status_tone = 'green';
                                             } elseif ($trip['current_status'] === 'rejected') {
                                                 $status_text = __('rejected');
-                                                $status_badge_class = 'danger';
+                                                $status_tone = 'red';
                                             } elseif ($trip['current_status'] === 'completed') {
                                                 $status_text = __('completed');
-                                                $status_badge_class = 'primary';
+                                                $status_tone = 'indigo';
                                             } else {
                                                 $status_text = __('pending_approval');
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                             }
 
                                             $can_take_action = ((int)($trip['current_approver_id'] ?? 0) === (int)$empid || ($delegatedFromEmpId !== null && (int)($trip['current_approver_id'] ?? 0) === (int)$delegatedFromEmpId)) && (($trip['current_status'] ?? '') === 'pending_approval');
-                                            ?>
-                                            <div class="col-lg-4 col-md-6 mb-4">
-                                                <div class="card request-card h-100">
-                                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                                        <span><?= getDisplayName(parseName($trip['employee_name'])); ?></span>
-                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars((string)$trip['emp_id']); ?></span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <div class="detail-item"><i class="fa fa-hashtag"></i><strong><?= __('request_id') ?>:</strong> <?= htmlspecialchars((string)$trip['request_inv_no']); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-plane"></i><strong><?= __('trip_type') ?>:</strong> <?= htmlspecialchars((string)$trip_type_text); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-map-marker"></i><strong><?= __('destination') ?>:</strong> <?= htmlspecialchars((string)$route_text); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-calendar-alt"></i><strong><?= __('trip_dates') ?>:</strong> <?= htmlspecialchars((string)$trip['trip_start_date']); ?> → <?= htmlspecialchars((string)$trip['trip_end_date']); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-info-circle"></i><strong><?= __('purpose') ?>:</strong> <?= htmlspecialchars((string)($trip['trip_purpose'] ?? '')); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-stream"></i><strong><?= __('status') ?>:</strong> <span class="badge badge-<?= $status_badge_class; ?> p-2"><?= htmlspecialchars($status_text . $current_level_display); ?></span></div>
 
-                                                        <?php if (($trip['current_status'] ?? '') === 'rejected' && !empty($trip['rejection_note'])): ?>
-                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
-                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i>
-                                                                <strong><?= __('rejection_reason') ?>:</strong>
-                                                                <?= nl2br(htmlspecialchars(getDisplayName((string)$trip['rejection_note']))); ?>
-                                                            </div>
+                                            $is_approved = (($trip['current_status'] ?? '') === 'approved');
+                                            $is_by_air = (($trip['transportation_type'] ?? '') === 'by_air');
+                                            $show_travel_email = $is_approved && $is_by_air && empty($trip['travel_email_sent']);
+                                            $show_other_amount = $is_approved && empty($trip['has_allowance_record']);
+                                            $show_ticket_fare = $is_approved && $is_by_air && !empty($trip['travel_email_sent']) && $isHRPayrollRole && empty($trip['has_allowance_record']);
+
+                                            $id = (int)$trip['id'];
+                                            $name_js = htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES);
+                                            $inv_js = htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES);
+                                            $type_js = htmlspecialchars((string)$trip_type_text, ENT_QUOTES);
+                                            $start_js = htmlspecialchars((string)$trip['trip_start_date'], ENT_QUOTES);
+                                            $end_js = htmlspecialchars((string)$trip['trip_end_date'], ENT_QUOTES);
+                                            $report_url = 'business_trip_report_details.php?id=' . $id . '&emp_id=' . urlencode((string)$trip['emp_id']);
+                                            ?>
+                                            <tr>
+                                                <td><?= sr_person_cell(getDisplayName(parseName($trip['employee_name'])), $trip['emp_id']) ?></td>
+                                                <td>
+                                                    <span class="sr-cell-title"><?= sr_h($route_text) ?></span>
+                                                    <span class="sr-cell-sub"><i class="mdi <?= $is_intl ? 'mdi-earth' : 'mdi-map-marker' ?>"></i> <?= sr_h($trip_type_text) ?><?php if ($is_by_air): ?> &middot; <i class="mdi mdi-airplane"></i><?php endif; ?></span>
+                                                    <span class="sr-cell-sub sr-mono"><?= sr_h($trip['request_inv_no']) ?></span>
+                                                </td>
+                                                <td class="sr-period">
+                                                    <span class="sr-cell-title"><?= sr_h(format_safe_date($trip['trip_start_date'] ?? null, 'd M Y', 'N/A')) ?><i class="mdi mdi-arrow-right"></i><?= sr_h(format_safe_date($trip['trip_end_date'] ?? null, 'd M Y', 'N/A')) ?></span>
+                                                </td>
+                                                <td><div class="sr-wrap-text"><?= sr_h($trip['trip_purpose'] ?? '') ?></div></td>
+                                                <td>
+                                                    <div class="sr-flags">
+                                                        <?= sr_pill($status_tone, $status_text . $current_level_display) ?>
+                                                        <?php if ($show_travel_email): ?>
+                                                            <?= sr_pill('red', __('pending_travel_email') ?: 'Pending Travel Email', true, 'mdi-send') ?>
                                                         <?php endif; ?>
                                                     </div>
-                                                    <div class="card-footer">
-                                                        <div class="request-time-footer">
-                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($trip['created_at'] ?? '') : timeAgo($trip['created_at'] ?? '')) ?></span>
-                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($trip['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                        </div>
-                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000; display:flex;">
-                                                            <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                <?= __('actions') ?> <span class="caret"></span>
-                                                            </button>
-                                                            <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
-                                                                <a class="dropdown-item" href="business_trip_report_details.php?id=<?= (int)$trip['id']; ?>&emp_id=<?= urlencode((string)$trip['emp_id']); ?>" target="_blank">
-                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
-                                                                </a>
-                                                                <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="business_trip_status_history.php?request_inv_no=<?= urlencode($trip['request_inv_no']); ?>" target="_blank">
-                                                                    <i class="fa fa-history"></i> <?= __('history') ?>
-                                                                </a>
-                                                                <?php if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && empty($trip['travel_email_sent'])): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="sendTravelEmailBusinessTrip(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-plane text-info"></i> <?= __('send_travel_email')?>
-                                                                    </button>
+                                                    <?php if (($trip['current_status'] ?? '') === 'rejected' && !empty($trip['rejection_note'])): ?>
+                                                        <div class="sr-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br(sr_h(getDisplayName((string)$trip['rejection_note']))) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><?= sr_time_cell($trip['created_at'] ?? '') ?></td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($can_take_action): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveBusinessTripRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $type_js ?>', '<?= $start_js ?>', '<?= $end_js ?>')"><i class="mdi mdi-check"></i> <?= __('approve') ?></a>
+                                                        <?php else: ?>
+                                                            <a href="<?= sr_h($report_url) ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-file-pdf"></i> <?= __('report') ?></a>
+                                                        <?php endif; ?>
+                                                        <div class="btn-group dropdown">
+                                                            <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                            <div class="dropdown-menu dropdown-menu-right">
+                                                                <?php if ($can_take_action): ?>
+                                                                    <a class="dropdown-item" href="<?= sr_h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?= __('report') ?></a>
                                                                 <?php endif; ?>
-                                                                <?php //if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && !$isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
-                                                                <?php if ( ($trip['current_status'] ?? '') === 'approved' && empty($trip['has_allowance_record']) ): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openBusinessTripAllowanceModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-money-bill-wave text-success"></i> <?= __('add_other_amount') ?: 'Add Other Amount' ?>
-                                                                    </button>
-                                                                <?php endif; ?>
-                                                                <?php if (($trip['current_status'] ?? '') === 'approved' && ($trip['transportation_type'] ?? '') === 'by_air' && !empty($trip['travel_email_sent']) && $isHRPayrollRole && empty($trip['has_allowance_record'])): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openHRPayrollTicketFareModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-ticket-alt text-primary"></i> <?= __('add_ticket_fare_only') ?: 'HR Payroll Ticket Fare' ?>
-                                                                    </button>
-                                                                <?php endif; ?>
-                                                                <?php if ($can_add_business_trip_manual_allowance): ?>
-                                                                    <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="openBusinessTripOtherAllowanceModal(<?= (int)$trip['id']; ?>, '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-receipt text-warning"></i> <?= __('add_manual_allowance') ?: 'Add Manual Allowance' ?>
-                                                                    </button>
-                                                                <?php endif; ?>
+                                                                <a class="dropdown-item" href="business_trip_status_history.php?request_inv_no=<?= urlencode($trip['request_inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($can_take_action): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveBusinessTripRequest('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip_type_text, ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_start_date'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_end_date'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-check text-success"></i> <?= __('approve') ?>
-                                                                    </button>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectBusinessTripRequest('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip_type_text, ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_start_date'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['trip_end_date'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                    </button>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectBusinessTripRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $type_js ?>', '<?= $start_js ?>', '<?= $end_js ?>')"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
+                                                                <?php endif; ?>
+                                                                <?php if ($show_travel_email || $show_other_amount || $show_ticket_fare || $can_add_business_trip_manual_allowance): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                <?php endif; ?>
+                                                                <?php if ($show_travel_email): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="sendTravelEmailBusinessTrip(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-send text-info"></i><?= __('send_travel_email') ?></a>
+                                                                <?php endif; ?>
+                                                                <?php if ($show_other_amount): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openBusinessTripAllowanceModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-cash text-success"></i><?= __('add_other_amount') ?: 'Add Other Amount' ?></a>
+                                                                <?php endif; ?>
+                                                                <?php if ($show_ticket_fare): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openHRPayrollTicketFareModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-airplane text-primary"></i><?= __('add_ticket_fare_only') ?: 'HR Payroll Ticket Fare' ?></a>
+                                                                <?php endif; ?>
+                                                                <?php if ($can_add_business_trip_manual_allowance): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openBusinessTripOtherAllowanceModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-receipt text-warning"></i><?= __('add_manual_allowance') ?: 'Add Manual Allowance' ?></a>
                                                                 <?php endif; ?>
                                                                 <?php if ($can_cancel_business_trip_requests && in_array($trip['current_status'] ?? '', $cancellable_business_trip_statuses, true)): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelBusinessTripAdmin('<?= htmlspecialchars((string)$trip['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel', 'Cancel') ?>
-                                                                    </button>
+                                                                    <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelBusinessTripAdmin('<?= $inv_js ?>', '<?= $name_js ?>')"><i class="mdi mdi-cancel"></i><?= __('cancel', 'Cancel') ?></a>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
-                                    </div>
-
-                                    <?php
-                                    $pagination_params = [];
-                                    if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                    if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                    echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
-                                    ?>
-                                <?php else: ?>
-                                    <div class="row justify-content-center">
-                                        <div class="col-md-8">
-                                            <div class="text-center no-requests">
-                                                <i class="fas fa-plane-departure fa-3x text-muted mb-3"></i>
-                                                <h2><?= __('no_business_trip_requests_found') ?></h2>
-                                                <p class="text-muted"><?= __('no_requests_matching_filters') ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
-                        </div>
+
+                            <div class="sr-pager">
+                                <?php
+                                $pagination_params = [];
+                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <?= sr_empty_state(__('no_business_trip_requests_found'), __('no_requests_matching_filters')) ?>
+                        <?php endif; ?>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -504,28 +460,9 @@ if ($can_see_all_depts) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
     <script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
     <script>
-        // Move each card's "Actions" dropdown from the footer into the header so the
-        // menu has room to open downward instead of getting clipped at the bottom of
-        // the page (was especially bad for the last row of cards on a page).
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.request-card').forEach(function(card) {
-                const footer = card.querySelector('.card-footer');
-                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-                const headerSlot = card.querySelector('.card-header-actions');
-                if (!actionsGroup || !headerSlot) {
-                    return;
-                }
-                actionsGroup.classList.remove('flex-fill');
-                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
-                    toggleBtn.classList.add('btn-sm', 'btn-light');
-                }
-                headerSlot.appendChild(actionsGroup);
-            });
-        });
 
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
@@ -536,11 +473,6 @@ if ($can_see_all_depts) {
             window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
         }
 
-        document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                applyFilters();
-            }
-        });
 
         function approveBusinessTripRequest(tripId, employeeName, tripType, startDate, endDate) {
             Swal.fire({

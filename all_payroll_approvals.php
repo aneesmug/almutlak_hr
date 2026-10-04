@@ -965,44 +965,17 @@ if (!empty($requests)) {
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls { max-width: 800px; }
-        .request-card {
-            border-radius: 15px;
-            border: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-        .request-card .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            border-bottom: none;
-            font-weight: 600;
-            border-top-left-radius: 15px;
-            border-top-right-radius: 15px;
-        }
-        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
-        .request-card .card-body { padding: 1.5rem; }
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
         .detail-item { flex-direction: <?= ($is_rtl ?? false) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl ?? false) ? 'right !important' : 'left !important' ?>; }
-        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
-        .request-time-footer {
-            display: flex; justify-content: space-between; align-items: center; gap: 8px;
-            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-        .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
         .swal-payroll-details {
             text-align: left;
             border: 1px solid #e9ecef;
@@ -1068,51 +1041,36 @@ if (!empty($requests)) {
 
     <div class="content-page">
         <?php include './includes/topbar.php'; ?>
-        <div class="content">
+        <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+        <div class="content sr-page">
             <div class="container-fluid">
-                <div class="row">
-                    <div class="col-xl-12">
-                        <div class="card-box">
-                            <h4 class="header-title m-t-0 m-b-30"><?= __('payroll_approvals', 'Payroll Approvals') ?></h4>
 
-                            <div class="row filter-controls mx-auto mb-5">
-                                <div class="col-md-6 mb-3 mb-md-0">
-                                    <div class="form-group">
-                                        <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                        <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                            <?php foreach ($allStatuses as $statusKey => $statusValue): ?>
-                                                <option value="<?= $statusKey ?>" <?= ($currentFilter === $statusKey) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($statusValue) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                        <div class="input-group">
-                                            <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($searchTerm) ?>">
-                                            <div class="input-group-append">
-                                                <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                            </div>
-                                            <?php if (!empty($searchTerm) || $currentFilter !== 'my_pending'): ?>
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-danger" type="button" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                <div class="sr-head">
+                    <div>
+                        <h1><?= __('payroll_approvals', 'Payroll Approvals') ?></h1>
+                        <p><?= str_replace('{0}', (string)$totalItems, __('showing_requests')) ?></p>
+                    </div>
+                </div>
 
-                            <div class="d-flex justify-content-between align-items-center mb-4">
-                                <h4 class="mb-0 text-muted"><?= str_replace('{0}', (string)$totalItems, __('showing_requests')) ?></h4>
-                                <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $totalItems ?></span>
-                            </div>
+                <div class="sr-card">
+                    <?= sr_status_tabs($allStatuses, $currentFilter, $totalItems) ?>
+                    <?= sr_list_toolbar($searchTerm, (!empty($searchTerm) || $currentFilter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
-                            <?php if (!empty($requests)): ?>
-                                <div class="row">
+                    <?php if (!empty($requests)): ?>
+                        <div class="sr-table-wrap sr-list-wrap">
+                            <table class="table sr-table sr-list" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?= __('payroll_month') ?></th>
+                                        <th><?= __('employees', 'Employees') ?></th>
+                                        <th><?= __('total_net', 'Total Net') ?></th>
+                                        <th><?= __('progress', 'Progress') ?></th>
+                                        <th><?= __('status') ?></th>
+                                        <th><?= __('submitted', 'Submitted') ?></th>
+                                        <th class="text-right"><?= __('actions') ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                     <?php foreach ($requests as $request): ?>
                                         <?php
                                         $approvalStatus = $request['approval_status'] ?? null;
@@ -1241,117 +1199,106 @@ if (!empty($requests)) {
                                             $statusText = __('completed');
                                             $statusIcon = "<i class='fa fa-badge-check text-white'></i>";
                                         }
+
+                                        $statusTone = ['warning' => 'amber', 'success' => 'green', 'danger' => 'red', 'primary' => 'indigo', 'dark' => 'slate', 'secondary' => 'slate'][$statusClass] ?? 'slate';
+                                        $invJs = htmlspecialchars((string)($request['request_inv_no'] ?? ''), ENT_QUOTES);
+                                        $monthJs = htmlspecialchars((string)$request['payroll_month'], ENT_QUOTES);
+                                        $empCount = (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0);
+                                        $totalNet = (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0);
+                                        $bankNet = (float)($request['checklist_bank_total_net_salary'] ?? $request['bank_total_net_salary'] ?? 0);
+                                        $checklistUrl = 'payroll_checklist_report.php?month=' . urlencode($request['payroll_month']) . (!empty($request['request_inv_no']) ? '&request_inv_no=' . urlencode($request['request_inv_no']) : '');
+                                        $approveJs = "approvePayrollRequest('" . $invJs . "', '" . $monthJs . "', " . $empCount . ", " . $totalNet . ", '" . htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) . "', " . $bankNet . ")";
+                                        $rejectJs = "rejectPayrollRequest('" . $invJs . "', '" . $monthJs . "', " . $empCount . ", " . $totalNet . ", '" . htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) . "', " . $bankNet . ")";
+                                        $monthTs = strtotime((string)$request['payroll_month'] . (strlen((string)$request['payroll_month']) === 7 ? '-01' : ''));
                                         ?>
-                                        <div class="col-lg-4 col-md-6 mb-4">
-                                            <div class="card request-card h-100">
-                                                <div class="card-header d-flex justify-content-between align-items-center">
-                                                    <span><?= __('payroll_month') ?>: <?= htmlspecialchars($request['payroll_month']) ?></span>
-                                                    <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                        <?php if (!empty($request['request_inv_no'])): ?>
-                                                        <span><?= __('request_id') ?>: <?= htmlspecialchars($request['request_inv_no']) ?></span>
-                                                        <?php endif; ?>
+                                        <tr>
+                                            <td>
+                                                <div class="sr-person">
+                                                    <span class="sr-avatar" style="border-radius: 10px;"><i class="mdi mdi-calendar-check" style="font-size: 17px;"></i></span>
+                                                    <div style="min-width: 0;">
+                                                        <span class="sr-cell-title"><?= $monthTs ? date('F Y', $monthTs) : sr_h($request['payroll_month']) ?></span>
+                                                        <span class="sr-cell-sub sr-mono"><?= !empty($request['request_inv_no']) ? sr_h($request['request_inv_no']) : sr_h($request['payroll_month']) ?></span>
                                                     </div>
                                                 </div>
-                                                <div class="card-body">
-                                                        <div class="detail-item"><i class="fad fa-calendar"></i><strong><?= __('month') ?>:</strong> <?= htmlspecialchars($request['payroll_month']) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-users"></i><strong><?= __('employees', 'Employees') ?>:</strong> <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?></div>
-                                                        <div class="detail-item"><i class="fad fa-money-bill"></i><strong><?= __('total_net', 'Total Net') ?>:</strong> <i class="icon-saudi_riyal"></i> <?= number_format((float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0), 2) ?></div>
-                                                        <?php if ($isHrPayrollUser): ?>
-                                                        <div class="detail-item"><i class="fad fa-user-check"></i><strong><?= __('checked_by_me', 'Checked By Me') ?>:</strong> <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeOfficerChecklistCompleted): ?>
-                                                        <div class="detail-item"><i class="fad fa-user-clock"></i><strong><?= __('finance_verification_status', 'Finance Verification') ?>:</strong> <?= (int)($financeOfficerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeOfficerChecklistCompletion['total_employees'] ?? 0) ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if ($isHeadOfficeFinancePending && $monthCompaniesCount > 0): ?>
-                                                        <div class="detail-item"><i class="fad fa-building"></i><strong><?= __('assigned_companies', 'Assigned Companies') ?>:</strong> <?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if ($isHeadOfficeFinancePending && $financeOfficerChecklistCompleted && !$financeOfficerApproved): ?>
-                                                        <div class="detail-item"><i class="fad fa-hourglass-half"></i><strong><?= __('finance_officer_approval', 'Finance Officer Approval') ?>:</strong> <?= __('pending', 'Pending') ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeManagerChecklistCompleted): ?>
-                                                        <div class="detail-item"><i class="fad fa-list-check"></i><strong><?= __('manager_verification_status', 'Manager Verification') ?>:</strong> <?= (int)($financeManagerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeManagerChecklistCompletion['total_employees'] ?? 0) ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if (!empty($request['requester_name'])): ?>
-                                                        <div class="detail-item"><i class="fad fa-user"></i><strong><?= __('requested_by', 'Requested By') ?>:</strong> <?= htmlspecialchars(getDisplayName($request['requester_name'])) ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if (!empty($request['approval_created_at'])): ?>
-                                                        <div class="detail-item"><i class="fad fa-clock"></i><strong><?= __('submitted', 'Submitted') ?>:</strong> <?= htmlspecialchars(format_safe_date($request['approval_created_at'] ?? null, 'd M Y')) ?></div>
-                                                        <?php endif; ?>
-                                                        <div class="detail-item">
-                                                            <i class="fad fa-tasks"></i>
-                                                            <strong><?= __('status') ?>:</strong>
-                                                            <span class="badge badge-<?= $statusClass ?> p-2"><?= $statusIcon . ' ' . $statusText ?></span>
-                                                        </div>
-                                                </div>
-                                                <div class="card-footer">
-                                                    <?php if (!empty($request['approval_created_at'])): ?>
-                                                    <div class="request-time-footer">
-                                                        <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($request['approval_created_at']) : timeAgo($request['approval_created_at'])) ?></span>
-                                                        <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($request['approval_created_at'], 'Y-m-d H:i:s')) ?></span>
-                                                    </div>
+                                            </td>
+                                            <td><span class="sr-chip"><i class="mdi mdi-account-multiple"></i><?= $empCount ?></span></td>
+                                            <td class="sr-nowrap"><span class="sr-money"><i class="icon-saudi_riyal"></i> <?= number_format($totalNet, 2) ?></span></td>
+                                            <td>
+                                                <div class="sr-flags">
+                                                    <?php if ($isHrPayrollUser): ?>
+                                                        <span class="sr-pill sr-pill-xs tone-<?= ($monthEmployeeCount > 0 && $hrCheckedCount >= $monthEmployeeCount) ? 'green' : 'sky' ?>" title="<?= __('checked_by_me', 'Checked By Me') ?>"><i class="mdi mdi-account-check"></i><?= __('checked_by_me', 'Checked By Me') ?>: <?= $hrCheckedCount ?> / <?= $monthEmployeeCount ?></span>
                                                     <?php endif; ?>
-                                                    <div class="btn-group flex-fill" style="display:flex;">
-                                                        <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                            <?= __('actions') ?> <span class="caret"></span>
-                                                        </button>
+                                                    <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeOfficerChecklistCompleted): ?>
+                                                        <span class="sr-pill sr-pill-xs tone-amber"><i class="mdi mdi-timer-sand"></i><?= __('finance_verification_status', 'Finance Verification') ?>: <?= (int)($financeOfficerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeOfficerChecklistCompletion['total_employees'] ?? 0) ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if ($isHeadOfficeFinancePending && $monthCompaniesCount > 0): ?>
+                                                        <span class="sr-pill sr-pill-xs tone-<?= $allCompaniesAssigned ? 'green' : 'amber' ?>"><i class="mdi mdi-domain"></i><?= __('assigned_companies', 'Assigned Companies') ?>: <?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if ($isHeadOfficeFinancePending && $financeOfficerChecklistCompleted && !$financeOfficerApproved): ?>
+                                                        <span class="sr-pill sr-pill-xs tone-amber"><i class="mdi mdi-timer-sand"></i><?= __('finance_officer_approval', 'Finance Officer Approval') ?>: <?= __('pending', 'Pending') ?></span>
+                                                    <?php endif; ?>
+                                                    <?php if ($isHeadOfficeFinancePending && $financeVerificationConfirmed && !$financeManagerChecklistCompleted): ?>
+                                                        <span class="sr-pill sr-pill-xs tone-sky"><i class="mdi mdi-format-list-checks"></i><?= __('manager_verification_status', 'Manager Verification') ?>: <?= (int)($financeManagerChecklistCompletion['checked_employees'] ?? 0) ?> / <?= (int)($financeManagerChecklistCompletion['total_employees'] ?? 0) ?></span>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <?= sr_pill($statusTone, strip_tags(html_entity_decode($statusText, ENT_QUOTES))) ?>
+                                                <?php if (!empty($request['requester_name'])): ?>
+                                                    <span class="sr-cell-sub"><i class="mdi mdi-account"></i> <?= sr_h(getDisplayName($request['requester_name'])) ?></span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= sr_time_cell($request['approval_created_at'] ?? '') ?></td>
+                                            <td class="text-right">
+                                                <div class="sr-actions">
+                                                    <?php if ($canApproveNow): ?>
+                                                        <a href="javascript:void(0);" class="sr-open-btn" onclick="<?= $approveJs ?>"><i class="mdi mdi-check"></i> <?= __('approve') ?></a>
+                                                    <?php elseif ($showFinanceVerificationSetupAction): ?>
+                                                        <a href="javascript:void(0);" class="sr-open-btn" onclick="openFinanceVerificationSetupModal('<?= $invJs ?>', '<?= $monthJs ?>')"><i class="mdi mdi-format-list-checks"></i> <?= __('finance_verification_setup', 'Finance Verification Setup') ?></a>
+                                                    <?php else: ?>
+                                                        <a href="<?= sr_h($checklistUrl) ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-clipboard-check"></i> <?= __('payroll_check_list', 'Payroll Check List') ?></a>
+                                                    <?php endif; ?>
+                                                    <div class="btn-group dropdown">
+                                                        <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
                                                         <div class="dropdown-menu dropdown-menu-right">
-                                                            <a class="dropdown-item" href="payroll_checklist_report.php?month=<?= urlencode($request['payroll_month']) ?><?php if (!empty($request['request_inv_no'])): ?>&request_inv_no=<?= urlencode($request['request_inv_no']) ?><?php endif; ?>" target="_blank">
-                                                                <i class="fa fa-clipboard-check"></i> <?= __('payroll_check_list', 'Payroll Check List') ?>
-                                                            </a>
-                                                            <div class="dropdown-divider"></div>
+                                                            <?php if ($canApproveNow || $showFinanceVerificationSetupAction): ?>
+                                                                <a class="dropdown-item" href="<?= sr_h($checklistUrl) ?>" target="_blank"><i class="mdi mdi-clipboard-check"></i><?= __('payroll_check_list', 'Payroll Check List') ?></a>
+                                                            <?php endif; ?>
                                                             <?php if (!empty($request['request_inv_no'])): ?>
-                                                                <a class="dropdown-item" href="payroll_status_history.php?inv_no=<?= urlencode($request['request_inv_no']) ?>" target="_blank">
-                                                                    <i class="fa fa-history"></i> <?= __('history') ?>
-                                                                </a>
+                                                                <a class="dropdown-item" href="payroll_status_history.php?inv_no=<?= urlencode($request['request_inv_no']) ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                             <?php else: ?>
-                                                                <a class="dropdown-item" href="generate_payroll.php">
-                                                                    <i class="fa fa-paper-plane text-warning"></i> <?= __('start_approval', 'Start Approval') ?>
-                                                                </a>
+                                                                <a class="dropdown-item" href="generate_payroll.php"><i class="mdi mdi-send text-warning"></i><?= __('start_approval', 'Start Approval') ?></a>
                                                             <?php endif; ?>
                                                             <?php if ($showFinanceVerificationSetupAction): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="openFinanceVerificationSetupModal('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>')">
-                                                                    <i class="fa fa-tasks text-primary"></i> <?= __('finance_verification_setup', 'Finance Verification Setup') ?> (<?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?>)
-                                                                </a>
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="openFinanceVerificationSetupModal('<?= $invJs ?>', '<?= $monthJs ?>')"><i class="mdi mdi-format-list-checks text-primary"></i><?= __('finance_verification_setup', 'Finance Verification Setup') ?> (<?= $assignedCompaniesCount ?> / <?= $monthCompaniesCount ?>)</a>
                                                             <?php endif; ?>
                                                             <?php if ($canApproveNow): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="approvePayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName(parseName($request['requester_name'] ?? '')), ENT_QUOTES) ?>', <?= (float)($request['checklist_bank_total_net_salary'] ?? $request['bank_total_net_salary'] ?? 0) ?>)">
-                                                                    <i class="fa fa-check text-success"></i> <?= __('approve') ?>
-                                                                </a>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="rejectPayrollRequest('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>', <?= (int)($request['checklist_employee_count'] ?? $request['employee_count'] ?? 0) ?>, <?= (float)($request['checklist_total_net_salary'] ?? $request['total_net_salary'] ?? 0) ?>, '<?= htmlspecialchars(getDisplayName($request['requester_name'] ?? ''), ENT_QUOTES) ?>', <?= (float)($request['checklist_bank_total_net_salary'] ?? $request['bank_total_net_salary'] ?? 0) ?>)">
-                                                                    <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                </a>
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="<?= $rejectJs ?>"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
                                                             <?php endif; ?>
                                                             <?php if ($canSendCompanyPayrollReport): ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="openCompanyPayrollReportModal('<?= htmlspecialchars($request['request_inv_no'], ENT_QUOTES) ?>', '<?= htmlspecialchars($request['payroll_month'], ENT_QUOTES) ?>')">
-                                                                    <i class="fa fa-envelope-open-text text-primary"></i> <?= __('send_supervisor_payroll_report', 'Send Payroll Report by Direct Supervisor') ?>
-                                                                </a>
+                                                                <a class="dropdown-item" href="javascript:void(0);" onclick="openCompanyPayrollReportModal('<?= $invJs ?>', '<?= $monthJs ?>')"><i class="mdi mdi-email text-primary"></i><?= __('send_supervisor_payroll_report', 'Send Payroll Report by Direct Supervisor') ?></a>
                                                             <?php endif; ?>
-                                                            
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </div>
+                                            </td>
+                                        </tr>
                                     <?php endforeach; ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="no-requests">
-                                    <h5><?= __('no_records_found') ?></h5>
-                                    <p><?= __('no_data_available_in_table') ?></p>
-                                </div>
-                            <?php endif; ?>
-
-                            <div class="row mt-4">
-                                <div class="col-xl-12">
-                                    <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $currentFilter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
-                                </div>
-                            </div>
+                                </tbody>
+                            </table>
                         </div>
+                    <?php else: ?>
+                        <?= sr_empty_state(__('no_records_found'), __('no_data_available_in_table')) ?>
+                    <?php endif; ?>
+
+                    <div class="sr-pager">
+                        <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $currentFilter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
                     </div>
                 </div>
+
             </div>
         </div>
         <footer class="footer"><?= $site_footer ?? '© 2026 Almutlak' ?></footer>
@@ -1369,27 +1316,8 @@ if (!empty($requests)) {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="assets/js/jquery.core.js"></script>
 <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
 <script>
-// Move each card's "Actions" dropdown from the footer into the header so the
-// menu has room to open downward instead of getting clipped at the bottom of
-// the page (was especially bad for the last row of cards on a page).
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.request-card').forEach(function(card) {
-        const footer = card.querySelector('.card-footer');
-        const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-        const headerSlot = card.querySelector('.card-header-actions');
-        if (!actionsGroup || !headerSlot) {
-            return;
-        }
-        actionsGroup.classList.remove('flex-fill');
-        const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-        if (toggleBtn) {
-            toggleBtn.classList.remove('btn-block', 'btn-secondary');
-            toggleBtn.classList.add('btn-sm', 'btn-light');
-        }
-        headerSlot.appendChild(actionsGroup);
-    });
-});
 
 const payrollApprovalBankReports = <?= json_encode($approvalBankReportByRequest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 const payrollApprovalUseWideModal = <?= $approvalModalUseWideLayout ? 'true' : 'false' ?>;

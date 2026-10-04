@@ -301,154 +301,16 @@ if ($canSeeAllDepts) {
     <!-- Select2 -->
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls {
-            max-width: 800px;
-        }
-
-        .request-card {
-            border-radius: 15px;
-            border: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .request-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
-        }
-
-        .request-card .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom: none;
-            font-weight: 600;
-            font-size: 1.1em;
-            border-top-left-radius: 15px;
-            border-top-right-radius: 15px;
-        }
-
-        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
-
-        .request-card .card-header .float-right {
-            font-size: 0.85em;
-            opacity: 0.9;
-        }
-
-        .request-card .card-body {
-            padding: 1.5rem;
-        }
-
-        .detail-item {
-            display: flex;
-            align-items: center;
-            font-size: 1.09em;
-            margin-bottom: 0.8rem;
-        }
-
-        .detail-item i.fad {
-            color: #4a90e2;
-            margin-right: 15px;
-            width: 20px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-
-        .detail-item strong {
-            color: #8a94a6;
-            min-width: 130px;
-            display: inline-block;
-            flex-shrink: 0;
-            margin-right: 10px;
-        }
-
-        .request-card .card-footer {
-            background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%);
-            border-top: 2px solid #a5b0e8;
-            border-bottom-left-radius: 15px;
-            border-bottom-right-radius: 15px;
-            overflow: visible;
-        }
-
-        .request-time-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.78em;
-            color: #6c757d;
-            padding-bottom: 8px;
-            margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago,
-        .request-time-footer .rtf-exact {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            white-space: nowrap;
-        }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-
-        /* Footer actions: responsive grid to avoid overflow and keep symmetry */
-        .vac-actions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: .5rem;
-        }
-
-        .vac-actions .btn {
-            white-space: normal;
-            line-height: 1.2;
-        }
-
-        .vac-actions .btn i {
-            margin-inline-end: .35rem;
-        }
-
-        /* Keep block buttons filling their grid cell */
-        .vac-actions .btn.btn-block {
-            display: inline-flex;
-            width: 100%;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .no-requests {
-            padding: 3rem;
-            background: #fff;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-        }
-
-        .btn-block+.btn-block {
-            margin-top: 0rem !important;
-        }
-
-        /* --- NEW STYLES FOR APPROVER LIST --- */
-        /* Ensure dropdowns are not hidden behind adjacent cards */
-        .request-card {
-            position: relative;
-        }
-
-        .request-card:hover,
-        .request-card:focus-within {
-            z-index: 50;
-        }
-
-        .request-card .dropdown-menu {
-            z-index: 2000;
-        }
-
         .detail-item {
             flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
         }
@@ -504,56 +366,38 @@ if ($canSeeAllDepts) {
             </div>
         </div>
 
+
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('all_settlements') ?></h4>
 
-                                <div class="row filter-controls mx-auto mb-5">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <div class="form-group">
-                                            <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                            <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                <?php foreach ($allStatuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                        <?= htmlspecialchars($status_value); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($searchTerm); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('all_settlements') ?></h1>
+                            <p><?= str_replace('{0}', (string)(int)$totalItems, __('showing_requests')) ?></p>
+                        </div>
+                    </div>
 
-                                <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <?php
-                                    $showing_text = str_replace('{0}', (string)(int)$totalItems, __('showing_requests'));
-                                    ?>
-                                    <h4 class="mb-0 text-muted"><?= $showing_text ?></h4>
-                                    <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $totalItems; ?></span>
-                                </div>
+                    <div class="sr-card">
+                        <?= sr_status_tabs($allStatuses, $current_filter, $totalItems) ?>
+                        <?= sr_list_toolbar($searchTerm, (!empty($searchTerm) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
-                                <?php if (!empty($settlements)): ?>
-                                    <div class="row">
+                        <?php if (!empty($settlements)): ?>
+                            <div class="sr-table-wrap sr-list-wrap">
+                                <table class="table sr-table sr-list" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee', 'Employee') ?></th>
+                                            <th><?= __('settlement_id') ?></th>
+                                            <th><?= __('amount') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th><?= __('created') ?></th>
+                                            <th class="text-right"><?= __('actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php foreach ($settlements as $settlement): ?>
                                             <?php
                                             // Check if this settlement is pending approval with the current user
@@ -732,136 +576,92 @@ if ($canSeeAllDepts) {
                                                 // EOS settlement stored as 0: show the Net Payment of the EOS record (same as EOS page/print).
                                                 $payableAmount = round((float)$settlement['eos_net_payment']);
                                             }
+
+                                            $status_tone = 'slate';
+                                            switch ($settlement['settlement_status']) {
+                                                case 'pending':
+                                                case 'pending_approval':
+                                                    $status_tone = 'amber';
+                                                    $approver = $settlement['current_approver_name'] ? getDisplayName(parseName($settlement['current_approver_name'])) : __('next_approver');
+                                                    $status_text = __('pending_with') . ' ' . $approver;
+                                                    break;
+                                                case 'approved':
+                                                    $status_tone = 'green';
+                                                    $status_text = __('approved');
+                                                    break;
+                                                case 'rejected':
+                                                    $status_tone = 'red';
+                                                    $status_text = __('rejected');
+                                                    break;
+                                                case 'completed':
+                                                    $status_tone = 'indigo';
+                                                    $status_text = __('completed');
+                                                    break;
+                                                default:
+                                                    $status_text = __($settlement['settlement_status']);
+                                                    break;
+                                            }
+                                            $setl_id = (int)$settlement['id'];
+                                            $inv_js = htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES);
+                                            $request_type_label = trim((string)($settlement['request_type'] ?? ''));
                                             ?>
-                                            <div class="col-lg-4 col-md-6 mb-4">
-                                                <div class="card request-card h-100">
-                                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                                        <span><?= htmlspecialchars(getDisplayName($settlement['emp_name']), ENT_QUOTES); ?></span>
-                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars($settlement['emp_id'], ENT_QUOTES); ?></span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <div class="detail-item"><i class="fad fa-file-invoice"></i><strong><?= __('settlement_id') ?>:</strong> <?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES); ?></div>
-                                                        <div class="detail-item"><i class="fad fa-coins"></i><strong><?= __('amount') ?>:</strong> <span class="badge <?= $payableAmount < 0 ? 'badge-danger' : 'badge-success' ?>" style="font-size: 0.95em; padding: 0.5rem 0.75rem;"><i class="icon-saudi_riyal"></i> <?= number_format(round($payableAmount), 2); ?></span></div>
-                                                        <div class="detail-item"><i class="fad fa-calendar-alt"></i><strong><?= __('created') ?>:</strong> <?= htmlspecialchars(format_safe_date($settlement['created_at'] ?? null, 'd M Y'), ENT_QUOTES); ?></div>
-                                                        <?php
-                                                            $settlementAttachments = getSettlementAttachments(
-                                                                $pdo,
-                                                                (int)$settlement['id'],
-                                                                $settlement['request_inv_no']
-                                                            );
-                                                            $attachmentLinks = [];
-                                                            foreach ($settlementAttachments as $attachment) {
-                                                                $attachmentLinks[] = 'download_settlement_attachment.php?id=' . (int)$attachment['id'];
-                                                            }
-                                                        ?>
-                                                        <div class="detail-item">
-                                                            <i class="fad fa-tasks"></i>
-                                                            <strong><?= __('status') ?>:</strong>
-                                                            <div style="display: flex; flex-direction: column; gap: 6px;">
-                                                                <?php
-                                                                $badge_class = 'secondary';
-                                                                $status_text = '';
-                                                                $status_icon = '';
-                                                                
-                                                                switch ($settlement['settlement_status']) {
-                                                                    case 'pending':
-                                                                    case 'pending_approval':
-                                                                        $badge_class = 'warning';
-                                                                        $approver = $settlement['current_approver_name'] ? getDisplayName(parseName($settlement['current_approver_name'])) : __('next_approver');
-                                                                        $status_text = __('pending_with') . ' ' . htmlspecialchars($approver);
-                                                                        $status_icon = "<i class='fa fa-solid fa-hourglass-half text-white'></i>";
-                                                                        break;
-                                                                    case 'approved':
-                                                                        $badge_class = 'success';
-                                                                        $status_text = __('approved');
-                                                                        $status_icon = "<i class='fa fa-solid fa-check text-white'></i>";
-                                                                        break;
-                                                                    case 'rejected':
-                                                                        $badge_class = 'danger';
-                                                                        $status_text = __('rejected');
-                                                                        $status_icon = "<i class='fa fa-solid fa-times text-white'></i>";
-                                                                        break;
-                                                                    case 'completed':
-                                                                        $badge_class = 'primary';
-                                                                        $status_text = __('completed');
-                                                                        $status_icon = "<i class='fa fa-solid fa-badge-check text-white'></i>";
-                                                                        break;
-                                                                    default:
-                                                                        $status_text = __($settlement['settlement_status']);
-                                                                        $status_icon = "";
-                                                                        break;
-                                                                }
-                                                                ?>
-                                                                <span class="badge badge-<?= $badge_class; ?> p-2" style="display: inline-block; width: fit-content;">
-                                                                    <?= $status_icon . " " . htmlspecialchars($status_text); ?>
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="card-footer">
-                                                        <div class="request-time-footer">
-                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($settlement['created_at'] ?? '') : timeAgo($settlement['created_at'] ?? '')) ?></span>
-                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($settlement['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                        </div>
-                                                        <div class="btn-group flex-fill" style="display:flex;">
-                                                            <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                <?= __('actions') ?> <span class="caret"></span>
-                                                            </button>
+                                            <tr>
+                                                <td><?= sr_person_cell(getDisplayName($settlement['emp_name']), $settlement['emp_id']) ?></td>
+                                                <td>
+                                                    <span class="sr-cell-title sr-mono"><?= sr_h($settlement['request_inv_no']) ?></span>
+                                                    <?php if ($request_type_label !== ''): ?>
+                                                        <span class="sr-cell-sub"><?= sr_h(__($request_type_label, ucwords(str_replace('_', ' ', $request_type_label)))) ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="sr-nowrap"><?= sr_pill($payableAmount < 0 ? 'red' : 'green', number_format(round($payableAmount), 2), false, 'mdi-cash') ?></td>
+                                                <td><?= sr_pill($status_tone, $status_text) ?></td>
+                                                <td><?= sr_time_cell($settlement['created_at'] ?? '') ?></td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($is_pending_with_me): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSettlement(<?= $setl_id ?>, '<?= $inv_js ?>', <?= $settlement['emp_id'] ?>)"><i class="mdi mdi-check"></i> <?= __('approve') ?></a>
+                                                        <?php else: ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="viewSettlementDetails(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-eye"></i> <?= __('view') ?></a>
+                                                        <?php endif; ?>
+                                                        <div class="btn-group dropdown">
+                                                            <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
                                                             <div class="dropdown-menu dropdown-menu-right">
-                                                                <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="viewSettlementDetails(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
-                                                                    <i class="fa fa-eye"></i> <?= __('view') ?>
-                                                                </button>
-                                                                <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="settlement_status_history.php?request_inv_no=<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>">
-                                                                    <i class="fa fa-history"></i> <?= __('history') ?>
-                                                                </a>
+                                                                <?php if ($is_pending_with_me): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-eye"></i><?= __('view') ?></a>
+                                                                <?php endif; ?>
+                                                                <a class="dropdown-item" href="settlement_status_history.php?request_inv_no=<?= urlencode($settlement['request_inv_no']) ?>"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($settlement['settlement_status'] === 'approved'): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="processSettlementPayment(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
-                                                                        <i class="fa fa-check-circle text-success"></i> <?= __('clear_settlement') ?>
-                                                                    </a>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="processSettlementPayment(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-check-circle text-success"></i><?= __('clear_settlement') ?></a>
                                                                 <?php endif; ?>
                                                                 <?php if ($is_pending_with_me): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="approveSettlement(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>', <?= $settlement['emp_id'] ?>)">
-                                                                        <i class="fa fa-check text-success"></i> <?= __('approve') ?>
-                                                                    </a>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectSettlement(<?= $settlement['id'] ?>, '<?= htmlspecialchars($settlement['request_inv_no'], ENT_QUOTES) ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                    </a>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectSettlement(<?= $setl_id ?>, '<?= $inv_js ?>')"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <div class="no-requests">
-                                        <h5><?= __('no_records_found') ?></h5>
-                                        <p><?= __('no_settlements_to_display') ?></p>
-                                    </div>
-                                <?php endif; ?>
-
-                                <!-- Pagination -->
-                                <div class="row mt-4">
-                                    <div class="col-xl-12">
-                                        <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $current_filter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
-                                    </div>
-                                </div>
+                                    </tbody>
+                                </table>
                             </div>
-                        </div>
+
+                            <div class="sr-pager">
+                                <?= generate_pagination_controls($currentPage, $totalPages, $totalItems, $itemsPerPage, $limitOptions, $showAll, ['status' => $current_filter, 'search' => $searchTerm], $unfilteredTotalItems) ?>
+                            </div>
+                        <?php else: ?>
+                            <?= sr_empty_state(__('no_records_found'), __('no_settlements_to_display')) ?>
+                        <?php endif; ?>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '© 2025 Almutlak' ?></footer>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
@@ -871,29 +671,10 @@ if ($canSeeAllDepts) {
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.js"></script>
 
     <script>
-        // Move each card's "Actions" dropdown from the footer into the header so the
-        // menu has room to open downward instead of getting clipped at the bottom of
-        // the page (was especially bad for the last row of cards on a page).
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.request-card').forEach(function(card) {
-                const footer = card.querySelector('.card-footer');
-                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-                const headerSlot = card.querySelector('.card-header-actions');
-                if (!actionsGroup || !headerSlot) {
-                    return;
-                }
-                actionsGroup.classList.remove('flex-fill');
-                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
-                    toggleBtn.classList.add('btn-sm', 'btn-light');
-                }
-                headerSlot.appendChild(actionsGroup);
-            });
-        });
 
         // Configuration constants
         const MAX_FILE_SIZE_MB = 10;

@@ -395,50 +395,6 @@ if ($can_see_all_depts) {
 
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        /* ---------- Page (sr-* design system, assets/css/smart_request.css) ---------- */
-        .vac-filters {
-            display: grid; grid-template-columns: 1.4fr 1fr 1fr .7fr .7fr auto; gap: 10px; align-items: end;
-            padding: 14px 18px; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface-2);
-        }
-        @media (max-width: 991px) { .vac-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 575px) { .vac-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        .vac-filters label { display: block; margin: 0 0 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
-        .vac-filters .form-control {
-            height: 36px; border-radius: 8px; font-size: 13px;
-            border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text);
-        }
-        .vac-filters .vac-filter-btns { display: flex; gap: 6px; }
-        .vac-filter-toggle .sr-count { margin-inline-start: 2px; }
-        .sr-page .sr-tabs .nav-link { cursor: pointer; }
-
-        .sr-page table.sr-table.vac-table tbody td { vertical-align: top; }
-        .vac-table .sr-cell-sub { white-space: nowrap; }
-        .vac-period { white-space: nowrap; }
-        .vac-period .sr-cell-title i { color: var(--sr-muted); font-size: 12px; margin: 0 3px; }
-        .vac-flags { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-        .vac-reject-note {
-            margin-top: 6px; max-width: 260px; white-space: normal; font-size: 12px; line-height: 1.4;
-            padding: 6px 9px; border-radius: 8px; color: var(--tone-red-fg); background: var(--tone-red-bg); border: 1px solid var(--tone-red-bd);
-        }
-        .vac-attach { margin-top: 6px; cursor: pointer; border: 0; }
-        .vac-attach:hover { color: var(--sr-accent-strong); }
-        .sr-page .sr-actions .dropdown-menu { z-index: 2000; }
-        .sr-page .sr-actions .dropdown-item i { width: 18px; text-align: center; margin-inline-end: 6px; }
-        @media (max-width: 1199px) { .sr-page .vac-table-wrap { overflow-x: auto; } }
-
-        /* Server-side pagination (generate_pagination_controls) inside the card */
-        .vac-pager { padding: 0 18px 16px; }
-        .vac-pager .row { margin: 0 !important; }
-        .vac-pager .col-12 { padding: 0; font-size: 12.5px; color: var(--sr-muted); }
-        .vac-pager .pagination { gap: 4px; }
-        .vac-pager .page-link {
-            min-width: 32px; height: 32px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
-            border-radius: 8px !important; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600;
-        }
-        .vac-pager .page-item.active .page-link { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; }
-        .vac-pager .page-item.disabled .page-link { opacity: .5; }
-        .vac-pager #limitFilter { height: 32px; border-radius: 8px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text); }
-
         /* ---------- Approval popups ---------- */
         .swal-approval-chain .select2-container {
             width: 100% !important;
@@ -648,7 +604,7 @@ if ($can_see_all_depts) {
                             </div>
                         </div>
 
-                        <div class="vac-filters" id="vacFilters" <?= $active_extra_filters ? '' : 'style="display: none;"' ?>>
+                        <div class="sr-filters" id="vacFilters" <?= $active_extra_filters ? '' : 'style="display: none;"' ?>>
                             <div>
                                 <label for="vacTypeFilter"><?= __('vacation_type', 'Type') ?></label>
                                 <select class="form-control" id="vacTypeFilter">
@@ -674,14 +630,14 @@ if ($can_see_all_depts) {
                                 <label for="daysMaxFilter"><?= __('max_days', 'Max Days') ?></label>
                                 <input type="number" min="0" class="form-control" id="daysMaxFilter" value="<?= $filter_days_max !== null ? $h($filter_days_max) : '' ?>">
                             </div>
-                            <div class="vac-filter-btns">
+                            <div class="sr-filter-btns">
                                 <button type="button" class="sr-btn sr-btn-primary" onclick="applyFilters()"><i class="mdi mdi-filter"></i> <?= __('apply', 'Apply') ?></button>
                             </div>
                         </div>
 
                         <?php if (!empty($requests)): ?>
-                            <div class="sr-table-wrap vac-table-wrap">
-                                <table class="table sr-table vac-table" style="width: 100%;">
+                            <div class="sr-table-wrap sr-list-wrap">
+                                <table class="table sr-table sr-list" style="width: 100%;">
                                     <thead>
                                         <tr>
                                             <th><?= __('employee', 'Employee') ?></th>
@@ -937,12 +893,12 @@ if ($can_see_all_depts) {
                                                     <?php endif; ?>
                                                     <span class="sr-cell-sub sr-mono"><?= $h($req['request_inv_no']) ?></span>
                                                     <?php if ($attachments): ?>
-                                                        <button type="button" class="sr-chip vac-attach" onclick='showAttachmentsModal(<?= $h(json_encode($attachments)) ?>, <?= $h(json_encode(__('attachments'))) ?>)'>
+                                                        <button type="button" class="sr-chip sr-chip-btn" onclick='showAttachmentsModal(<?= $h(json_encode($attachments)) ?>, <?= $h(json_encode(__('attachments'))) ?>)'>
                                                             <i class="mdi mdi-paperclip"></i><?= count($attachments) ?> <?= __('attachments') ?>
                                                         </button>
                                                     <?php endif; ?>
                                                 </td>
-                                                <td class="vac-period">
+                                                <td class="sr-period">
                                                     <span class="sr-cell-title"><?= $h(format_safe_date($req['start_date'] ?? null, 'd M Y', 'N/A')) ?><i class="mdi mdi-arrow-right"></i><?= $h(format_safe_date($req['return_date'] ?? null, 'd M Y', 'N/A')) ?></span>
                                                     <?php if ($is_fly_annual && !empty($req['departure_date'])): ?>
                                                         <span class="sr-cell-sub" title="<?= __('departure_date') ?>"><i class="mdi mdi-airplane-takeoff"></i> <?= $h(format_safe_date($req['departure_date'], 'd M Y', 'N/A')) ?></span>
@@ -958,7 +914,7 @@ if ($can_see_all_depts) {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <div class="vac-flags">
+                                                    <div class="sr-flags">
                                                         <span class="sr-pill tone-<?= $status_tone ?>"><span class="sr-dot"></span><?= $h($status_text) ?></span>
                                                         <?php if ($is_travel_email_pending): ?>
                                                             <span class="sr-pill sr-pill-xs tone-red"><i class="mdi mdi-send"></i><?= __('pending_travel_email') ?: 'Pending Travel Email' ?></span>
@@ -971,7 +927,7 @@ if ($can_see_all_depts) {
                                                         <?php endif; ?>
                                                     </div>
                                                     <?php if ($req['current_status'] === 'rejected' && !empty($req['rejection_note'])): ?>
-                                                        <div class="vac-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br($h(getDisplayName(stripslashes($req['rejection_note'])))) ?></div>
+                                                        <div class="sr-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br($h(getDisplayName(stripslashes($req['rejection_note'])))) ?></div>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
@@ -1063,7 +1019,7 @@ if ($can_see_all_depts) {
                                 </table>
                             </div>
 
-                            <div class="vac-pager">
+                            <div class="sr-pager">
                                 <?php
                                 $pagination_params = [];
                                 if (!empty($search_term)) $pagination_params['search'] = $search_term;

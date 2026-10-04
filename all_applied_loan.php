@@ -327,31 +327,13 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
         <!-- Select2 -->
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
         <style>
-            .filter-controls { max-width: 800px; }
-            .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; }
-            .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-            .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
-            .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
-            .request-card .card-body { padding: 1.5rem; }
-            .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.09em; }
-            .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
-            .detail-item strong { color: #8a94a6; min-width: 130px; display: inline-block; }
-            .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
-            .request-time-footer {
-                display: flex; justify-content: space-between; align-items: center; gap: 8px;
-                font-size: 0.78em; color: #6c757d;
-            }
-            .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-            .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-            .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-            .request-time-footer i { color: #a0a8c0; }
-            .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-			.btn-block + .btn-block{ margin-top: 0rem !important; }
             .detail-item{
                 flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
                 text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>;
@@ -379,198 +361,157 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
 
             <div class="content-page">
                 <?php include("./includes/topbar.php"); ?>
-                <div class="content">
+                <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+                <div class="content sr-page">
                     <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-xl-12">
-                                <div class="card-box">
-                                    <h4 class="header-title m-t-0 m-b-30"><?=__('loan_approval_center')?></h4>
-                                    <div class="row filter-controls mx-auto mb-5">
-                                        <div class="col-md-6 mb-3 mb-md-0">
-                                            <div class="form-group">
-                                                <label for="statusFilter" class="font-weight-bold"><?=__('filter_by_status')?></label>
-                                                <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                    <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                        <option value="<?=$status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                            <?=htmlspecialchars($status_value); ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label for="searchFilter" class="font-weight-bold"><?=__('search_by_name_id')?></label>
-                                                <div class="input-group">
-                                                    <input type="search" class="form-control" id="searchFilter" placeholder="<?=__('enter_search_term')?>" value="<?=htmlspecialchars($search_term); ?>">
-                                                    <div class="input-group-append">
-                                                        <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                    </div>
-                                                    <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
-                                                    <div class="input-group-append">
-                                                        <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                    </div>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    <div class="d-flex justify-content-between align-items-center mb-4">
-                                        <h4 class="mb-0 text-muted"><?=__('showing')?>: <?=htmlspecialchars($page_title); ?></h4>
-                                        <span class="badge badge-light p-2"><?=__('total_found')?>: <?=$total_items; ?></span>
-                                    </div>
-
-                                    <?php if (!empty($requests)): ?>
-                                        <div class="row">
-                                            <?php foreach ($requests as $loan): ?>
-                                                <div class="col-lg-4 col-md-6 mb-4">
-                                                    <div class="card request-card h-100">
-                                                        <div class="card-header d-flex justify-content-between align-items-center">
-                                                            <span><?=getDisplayName(parseName($loan['employee_name'])); ?></span>
-                                                            <div class="d-flex align-items-center" style="gap: 8px;">
-                                                                <span><?=__('emp_id')?>: <?=htmlspecialchars($loan['emp_id']); ?></span>
-                                                                <div class="btn-group" style="position: static;">
-                                                                    <button type="button" class="btn btn-sm btn-light dropdown-toggle waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                        <?=__('actions')?>
-                                                                    </button>
-                                                                    <div class="dropdown-menu dropdown-menu-right">
-                                                                        <a class="dropdown-item" href="loan_report_details.php?id=<?=$loan['id']; ?>&emp_id=<?=$loan['emp_id']; ?>" target="_blank">
-                                                                            <i class="fa fa-file-pdf"></i> <?=__('report')?>
-                                                                        </a>
-                                                                        <div class="dropdown-divider"></div>
-                                                                        <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank" style="cursor: pointer;">
-                                                                            <i class="fa fa-history"></i> <?=__('history')?>
-                                                                        </a>
-                                                                        <?php
-                                                                            // Button visibility: Only show if pending with logged-in user
-                                                                            $can_take_action = false;
-                                                                            if ($loan['current_approver_id'] == $empid || ($delegatedFromEmpId !== null && $loan['current_approver_id'] == $delegatedFromEmpId)) {
-                                                                                $can_take_action = true;
-                                                                            }
-                                                                        ?>
-                                                                        <?php if($can_take_action): ?>
-                                                                            <div class="dropdown-divider"></div>
-                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['loan_amount']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>', <?=$loan['current_approval_level'] ?? 0?>, <?=(int)($loan['payer_emp_id'] ?? 0)?>, <?=(int)$_SESSION['empid']?>, <?=isset($loan['installments']) ? (int)$loan['installments'] : 1?>)">
-                                                                                <i class="fa fa-check text-success"></i> <?=__('approve')?>
-                                                                            </button>
-                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')">
-                                                                                <i class="fa fa-times text-danger"></i> <?=__('reject')?>
-                                                                            </button>
-                                                                        <?php endif; ?>
-
-                                                                        <?php if ($can_cancel_loan_requests && in_array($loan['status'], $cancellable_loan_statuses, true)): ?>
-                                                                            <div class="dropdown-divider"></div>
-                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelLoanRequestAdmin(<?=$loan['id']; ?>, '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES)?>', '<?=htmlspecialchars($loan['inv_no'], ENT_QUOTES)?>')">
-                                                                                <i class="fa fa-ban text-danger"></i> <?=__('cancel', 'Cancel')?>
-                                                                            </button>
-                                                                        <?php endif; ?>
-
-                                                                        <!-- Settlement Button - After Full Approval -->
-                                                                        <?php
-                                                                        // Check if settlement already exists for this request
-                                                                        $loanSettlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $loan['inv_no'] . "%' LIMIT 1");
-                                                                        $loanSettlementExists = $loanSettlementCheckQry && mysqli_num_rows($loanSettlementCheckQry) > 0;
-                                                                        ?>
-                                                                        <?php if ($loan['status'] === 'approved' && !$loanSettlementExists): ?>
-                                                                            <div class="dropdown-divider"></div>
-                                                                            <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="createLoanSettlement(<?=$loan['id']; ?>, '<?=$loan['inv_no']; ?>', '<?=$loan['emp_id']; ?>', '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES); ?>', <?=(float)$loan['loan_amount']; ?>)">
-                                                                                <i class="fa fa-handshake text-success"></i> <?=__('create_settlement') ?: 'Create Settlement'?>
-                                                                            </button>
-                                                                        <?php elseif ($loan['status'] === 'approved' && $loanSettlementExists): ?>
-                                                                            <div class="dropdown-divider"></div>
-                                                                            <button type="button" class="dropdown-item disabled" style="cursor: not-allowed; background: none; border: none; width: 100%; text-align: left; color: #999;" disabled>
-                                                                                <i class="fa fa-check-circle text-success"></i> <?=__('settlement_created') ?: 'Settlement Created'?>
-                                                                            </button>
-                                                                        <?php endif; ?>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <div class="detail-item">
-                                                                <i class="fad fa-hand-holding-usd duotone-info"></i><strong><?=__('applied_amount')?>:</strong> <i class="icon-saudi_riyal"></i> <?=htmlspecialchars($loan['loan_amount']); ?>
-                                                            </div>
-                                                            <?php if (!empty($loan['approved_amount']) && $loan['approved_amount'] != $loan['loan_amount']): ?>
-                                                                <div class="detail-item">
-                                                                    <i class="fad fa-check-circle text-success"></i><strong><?=__('approved')?>:</strong> <span class="text-success font-weight-bold"><i class="icon-saudi_riyal"></i> <?=htmlspecialchars($loan['approved_amount']); ?></span>
-                                                                </div>
-                                                            <?php endif; ?>
-                                                            <div class="detail-item"><i class="fad fa-calendar-alt duotone-info"></i><strong><?=__('start_date')?>:</strong> <?=htmlspecialchars(format_safe_date($loan['start_date'] ?? null, 'd M Y', 'N/A')); ?></div>
-                                                            <div class="detail-item"><i class="fad fa-calendar-check duotone-info"></i><strong><?=__('end_date')?>:</strong> <?=htmlspecialchars(format_safe_date($loan['end_date'] ?? null, 'd M Y', 'N/A')); ?></div>
-                                                            <div class="detail-item"><i class="fad fa-wallet duotone-info"></i><strong><?=__('monthly')?>:</strong> <?=htmlspecialchars($loan['monthly_deduction']); ?></div>
-                                                            <div class="detail-item">
-                                                                <?php
-                                                                    $loan_badge_class = 'secondary';
-                                                                    $loan_status_text = '';
-                                                                    $current_level_display = '';
-                                                                    
-                                                                    // Check if we have current approver from chain (ALWAYS show if available)
-                                                                    if (!empty($loan['current_approver_name'])) {
-                                                                        $loan_status_text = __('pending_with') . ' ' . getDisplayName(parseName($loan['current_approver_name']));
-                                                                        $loan_badge_class = 'warning';
-                                                                        if (!empty($loan['current_approval_level'])) {
-                                                                            $current_level_display = ' (Level ' . $loan['current_approval_level'] . ')';
-                                                                        }
-                                                                    } elseif (in_array($loan['status'], ['pending', 'pending_approval'])) {
-                                                                        // Generic pending status when no approver is found
-                                                                        $loan_status_text = __('pending_approval');
-                                                                        $loan_badge_class = 'warning';
-                                                                    } elseif ($loan['status'] === 'approved') {
-                                                                        $loan_status_text = __('approved');
-                                                                        $loan_badge_class = 'success';
-                                                                    } elseif ($loan['status'] === 'rejected') {
-                                                                        $loan_status_text = __('rejected');
-                                                                        $loan_badge_class = 'danger';
-                                                                    } elseif ($loan['status'] === 'paid') {
-                                                                        $loan_status_text = __('paid');
-                                                                        $loan_badge_class = 'primary';
-                                                                    } else {
-                                                                        $loan_status_text = __('pending');
-                                                                        $loan_badge_class = 'warning';
-                                                                    }
-                                                                ?>
-                                                                <i class="fad fa-info-circle duotone-info"></i>
-                                                                <strong><?=__('status')?>:</strong> <span class="badge badge-<?=$loan_badge_class; ?> p-2"><?=htmlspecialchars($loan_status_text . $current_level_display); ?></span>
-                                                            </div>
-                                                            <?php if ($loan['status'] === 'rejected' && !empty($loan['rejection_note'])): ?>
-                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
-                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i><strong><?=__('rejection_reason')?>:</strong>    
-                                                                    <?=nl2br(htmlspecialchars(getDisplayName($loan['rejection_note']))); ?>
-                                                            </div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <div class="card-footer">
-                                                            <div class="request-time-footer">
-                                                                <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($loan['created_at'] ?? '') : timeAgo($loan['created_at'] ?? '')) ?></span>
-                                                                <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($loan['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <?php endforeach; ?>
-                                        </div>
-
-                                        <?php
-                                            $pagination_params = [];
-                                            if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                            if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                            echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
-                                        ?>
-                                    <?php else: ?>
-                                        <div class="row justify-content-center">
-                                            <div class="col-md-8">
-                                                <div class="text-center no-requests">
-                                                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                                    <h2><?=__('no_loan_requests_found')?></h2>
-                                                    <p class="text-muted"><?=__('no_requests_matching_filters')?></p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    <?php endif; ?>
-                                </div>
+                        <div class="sr-head">
+                            <div>
+                                <h1><?=__('loan_approval_center')?></h1>
+                                <p><?= sr_h($page_title) ?> &middot; <?=__('total_found')?>: <?= (int)$total_items ?></p>
                             </div>
                         </div>
+
+                        <div class="sr-card">
+                            <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
+                            <?= sr_list_toolbar($search_term, (!empty($search_term) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
+
+                            <?php if (!empty($requests)): ?>
+                                <div class="sr-table-wrap sr-list-wrap">
+                                    <table class="table sr-table sr-list" style="width: 100%;">
+                                        <thead>
+                                            <tr>
+                                                <th><?= __('employee', 'Employee') ?></th>
+                                                <th><?=__('applied_amount')?></th>
+                                                <th><?=__('monthly')?></th>
+                                                <th><?= __('period', 'Period') ?></th>
+                                                <th><?=__('status')?></th>
+                                                <th><?= __('applied') ?></th>
+                                                <th class="text-right"><?=__('actions')?></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($requests as $loan): ?>
+                                                <?php
+                                                // Button visibility: Only show if pending with logged-in user
+                                                $can_take_action = false;
+                                                if ($loan['current_approver_id'] == $empid || ($delegatedFromEmpId !== null && $loan['current_approver_id'] == $delegatedFromEmpId)) {
+                                                    $can_take_action = true;
+                                                }
+
+                                                // Check if settlement already exists for this request
+                                                $loanSettlementCheckQry = mysqli_query($conDB, "SELECT id FROM settlement_records WHERE request_inv_no LIKE 'SETTLEMENT-" . $loan['inv_no'] . "%' LIMIT 1");
+                                                $loanSettlementExists = $loanSettlementCheckQry && mysqli_num_rows($loanSettlementCheckQry) > 0;
+
+                                                $loan_tone = 'slate';
+                                                $loan_status_text = '';
+                                                $current_level_display = '';
+                                                // Check if we have current approver from chain (ALWAYS show if available)
+                                                if (!empty($loan['current_approver_name'])) {
+                                                    $loan_status_text = __('pending_with') . ' ' . getDisplayName(parseName($loan['current_approver_name']));
+                                                    $loan_tone = 'amber';
+                                                    if (!empty($loan['current_approval_level'])) {
+                                                        $current_level_display = ' (Level ' . $loan['current_approval_level'] . ')';
+                                                    }
+                                                } elseif (in_array($loan['status'], ['pending', 'pending_approval'])) {
+                                                    // Generic pending status when no approver is found
+                                                    $loan_status_text = __('pending_approval');
+                                                    $loan_tone = 'amber';
+                                                } elseif ($loan['status'] === 'approved') {
+                                                    $loan_status_text = __('approved');
+                                                    $loan_tone = 'green';
+                                                } elseif ($loan['status'] === 'rejected') {
+                                                    $loan_status_text = __('rejected');
+                                                    $loan_tone = 'red';
+                                                } elseif ($loan['status'] === 'paid') {
+                                                    $loan_status_text = __('paid');
+                                                    $loan_tone = 'indigo';
+                                                } else {
+                                                    $loan_status_text = __('pending');
+                                                    $loan_tone = 'amber';
+                                                }
+                                                $report_url = 'loan_report_details.php?id=' . (int)$loan['id'] . '&emp_id=' . urlencode($loan['emp_id']);
+                                                $approve_js = "approveLoanRequest(" . (int)$loan['id'] . ", '" . htmlspecialchars($user_type, ENT_QUOTES) . "', " . $loan['loan_amount'] . ", '" . htmlspecialchars($user_type, ENT_QUOTES) . "', " . ($loan['current_approval_level'] ?? 0) . ", " . (int)($loan['payer_emp_id'] ?? 0) . ", " . (int)$_SESSION['empid'] . ", " . (isset($loan['installments']) ? (int)$loan['installments'] : 1) . ")";
+                                                ?>
+                                                <tr>
+                                                    <td><?= sr_person_cell(getDisplayName(parseName($loan['employee_name'])), $loan['emp_id']) ?></td>
+                                                    <td class="sr-nowrap">
+                                                        <span class="sr-money"><i class="icon-saudi_riyal"></i> <?= sr_h($loan['loan_amount']) ?></span>
+                                                        <?php if (!empty($loan['approved_amount']) && $loan['approved_amount'] != $loan['loan_amount']): ?>
+                                                            <span class="sr-cell-sub" style="color: var(--tone-green-fg);"><i class="mdi mdi-check-circle"></i> <?=__('approved')?>: <i class="icon-saudi_riyal"></i> <?= sr_h($loan['approved_amount']) ?></span>
+                                                        <?php endif; ?>
+                                                        <span class="sr-cell-sub sr-mono"><?= sr_h($loan['inv_no']) ?></span>
+                                                    </td>
+                                                    <td class="sr-nowrap"><span class="sr-chip"><i class="mdi mdi-wallet"></i><?= sr_h($loan['monthly_deduction']) ?></span></td>
+                                                    <td class="sr-period">
+                                                        <span class="sr-cell-title"><?= sr_h(format_safe_date($loan['start_date'] ?? null, 'd M Y', 'N/A')) ?><i class="mdi mdi-arrow-right"></i><?= sr_h(format_safe_date($loan['end_date'] ?? null, 'd M Y', 'N/A')) ?></span>
+                                                    </td>
+                                                    <td>
+                                                        <?= sr_pill($loan_tone, $loan_status_text . $current_level_display) ?>
+                                                        <?php if ($loan['status'] === 'rejected' && !empty($loan['rejection_note'])): ?>
+                                                            <div class="sr-reject-note"><strong><?=__('rejection_reason')?>:</strong> <?= nl2br(sr_h(getDisplayName($loan['rejection_note']))) ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><?= sr_time_cell($loan['created_at'] ?? '') ?></td>
+                                                    <td class="text-right">
+                                                        <div class="sr-actions">
+                                                            <?php if ($can_take_action): ?>
+                                                                <a href="javascript:void(0);" class="sr-open-btn" onclick="<?= $approve_js ?>"><i class="mdi mdi-check"></i> <?=__('approve')?></a>
+                                                            <?php else: ?>
+                                                                <a href="<?= sr_h($report_url) ?>" target="_blank" class="sr-open-btn"><i class="mdi mdi-file-pdf"></i> <?=__('report')?></a>
+                                                            <?php endif; ?>
+                                                            <div class="btn-group dropdown">
+                                                                <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                                <div class="dropdown-menu dropdown-menu-right">
+                                                                    <?php if ($can_take_action): ?>
+                                                                        <a class="dropdown-item" href="<?= sr_h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?=__('report')?></a>
+                                                                    <?php endif; ?>
+                                                                    <a class="dropdown-item" href="loan_status_history.php?inv_no=<?=urlencode($loan['inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?=__('history')?></a>
+                                                                    <?php if ($can_take_action): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="rejectLoanRequest(<?=$loan['id']; ?>, '<?=htmlspecialchars($user_type, ENT_QUOTES)?>')"><i class="mdi mdi-close text-danger"></i><?=__('reject')?></a>
+                                                                    <?php endif; ?>
+
+                                                                    <!-- Settlement - after full approval -->
+                                                                    <?php if ($loan['status'] === 'approved' && !$loanSettlementExists): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item" href="javascript:void(0);" onclick="createLoanSettlement(<?=$loan['id']; ?>, '<?=$loan['inv_no']; ?>', '<?=$loan['emp_id']; ?>', '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES); ?>', <?=(float)$loan['loan_amount']; ?>)">
+                                                                            <i class="mdi mdi-cash text-success"></i><?=__('create_settlement') ?: 'Create Settlement'?>
+                                                                        </a>
+                                                                    <?php elseif ($loan['status'] === 'approved' && $loanSettlementExists): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <span class="dropdown-item disabled"><i class="mdi mdi-check-circle text-success"></i><?=__('settlement_created') ?: 'Settlement Created'?></span>
+                                                                    <?php endif; ?>
+
+                                                                    <?php if ($can_cancel_loan_requests && in_array($loan['status'], $cancellable_loan_statuses, true)): ?>
+                                                                        <div class="dropdown-divider"></div>
+                                                                        <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelLoanRequestAdmin(<?=$loan['id']; ?>, '<?=htmlspecialchars($loan['employee_name'] ?? 'Unknown', ENT_QUOTES)?>', '<?=htmlspecialchars($loan['inv_no'], ENT_QUOTES)?>')">
+                                                                            <i class="mdi mdi-cancel"></i><?=__('cancel', 'Cancel')?>
+                                                                        </a>
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="sr-pager">
+                                    <?php
+                                        $pagination_params = [];
+                                        if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                        if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                        echo generate_pagination_controls($current_page,$total_pages,$total_items,$items_per_page,$limit_options,$show_all,$pagination_params,$unfiltered_total_items);
+                                    ?>
+                                </div>
+                            <?php else: ?>
+                                <?= sr_empty_state(__('no_loan_requests_found'), __('no_requests_matching_filters')) ?>
+                            <?php endif; ?>
+                        </div>
+
                     </div>
                 </div>
                 <footer class="footer"><?= $site_footer ?></footer>
@@ -586,6 +527,7 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
         <script src="./plugins/select2/js/select2.min.js"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
         <script src="assets/js/loan_approval.js"></script>
         <script>
             function applyFilters() {
@@ -596,9 +538,6 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                 const baseUrl = window.location.href.split('?')[0];
                 window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
             }
-            document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') { applyFilters(); }
-            });
 
             /**
              * =====================================================================

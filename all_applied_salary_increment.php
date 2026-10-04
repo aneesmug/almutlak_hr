@@ -231,33 +231,16 @@ if ($can_see_all_depts) {
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .filter-controls { max-width: 800px; }
-        .request-card { border-radius: 15px; border: none; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .request-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1); }
-        .request-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom: none; font-weight: 600; font-size: 1.1em; border-top-left-radius: 15px; border-top-right-radius: 15px; }
-        .request-card .card-header .float-right { font-size: 0.85em; opacity: 0.9; }
-        .request-card .card-header .btn, .request-card .card-header .dropdown-toggle { color: #212529 !important; }
-        .request-card .card-body { padding: 1.5rem; }
         .detail-item { display: flex; align-items: center; margin-bottom: 1rem; font-size: 1.03em; }
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
-        .request-card .card-footer { background: linear-gradient(135deg, #eef1fc 0%, #f6f1fb 100%); border-top: 2px solid #a5b0e8; border-bottom-left-radius: 15px; border-bottom-right-radius: 15px; }
-        .request-time-footer {
-            display: flex; justify-content: space-between; align-items: center; gap: 8px;
-            font-size: 0.78em; color: #6c757d; padding-bottom: 8px; margin-bottom: 10px;
-            border-bottom: 1px dashed #e3e6f5;
-        }
-        .request-time-footer .rtf-ago, .request-time-footer .rtf-exact { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-        .request-time-footer .rtf-ago { font-weight: 600; color: #495057; }
-        .request-time-footer .rtf-exact { font-variant-numeric: tabular-nums; opacity: 0.85; }
-        .request-time-footer i { color: #a0a8c0; }
-        .no-requests { padding: 3rem; background: #fff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); }
-        .btn-block + .btn-block { margin-top: 0rem !important; }
         .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
     </style>
     <?php if ($is_rtl): ?>
@@ -279,176 +262,140 @@ if ($can_see_all_depts) {
                 <div class="clearfix"></div>
             </div>
         </div>
-
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            <div class="content">
+            <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+            <div class="content sr-page">
                 <div class="container-fluid">
-                    <div class="row">
-                        <div class="col-xl-12">
-                            <div class="card-box">
-                                <h4 class="header-title m-t-0 m-b-30"><?= __('salary_increment_approval_center', 'Salary Increment Approval Center') ?></h4>
 
-                                <div class="row filter-controls mx-auto mb-5">
-                                    <div class="col-md-6 mb-3 mb-md-0">
-                                        <div class="form-group">
-                                            <label for="statusFilter" class="font-weight-bold"><?= __('filter_by_status') ?></label>
-                                            <select class="form-control" id="statusFilter" onchange="applyFilters()">
-                                                <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                                    <option value="<?= $status_key; ?>" <?php if ($current_filter == $status_key) echo 'selected'; ?>>
-                                                        <?= htmlspecialchars($status_value); ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="form-group">
-                                            <label for="searchFilter" class="font-weight-bold"><?= __('search_by_name_id') ?></label>
-                                            <div class="input-group">
-                                                <input type="search" class="form-control" id="searchFilter" placeholder="<?= __('enter_search_term') ?>" value="<?= htmlspecialchars($search_term); ?>">
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-primary" type="button" onclick="applyFilters()"><i class="fas fa-search"></i></button>
-                                                </div>
-                                                <?php if (!empty($search_term) || $current_filter !== 'my_pending'): ?>
-                                                <div class="input-group-append">
-                                                    <button class="btn btn-danger" type="reset" onclick="resetFilters(<?= $perpage ?>)"><i class="fas fa-times"></i></button>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div class="sr-head">
+                        <div>
+                            <h1><?= __('salary_increment_approval_center', 'Salary Increment Approval Center') ?></h1>
+                            <p><?= sr_h($page_title) ?> &middot; <?= __('total_found') ?>: <?= (int)$total_items ?></p>
+                        </div>
+                    </div>
 
-                                <div class="d-flex justify-content-between align-items-center mb-4">
-                                    <h4 class="mb-0 text-muted"><?= __('showing') ?>: <?= htmlspecialchars($page_title); ?></h4>
-                                    <span class="badge badge-light p-2"><?= __('total_found') ?>: <?= $total_items; ?></span>
-                                </div>
+                    <div class="sr-card">
+                        <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
+                        <?= sr_list_toolbar($search_term, (!empty($search_term) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
-                                <?php if (!empty($requests)): ?>
-                                    <div class="row">
+                        <?php if (!empty($requests)): ?>
+                            <div class="sr-table-wrap sr-list-wrap">
+                                <table class="table sr-table sr-list" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee', 'Employee') ?></th>
+                                            <th><?= __('increment_amount', 'Increment Amount') ?></th>
+                                            <th><?= __('evaluation_score', 'Evaluation Score') ?></th>
+                                            <th><?= __('reason', 'Reason') ?></th>
+                                            <th><?= __('status') ?></th>
+                                            <th><?= __('applied') ?></th>
+                                            <th class="text-right"><?= __('actions') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         <?php foreach ($requests as $req): ?>
                                             <?php
-                                            $status_badge_class = 'secondary';
+                                            $status_tone = 'slate';
                                             $status_text = '';
                                             $current_level_display = '';
 
                                             if (!empty($req['current_approver_name']) && $req['current_status'] === 'pending_approval') {
                                                 $status_text = __('pending_with') . ' ' . getDisplayName(parseName($req['current_approver_name']));
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                                 if (!empty($req['current_approval_level'])) {
                                                     $current_level_display = ' (Level ' . (int)$req['current_approval_level'] . ')';
                                                 }
                                             } elseif ($req['current_status'] === 'approved') {
                                                 $status_text = __('approved');
-                                                $status_badge_class = 'success';
+                                                $status_tone = 'green';
                                             } elseif ($req['current_status'] === 'rejected') {
                                                 $status_text = __('rejected');
-                                                $status_badge_class = 'danger';
+                                                $status_tone = 'red';
                                             } elseif ($req['current_status'] === 'cancelled') {
                                                 $status_text = __('cancelled', 'Cancelled');
-                                                $status_badge_class = 'secondary';
+                                                $status_tone = 'slate';
                                             } else {
                                                 $status_text = __('pending_approval');
-                                                $status_badge_class = 'warning';
+                                                $status_tone = 'amber';
                                             }
 
                                             $can_take_action = ((int)($req['current_approver_id'] ?? 0) === (int)$empid || ($delegatedFromEmpId !== null && (int)($req['current_approver_id'] ?? 0) === (int)$delegatedFromEmpId)) && (($req['current_status'] ?? '') === 'pending_approval');
                                             $can_cancel_self = ((string)($req['submitted_by'] ?? '') === (string)$empid) && (($req['current_status'] ?? '') === 'pending_approval');
+                                            $inv_js = htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES);
+                                            $name_js = htmlspecialchars((string)$req['employee_name'], ENT_QUOTES);
+                                            $amount_js = number_format((float)$req['increment_amount'], 2);
                                             ?>
-                                            <div class="col-lg-4 col-md-6 mb-4">
-                                                <div class="card request-card h-100">
-                                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                                        <span><?= getDisplayName(parseName($req['employee_name'])); ?></span>
-                                                        <div class="d-flex align-items-center card-header-actions" style="gap: 8px;">
-                                                            <span><?= __('emp_id') ?>: <?= htmlspecialchars((string)$req['emp_id']); ?></span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <div class="detail-item"><i class="fa fa-hashtag"></i><strong><?= __('request_id') ?>:</strong> <?= htmlspecialchars((string)$req['request_inv_no']); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-arrow-trend-up"></i><strong><?= __('increment_amount', 'Increment Amount') ?>:</strong> <?= number_format((float)$req['increment_amount'], 2); ?></div>
-                                                        <?php if ($req['approved_amount'] !== null): ?>
-                                                            <div class="detail-item"><i class="fa fa-check-circle"></i><strong><?= __('approved_amount', 'Approved Amount') ?>:</strong> <?= number_format((float)$req['approved_amount'], 2); ?></div>
+                                            <tr>
+                                                <td><?= sr_person_cell(getDisplayName(parseName($req['employee_name'])), $req['emp_id']) ?></td>
+                                                <td class="sr-nowrap">
+                                                    <span class="sr-money"><i class="icon-saudi_riyal"></i> <?= number_format((float)$req['increment_amount'], 2) ?></span>
+                                                    <?php if ($req['approved_amount'] !== null): ?>
+                                                        <span class="sr-cell-sub" style="color: var(--tone-green-fg);"><i class="mdi mdi-check-circle"></i> <?= __('approved_amount', 'Approved Amount') ?>: <?= number_format((float)$req['approved_amount'], 2) ?></span>
+                                                    <?php endif; ?>
+                                                    <span class="sr-cell-sub sr-mono"><?= sr_h($req['request_inv_no']) ?></span>
+                                                </td>
+                                                <td><span class="sr-chip"><?= $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : '-' ?></span></td>
+                                                <td>
+                                                    <div class="sr-wrap-text"><?= sr_h($req['reason'] ?? '') ?></div>
+                                                    <span class="sr-cell-sub"><i class="mdi mdi-account"></i> <?= sr_h($req['submitted_by_name'] ?? $req['submitted_by']) ?></span>
+                                                </td>
+                                                <td>
+                                                    <?= sr_pill($status_tone, $status_text . $current_level_display) ?>
+                                                    <?php if (($req['current_status'] ?? '') === 'rejected' && !empty($req['rejection_note'])): ?>
+                                                        <div class="sr-reject-note"><strong><?= __('rejection_reason') ?>:</strong> <?= nl2br(sr_h(getDisplayName((string)$req['rejection_note']))) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td><?= sr_time_cell($req['created_at'] ?? '') ?></td>
+                                                <td class="text-right">
+                                                    <div class="sr-actions">
+                                                        <?php if ($can_take_action): ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSalaryIncrementRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $amount_js ?>')"><i class="mdi mdi-check"></i> <?= $isHRPayrollRole ? __('submit_salary_increment_request', 'Submit') : __('approve') ?></a>
+                                                        <?php else: ?>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="viewSalaryIncrementReport('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i> <?= __('report') ?></a>
                                                         <?php endif; ?>
-                                                        <div class="detail-item"><i class="fa fa-clipboard-check"></i><strong><?= __('evaluation_score', 'Evaluation Score') ?>:</strong> <?= $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : '-'; ?></div>
-                                                        <div class="detail-item"><i class="fa fa-user-tie"></i><strong><?= __('submitted_by', 'Submitted By') ?>:</strong> <?= htmlspecialchars((string)($req['submitted_by_name'] ?? $req['submitted_by'])); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-info-circle"></i><strong><?= __('reason', 'Reason') ?>:</strong> <?= htmlspecialchars((string)($req['reason'] ?? '')); ?></div>
-                                                        <div class="detail-item"><i class="fa fa-stream"></i><strong><?= __('status') ?>:</strong> <span class="badge badge-<?= $status_badge_class; ?> p-2"><?= htmlspecialchars($status_text . $current_level_display); ?></span></div>
-
-                                                        <?php if (($req['current_status'] ?? '') === 'rejected' && !empty($req['rejection_note'])): ?>
-                                                            <div class="detail-item" style="margin-top: 12px; padding: 10px; background-color: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px;">
-                                                                <i class="fas fa-ban" style="color:#dc3545; margin-right:8px;"></i>
-                                                                <strong><?= __('rejection_reason') ?>:</strong>
-                                                                <?= nl2br(htmlspecialchars(getDisplayName((string)$req['rejection_note']))); ?>
-                                                            </div>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <div class="card-footer">
-                                                        <div class="request-time-footer">
-                                                            <span class="rtf-ago"><i class="fa fa-history"></i> <?= htmlspecialchars(($current_lang ?? 'en') === 'ar' ? timeAgoAr($req['created_at'] ?? '') : timeAgo($req['created_at'] ?? '')) ?></span>
-                                                            <span class="rtf-exact"><i class="fa fa-calendar-alt"></i> <?= htmlspecialchars(format_safe_date($req['created_at'] ?? null, 'Y-m-d H:i:s')) ?></span>
-                                                        </div>
-                                                        <div class="btn-group flex-fill" style="position: relative; z-index: 1000; display:flex;">
-                                                            <button type="button" class="btn btn-secondary dropdown-toggle btn-block waves-effect" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                                <?= __('actions') ?> <span class="caret"></span>
-                                                            </button>
-                                                            <div class="dropdown-menu dropdown-menu-right" style="z-index: 1050; position: absolute;">
-                                                                <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="viewSalaryIncrementReport('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>')">
-                                                                    <i class="fa fa-file-pdf"></i> <?= __('report') ?>
-                                                                </button>
-                                                                <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item" href="salary_increment_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank">
-                                                                    <i class="fa fa-history"></i> <?= __('history') ?>
-                                                                </a>
+                                                        <div class="btn-group dropdown">
+                                                            <a href="javascript:void(0);" class="sr-more-btn dropdown-toggle arrow-none" data-toggle="dropdown" data-boundary="viewport" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical"></i></a>
+                                                            <div class="dropdown-menu dropdown-menu-right">
+                                                                <?php if ($can_take_action): ?>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSalaryIncrementReport('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i><?= __('report') ?></a>
+                                                                <?php endif; ?>
+                                                                <a class="dropdown-item" href="salary_increment_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
                                                                 <?php if ($can_take_action): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="approveSalaryIncrementRequest('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$req['employee_name'], ENT_QUOTES); ?>', '<?= number_format((float)$req['increment_amount'], 2); ?>')">
-                                                                        <i class="fa fa-check text-success"></i> <?= $isHRPayrollRole ? __('submit_salary_increment_request', 'Submit') : __('approve') ?>
-                                                                    </button>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="rejectSalaryIncrementRequest('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$req['employee_name'], ENT_QUOTES); ?>', '<?= number_format((float)$req['increment_amount'], 2); ?>')">
-                                                                        <i class="fa fa-times text-danger"></i> <?= __('reject') ?>
-                                                                    </button>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="rejectSalaryIncrementRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $amount_js ?>')"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
                                                                 <?php endif; ?>
                                                                 <?php if ($can_cancel_self && in_array($req['current_status'] ?? '', $cancellable_salary_increment_statuses, true)): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelSalaryIncrementSelf('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$req['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel', 'Cancel') ?>
-                                                                    </button>
+                                                                    <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelSalaryIncrementSelf('<?= $inv_js ?>', '<?= $name_js ?>')"><i class="mdi mdi-cancel"></i><?= __('cancel', 'Cancel') ?></a>
                                                                 <?php endif; ?>
                                                                 <?php if ($can_cancel_salary_increment_requests && !$can_cancel_self && in_array($req['current_status'] ?? '', $cancellable_salary_increment_statuses, true)): ?>
                                                                     <div class="dropdown-divider"></div>
-                                                                    <button type="button" class="dropdown-item" style="cursor: pointer; background: none; border: none; width: 100%; text-align: left;" onclick="cancelSalaryIncrementAdmin('<?= htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES); ?>', '<?= htmlspecialchars((string)$req['employee_name'], ENT_QUOTES); ?>')">
-                                                                        <i class="fa fa-ban text-danger"></i> <?= __('cancel', 'Cancel') ?>
-                                                                    </button>
+                                                                    <a class="dropdown-item text-danger" href="javascript:void(0);" onclick="cancelSalaryIncrementAdmin('<?= $inv_js ?>', '<?= $name_js ?>')"><i class="mdi mdi-cancel"></i><?= __('cancel', 'Cancel') ?></a>
                                                                 <?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         <?php endforeach; ?>
-                                    </div>
-
-                                    <?php
-                                    $pagination_params = [];
-                                    if (!empty($search_term)) $pagination_params['search'] = $search_term;
-                                    if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
-                                    echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
-                                    ?>
-                                <?php else: ?>
-                                    <div class="row justify-content-center">
-                                        <div class="col-md-8">
-                                            <div class="text-center no-requests">
-                                                <i class="fas fa-arrow-trend-up fa-3x text-muted mb-3"></i>
-                                                <h2><?= __('no_salary_increment_requests_found', 'No salary increment requests found') ?></h2>
-                                                <p class="text-muted"><?= __('no_requests_matching_filters') ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
-                        </div>
+
+                            <div class="sr-pager">
+                                <?php
+                                $pagination_params = [];
+                                if (!empty($search_term)) $pagination_params['search'] = $search_term;
+                                if (!empty($current_filter)) $pagination_params['status'] = $current_filter;
+                                echo generate_pagination_controls($current_page, $total_pages, $total_items, $items_per_page, $limit_options, $show_all, $pagination_params, $unfiltered_total_items);
+                                ?>
+                            </div>
+                        <?php else: ?>
+                            <?= sr_empty_state(__('no_salary_increment_requests_found', 'No salary increment requests found'), __('no_requests_matching_filters')) ?>
+                        <?php endif; ?>
                     </div>
+
                 </div>
             </div>
             <footer class="footer"><?= $site_footer ?? '' ?></footer>
@@ -464,28 +411,12 @@ if ($can_see_all_depts) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+        <?= sr_list_js() ?>
     <script>
         const IS_HR_PAYROLL_APPROVER = <?= $isHRPayrollRole ? 'true' : 'false' ?>;
         const IS_GM_APPROVER = <?= $isGMRole ? 'true' : 'false' ?>;
         const SALARY_INCREMENT_MAX_AMOUNT = <?= json_encode((float)get_setting_num($conDB, 'salary_increment_max_amount', 2000)) ?>;
 
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.request-card').forEach(function(card) {
-                const footer = card.querySelector('.card-footer');
-                const actionsGroup = footer ? footer.querySelector('.btn-group') : null;
-                const headerSlot = card.querySelector('.card-header-actions');
-                if (!actionsGroup || !headerSlot) {
-                    return;
-                }
-                actionsGroup.classList.remove('flex-fill');
-                const toggleBtn = actionsGroup.querySelector('.dropdown-toggle');
-                if (toggleBtn) {
-                    toggleBtn.classList.remove('btn-block', 'btn-secondary');
-                    toggleBtn.classList.add('btn-sm', 'btn-light');
-                }
-                headerSlot.appendChild(actionsGroup);
-            });
-        });
 
         function applyFilters() {
             const status = document.getElementById('statusFilter').value;
@@ -496,11 +427,6 @@ if ($can_see_all_depts) {
             window.location.href = `${baseUrl}?status=${status}&limit=${limit}&search=${encodeURIComponent(search)}&page=1`;
         }
 
-        document.getElementById('searchFilter').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                applyFilters();
-            }
-        });
 
         function approveSalaryIncrementRequest(requestInvNo, employeeName, amount) {
             const showLastIncrementDate = IS_HR_PAYROLL_APPROVER && !IS_GM_APPROVER;
