@@ -372,13 +372,15 @@ if ($isEmployee !== true) {
 					<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
 						<?php if ($emprow["status"] == 1) : ?>
 						<div class="more-actions-wrapper" style="text-align:center; position:relative;">
-							<?php if (($is_system_admin ?? false) && in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) :
+							<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) :
+								// Status pill for everyone; Sync / Add buttons only for system admins + 'd365_sync_employee' special access
+								$d365CanSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 								if (empty($_SESSION['d365_csrf'])) {
 									$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 								} ?>
 								<!-- Dynamics 365 status / Add / Sync (filled by the script below, see includes/ajaxFile/d365_employee.php) -->
-								<div id="d365Widget" class="d365-widget" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>">
-									<span class="d365-pill"><i class="fa fa-spinner fa-spin"></i> D365</span>
+								<div id="d365Widget" class="d365-widget" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>" data-can-sync="<?= $d365CanSync ? '1' : '0' ?>">
+									<span class="d365-pill is-loading"><span class="d365-logo"><i></i><i></i><i></i><i></i></span><span class="d365-txt"><b>Microsoft Dynamics 365</b><small><i class="fa fa-spinner fa-spin"></i> Checking...</small></span></span>
 								</div>
 							<?php endif; ?>
 							<button type="button" id="moreActionsBtn" class="more-actions-btn">
@@ -533,14 +535,32 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 } ?>
 <!-- End Force Salary Entry -->
 
-<?php if (($is_system_admin ?? false) && in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) : ?>
-<!-- Dynamics 365 widget (status / Add to D365 / Sync to D365) - system admins only, see includes/ajaxFile/d365_employee.php -->
+<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) : ?>
+<!-- Dynamics 365 widget (status / Add to D365 / Sync to D365) - status for everyone, buttons for system admins + 'd365_sync_employee' special access, see includes/ajaxFile/d365_employee.php -->
 <style>
 	.d365-widget { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 10px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
 	[dir="rtl"] .d365-widget { right: auto; left: 100%; margin-right: 0; margin-left: 10px; }
-	.d365-widget .d365-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #fff; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.25); }
-	.d365-widget .d365-pill.is-ok { background: rgba(22,163,74,.85); border-color: rgba(255,255,255,.35); }
-	.d365-widget .d365-pill.is-bad { background: rgba(220,38,38,.85); border-color: rgba(255,255,255,.35); cursor: help; }
+	/* Status card: Microsoft logo + full product name + company / state line */
+	.d365-widget .d365-pill { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 10px; border-radius: 10px; background: #fff; color: #1e293b; border: 1px solid rgba(15,23,42,.08); border-left: 4px solid #94a3b8; box-shadow: 0 2px 8px rgba(15,23,42,.18); line-height: 1.15; text-align: left; cursor: default; }
+	[dir="rtl"] .d365-widget .d365-pill { border-left-width: 1px; border-right: 4px solid #94a3b8; text-align: right; padding: 6px 10px 6px 14px; }
+	.d365-widget .d365-pill.is-ok { border-left-color: #16a34a; }
+	.d365-widget .d365-pill.is-bad { border-left-color: #dc2626; cursor: help; }
+	[dir="rtl"] .d365-widget .d365-pill.is-ok { border-right-color: #16a34a; }
+	[dir="rtl"] .d365-widget .d365-pill.is-bad { border-right-color: #dc2626; }
+	.d365-widget .d365-logo { display: grid; grid-template-columns: 9px 9px; gap: 2px; flex: none; }
+	.d365-widget .d365-logo i { width: 9px; height: 9px; display: block; }
+	.d365-widget .d365-logo i:nth-child(1) { background: #f25022; }
+	.d365-widget .d365-logo i:nth-child(2) { background: #7fba00; }
+	.d365-widget .d365-logo i:nth-child(3) { background: #00a4ef; }
+	.d365-widget .d365-logo i:nth-child(4) { background: #ffb900; }
+	.d365-widget .d365-txt { display: flex; flex-direction: column; gap: 2px; }
+	.d365-widget .d365-txt b { font-size: 12.5px; font-weight: 700; letter-spacing: .1px; color: #0f172a; }
+	.d365-widget .d365-txt small { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #64748b; }
+	.d365-widget .d365-dot { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; flex: none; }
+	.d365-widget .is-ok .d365-dot { background: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.18); }
+	.d365-widget .is-bad .d365-dot { background: #dc2626; box-shadow: 0 0 0 3px rgba(220,38,38,.18); }
+	.d365-widget .is-ok .d365-txt small { color: #15803d; }
+	.d365-widget .is-bad .d365-txt small { color: #b91c1c; }
 	.d365-widget .more-actions-btn { padding: 8px 14px; }
 	.d365-widget .more-actions-btn.is-warn { background: rgba(245,158,11,.9); border-color: rgba(255,255,255,.4); }
 	@media (max-width: 991px) { .d365-widget { position: static; transform: none; margin: 0 0 8px; justify-content: center; } }
@@ -551,6 +571,7 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 	if (!box) return;
 	var empId = box.getAttribute('data-emp');
 	var csrf = box.getAttribute('data-csrf');
+	var canSync = box.getAttribute('data-can-sync') === '1';
 	var ENDPOINT = './includes/ajaxFile/d365_employee.php';
 	var last = null;
 
@@ -581,10 +602,17 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 			.then(function (r) { return r.json().catch(function () { throw new Error('Server error (HTTP ' + r.status + ')'); }); });
 	}
 
+	// Status card: tone = ok / bad / loading, line = company / state text (already escaped)
+	function pill(tone, line, title) {
+		return '<span class="d365-pill is-' + tone + '"' + (title ? ' title="' + esc(title) + '"' : '') + '>'
+			+ '<span class="d365-logo"><i></i><i></i><i></i><i></i></span>'
+			+ '<span class="d365-txt"><b>Microsoft Dynamics 365</b><small>' + (tone === 'loading' ? '<i class="fa fa-spinner fa-spin"></i>' : '<span class="d365-dot"></span>') + line + '</small></span></span>';
+	}
+
 	function render(res) {
 		last = res;
 		if (!res || (res.ok === false && !res.status)) {
-			box.innerHTML = '<span class="d365-pill is-bad" title="' + esc(res && res.error) + '"><i class="fa fa-exclamation-triangle"></i> D365 ?</span>'
+			box.innerHTML = pill('bad', 'Status unavailable', res && res.error)
 				+ '<button type="button" class="more-actions-btn" data-act="refresh" title="Retry"><i class="fa fa-redo"></i></button>';
 			return;
 		}
@@ -592,21 +620,21 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 		var env = (res.environment || '').toUpperCase();
 		var writeAttr = res.can_write ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"';
 		if (st.status === 'registered') {
-			var info = 'D365 ' + env + ' worker ' + (st.d365_name || empId)
+			var info = 'Microsoft Dynamics 365 (' + env + ') worker ' + (st.d365_name || empId)
 				+ (st.synced_at ? '\nLast sync: ' + st.synced_at : '\nNot synced from the app yet')
 				+ (st.last_error ? '\n' + st.last_error : '');
-			box.innerHTML = '<span class="d365-pill ' + (st.last_error ? 'is-bad' : 'is-ok') + '" title="' + esc(info) + '"><i class="fa fa-check-circle"></i> D365'
-				+ (st.legal_entity ? ' · ' + esc(st.legal_entity) : '') + '</span>'
-				+ '<button type="button" class="more-actions-btn" data-act="sync"' + writeAttr + '><i class="fa fa-sync-alt"></i> Sync to D365</button>';
+			var line = (st.legal_entity ? esc(st.legal_entity) + ' · ' : '') + (st.last_error ? 'Sync error' : (st.synced_at ? 'Synced' : 'Registered'));
+			box.innerHTML = pill(st.last_error ? 'bad' : 'ok', line, info)
+				+ (canSync ? '<button type="button" class="more-actions-btn" data-act="sync"' + writeAttr + '><i class="fa fa-sync-alt"></i> Sync to D365</button>' : '');
 		} else {
-			var why = st.status === 'missing' ? 'Not registered in D365 ' + env : (st.last_error || 'Registration failed');
-			box.innerHTML = '<span class="d365-pill is-bad" title="' + esc(why) + '"><i class="fa fa-times-circle"></i> Not in D365</span>'
-				+ '<button type="button" class="more-actions-btn is-warn" data-act="register"' + writeAttr + '><i class="fa fa-plus"></i> Add to D365</button>';
+			var why = st.status === 'missing' ? 'Not registered in Microsoft Dynamics 365 ' + env : (st.last_error || 'Registration failed');
+			box.innerHTML = pill('bad', 'Not registered' + (env ? ' · ' + esc(env) : ''), why)
+				+ (canSync ? '<button type="button" class="more-actions-btn is-warn" data-act="register"' + writeAttr + '><i class="fa fa-plus"></i> Add to D365</button>' : '');
 		}
 	}
 
 	function load(refresh) {
-		box.innerHTML = '<span class="d365-pill"><i class="fa fa-spinner fa-spin"></i> D365</span>';
+		box.innerHTML = pill('loading', 'Checking...');
 		call('status', refresh ? { refresh: 1 } : {}).then(render).catch(function (e) { render({ ok: false, error: e.message }); });
 	}
 
@@ -700,15 +728,15 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 		});
 	}
 	// D365 tab "Sync to D365" button uses the same flow
-	document.addEventListener('d365:sync-request', function () { doSync(); });
-	document.addEventListener('d365:register-request', function () { doRegister(); });
+	document.addEventListener('d365:sync-request', function () { if (canSync) doSync(); });
+	document.addEventListener('d365:register-request', function () { if (canSync) doRegister(); });
 
 	box.addEventListener('click', function (ev) {
 		var b = ev.target.closest('[data-act]');
 		if (!b || b.disabled) return;
 		var act = b.getAttribute('data-act');
-		if (act === 'register') doRegister();
-		else if (act === 'sync') doSync();
+		if (act === 'register') { if (canSync) doRegister(); }
+		else if (act === 'sync') { if (canSync) doSync(); }
 		else load(true);
 	});
 	load(false);

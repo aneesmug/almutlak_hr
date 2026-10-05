@@ -1,5 +1,5 @@
 <?php
-// Employee master "D365" tab (view_employee.php) - system admins only.
+// Employee master "D365" tab (view_employee.php) - system admins + 'view_employee_d365_tab' special access.
 // POST csrf (= $_SESSION['d365_csrf']), emp_id, refresh=1 to bypass the 10 min session cache.
 // Returns an HTML fragment: HR app vs D365 comparison, worker record, employments, positions,
 // bank accounts and the financial transactions of the worker (general journal lines, payroll excluded).
@@ -13,9 +13,9 @@ header('Content-Type: text/html; charset=utf-8');
 
 $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
 
-if (empty($is_system_admin)) {
+if (!user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     http_response_code(403);
-    exit('<div class="sr-notice tone-red">Only system administrators can view D365 data.</div>');
+    exit('<div class="sr-notice tone-red">You do not have access to D365 data.</div>');
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_SESSION['d365_csrf']) || !hash_equals($_SESSION['d365_csrf'], (string)($_POST['csrf'] ?? ''))) {
     exit('<div class="sr-notice tone-amber">Session expired - reload the page.</div>');

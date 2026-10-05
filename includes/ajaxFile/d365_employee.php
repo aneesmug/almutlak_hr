@@ -1,5 +1,7 @@
 <?php
-// D365 widget in the employee header (includes/emp_top_info.php) - system admins only.
+// D365 widget in the employee header (includes/emp_top_info.php).
+// 'status' is open to every logged-in user (status pill); register / sync / sync_payroll need
+// system admin or the 'd365_sync_employee' special access.
 // Actions (POST, CSRF = $_SESSION['d365_csrf']):
 //   status   -> stored/fresh D365 status of the employee (+ company suggestion when not registered)
 //   register -> create worker + employment in D365 (company chosen in the popup)
@@ -12,7 +14,8 @@ header('Content-Type: application/json; charset=utf-8');
 // D365 can be slow - lift the 25s app-wide limit from includes/db.php
 @set_time_limit(120);
 
-if (empty($is_system_admin)) {
+$canSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if (!$canSync && (string)($_POST['action'] ?? 'status') !== 'status') {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'Forbidden']);
     exit;
@@ -63,7 +66,7 @@ try {
     $result['status'] = $status;
     $result['environment'] = $client->getEnvironment();
     $result['can_write'] = $client->canWrite();
-    if (($status['status'] ?? '') !== 'registered') {
+    if ($canSync && ($status['status'] ?? '') !== 'registered') {
         $result['suggest'] = $workers->suggestCompanyFor($targetEmp);
     }
     echo json_encode($result, JSON_UNESCAPED_UNICODE);

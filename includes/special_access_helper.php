@@ -70,6 +70,8 @@ if (!function_exists('get_special_access_labels')) {
             'manage_vacation_blackout_dates' => 'Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)',
             'access_import_excel_dynamic' => 'Tools: Dynamic Excel Import (Import Excel Into Any Table)',
             'manage_memo_templates' => 'Employee Memos: Add / Edit / Delete Memo Templates',
+            'd365_sync_employee' => 'D365: Sync to D365 Button (Employee Header Widget & Payrolls Tab)',
+            'view_employee_d365_tab' => 'D365: View Employee Profile\'s D365 Tab',
         ] + get_special_access_page_labels();
     }
 }
@@ -232,6 +234,13 @@ if (!function_exists('get_special_access_categories')) {
                     'asset_inventory_add',
                     'asset_inventory_edit',
                     'asset_inventory_delete',
+                ],
+            ],
+            'D365' => [
+                'icon' => 'fa-cloud',
+                'keys' => [
+                    'd365_sync_employee',
+                    'view_employee_d365_tab',
                 ],
             ],
             'Other Special Actions' => [

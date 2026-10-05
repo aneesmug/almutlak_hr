@@ -199,16 +199,18 @@ if (mysqli_num_rows($query) == 1) {
 				$payroll_benefits_by_month[$benefit_row['month']][] = $benefit_row;
 			}
 		}
-		// D365 tab (system admins only) - content loaded on first open from includes/ajaxFile/d365_employee_tab.php
-		$show_d365_tab = !empty($is_system_admin);
+		// D365 tab (system admins + 'view_employee_d365_tab' special access) - content loaded on first open from includes/ajaxFile/d365_employee_tab.php
+		$show_d365_tab = user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		// "Sync to D365" (header widget + Payrolls tab): system admins + 'd365_sync_employee' special access
+		$can_d365_sync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		if ($show_d365_tab && empty($_SESSION['d365_csrf'])) {
 			$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 		}
 
-		// D365 sync state per paid month (system admins only; local push log, no D365 call)
+		// D365 sync state per paid month (status shown to everyone, Sync button needs $can_d365_sync; local push log, no D365 call)
 		$d365_pay_state = null;
 		$d365_pay_env = '';
-		if (!empty($is_system_admin) && !empty($payroll_history)) {
+		if (!empty($payroll_history)) {
 			try {
 				require_once __DIR__ . '/includes/D365Payroll.php';
 				$d365_pay_client = new D365Client();
@@ -2566,7 +2568,9 @@ if (mysqli_num_rows($query) == 1) {
 																		<?php else: ?>
 																			<span class="badge badge-secondary">Not synced</span>
 																		<?php endif; ?>
+																		<?php if ($can_d365_sync): ?>
 																		<button type="button" class="btn btn-sm btn-primary btn-d365-pay ml-1" data-month="<?= htmlspecialchars($payroll_rec['month_year']) ?>"><i class="fa fa-cloud-upload-alt"></i> Sync to D365</button>
+																		<?php endif; ?>
 																	<?php endif; ?>
 																</td>
 															<?php endif; ?>
@@ -4180,7 +4184,7 @@ if (mysqli_num_rows($query) == 1) {
 						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
 					}
 				});
-				<?php if ($d365_pay_state !== null): ?>
+				<?php if ($d365_pay_state !== null && $can_d365_sync): ?>
 				// Payrolls tab: sync a missing / failed paid month to D365 (includes/ajaxFile/d365_employee.php)
 				$(document).on('click', '.btn-d365-pay', function () {
 					var month = String($(this).data('month'));
