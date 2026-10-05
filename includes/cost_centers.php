@@ -106,6 +106,18 @@ function cost_center_options_html($conDB, $selected = null)
     return $html;
 }
 
+/** "C30 - الاداريين" for display (just the code when D365 has no name for it) */
+function cost_center_label($conDB, $value)
+{
+    $value = (string)($value ?? '') !== '' ? (string)$value : COST_CENTER_DEFAULT;
+    foreach (cost_center_list($conDB) as $cc) {
+        if ($cc['value'] === $value) {
+            return $value . ($cc['name'] !== '' ? ' - ' . $cc['name'] : '') . ($cc['active'] ? '' : ' (suspended in D365)');
+        }
+    }
+    return $value;
+}
+
 /** Normalise a posted cost center: known value, else the default */
 function cost_center_clean($conDB, $value)
 {

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 require_once __DIR__ . '/includes/eos_estimate_helper.php';
+require_once __DIR__ . '/includes/cost_centers.php';
 
 $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='" . $username . "'");
 if (mysqli_num_rows($query) == 1) {
