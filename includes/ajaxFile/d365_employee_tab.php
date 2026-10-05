@@ -167,6 +167,10 @@ $money = function ($v) { return number_format((float)$v, 2); };
         }
         $deptIdx = array_search('department', array_map('strtolower', $deptFormats['default'] ?: []), true);
         $deptD365 = trim(explode('-', (string)($current['DimensionDisplayValue'] ?? ''))[$deptIdx === false ? 2 : $deptIdx] ?? '');
+        // Cost center is not synced to the D365 employment - payroll lines take it from the HR app (MHO only)
+        $ccCompany = $workers->payrollCompany($targetEmp, $current['LegalEntityId'] ?? '');
+        $ccUsed = $workers->companyUsesCostCenter($ccCompany) !== false;
+        $ccRow = ['Cost Center (payroll)', $ccUsed ? (string)($local['cost_center'] ?? '') : 'Not used in ' . $ccCompany, 'Taken from HR app on payroll lines', false];
         $compare = [
             ['Name', $local['name'] ?? '', $worker['Name'] ?? '', true],
             ['Joining date', $local['joining_date'] ?? '', d365tab_date($current['EmploymentStartDate'] ?? ''), true],
@@ -177,6 +181,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
             ['Gender', ['1' => 'Male', '2' => 'Female'][(string)($local['sex'] ?? '')] ?? (string)($local['sex'] ?? ''),d365tab_empty($worker['Gender'] ?? '') ? '' : $worker['Gender'], true],
             ['Marital status', $local['mar_status'] ?? '', d365tab_empty($worker['MaritalStatus'] ?? '') ? '' : $worker['MaritalStatus'], false],
             ['Department' . (!empty($local['dep_nme']) ? ' (' . $local['dep_nme'] . ')' : ''), $deptExpected, $deptD365, true],
+            $ccRow,
             ['Status', isset($local['status']) ? ((string)$local['status'] === '1' ? 'Active' : 'Inactive (' . $local['status'] . ')') : '', $worker['WorkerStatus'] ?? '', false],
         ]; ?>
         <div class="sr-card">
@@ -191,8 +196,9 @@ $money = function ($v) { return number_format((float)$v, 2); };
                 <table class="sr-table">
                     <thead><tr><th>Field</th><th>HR app</th><th>D365</th><th></th></tr></thead>
                     <tbody>
-                    <?php foreach ($compare as [$label, $lv, $dv, $check]):
-                        $tone = null;
+                    <?php foreach ($compare as $row):
+                        [$label, $lv, $dv, $check] = $row;
+                        $tone = $row[4] ?? null;
                         if ($check && $local) {
                             if ($lv === '' && $dv === '') { $tone = null; }
                             elseif ($dv === '') { $tone = ['amber', 'Missing in D365']; }

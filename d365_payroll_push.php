@@ -596,7 +596,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
             Swal.fire({
                 icon: 'question',
                 title: 'Sync ' + ids.length + ' employees?',
-                html: 'Payroll <b>' + esc(m) + '</b> goes to D365 <b>' + esc(env.toUpperCase()) + '</b> as an unposted MHO journal dated <b>' + lastDay(m) + '</b>.<br><br>Keep this window open until it finishes.',
+                html: 'Payroll <b>' + esc(m) + '</b> goes to D365 <b>' + esc(env.toUpperCase()) + '</b> as unposted journals (one per payroll company) dated <b>' + lastDay(m) + '</b>.<br><br>Keep this window open until it finishes.',
                 showCancelButton: true,
                 confirmButtonText: 'Start sync',
                 allowOutsideClick: false,

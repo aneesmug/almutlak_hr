@@ -216,7 +216,18 @@ if (mysqli_num_rows($query) == 1) {
 				require_once __DIR__ . '/includes/D365Payroll.php';
 				$d365_pay_client = new D365Client();
 				$d365_pay_env = $d365_pay_client->getEnvironment();
-				$d365_pay_state = (new D365Payroll($conDB, $d365_pay_client))->getEmployeeSyncState($d365_pay_env, $emprow['empid']);
+				$d365_payroll = new D365Payroll($conDB, $d365_pay_client);
+				// "Synced" months are re-checked against D365 (journal deleted there = Removed, can sync again); every 2 min per employee
+				$d365_verify_file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_payverify_' . md5($d365_pay_env . '|' . $emprow['empid']);
+				if (!is_file($d365_verify_file) || time() - filemtime($d365_verify_file) > 120) {
+					try {
+						$d365_payroll->verifyEmployeePushed($d365_pay_env, (string)$emprow['empid']);
+						@touch($d365_verify_file);
+					} catch (Throwable $ex) {
+						error_log('D365 payroll verify: ' . $ex->getMessage()); // D365 unreachable - show the app's log as it is
+					}
+				}
+				$d365_pay_state = $d365_payroll->getEmployeeSyncState($d365_pay_env, $emprow['empid']);
 				if (empty($_SESSION['d365_csrf'])) {
 					$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 				}
@@ -812,6 +823,10 @@ if (mysqli_num_rows($query) == 1) {
 				display: flex;
 				align-items: center;
 				gap: 10px;
+			}
+
+			.profile-section-header.d365 {
+				background: linear-gradient(135deg, #0078d4 0%, #2b88d8 100%);
 			}
 
 			.profile-section-header i {
@@ -1721,10 +1736,6 @@ if (mysqli_num_rows($query) == 1) {
 																<div class="profile-field-value"><?= !empty($emprow["subdeptname"]) ? (($is_rtl ?? false) ? $emprow["subdeptname_ar"] : $emprow["subdeptname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('cost_center_label', 'Cost Center') ?></div>
-																<div class="profile-field-value"><?= htmlspecialchars(cost_center_label($conDB, $emprow['cost_center'] ?? '')) ?></div>
-															</div>
-															<div class="profile-field">
 																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
 																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? __('not_available', 'N/A') ?></div>
 															</div>
@@ -1855,6 +1866,65 @@ if (mysqli_num_rows($query) == 1) {
 																<div class="profile-field-label"><?= __('gosi_expiry') ?></div>
 																<div class="profile-field-value"><?= $emprow["date_hijri"] . " | " . $emprow["date_greg"] ?></div>
 															</div>
+														</div>
+													</div>
+												</div>
+
+												<!-- Dynamics 365 Section -->
+												<?php $d365Info = d365_profile_info($conDB, $emprow); $d365St = $d365Info['status']; $d365Companies = payroll_company_list(); ?>
+												<div class="profile-section">
+													<div class="profile-section-header d365">
+														<i class="mdi mdi-microsoft"></i>
+														<span><?= __('d365_details', 'Dynamics 365') ?><?= $d365Info['environment'] !== '' ? ' (' . htmlspecialchars($d365Info['environment']) . ')' : '' ?></span>
+														<?php if (!empty($show_d365_tab)): ?>
+														<a href="javascript:void(0)" onclick="var l=document.getElementById('d365TabLink'); if(l){ l.click(); }" style="margin-left:auto;color:#fff;font-size:13px;font-weight:500;text-decoration:underline"><?= __('open_d365_tab', 'Open D365 tab') ?></a>
+														<?php endif; ?>
+													</div>
+													<div class="profile-section-body">
+														<div class="profile-grid">
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('d365_worker_status', 'D365 worker') ?></div>
+																<div class="profile-field-value">
+																	<?php if ($d365St && ($d365St['status'] ?? '') === 'registered'): ?>
+																		<span class="text-success"><i class="mdi mdi-check-circle"></i> <?= __('d365_registered', 'Registered') ?></span>
+																		<small class="text-muted">- <?= __('personnel_number', 'Personnel no.') ?> <?= htmlspecialchars($emprow['emp_id']) ?></small>
+																	<?php elseif ($d365St): ?>
+																		<span class="text-warning"><i class="mdi mdi-alert-circle"></i> <?= htmlspecialchars(ucfirst(str_replace('_', ' ', (string)$d365St['status']))) ?></span>
+																	<?php else: ?>
+																		<span class="text-muted"><?= __('d365_not_checked', 'Not checked yet') ?></span>
+																	<?php endif; ?>
+																</div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('d365_last_synced', 'Last synced') ?></div>
+																<div class="profile-field-value"><?= !empty($d365St['synced_at']) ? htmlspecialchars($d365St['synced_at']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('d365_employment_company', 'D365 employment company') ?></div>
+																<div class="profile-field-value"><?php $c = $d365Info['employment_company'];
+																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : '')); ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('payroll_company_label', 'Payroll Company (D365)') ?></div>
+																<div class="profile-field-value"><?php $c = $d365Info['payroll_company'];
+																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : ''));
+																	if ($d365Info['payroll_auto']): ?> <small class="text-muted">(<?= __('payroll_company_auto_short', 'Auto') ?>)</small><?php endif; ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('cost_center_label', 'Cost Center') ?></div>
+																<div class="profile-field-value"><?php if ($d365Info['uses_cost_center']): ?><?= htmlspecialchars(cost_center_label($conDB, $emprow['cost_center'] ?? '')) ?><?php else: ?><span class="text-muted"><?= htmlspecialchars(__('cost_center_not_used_short', 'Not used in') . ' ' . $d365Info['payroll_company']) ?></span><?php endif; ?></div>
+															</div>
+															<div class="profile-field">
+																<div class="profile-field-label"><?= __('d365_department', 'D365 Department') ?></div>
+																<div class="profile-field-value"><?= $d365Info['department'] !== '' ? htmlspecialchars($d365Info['department']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' ?>
+																	<small class="text-muted">(<?= htmlspecialchars((($is_rtl ?? false) ? $emprow['deptnme_ar'] : $emprow['deptnme']) ?? '') ?>)</small></div>
+															</div>
+															<?php if (!empty($d365St['last_error'])): ?>
+															<div class="profile-field full-width">
+																<div class="profile-field-label"><?= __('d365_last_message', 'Last D365 message') ?></div>
+																<div class="profile-field-value text-warning"><?= htmlspecialchars($d365St['last_error']) ?></div>
+															</div>
+															<?php endif; ?>
 														</div>
 													</div>
 												</div>
@@ -4200,7 +4270,7 @@ if (mysqli_num_rows($query) == 1) {
 							+ '<div class="row-kv"><dt>Employee</dt><dd><?= htmlspecialchars($emprow['empid'], ENT_QUOTES) ?></dd></div>'
 							+ '<div class="row-kv"><dt>Payroll month</dt><dd>' + $('<i>').text(month).html() + '</dd></div>'
 							+ '<div class="row-kv"><dt>D365 environment</dt><dd><span class="sr-pill sr-pill-xs tone-amber"><?= strtoupper(htmlspecialchars($d365_pay_env, ENT_QUOTES)) ?></span></dd></div>'
-							+ '<div class="row-kv"><dt>Journal</dt><dd>Unposted line in the MHO payroll journal</dd></div>'
+							+ '<div class="row-kv"><dt>Journal</dt><dd>Unposted line in the journal of the employee payroll company</dd></div>'
 							+ '</dl></div>',
 						showCancelButton: true,
 						confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Sync to D365',

@@ -24,6 +24,137 @@ function cost_center_ensure_column($conDB)
     if ($res && $res->num_rows === 0) {
         @$conDB->query("ALTER TABLE `employees` ADD COLUMN `cost_center` VARCHAR(20) NOT NULL DEFAULT '" . COST_CENTER_DEFAULT . "'");
     }
+    // D365 legal entity the employee's payroll is booked in (NULL = the employee's D365 employment company)
+    $res = @$conDB->query("SHOW COLUMNS FROM `employees` LIKE 'payroll_company'");
+    if ($res && $res->num_rows === 0) {
+        @$conDB->query("ALTER TABLE `employees` ADD COLUMN `payroll_company` VARCHAR(10) NULL DEFAULT NULL");
+    }
+}
+
+/**
+ * D365 legal entities for the payroll company select: ['MHO' => ['name' => ..., 'cost_center' => bool], ...]
+ * cost_center = the company's account structure has a CostCenter segment (cost center only matters there).
+ */
+function payroll_company_list()
+{
+    static $list = null;
+    if ($list !== null) {
+        return $list;
+    }
+    $list = [];
+    try {
+        require_once __DIR__ . '/D365AccountRules.php';
+        $config = D365Client::loadConfig();
+        if (!empty($config['CLIENT_SECRET']) && !empty($config['RESOURCE_URL'])) {
+            $rules = new D365AccountRules(new D365Client($config));
+            $withCc = $rules->companiesWithDimension('CostCenter');
+            foreach ($rules->companies() as $code => $name) {
+                $list[$code] = ['name' => $name, 'cost_center' => in_array($code, $withCc, true)];
+            }
+        }
+    } catch (Throwable $ex) {
+        error_log('Payroll companies from D365: ' . $ex->getMessage());
+    }
+    return $list;
+}
+
+/** D365 employment company of an employee as last seen by the app (d365_worker_status), '' when unknown */
+function payroll_employment_company($conDB, $empId)
+{
+    try {
+        $env = '';
+        require_once __DIR__ . '/D365Client.php';
+        $env = (string)(new D365Client(D365Client::loadConfig()))->getEnvironment();
+    } catch (Throwable $ex) {
+    }
+    $stmt = @$conDB->prepare("SELECT legal_entity FROM d365_worker_status WHERE emp_id = ? AND legal_entity <> ''
+        ORDER BY environment = ? DESC, checked_at DESC LIMIT 1");
+    if (!$stmt) {
+        return '';
+    }
+    $empId = (string)$empId;
+    $stmt->bind_param('ss', $empId, $env);
+    $stmt->execute();
+    $value = strtoupper(trim((string)($stmt->get_result()->fetch_row()[0] ?? '')));
+    $stmt->close();
+    return $value;
+}
+
+/**
+ * Everything the profile's D365 block shows, from the app DB only (no D365 call on page load):
+ * ['environment', 'status' row of d365_worker_status|null, 'employment_company', 'payroll_company', 'payroll_auto',
+ *  'uses_cost_center', 'department' (D365 value the app department maps to, '' unknown)]
+ */
+function d365_profile_info($conDB, array $emprow)
+{
+    $empId = (string)($emprow['emp_id'] ?? '');
+    $info = ['environment' => '', 'status' => null, 'employment_company' => '', 'payroll_company' => '', 'payroll_auto' => true,
+        'uses_cost_center' => true, 'department' => ''];
+    $client = null;
+    try {
+        require_once __DIR__ . '/D365Workers.php';
+        $client = new D365Client(D365Client::loadConfig());
+        $info['environment'] = (string)$client->getEnvironment();
+        $workers = new D365Workers($conDB, $client);
+        $info['status'] = $workers->loadStatus($empId);
+        $info['department'] = $workers->departmentForOffline($empId);
+    } catch (Throwable $ex) {
+        error_log('D365 profile block: ' . $ex->getMessage());
+    }
+    $info['employment_company'] = strtoupper((string)($info['status']['legal_entity'] ?? '')) ?: payroll_employment_company($conDB, $empId);
+    $stored = strtoupper(trim((string)($emprow['payroll_company'] ?? '')));
+    $info['payroll_auto'] = $stored === '';
+    $info['payroll_company'] = $stored !== '' ? $stored : $info['employment_company'];
+    $info['uses_cost_center'] = payroll_company_uses_cost_center($info['payroll_company']);
+    return $info;
+}
+
+/** Company the employee's payroll is booked in: employees.payroll_company, else the D365 employment company ('' = unknown) */
+function payroll_company_effective($conDB, $empId, $stored = null)
+{
+    $stored = strtoupper(trim((string)$stored));
+    return $stored !== '' ? $stored : payroll_employment_company($conDB, $empId);
+}
+
+/**
+ * Whether a company's account structures have a CostCenter segment (only MHO today).
+ * Unknown company / D365 unreachable = true, so the field is never hidden by mistake.
+ */
+function payroll_company_uses_cost_center($company)
+{
+    $company = strtoupper(trim((string)$company));
+    $list = payroll_company_list();
+    if ($company === '' || !isset($list[$company])) {
+        return true;
+    }
+    return $list[$company]['cost_center'];
+}
+
+/** <option> list for the payroll company; '' = automatic (D365 employment company, shown when known) */
+function payroll_company_options_html($selected, $employmentCompany = '')
+{
+    $selected = strtoupper(trim((string)$selected));
+    $employmentCompany = strtoupper(trim((string)$employmentCompany));
+    $list = payroll_company_list();
+    $autoUsesCc = payroll_company_uses_cost_center($employmentCompany);
+    $html = '<option value="" data-cost-center="' . ($autoUsesCc ? '1' : '0') . '" data-company="' . htmlspecialchars($employmentCompany, ENT_QUOTES, 'UTF-8') . '"'
+        . ($selected === '' ? ' selected' : '') . '>'
+        . htmlspecialchars(__('payroll_company_auto', 'Auto - D365 employment company') . ($employmentCompany !== '' ? ' (' . $employmentCompany . ')' : ''), ENT_QUOTES, 'UTF-8') . '</option>';
+    if ($selected !== '' && !isset($list[$selected])) {
+        $list[$selected] = ['name' => '', 'cost_center' => false];
+    }
+    foreach ($list as $code => $c) {
+        $html .= '<option value="' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '" data-cost-center="' . ($c['cost_center'] ? '1' : '0') . '"'
+            . ($code === $selected ? ' selected' : '') . '>' . htmlspecialchars($code . ($c['name'] !== '' ? ' - ' . $c['name'] : ''), ENT_QUOTES, 'UTF-8') . '</option>';
+    }
+    return $html;
+}
+
+/** Normalise a posted payroll company: known D365 legal entity or '' (automatic) */
+function payroll_company_clean($value)
+{
+    $value = strtoupper(trim((string)$value));
+    return ($value !== '' && isset(payroll_company_list()[$value])) ? $value : '';
 }
 
 /**

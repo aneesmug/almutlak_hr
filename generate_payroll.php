@@ -8190,7 +8190,7 @@ function openPayslipsFile(base, data) {
     </style>
     <script>
     // Sync Payroll to D365: same flow as d365_payroll_push.php (its month_pending / sync_chunk actions do the work).
-    // Only PAID payroll is sent, employees already synced are skipped; booked in one unposted MHO journal per month (each line keeps the worker's own dimensions).
+    // Only PAID payroll is sent, employees already synced are skipped; one unposted journal per payroll company and month (Employee Master > Payroll Company; lines carry only the dimensions that company's account structure accepts).
     (function () {
         var csrf = <?= json_encode($_SESSION['d365_csrf'] ?? '') ?>;
         var CHUNK = 10;

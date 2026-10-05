@@ -36,22 +36,23 @@ class D365Payroll
      */
     const DEFAULT_SETTINGS = [
         'currency'           => 'SAR',
-        'payroll_company'    => 'MHO',        // every payroll journal is booked in this legal entity; lines keep each worker's own dimensions
         'dimension_mode'     => 'employment', // employment = append the worker's D365 employment dimensions to the ledger account
+        // Finance: every payroll earning (basic, allowances, overtime, other income) is booked on 51010101
+        // in every company; the component name stays in the line text
         'accounts'           => [             // component column => main account
             'basic_salary'            => '51010101', // مرتبات
-            'housing_allowance'       => '51010102', // بدل سكن
-            'transport_allowance'     => '51010103', // بدل مواصلات
-            'food_allowance'          => '51010104', // بدل طعام
-            'miscellaneous_allowance' => '51010109', // بدلات اخرى
-            'cashier_allowance'       => '51010109',
-            'fuel_allowance'          => '51010107', // بدل محروقات
-            'telephone_allowance'     => '51010108', // بدل تليفون
-            'other_allowance'         => '51010109',
-            'guard_allowance'         => '51010106', // بدل حراسة
+            'housing_allowance'       => '51010101',
+            'transport_allowance'     => '51010101',
+            'food_allowance'          => '51010101',
+            'miscellaneous_allowance' => '51010101',
+            'cashier_allowance'       => '51010101',
+            'fuel_allowance'          => '51010101',
+            'telephone_allowance'     => '51010101',
+            'other_allowance'         => '51010101',
+            'guard_allowance'         => '51010101',
         ],
-        'benefit_default'    => '51010109',
-        'benefit_rules'      => "overtime = 51010105\nover time = 51010105\nother income = 51010109",
+        'benefit_default'    => '51010101',
+        'benefit_rules'      => '',
         'deduction_default'  => '51010101',
         'deduction_rules'    => "gosi = 21070111\nloan = 11014102",
         'net_payable'        => '21070102', // رواتب مستحقة
@@ -126,11 +127,50 @@ class D365Payroll
 
     // ---------------------------------------------------------------- settings
 
-    /** Legal entity every payroll journal is booked in (finance: all payroll in MHO) */
-    public static function payrollCompany(array $settings)
+    /** @var D365AccountRules|null account structures of the connected D365 (loaded with the dimension formats) */
+    private static $accountRules = null;
+
+    /** Company part of a journal key ("MTL/02" -> "MTL") */
+    public static function keyCompany($key)
     {
-        $company = strtoupper(trim((string)($settings['payroll_company'] ?? '')));
-        return $company !== '' ? $company : 'MHO';
+        return strtoupper(explode('/', (string)$key, 2)[0]);
+    }
+
+    /** Payroll company of an employee: employees.payroll_company (Employee Master), else the D365 employment company */
+    public function payrollCompanyFor($empId, $employmentCompany)
+    {
+        static $hasColumn = null;
+        if ($hasColumn === null) {
+            $res = $this->db->query("SHOW COLUMNS FROM employees LIKE 'payroll_company'");
+            $hasColumn = $res && $res->num_rows > 0;
+        }
+        if ($hasColumn) {
+            $stmt = $this->prepare("SELECT payroll_company FROM employees WHERE emp_id = ?");
+            $stmt->bind_param('s', $empId);
+            $stmt->execute();
+            $value = strtoupper(trim((string)($stmt->get_result()->fetch_row()[0] ?? '')));
+            $stmt->close();
+            if ($value !== '') {
+                return $value;
+            }
+        }
+        return strtoupper((string)$employmentCompany);
+    }
+
+    /**
+     * Journal key for a company: "MTL/02" when D365 Config has a journal name for that Company dimension
+     * value (MTL keeps 01-GV / 02-GV journals with journal control per division), else just the company.
+     */
+    public function journalKey($company, $dims)
+    {
+        $company = strtoupper((string)$company);
+        $formats = self::$dimFormats ?: ($this->client ? self::fetchDimensionFormats($this->client) : ['default' => []]);
+        $i = array_search('company', array_map('strtolower', $formats['default'] ?? []), true);
+        $value = $i === false ? '' : trim(explode('-', (string)$dims)[$i] ?? '');
+        if ($value !== '' && $this->client && $this->client->getJournalName($company . '/' . $value)) {
+            return $company . '/' . $value;
+        }
+        return $company;
     }
 
     /**
@@ -181,6 +221,51 @@ class D365Payroll
             }
         }
         return $found;
+    }
+
+    /**
+     * The app's log says these months are synced: check D365 still has the payroll lines (they go when
+     * someone deletes the journal or its lines). Months missing in D365 are marked "removed" so they can be
+     * synced again. One D365 query per 10 months. Returns the months marked removed.
+     */
+    public function verifyEmployeePushed($environment, $empId)
+    {
+        $stmt = $this->prepare("SELECT DISTINCT month_year FROM d365_payroll_push_log WHERE environment = ? AND emp_id = ? AND status = 'ok'");
+        $stmt->bind_param('ss', $environment, $empId);
+        $stmt->execute();
+        $months = array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'month_year');
+        $stmt->close();
+        $found = [];
+        foreach (array_chunk($months, 10) as $part) {
+            $or = implode(' or ', array_map(function ($m) use ($empId) {
+                return "Text eq 'PAY " . $m . ' ' . str_replace("'", "''", $empId) . " *'";
+            }, $part));
+            $r = $this->client->getAll('LedgerJournalLines', ['$filter' => "($or)", '$select' => 'Text'], true);
+            if ($r['error']) {
+                throw new RuntimeException('D365 check failed: ' . $r['error']);
+            }
+            foreach ($r['data']['value'] ?? [] as $l) {
+                $p = explode(' ', (string)$l['Text']);
+                if (($p[2] ?? '') === (string)$empId) {
+                    $found[$p[1] ?? ''] = true;
+                }
+            }
+        }
+        $removed = array_values(array_filter($months, function ($m) use ($found) { return !isset($found[$m]); }));
+        foreach ($removed as $m) {
+            $this->markRemoved($environment, $m, $empId);
+        }
+        return $removed;
+    }
+
+    /** Log rows of an employee + month whose lines are no longer in D365: synced -> removed */
+    private function markRemoved($environment, $month, $empId)
+    {
+        $stmt = $this->prepare("UPDATE d365_payroll_push_log SET status = 'removed', error = 'Payroll lines no longer in D365 (journal or lines deleted)'
+            WHERE environment = ? AND month_year = ? AND emp_id = ? AND status = 'ok'");
+        $stmt->bind_param('sss', $environment, $month, $empId);
+        $stmt->execute();
+        $stmt->close();
     }
 
     public function getSettings()
@@ -503,7 +588,7 @@ class D365Payroll
      * account structure has main account + 5 ("51040302--81--JD-"): segments 2-6 of the employment value
      * line up with the ledger dimensions (verified against existing journal lines, e.g. 11014102---5430--).
      */
-    public static function ledgerAccount($mainAccount, $dims, array $settings)
+    public static function ledgerAccount($mainAccount, $dims, array $settings, array $extra = [], array $allowed = null)
     {
         if (($settings['dimension_mode'] ?? 'employment') !== 'employment' || trim($dims, '-') === '') {
             return $mainAccount;
@@ -518,12 +603,20 @@ class D365Payroll
             foreach ($f['default'] as $i => $name) {
                 $byName[strtolower($name)] = $segments[$i] ?? '';
             }
+            // values that only the ledger format has (e.g. CostCenter while the default format lacks it)
+            foreach ($extra as $extraName => $extraValue) {
+                if (($byName[strtolower($extraName)] ?? '') === '') {
+                    $byName[strtolower($extraName)] = (string)$extraValue;
+                }
+            }
             $out = [];
             $hasMain = false;
             foreach ($f['ledger'] as $name) {
                 if (strtolower($name) === 'mainaccount') {
                     $out[] = $mainAccount;
                     $hasMain = true;
+                } elseif ($allowed !== null && !in_array(strtolower($name), $allowed, true)) {
+                    $out[] = ''; // not in this company's account structure for this main account
                 } else {
                     $out[] = $byName[strtolower($name)] ?? '';
                 }
@@ -551,7 +644,7 @@ class D365Payroll
     public static function fetchDimensionFormats(D365Client $client)
     {
         $file = self::dimensionFormatFile($client);
-        $formats = (is_file($file) && time() - filemtime($file) < 21600) ? json_decode((string)file_get_contents($file), true) : null;
+        $formats = (is_file($file) && time() - filemtime($file) < 900) ? json_decode((string)file_get_contents($file), true) : null;
         if ($formats) {
             return $formats;
         }
@@ -586,22 +679,36 @@ class D365Payroll
      */
     public static function withDepartment($dims, $department, array $defaultFormat)
     {
-        $department = trim((string)$department);
-        if ($department === '') {
+        return self::withDimension($dims, 'Department', $department, $defaultFormat, true);
+    }
+
+    /**
+     * Set one named dimension in a default-format dims string. $onlyIfBlank keeps an existing value.
+     * Returns the dims unchanged when the value is empty or the format has no such dimension.
+     */
+    public static function withDimension($dims, $name, $value, array $defaultFormat, $onlyIfBlank = false)
+    {
+        $value = trim((string)$value);
+        if ($value === '') {
             return $dims;
         }
         $names = $defaultFormat ?: ['MainAccount', 'Company', 'Department', 'Worker', 'Branch', 'Customer', 'FixedAsset', 'LC'];
-        $i = array_search('department', array_map('strtolower', $names), true);
+        $i = array_search(strtolower($name), array_map('strtolower', $names), true);
         if ($i === false) {
             return $dims;
         }
-        $segments = explode('-', (string)$dims);
-        $segments = array_pad($segments, count($names), '');
-        if (trim($segments[$i]) !== '') {
+        $segments = array_pad(explode('-', (string)$dims), count($names), '');
+        if ($onlyIfBlank && trim($segments[$i]) !== '') {
             return $dims;
         }
-        $segments[$i] = $department;
+        $segments[$i] = $value;
         return implode('-', $segments);
+    }
+
+    /** Does the active D365 default dimension format contain this dimension? */
+    public static function formatHas(array $formats, $name, $type = 'default')
+    {
+        return in_array(strtolower($name), array_map('strtolower', $formats[$type] ?? []), true);
     }
 
     /** @var D365Workers|null */
@@ -619,9 +726,26 @@ class D365Payroll
                 $this->workersHelper = new D365Workers($this->db, $this->client);
             }
             $formats = self::$dimFormats ?: self::fetchDimensionFormats($this->client);
-            return self::withDepartment($dims, $this->workersHelper->departmentFor($empId, $employments), $formats['default'] ?? []);
+            $dims = self::withDepartment($dims, $this->workersHelper->departmentFor($empId, $employments), $formats['default'] ?? []);
+            // Cost center from the HR app (used on the line once the D365 formats contain CostCenter)
+            return self::withDimension($dims, 'CostCenter', $this->workersHelper->appCostCenter($empId), $formats['default'] ?? []);
         } catch (Throwable $ex) {
             return $dims; // never block the payroll line on the department lookup
+        }
+    }
+
+    /** Ledger-only dimension values from the HR app: ['CostCenter' => 'C30'] */
+    private function extraLedgerValues($empId)
+    {
+        try {
+            if (!$this->workersHelper) {
+                require_once __DIR__ . '/D365Workers.php';
+                $this->workersHelper = new D365Workers($this->db, $this->client);
+            }
+            $cc = $this->workersHelper->appCostCenter($empId);
+            return $cc !== '' ? ['CostCenter' => $cc] : [];
+        } catch (Throwable $ex) {
+            return [];
         }
     }
 
@@ -642,6 +766,8 @@ class D365Payroll
                 . 'select "Ledger dimension format" and set the dimensions to MainAccount-Company-Department-Worker-Branch-Customer (same as the sandbox), then sync again.');
         }
         self::$dimFormats = $formats;
+        require_once __DIR__ . '/D365AccountRules.php';
+        self::$accountRules = new D365AccountRules($this->client);
         return $formats;
     }
 
@@ -678,16 +804,19 @@ class D365Payroll
         if (strtolower((string)$p['status']) !== 'paid') {
             return ['ok' => false, 'error' => "Payroll $month is \"{$p['status']}\" - only paid payroll can be synced"];
         }
+        // Duplicate guard against D365 itself - the source of truth (the app's log may miss lines after a
+        // request died mid-way, or still say "synced" after the journal was deleted in D365)
         $pushed = $this->getPushedMap($environment, $month);
-        if (isset($pushed[$empId])) {
-            return ['ok' => false, 'error' => "Already synced to journal {$pushed[$empId]['journal_batch']} ({$pushed[$empId]['legal_entity']})"];
-        }
-        // Duplicate guard against D365 itself (the app's log may miss lines, e.g. after a request died mid-way)
         $inD365 = $this->findExistingInD365($month, [$empId]);
         if (isset($inD365[$empId])) {
             $x = $inD365[$empId];
-            $this->logPush($environment, $month, $x['entity'], $x['journal'], $empId, ['ok' => true, 'lines' => $x['lines'], 'amount' => 0], $userId);
+            if (!isset($pushed[$empId])) {
+                $this->logPush($environment, $month, $x['entity'], $x['journal'], $empId, ['ok' => true, 'lines' => $x['lines'], 'amount' => 0], $userId);
+            }
             return ['ok' => false, 'error' => "Already in D365 journal {$x['journal']} ({$x['entity']}) - not sent again"];
+        }
+        if (isset($pushed[$empId])) {
+            $this->markRemoved($environment, $month, $empId); // logged as synced but gone from D365 - send again
         }
 
         // Failures before the push are logged too, so the employee's Payrolls tab can show them
@@ -703,21 +832,24 @@ class D365Payroll
             return $fail(implode('; ', array_unique($built['errors'])) . ' - fill the account mapping on the Payroll settings page');
         }
 
-        // Booked in the payroll company (MHO), with the dims of the worker's own employment
+        // Booked in the employee's payroll company (Employee Master; default = D365 employment company),
+        // with the dims of the worker's own employment - only those the company's account structure accepts
         $employment = $this->getEmployments($empId)[$empId] ?? null;
         if (!$employment) {
             return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
         }
-        $employment['entity'] = self::payrollCompany($settings);
         $employment['dims'] = $this->dimsWithDepartment($empId, $employment['dims']);
+        $employment['extra'] = $this->extraLedgerValues($empId);
+        $employment['entity'] = $this->payrollCompanyFor($empId, $employment['entity']);
+        $key = $this->journalKey($employment['entity'], $employment['dims']);
 
         try {
-            $journal = $this->ensureJournal($environment, $month, $employment['entity'], $settings, $userId);
+            $journal = $this->ensureJournal($environment, $month, $key, $settings, $userId);
         } catch (Throwable $ex) {
-            return $fail($ex->getMessage(), $employment['entity']);
+            return $fail($ex->getMessage(), $key);
         }
         $res = $this->pushEmployee($p, $employment, $journal, $settings, $environment, $month, $transDate, $userId);
-        return $res + ['journal' => $journal['journal_batch'], 'entity' => $employment['entity']];
+        return $res + ['journal' => $journal['journal_batch'], 'entity' => $key];
     }
 
     /**
@@ -737,7 +869,7 @@ class D365Payroll
         }
 
         $h = $this->client->get('LedgerJournalHeaders', [
-            '$filter' => "JournalBatchNumber eq '" . str_replace("'", "''", $row['journal_batch']) . "' and dataAreaId eq '" . strtolower($entity) . "'",
+            '$filter' => "JournalBatchNumber eq '" . str_replace("'", "''", $row['journal_batch']) . "' and dataAreaId eq '" . strtolower(self::keyCompany($entity)) . "'",
             '$select' => 'JournalBatchNumber,IsPosted',
         ], true);
         if ($h['error']) {
@@ -770,12 +902,13 @@ class D365Payroll
             return $row;
         }
 
-        $journalName = $this->client->getJournalName($entity);
+        // $entity is a journal key: company ("MSP") or company + Company dimension ("MTL/02")
+        $journalName = $this->client->getJournalName($entity) ?: $this->client->getJournalName(self::keyCompany($entity));
         if (!$journalName) {
             throw new RuntimeException("No payroll journal name for company $entity - add it in App Settings > D365 Config (e.g. $entity=GEN)");
         }
         $res = $this->client->create('LedgerJournalHeaders', [
-            'dataAreaId'  => strtolower($entity),
+            'dataAreaId'  => strtolower(self::keyCompany($entity)),
             'JournalName' => $journalName,
             'Description' => "HR Payroll $month",
         ]);
@@ -810,7 +943,7 @@ class D365Payroll
             }
         }
 
-        $this->logPush($environment, $month, $employment['entity'], $journal['journal_batch'], $p['emp_id'], $result, $userId);
+        $this->logPush($environment, $month, $journal['legal_entity'] ?? $employment['entity'], $journal['journal_batch'], $p['emp_id'], $result, $userId);
         return $result;
     }
 
@@ -818,13 +951,16 @@ class D365Payroll
     private static function lineBodies(array $built, array $employment, array $journal, array $settings, $transDate)
     {
         $bodies = [];
+        $company = self::keyCompany($employment['entity']);
         foreach ($built['lines'] as $l) {
+            // only the dimensions this company's account structure accepts for the main account
+            $allowed = self::$accountRules ? self::$accountRules->allowedDimensions($company, $l['account']) : null;
             $body = [
-                'dataAreaId'          => strtolower($employment['entity']),
+                'dataAreaId'          => strtolower($company),
                 'JournalBatchNumber'  => $journal['journal_batch'],
                 'TransDate'           => $transDate . 'T12:00:00Z',
                 'AccountType'         => 'Ledger',
-                'AccountDisplayValue' => self::ledgerAccount($l['account'], $employment['dims'], $settings),
+                'AccountDisplayValue' => self::ledgerAccount($l['account'], $employment['dims'], $settings, $employment['extra'] ?? [], $allowed),
                 'DebitAmount'         => $l['debit'],
                 'CreditAmount'        => $l['credit'],
                 'CurrencyCode'        => $settings['currency'] ?: 'SAR',
@@ -905,12 +1041,19 @@ class D365Payroll
         $pushed = $this->getPushedMap($environment, $month);
         // Duplicate guard against D365 itself: employees whose payroll lines for this month are already
         // in any D365 journal (any company, posted or not) are recorded as synced and never sent again
-        $inD365 = $this->findExistingInD365($month, array_values(array_filter($empIds, function ($id) use ($pushed) {
-            return !isset($pushed[$id]);
-        })));
+        // Employees the log calls synced but whose lines are gone from D365 (journal deleted) are sent again.
+        $inD365 = $this->findExistingInD365($month, array_values($empIds));
+        foreach ($empIds as $id) {
+            if (isset($pushed[$id]) && !isset($inD365[$id])) {
+                $this->markRemoved($environment, $month, $id);
+                unset($pushed[$id]);
+            }
+        }
         foreach ($inD365 as $id => $x) {
-            $this->logPush($environment, $month, $x['entity'], $x['journal'], $id, ['ok' => true, 'lines' => $x['lines'], 'amount' => 0], $userId);
-            $pushed[$id] = ['legal_entity' => $x['entity'], 'journal_batch' => $x['journal']];
+            if (!isset($pushed[$id])) {
+                $this->logPush($environment, $month, $x['entity'], $x['journal'], $id, ['ok' => true, 'lines' => $x['lines'], 'amount' => 0], $userId);
+                $pushed[$id] = ['legal_entity' => $x['entity'], 'journal_batch' => $x['journal']];
+            }
         }
         $journals = [];      // company => journal row (created on first use)
         $journalErrors = []; // company => error, so one bad company does not stop the others
@@ -919,7 +1062,10 @@ class D365Payroll
         $built = [];
         foreach ($empIds as $id) {
             $p = $rows[$id] ?? null;
-            $company = isset($employments[$id]) ? self::payrollCompany($settings) : ''; // all payroll in one company (MHO)
+            // journal key: the employee's payroll company (Employee Master, default = D365 employment company),
+            // split by Company dimension where D365 Config has e.g. MTL/02=02-GV
+            $empDims = isset($employments[$id]) ? $this->dimsWithDepartment($id, $employments[$id]['dims'], $employments) : '';
+            $company = isset($employments[$id]) ? $this->journalKey($this->payrollCompanyFor($id, $employments[$id]['entity']), $empDims) : '';
             $result = ['ok' => false, 'error' => null, 'lines' => 0, 'amount' => 0, 'company' => $company];
             if (isset($pushed[$id])) {
                 $results[$id] = ['ok' => true, 'skipped' => true, 'error' => null, 'lines' => 0, 'amount' => 0, 'company' => $pushed[$id]['legal_entity']];
@@ -948,7 +1094,7 @@ class D365Payroll
                         }
                     }
                     if (isset($journals[$company])) {
-                        $employment = ['entity' => $company, 'dims' => $this->dimsWithDepartment($id, $employments[$id]['dims'], $employments)];
+                        $employment = ['entity' => $company, 'dims' => $empDims, 'extra' => $this->extraLedgerValues($id)];
                         $groups[$id] = self::lineBodies($b, $employment, $journals[$company], $settings, $transDate);
                         $built[$id] = $result;
                         continue;

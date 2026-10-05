@@ -184,6 +184,20 @@ class D365Workers
     /** @var array|null app department (id and lower-case name) => D365 Department value */
     private $departmentMap = null;
 
+    /** @var bool true = departmentFor() never calls D365 (uses the config map and the last vote cache) */
+    private $offline = false;
+
+    /** D365 Department for the profile page without calling D365 ('' when not known yet) */
+    public function departmentForOffline($empId)
+    {
+        $this->offline = true;
+        try {
+            return $this->departmentFor($empId);
+        } finally {
+            $this->offline = false;
+        }
+    }
+
     /**
      * D365 Department value for an employee's app department: D365 Config "Department map" first
      * (APP DEPARTMENT=VALUE, by name or id), else the value most colleagues of that app department
@@ -226,7 +240,10 @@ class D365Workers
 
         // Fallback: majority vote of colleagues already carrying a Department in D365
         $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_dept_vote_' . md5($this->client->getResourceUrl()) . '.json';
-        $votes = (is_file($file) && time() - filemtime($file) < 86400) ? json_decode((string)file_get_contents($file), true) : null;
+        $votes = (is_file($file) && (time() - filemtime($file) < 86400 || $this->offline)) ? json_decode((string)file_get_contents($file), true) : null;
+        if (!is_array($votes) && $this->offline) {
+            $votes = []; // profile page: no D365 call, the config map only
+        }
         if (!is_array($votes)) {
             require_once __DIR__ . '/D365Payroll.php';
             $employments = $employments ?? (new D365Payroll($this->db, $this->client))->getEmployments();
@@ -266,21 +283,72 @@ class D365Workers
             return ['ok' => true, 'error' => null, 'action' => 'skipped'];
         }
         $formats = D365Payroll::fetchDimensionFormats($this->client);
+        $dims = $employment['dims'];
+        $out = ['ok' => true, 'error' => null, 'action' => 'unchanged', 'value' => null];
+
+        // Department: only filled when blank (finance's value is kept)
         $dept = $this->departmentFor($empId);
         if ($dept === '') {
-            return ['ok' => true, 'error' => null, 'action' => 'unknown'];
+            $out['action'] = 'unknown';
+        } else {
+            $withDept = D365Payroll::withDepartment($dims, $dept, $formats['default'] ?? []);
+            if ($withDept !== $dims) {
+                $out['action'] = 'set';
+                $out['value'] = $dept;
+                $dims = $withDept;
+            }
         }
-        $newDims = D365Payroll::withDepartment($employment['dims'], $dept, $formats['default'] ?? []);
-        if ($newDims === $employment['dims']) {
-            return ['ok' => true, 'error' => null, 'action' => 'unchanged'];
+
+        if ($dims === $employment['dims']) {
+            return $out;
         }
         $q = function ($v) { return "'" . rawurlencode(str_replace("'", "''", (string)$v)) . "'"; };
         $key = 'Employments(PersonnelNumber=' . $q($empId) . ',LegalEntityId=' . $q($employment['entity'])
             . ',EmploymentStartDate=' . $employment['start'] . ',EmploymentEndDate=' . $employment['end'] . ')';
-        $res = $this->client->batchUpdate($key, ['DimensionDisplayValue' => $newDims]);
-        // payroll pages cache the employment list - drop it so the next sync sees the department
+        $res = $this->client->batchUpdate($key, ['DimensionDisplayValue' => $dims]);
+        // payroll pages cache the employment list - drop it so the next sync sees the new dimensions
         @unlink(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_cache_' . md5($this->client->getResourceUrl() . '|employments') . '.json');
-        return ['ok' => $res['ok'], 'error' => $res['error'], 'action' => 'set', 'value' => $dept];
+        $out['ok'] = $res['ok'];
+        $out['error'] = $res['error'];
+        return $out;
+    }
+
+    /** Payroll company: employees.payroll_company, else the D365 employment company */
+    public function payrollCompany($empId, $employmentCompany)
+    {
+        require_once __DIR__ . '/D365Payroll.php';
+        return (new D365Payroll($this->db, $this->client))->payrollCompanyFor($empId, $employmentCompany);
+    }
+
+    /** Whether the company's account structures have CostCenter; null when D365 rules cannot be read */
+    public function companyUsesCostCenter($company)
+    {
+        try {
+            require_once __DIR__ . '/D365AccountRules.php';
+            $rules = new D365AccountRules($this->client);
+            if (!isset($rules->companies()[strtoupper((string)$company)])) {
+                return null;
+            }
+            return in_array(strtoupper((string)$company), $rules->companiesWithDimension('CostCenter'), true);
+        } catch (Throwable $ex) {
+            error_log('D365 account rules: ' . $ex->getMessage());
+            return null;
+        }
+    }
+
+    /** The employee's cost center in the HR app ('' when the column does not exist yet) */
+    public function appCostCenter($empId)
+    {
+        $res = $this->db->query("SHOW COLUMNS FROM employees LIKE 'cost_center'");
+        if (!$res || $res->num_rows === 0) {
+            return '';
+        }
+        $stmt = $this->db->prepare("SELECT cost_center FROM employees WHERE emp_id = ?");
+        $stmt->bind_param('s', $empId);
+        $stmt->execute();
+        $cc = trim((string)($stmt->get_result()->fetch_row()[0] ?? ''));
+        $stmt->close();
+        return $cc;
     }
 
     /** Saudi IBAN bank code (characters 5-6) => [D365 bank name, SWIFT] */
