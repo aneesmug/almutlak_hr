@@ -2040,8 +2040,9 @@ RTL Support
                 </a>
             <?php endif; ?>
             <?php
-                // Microsoft Dynamics 365 status (+ Sync for system admins / 'd365_sync_employee')
+                // Microsoft Dynamics 365 status only - no Sync / Add to D365 buttons on the profile
                 $d365WidgetClass = 'is-inline';
+                $d365WidgetStatusOnly = true;
                 include __DIR__ . '/includes/d365_widget.php';
             ?>
 
