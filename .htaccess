@@ -5,6 +5,11 @@
 # Disable directory listing - no one can see folder contents
 Options -Indexes
 
+# Never serve config, log or key files over HTTP (DB / D365 credentials live in .ini files)
+<FilesMatch "(\.(ini|log|env|pub)$|^github_pat_)">
+    Require all denied
+</FilesMatch>
+
 # Custom error messages
 ErrorDocument 403 /error403.php
 ErrorDocument 404 /error404.php

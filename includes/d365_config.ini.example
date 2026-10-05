@@ -1,0 +1,15 @@
+; Microsoft Dynamics 365 Finance & Operations connection settings
+; Copy this file to d365_config.ini (same folder) and fill in the secret.
+; d365_config.ini is git-ignored and blocked from HTTP by .htaccess - never commit it.
+[d365]
+TENANT_ID     = "1dd2e950-8575-4619-859c-bdb07e7d4695"
+CLIENT_ID     = "10362ae1-7aa6-48e5-b4a8-3a786648d9c7"
+CLIENT_SECRET = ""
+; F&O environment URL, no trailing slash (use the sandbox URL while testing if you have one)
+RESOURCE_URL  = "https://almutlak.operations.dynamics.com"
+; Default legal entity (dataAreaId)
+COMPANY       = "MHO"
+; "sandbox" or "production" - shown on D365 pages so you always know where you are
+ENVIRONMENT   = "sandbox"
+; Create/update/delete in D365. Keep "false" on production until sandbox testing is signed off.
+ALLOW_WRITES  = "false"

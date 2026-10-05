@@ -199,6 +199,28 @@ if (mysqli_num_rows($query) == 1) {
 				$payroll_benefits_by_month[$benefit_row['month']][] = $benefit_row;
 			}
 		}
+		// D365 tab (system admins only) - content loaded on first open from includes/ajaxFile/d365_employee_tab.php
+		$show_d365_tab = !empty($is_system_admin);
+		if ($show_d365_tab && empty($_SESSION['d365_csrf'])) {
+			$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
+		}
+
+		// D365 sync state per paid month (system admins only; local push log, no D365 call)
+		$d365_pay_state = null;
+		$d365_pay_env = '';
+		if (!empty($is_system_admin) && !empty($payroll_history)) {
+			try {
+				require_once __DIR__ . '/includes/D365Payroll.php';
+				$d365_pay_client = new D365Client();
+				$d365_pay_env = $d365_pay_client->getEnvironment();
+				$d365_pay_state = (new D365Payroll($conDB, $d365_pay_client))->getEmployeeSyncState($d365_pay_env, $emprow['empid']);
+				if (empty($_SESSION['d365_csrf'])) {
+					$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
+				}
+			} catch (Throwable $ex) {
+				$d365_pay_state = null; // D365 not configured - no column
+			}
+		}
 		// --- END: Payroll (Payslip) History ---
 
 		// --- START: Additional Information (HR/Payroll reference fields) ---
@@ -1551,6 +1573,13 @@ if (mysqli_num_rows($query) == 1) {
 											</a>
 										</li>
 										<?php endif; ?>
+										<?php if ($show_d365_tab): ?>
+										<li class="nav-item">
+											<a href="#d365tab" data-toggle="tab" aria-expanded="false" class="nav-link" id="d365TabLink">
+												<i class="mdi mdi-microsoft"></i> D365
+											</a>
+										</li>
+										<?php endif; ?>
 									</ul>
 									<div class="tab-content sr-page">
 										<!-- Profile -->
@@ -2495,6 +2524,9 @@ if (mysqli_num_rows($query) == 1) {
 														<th><?= __('total_benefits', 'Additional Benefits') ?></th>
 														<th><?= __('total_deductions', 'Total Deductions') ?></th>
 														<th><?= __('net_salary', 'Net Salary') ?></th>
+														<?php if ($d365_pay_state !== null): ?>
+															<th title="Dynamics 365 (<?= htmlspecialchars($d365_pay_env) ?>)">D365</th>
+														<?php endif; ?>
 														<th><?= __('actions', 'Actions') ?></th>
 													</tr>
 												</thead>
@@ -2517,6 +2549,27 @@ if (mysqli_num_rows($query) == 1) {
 															</td>
 															<td><?= number_format((float)$payroll_rec['total_deductions'], 2); ?> <i class="icon-saudi_riyal"></i></td>
 															<td class="font-weight-bold text-success"><?= number_format((float)$payroll_rec['net_salary'], 2); ?> <i class="icon-saudi_riyal"></i></td>
+															<?php if ($d365_pay_state !== null):
+																$d365_row = $d365_pay_state[$payroll_rec['month_year']] ?? null;
+																$d365_rs = $d365_row['status'] ?? '';
+															?>
+																<td class="d365-pay-cell" data-month="<?= htmlspecialchars($payroll_rec['month_year']) ?>">
+																	<?php if ($d365_rs === 'ok'): ?>
+																		<span class="badge badge-success" title="<?= htmlspecialchars('Journal ' . $d365_row['journal_batch'] . ' · ' . $d365_row['pushed_at']) ?>">
+																			<i class="fa fa-check"></i> <?= htmlspecialchars($d365_row['legal_entity'] . ' · ' . $d365_row['journal_batch']) ?>
+																		</span>
+																	<?php else: ?>
+																		<?php if ($d365_rs === 'error'): ?>
+																			<span class="badge badge-danger" title="<?= htmlspecialchars((string)$d365_row['error']) ?>"><i class="fa fa-times"></i> Failed</span>
+																		<?php elseif ($d365_rs === 'removed'): ?>
+																			<span class="badge badge-warning" title="The journal was deleted in D365">Removed</span>
+																		<?php else: ?>
+																			<span class="badge badge-secondary">Not synced</span>
+																		<?php endif; ?>
+																		<button type="button" class="btn btn-sm btn-primary btn-d365-pay ml-1" data-month="<?= htmlspecialchars($payroll_rec['month_year']) ?>"><i class="fa fa-cloud-upload-alt"></i> Sync to D365</button>
+																	<?php endif; ?>
+																</td>
+															<?php endif; ?>
 															<td>
 																<a href="./generate_bulk_payslips_pdf.php?month=<?= urlencode($payroll_rec['month_year']); ?>&emp_id=<?= urlencode($emprow['empid']); ?>" target="_blank" class="btn btn-sm btn-info">
 																	<i class="fas fa-file-pdf"></i> <?= __('download_payslip', 'Download Payslip') ?>
@@ -3100,6 +3153,14 @@ if (mysqli_num_rows($query) == 1) {
 											</div>
 										</div>
 										<?php  ?>
+
+										<?php if ($show_d365_tab): ?>
+										<div class="tab-pane" id="d365tab" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>" data-loaded="0">
+											<div id="d365TabBody">
+												<div class="text-center text-muted p-4"><i class="mdi mdi-loading mdi-spin"></i> Loading Dynamics 365 data...</div>
+											</div>
+										</div>
+										<?php endif; ?>
 
 										<?php if ($direct_reports_count > 1): ?>
 										<div class="tab-pane" id="directreports" data-supervisor-emp-id="<?= htmlspecialchars($emprow['emp_id']) ?>" data-loaded="0">
@@ -4119,6 +4180,52 @@ if (mysqli_num_rows($query) == 1) {
 						processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
 					}
 				});
+				<?php if ($d365_pay_state !== null): ?>
+				// Payrolls tab: sync a missing / failed paid month to D365 (includes/ajaxFile/d365_employee.php)
+				$(document).on('click', '.btn-d365-pay', function () {
+					var month = String($(this).data('month'));
+					var d365Pop = { popup: 'sr-addline-popup sr-page' };
+					Swal.fire({
+						title: 'Sync ' + $('<i>').text(month).html() + ' to D365?',
+						html: '<div class="sr-form"><dl class="sr-kv">'
+							+ '<div class="row-kv"><dt>Employee</dt><dd><?= htmlspecialchars($emprow['empid'], ENT_QUOTES) ?></dd></div>'
+							+ '<div class="row-kv"><dt>Payroll month</dt><dd>' + $('<i>').text(month).html() + '</dd></div>'
+							+ '<div class="row-kv"><dt>D365 environment</dt><dd><span class="sr-pill sr-pill-xs tone-amber"><?= strtoupper(htmlspecialchars($d365_pay_env, ENT_QUOTES)) ?></span></dd></div>'
+							+ '<div class="row-kv"><dt>Journal</dt><dd>Unposted line in the MHO payroll journal</dd></div>'
+							+ '</dl></div>',
+						showCancelButton: true,
+						confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Sync to D365',
+						confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
+						cancelButtonColor: (window.APP_COLORS && APP_COLORS.danger_dark) || undefined,
+						width: '560px',
+						customClass: d365Pop,
+						showLoaderOnConfirm: true,
+						allowOutsideClick: false,
+						preConfirm: function () {
+							var fd = new FormData();
+							fd.append('csrf', <?= json_encode($_SESSION['d365_csrf'] ?? '') ?>);
+							fd.append('action', 'sync_payroll');
+							fd.append('emp_id', <?= json_encode((string)$emprow['empid']) ?>);
+							fd.append('month', month);
+							return fetch('includes/ajaxFile/d365_employee.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+								.then(function (r) { return r.json().catch(function () { throw new Error('Server error (HTTP ' + r.status + ')'); }); })
+								.catch(function (err) { return { ok: false, error: err.message }; });
+						}
+					}).then(function (res) {
+						if (!res.isConfirmed) return;
+						var r = res.value || {};
+						var cells = $('.d365-pay-cell[data-month="' + month + '"]');
+						if (r.ok) {
+							cells.html($('<span class="badge badge-success"><i class="fa fa-check"></i> </span>').append(document.createTextNode((r.entity || '') + ' · ' + (r.journal || ''))));
+							$('.btn-d365-pay[data-month="' + month + '"]').remove(); // copies in responsive child rows
+							Swal.fire({ icon: 'success', title: 'Synced to D365', customClass: d365Pop, html: '<div class="sr-form"><dl class="sr-kv"><div class="row-kv"><dt>Journal</dt><dd>' + $('<i>').text(r.journal || '').html() + '</dd></div><div class="row-kv"><dt>Company</dt><dd>' + $('<i>').text(r.entity || '').html() + '</dd></div></dl><span class="sr-fhint mt-2">Unposted - finance posts it in D365.</span></div>' });
+						} else {
+							cells.find('.badge').replaceWith($('<span class="badge badge-danger"><i class="fa fa-times"></i> Failed</span>').attr('title', r.error || ''));
+							Swal.fire({ icon: 'error', title: 'Sync failed', text: r.error || 'Unknown error', customClass: d365Pop });
+						}
+					});
+				});
+				<?php endif; ?>
 				$('#payment_history_tbl').DataTable({
 					language: {
 						search: `<span>${__('search')}:</span> _INPUT_`,
@@ -5216,6 +5323,80 @@ if (mysqli_num_rows($query) == 1) {
 				});
 			});
 		</script>
+
+		<?php if ($show_d365_tab): ?>
+		<!-- D365 Tab - loaded on first open (D365 is slow), refresh re-reads D365 -->
+		<style>
+			#d365tab .sr-card { margin-bottom: 16px; }
+			#d365tab .sr-notice { margin-bottom: 12px; }
+			.d365tab-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+			.d365tab-bar > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+			.d365tab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+			.d365tab-muted { color: var(--sr-muted, #64748b); font-size: 12px; }
+			/* Refresh / Add buttons look like the active D365 tab */
+			.d365tab-btn { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 0.875rem;
+				color: var(--sr-accent-strong); background: var(--sr-surface); border: 1px solid var(--sr-border); cursor: pointer;
+				box-shadow: 0 1px 2px rgba(15, 23, 42, .06), inset 0 -2px 0 var(--sr-accent); transition: background-color .15s ease, box-shadow .15s ease; }
+			.d365tab-btn i { color: var(--sr-accent); font-size: 1rem; line-height: 1; }
+			.d365tab-btn:hover { background: var(--sr-surface-2); }
+			.d365tab-btn:disabled { opacity: .55; cursor: default; }
+			.d365fin-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+			.d365fin-tile { border: 1px solid var(--sr-border, #e2e8f0); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+			.d365fin-tile span { font-size: 12px; color: var(--sr-muted, #64748b); }
+			.d365fin-tile b { font-size: 20px; }
+			.d365fin-tile small { font-size: 11px; color: var(--sr-muted, #64748b); }
+			.d365fin-tile.is-debit { border-left: 4px solid #dc2626; }
+			.d365fin-tile.is-credit { border-left: 4px solid #16a34a; }
+			.d365fin-companies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+			.d365fin-debit { color: #dc2626; }
+			.d365fin-credit { color: #16a34a; }
+		</style>
+		<script>
+			(function () {
+				var $pane = $('#d365tab');
+				function loadD365Tab(refresh) {
+					var $body = $('#d365TabBody');
+					if (refresh) {
+						$body.css({ opacity: 0.45, 'pointer-events': 'none' });
+						$('#d365TabRefresh').prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin"></i> Loading...');
+					}
+					$.post('includes/ajaxFile/d365_employee_tab.php', {
+						csrf: $pane.data('csrf'),
+						emp_id: String($pane.data('emp')),
+						refresh: refresh ? 1 : 0
+					}).done(function (html) {
+						$body.html(html);
+						$pane.attr('data-loaded', '1');
+						if ($.fn.DataTable && $('#d365FinTable tbody tr').length) {
+							$('#d365FinTable').DataTable({ order: [[0, 'desc']], pageLength: 25, autoWidth: false });
+						}
+					}).fail(function (xhr) {
+						$body.html('<div class="sr-notice tone-red">Could not load D365 data (HTTP ' + xhr.status + '). <a href="#" id="d365TabRetry">Retry</a></div>');
+					}).always(function () {
+						$body.css({ opacity: '', 'pointer-events': '' });
+					});
+				}
+				$('#d365TabLink').on('shown.bs.tab click', function () {
+					if ($pane.attr('data-loaded') === '0') {
+						$pane.attr('data-loaded', 'loading');
+						loadD365Tab(false);
+					}
+				});
+				// view_employee.php?emp_id=X#d365 (links from the D365 pages) opens this tab directly
+				if (window.location.hash === '#d365') {
+					$(function () { $('#d365TabLink').tab('show'); });
+				}
+				$(document).on('click', '#d365TabRefresh', function () { loadD365Tab(true); });
+				// Sync from the tab = the header widget's Sync flow; after any sync re-read D365 (skip the 10 min cache)
+				$(document).on('click', '#d365TabSync', function () { document.dispatchEvent(new CustomEvent('d365:sync-request')); });
+				$(document).on('click', '#d365TabRegister', function () { document.dispatchEvent(new CustomEvent('d365:register-request')); });
+				document.addEventListener('d365:synced', function () {
+					if ($pane.attr('data-loaded') !== '0') loadD365Tab(true);
+				});
+				$(document).on('click', '#d365TabRetry', function (e) { e.preventDefault(); loadD365Tab(true); });
+			})();
+		</script>
+		<?php endif; ?>
 
 		<!-- Direct Reports Tab - AJAX pagination (no URL reload) -->
 		<script>

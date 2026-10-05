@@ -7,6 +7,11 @@
         include("./includes/avatar_select.php");
         $canUngeneratePayroll = user_has_special_access($conDB, $empid ?? '', 'ungenerate_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         $canAssignPayrollSupervisor = user_has_special_access($conDB, $empid ?? '', 'assign_payroll_supervisor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        // Sync Payroll to D365 (system admins only) - posts to d365_payroll_push.php, which shares this CSRF token
+        $canSyncD365 = !empty($is_system_admin);
+        if ($canSyncD365 && empty($_SESSION['d365_csrf'])) {
+            $_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
+        }
 ?>
     <!doctype html>
     <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -1070,6 +1075,11 @@
                                                         <button type="button" class="dropdown-item" id="actionPayrollSummaryReportBtn" style="display:none;" data-mi-color="rose">
                                                             <i class="fa fa-solid fa-file-invoice-dollar"></i> <?= __('payroll_summary_report', 'Payroll Summary Report') ?>
                                                         </button>
+                                                        <?php if ($canSyncD365): ?>
+                                                        <button type="button" class="dropdown-item" id="actionSyncD365Btn" style="display:none;" title="Send paid payroll of this month to Dynamics 365 as unposted journals" data-mi-color="primary">
+                                                            <i class="fa fa-solid fa-cloud-arrow-up"></i> <?= __('sync_payroll_d365', 'Sync Payroll to D365') ?>
+                                                        </button>
+                                                        <?php endif; ?>
                                                         <button type="button" class="dropdown-item" id="actionToggleFeedbackFilterBtn" style="display:none;" data-mi-color="amber">
                                                             <i class="fa fa-solid fa-comment-dots"></i>
                                                             <span class="feedback-filter-btn-label"><?= __('show_feedback_employees', 'Show Feedback Employees') ?></span>
@@ -2095,6 +2105,7 @@ $(document).ready(function() {
     $('#actionGenerateReportBtn').off('click').on('click', generatePayrollReport);
     $('#actionPayslipsBtn').off('click').on('click', openPayslipsModal);
     $('#actionPayrollSummaryReportBtn').off('click').on('click', generatePayrollSummaryReportPdf);
+    $('#actionSyncD365Btn').off('click').on('click', function () { window.syncPayrollToD365 && window.syncPayrollToD365($('#payrollMonth').val()); });
 
     const paymentQueryParams = new URLSearchParams(window.location.search);
     const paymentMonthFromUrl = (paymentQueryParams.get('payment_month') || '').trim();
@@ -2369,6 +2380,14 @@ async function updateRegenerateButtonVisibility() {
         $('#actionPayrollSummaryReportBtn').removeClass('hidden').show();
     } else {
         $('#actionPayrollSummaryReportBtn').addClass('hidden').hide();
+    }
+
+    // Sync Payroll to D365: only paid payroll is sent, so show it once anyone in this month is Paid
+    const monthHasPaid = Array.isArray(allEmployeesData) && allEmployeesData.some(emp => emp.payroll_status === 'paid');
+    if (monthHasPaid) {
+        $('#actionSyncD365Btn').removeClass('hidden').show();
+    } else {
+        $('#actionSyncD365Btn').addClass('hidden').hide();
     }
 }
         
@@ -8148,6 +8167,218 @@ function openPayslipsFile(base, data) {
         }
 
     </script>
+
+    <?php if ($canSyncD365): ?>
+    <script src="./assets/js/d365_missing_workers.js?v=<?= @filemtime(__DIR__ . '/assets/js/d365_missing_workers.js') ?>"></script>
+    <style>
+        /* D365 sync popups (New GUI) */
+        .d365-sync { text-align: start; }
+        .d365-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+        .d365-count { font-size: 22px; font-weight: 800; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+        .d365-bar { height: 10px; background: var(--sr-surface-3); border-radius: 999px; overflow: hidden; margin: 8px 0 12px; }
+        .d365-bar > div { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--sr-accent), #06b6d4); transition: width .3s; }
+        .d365-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .d365-stats .sr-stat { padding: 10px 14px; }
+        .d365-stats .sr-stat-value { font-size: 20px; }
+        .d365-journal { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--sr-muted); }
+        .d365-log { max-height: 160px; overflow: auto; text-align: start; font-size: 12px; margin-top: 10px; border: 1px solid var(--tone-red-bd); background: var(--tone-red-bg); color: var(--tone-red-fg); border-radius: 10px; padding: 6px 10px; }
+        .d365-log > div { padding: 3px 0; border-bottom: 1px dashed var(--tone-red-bd); }
+        .d365-log > div:last-child { border-bottom: 0; }
+        .d365-log:empty { display: none; }
+        .d365-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+        .d365-done-links { margin-top: 12px; }
+    </style>
+    <script>
+    // Sync Payroll to D365: same flow as d365_payroll_push.php (its month_pending / sync_chunk actions do the work).
+    // Only PAID payroll is sent, employees already synced are skipped; booked in one unposted MHO journal per month (each line keeps the worker's own dimensions).
+    (function () {
+        var csrf = <?= json_encode($_SESSION['d365_csrf'] ?? '') ?>;
+        var CHUNK = 10;
+        var POP = { popup: 'sr-addline-popup sr-page' };
+
+        function esc(s) {
+            var d = document.createElement('div');
+            d.textContent = s == null ? '' : String(s);
+            return d.innerHTML;
+        }
+        function lastDay(m) {
+            var p = m.split('-'), d = new Date(Number(p[0]), Number(p[1]), 0);
+            return m + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        function post(data) {
+            var fd = new FormData();
+            fd.append('csrf', csrf);
+            Object.keys(data).forEach(function (k) {
+                if (Array.isArray(data[k])) data[k].forEach(function (v) { fd.append(k + '[]', v); });
+                else fd.append(k, data[k]);
+            });
+            return fetch('d365_payroll_push.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) {
+                if (r.redirected) {
+                    // The app answered with a login/dashboard page: the session was signed out mid-sync
+                    throw new Error('You were signed out of the app during the sync. Reload the page and run Sync again - employees already synced are skipped.');
+                }
+                return r.json().catch(function () { throw new Error('Server error (HTTP ' + r.status + ')'); });
+            });
+        }
+
+        window.syncPayrollToD365 = function (m) {
+            if (!/^\d{4}-\d{2}$/.test(m || '')) {
+                Swal.fire({ icon: 'warning', title: 'Select a payroll month first', customClass: POP });
+                return;
+            }
+            Swal.fire({ title: 'Preparing ' + m, html: '<span class="sr-fhint">Collecting paid employees not yet in D365...</span>', allowOutsideClick: false, customClass: POP, didOpen: function () { Swal.showLoading(); } });
+            post({ action: 'month_pending', month: m }).then(function (res) {
+                if (res.error) { Swal.fire({ icon: 'error', title: 'Cannot sync', text: res.error, customClass: POP }); return; }
+                var ids = res.emp_ids || [];
+                if (!ids.length) {
+                    Swal.fire({ icon: 'info', title: 'Nothing to sync', html: '<div class="sr-notice tone-green mb-0" style="text-align:start"><i class="mdi mdi-check-circle"></i><div>All paid employees of <b>' + esc(m) + '</b> are already in D365.</div></div>', customClass: POP });
+                    return;
+                }
+                Swal.fire({
+                    title: 'Sync ' + ids.length + ' employees to D365?',
+                    html: '<div class="sr-form d365-sync">'
+                        + '<dl class="sr-kv">'
+                        + '<div class="row-kv"><dt>Payroll month</dt><dd>' + esc(m) + '</dd></div>'
+                        + '<div class="row-kv"><dt>Employees</dt><dd>' + ids.length + '</dd></div>'
+                        + '<div class="row-kv"><dt>Journal</dt><dd><span class="sr-pill sr-pill-xs tone-amber">Unposted MHO</span></dd></div>'
+                        + '<div class="row-kv"><dt>Journal date</dt><dd>' + lastDay(m) + '</dd></div>'
+                        + '</dl>'
+                        + '<div class="sr-notice tone-sky mb-0 mt-3"><i class="mdi mdi-information-outline"></i><div>Only paid payroll is sent. Keep this window open until it finishes.</div></div>'
+                        + '</div>',
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Start sync',
+                    confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
+                    allowOutsideClick: false,
+                    customClass: POP
+                }).then(function (r) { if (r.isConfirmed) runSync(m, ids); });
+            }).catch(function (err) {
+                Swal.fire({ icon: 'error', title: 'Cannot sync', text: err.message, customClass: POP });
+            });
+        };
+
+        function runSync(m, ids) {
+            var done = 0, ok = 0, failed = 0, skipped = 0, stop = false, journals = {}, failures = [], missing = [];
+            var started = Date.now();
+
+            Swal.fire({
+                title: 'Syncing ' + m + ' to D365',
+                html: '<div class="sr-form d365-sync">'
+                    + '<div class="sr-fsec mb-0">'
+                    + '<div class="sr-fsec-head"><span><i class="mdi mdi-cloud-sync"></i> Progress</span><span class="sr-chip">' + ids.length + ' employees</span></div>'
+                    + '<div class="sr-fsec-body">'
+                    + '<div class="d365-top"><span class="d365-count" id="d365Count">0 / ' + ids.length + '</span><span class="sr-fhint" id="d365Eta">starting...</span></div>'
+                    + '<div class="d365-bar"><div id="d365Bar"></div></div>'
+                    + '<div class="d365-stats">'
+                    + '<div class="sr-stat is-green"><div class="sr-stat-label">Synced <i class="mdi mdi-check-circle"></i></div><div class="sr-stat-value" id="d365Ok">0</div></div>'
+                    + '<div class="sr-stat is-red"><div class="sr-stat-label">Failed <i class="mdi mdi-close-circle"></i></div><div class="sr-stat-value" id="d365Fail">0</div></div>'
+                    + '</div>'
+                    + '<div class="d365-journal"><i class="mdi mdi-book-open-page-variant"></i><span id="d365Journal">The first step loads D365 employee data and can take a few seconds.</span></div>'
+                    + '<div class="d365-log" id="d365Log"></div>'
+                    + '</div></div>'
+                    + '<div class="d365-actions"><button type="button" class="sr-btn sr-btn-sm" id="d365Stop"><i class="mdi mdi-stop-circle-outline"></i> Stop after current batch</button></div>'
+                    + '</div>',
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                customClass: POP,
+                didOpen: function () {
+                    document.getElementById('d365Stop').addEventListener('click', function () {
+                        stop = true;
+                        this.disabled = true;
+                        this.textContent = 'Stopping...';
+                    });
+                    next();
+                }
+            });
+
+            function update() {
+                var pct = Math.round(done / ids.length * 100);
+                document.getElementById('d365Bar').style.width = pct + '%';
+                document.getElementById('d365Count').textContent = done + ' / ' + ids.length + ' (' + pct + '%)';
+                document.getElementById('d365Ok').textContent = ok;
+                document.getElementById('d365Fail').textContent = failed;
+                if (done > 0) {
+                    var secs = Math.round((Date.now() - started) / done * (ids.length - done) / 1000);
+                    document.getElementById('d365Eta').textContent = done < ids.length ? '~' + (secs > 90 ? Math.round(secs / 60) + ' min' : secs + ' s') + ' left' : 'done';
+                }
+                var js = Object.keys(journals).map(function (c) { return c + ' ' + journals[c]; });
+                if (js.length) document.getElementById('d365Journal').textContent = 'Journals: ' + js.join(', ');
+            }
+            function logFail(id, msg) {
+                failures.push({ id: id, msg: msg });
+                var row = document.createElement('div');
+                row.textContent = id + ': ' + msg;
+                document.getElementById('d365Log').appendChild(row);
+            }
+            function next() {
+                if (stop || done >= ids.length) { finish(); return; }
+                var part = ids.slice(done, done + CHUNK);
+                post({ action: 'sync_chunk', month: m, emp_ids: part }).then(function (res) {
+                    if (res.error) {
+                        // Whole chunk failed (journal, connection...) - stop, nothing in it was sent
+                        part.forEach(function (id) { logFail(id, res.error); });
+                        failed += part.length;
+                        stop = true;
+                    } else {
+                        Object.keys(res.journals || {}).forEach(function (c) { journals[c] = res.journals[c]; });
+                        part.forEach(function (id) {
+                            var r = (res.results || {})[id] || { ok: false, error: 'No result' };
+                            if (r.skipped) skipped++;
+                            else if (r.ok) ok++;
+                            else { failed++; logFail(id, r.error); if (r.missing_worker) missing.push({ id: id, name: r.name || '' }); }
+                        });
+                    }
+                    done += part.length;
+                    update();
+                    next();
+                }).catch(function (err) {
+                    part.forEach(function (id) { logFail(id, err.message); });
+                    failed += part.length;
+                    done += part.length;
+                    stop = true;
+                    update();
+                    next();
+                });
+            }
+            function finish() {
+                var notSent = ids.length - done;
+                var list = failures.length ? '<div class="d365-log">' + failures.map(function (f) { return '<div>' + esc(f.id) + ': ' + esc(f.msg) + '</div>'; }).join('') + '</div>' : '';
+                Swal.fire({
+                    icon: failed ? 'warning' : 'success',
+                    title: failed ? 'Finished with errors' : 'Payroll synced to D365',
+                    html: '<div class="sr-form d365-sync">'
+                        + (missing.length ? '<div class="sr-notice tone-amber" style="margin-bottom:12px"><i class="mdi mdi-account-alert"></i><div><b>' + missing.length + ' employee' + (missing.length === 1 ? ' is' : 's are') + ' not registered in D365</b> - their payroll was not sent. Use <b>Register in D365</b> below to create them, then sync their payroll.</div></div>' : '')
+                        + '<div class="d365-stats">'
+                        + '<div class="sr-stat is-green"><div class="sr-stat-label">Synced <i class="mdi mdi-check-circle"></i></div><div class="sr-stat-value">' + ok + '</div></div>'
+                        + '<div class="sr-stat' + (failed ? ' is-red' : '') + '"><div class="sr-stat-label">Failed <i class="mdi mdi-close-circle"></i></div><div class="sr-stat-value">' + failed + '</div></div>'
+                        + '</div>'
+                        + '<dl class="sr-kv mt-2">'
+                        + (skipped ? '<div class="row-kv"><dt>Already synced</dt><dd>' + skipped + '</dd></div>' : '')
+                        + (notSent ? '<div class="row-kv"><dt>Not sent (stopped)</dt><dd>' + notSent + '</dd></div>' : '')
+                        + (Object.keys(journals).length ? '<div class="row-kv"><dt>Unposted D365 journals</dt><dd>' + Object.keys(journals).map(function (c) { return esc(c) + ' ' + esc(journals[c]); }).join(', ') + '</dd></div>' : '')
+                        + '</dl>'
+                        + list
+                        + '<div class="d365-done-links"><a class="sr-btn sr-btn-sm" href="d365_payroll_push.php?month=' + encodeURIComponent(m) + '" target="_blank"><i class="mdi mdi-open-in-new"></i> Open D365 Payroll Sync page</a></div>'
+                        + '</div>',
+                    confirmButtonText: 'Close',
+                    confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
+                    allowOutsideClick: false,
+                    customClass: POP,
+                    showDenyButton: missing.length > 0,
+                    denyButtonText: 'Register in D365 (' + missing.length + ')',
+                    denyButtonColor: '#ea580c'
+                }).then(function (res) {
+                    // Employees not in D365: register them, then sync just their payroll
+                    if (res.isDenied) {
+                        d365MissingWorkers.open({ missing: missing, month: m, post: post, onSync: function (regIds) { runSync(m, regIds); } });
+                    }
+                });
+            }
+        }
+    })();
+    </script>
+    <?php endif; ?>
 
     </body>
 

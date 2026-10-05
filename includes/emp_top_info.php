@@ -371,7 +371,16 @@ if ($isEmployee !== true) {
 					</a>
 					<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
 						<?php if ($emprow["status"] == 1) : ?>
-						<div class="more-actions-wrapper" style="text-align:center;">
+						<div class="more-actions-wrapper" style="text-align:center; position:relative;">
+							<?php if (($is_system_admin ?? false) && in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) :
+								if (empty($_SESSION['d365_csrf'])) {
+									$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
+								} ?>
+								<!-- Dynamics 365 status / Add / Sync (filled by the script below, see includes/ajaxFile/d365_employee.php) -->
+								<div id="d365Widget" class="d365-widget" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>">
+									<span class="d365-pill"><i class="fa fa-spinner fa-spin"></i> D365</span>
+								</div>
+							<?php endif; ?>
 							<button type="button" id="moreActionsBtn" class="more-actions-btn">
 								<i class="fa fa-bars"></i> <?= __('more') ?>
 							</button>
@@ -520,6 +529,189 @@ if (!empty($empid_check) && ($is_system_admin || $isHR || $isDeptHr)) {
 		}, 500);
 	});
 </script>
-<?php endif; 
+<?php endif;
 } ?>
 <!-- End Force Salary Entry -->
+
+<?php if (($is_system_admin ?? false) && in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) : ?>
+<!-- Dynamics 365 widget (status / Add to D365 / Sync to D365) - system admins only, see includes/ajaxFile/d365_employee.php -->
+<style>
+	.d365-widget { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 10px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+	[dir="rtl"] .d365-widget { right: auto; left: 100%; margin-right: 0; margin-left: 10px; }
+	.d365-widget .d365-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #fff; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.25); }
+	.d365-widget .d365-pill.is-ok { background: rgba(22,163,74,.85); border-color: rgba(255,255,255,.35); }
+	.d365-widget .d365-pill.is-bad { background: rgba(220,38,38,.85); border-color: rgba(255,255,255,.35); cursor: help; }
+	.d365-widget .more-actions-btn { padding: 8px 14px; }
+	.d365-widget .more-actions-btn.is-warn { background: rgba(245,158,11,.9); border-color: rgba(255,255,255,.4); }
+	@media (max-width: 991px) { .d365-widget { position: static; transform: none; margin: 0 0 8px; justify-content: center; } }
+</style>
+<script>
+(function () {
+	var box = document.getElementById('d365Widget');
+	if (!box) return;
+	var empId = box.getAttribute('data-emp');
+	var csrf = box.getAttribute('data-csrf');
+	var ENDPOINT = './includes/ajaxFile/d365_employee.php';
+	var last = null;
+
+	function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+	var POP = { popup: 'sr-addline-popup sr-page' };
+	// New GUI popups need smart_request.css + icons.css (not every page that includes this header links them)
+	function ensureCss() {
+		[['smart_request.css', 'assets/css/smart_request.css'], ['icons.css', 'assets/css/icons.css']].forEach(function (c) {
+			if (document.querySelector('link[href*="' + c[0] + '"]')) return;
+			var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = c[1]; document.head.appendChild(l);
+		});
+	}
+	function withSwal(cb) {
+		ensureCss();
+		if (window.Swal) { cb(); return; }
+		var s = document.createElement('script');
+		s.src = './plugins/sweet-alert/v11/sweetalert2.all.min.js';
+		s.onload = cb;
+		document.head.appendChild(s);
+	}
+	function call(action, extra) {
+		var fd = new FormData();
+		fd.append('action', action);
+		fd.append('csrf', csrf);
+		fd.append('emp_id', empId);
+		Object.keys(extra || {}).forEach(function (k) { fd.append(k, extra[k]); });
+		return fetch(ENDPOINT, { method: 'POST', body: fd, credentials: 'same-origin' })
+			.then(function (r) { return r.json().catch(function () { throw new Error('Server error (HTTP ' + r.status + ')'); }); });
+	}
+
+	function render(res) {
+		last = res;
+		if (!res || (res.ok === false && !res.status)) {
+			box.innerHTML = '<span class="d365-pill is-bad" title="' + esc(res && res.error) + '"><i class="fa fa-exclamation-triangle"></i> D365 ?</span>'
+				+ '<button type="button" class="more-actions-btn" data-act="refresh" title="Retry"><i class="fa fa-redo"></i></button>';
+			return;
+		}
+		var st = res.status || {};
+		var env = (res.environment || '').toUpperCase();
+		var writeAttr = res.can_write ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"';
+		if (st.status === 'registered') {
+			var info = 'D365 ' + env + ' worker ' + (st.d365_name || empId)
+				+ (st.synced_at ? '\nLast sync: ' + st.synced_at : '\nNot synced from the app yet')
+				+ (st.last_error ? '\n' + st.last_error : '');
+			box.innerHTML = '<span class="d365-pill ' + (st.last_error ? 'is-bad' : 'is-ok') + '" title="' + esc(info) + '"><i class="fa fa-check-circle"></i> D365'
+				+ (st.legal_entity ? ' · ' + esc(st.legal_entity) : '') + '</span>'
+				+ '<button type="button" class="more-actions-btn" data-act="sync"' + writeAttr + '><i class="fa fa-sync-alt"></i> Sync to D365</button>';
+		} else {
+			var why = st.status === 'missing' ? 'Not registered in D365 ' + env : (st.last_error || 'Registration failed');
+			box.innerHTML = '<span class="d365-pill is-bad" title="' + esc(why) + '"><i class="fa fa-times-circle"></i> Not in D365</span>'
+				+ '<button type="button" class="more-actions-btn is-warn" data-act="register"' + writeAttr + '><i class="fa fa-plus"></i> Add to D365</button>';
+		}
+	}
+
+	function load(refresh) {
+		box.innerHTML = '<span class="d365-pill"><i class="fa fa-spinner fa-spin"></i> D365</span>';
+		call('status', refresh ? { refresh: 1 } : {}).then(render).catch(function (e) { render({ ok: false, error: e.message }); });
+	}
+
+	function doRegister() {
+		var sug = (last && last.suggest) || { company: '', entities: [] };
+		withSwal(function () {
+			var opts = '<option value="">- choose -</option>' + (sug.entities || []).map(function (en) {
+				return '<option value="' + esc(en) + '"' + (en === sug.company ? ' selected' : '') + '>' + esc(en) + '</option>';
+			}).join('');
+			var env = esc((last.environment || '').toUpperCase());
+			Swal.fire({
+				title: 'Add ' + esc(empId) + ' to D365',
+				html: '<div class="sr-form">'
+					+ '<div class="sr-notice tone-sky" style="margin-bottom:12px"><i class="mdi mdi-information-outline"></i><div>Creates the worker and employment in D365 <b>' + env + '</b> from this employee&#39;s HR data.</div></div>'
+					+ (last.status && last.status.last_error ? '<div class="sr-notice tone-red" style="margin-bottom:12px"><i class="mdi mdi-alert-circle-outline"></i><div><b>Last error:</b> ' + esc(last.status.last_error) + '</div></div>' : '')
+					+ '<div class="sr-fsec mb-0">'
+					+ '<div class="sr-fsec-head"><span><i class="mdi mdi-domain"></i> D365 worker</span>' + (env ? '<span class="sr-pill sr-pill-xs ' + (env === 'PROD' || env === 'PRODUCTION' ? 'tone-red' : 'tone-amber') + '">' + env + '</span>' : '') + '</div>'
+					+ '<div class="sr-fgrid">'
+					+ '<div class="sr-fcol c-6"><label>Employee ID</label><input type="text" class="form-control" value="' + esc(empId) + '" readonly></div>'
+					+ '<div class="sr-fcol c-6"><label for="d365Company">D365 company <span class="text-danger">*</span></label><select id="d365Company" class="form-control">' + opts + '</select>'
+					+ (sug.company ? '<span class="sr-fhint">Suggested from the app company: <b>' + esc(sug.company) + '</b></span>' : '') + '</div>'
+					+ '</div></div></div>',
+				showCancelButton: true,
+				confirmButtonText: '<i class="mdi mdi-account-plus"></i> Add to D365',
+				confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
+				cancelButtonColor: (window.APP_COLORS && APP_COLORS.danger_dark) || undefined,
+				width: '560px',
+				customClass: POP,
+				allowOutsideClick: false,
+				showLoaderOnConfirm: true,
+				preConfirm: function () {
+					var company = document.getElementById('d365Company').value;
+					if (!company) { Swal.showValidationMessage('Choose the D365 company'); return false; }
+					return call('register', { company: company }).then(function (res) {
+						if (!res.ok) { Swal.showValidationMessage(res.error || 'Failed'); if (res.status) render(res); return false; }
+						return res;
+					}).catch(function (e) { Swal.showValidationMessage(e.message); return false; });
+				}
+			}).then(function (r) {
+				if (!r.isConfirmed) return;
+				render(r.value);
+				if (r.value.warning) {
+					Swal.fire({ icon: 'warning', title: 'Added to D365', text: r.value.warning, customClass: POP });
+				} else {
+					Swal.fire({ icon: 'success', title: 'Added to D365', text: 'Worker, employment, contact details and bank account created.', timer: 2200, showConfirmButton: false, customClass: POP });
+				}
+				// D365 tab (view_employee.php) re-reads D365 so it shows the new worker
+				document.dispatchEvent(new CustomEvent('d365:synced', { detail: { emp: empId } }));
+			});
+		});
+	}
+
+	function doSync() {
+		withSwal(function () {
+			var fields = ['Name', 'Birth date', 'Gender', 'Email', 'Mobile', 'Marital status', 'Salary bank account (IBAN)'];
+			Swal.fire({
+				title: 'Sync ' + esc(empId) + ' to D365?',
+				html: '<div class="sr-form">'
+					+ '<div class="sr-fsec mb-0">'
+					+ '<div class="sr-fsec-head"><span><i class="mdi mdi-cloud-sync"></i> Sent from the HR app</span>' + (last && last.environment ? '<span class="sr-pill sr-pill-xs tone-amber">' + esc(String(last.environment).toUpperCase()) + '</span>' : '') + '</div>'
+					+ '<div class="sr-fsec-body"><div class="d-flex flex-wrap" style="gap:6px">'
+					+ fields.map(function (f) { return '<span class="sr-chip"><i class="mdi mdi-check"></i> ' + f + '</span>'; }).join('')
+					+ '</div><span class="sr-fhint mt-2">These values overwrite the D365 worker record.</span></div>'
+					+ '</div></div>',
+				showCancelButton: true,
+				confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Sync',
+				confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
+				cancelButtonColor: (window.APP_COLORS && APP_COLORS.danger_dark) || undefined,
+				width: '560px',
+				customClass: POP,
+				allowOutsideClick: false,
+				showLoaderOnConfirm: true,
+				preConfirm: function () {
+					return call('sync').then(function (res) {
+						if (!res.ok) { Swal.showValidationMessage(res.error || 'Failed'); return false; }
+						return res;
+					}).catch(function (e) { Swal.showValidationMessage(e.message); return false; });
+				}
+			}).then(function (r) {
+				if (!r.isConfirmed) return;
+				render(r.value);
+				var bankText = { created: 'Bank account added.', updated: 'Bank account IBAN updated.', unchanged: 'Bank account already up to date.' }[r.value.bank] || '';
+				if (r.value.warning) {
+					Swal.fire({ icon: 'warning', title: 'Synced to D365', text: r.value.warning, customClass: POP });
+				} else {
+					Swal.fire({ icon: 'success', title: 'Synced to D365', text: bankText, timer: 2200, showConfirmButton: false, customClass: POP });
+				}
+				// D365 tab (view_employee.php) re-reads D365 so it shows the new values
+				document.dispatchEvent(new CustomEvent('d365:synced', { detail: { emp: empId } }));
+			});
+		});
+	}
+	// D365 tab "Sync to D365" button uses the same flow
+	document.addEventListener('d365:sync-request', function () { doSync(); });
+	document.addEventListener('d365:register-request', function () { doRegister(); });
+
+	box.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-act]');
+		if (!b || b.disabled) return;
+		var act = b.getAttribute('data-act');
+		if (act === 'register') doRegister();
+		else if (act === 'sync') doSync();
+		else load(true);
+	});
+	load(false);
+})();
+</script>
+<?php endif; ?>

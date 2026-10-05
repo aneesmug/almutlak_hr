@@ -6,6 +6,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
+require_once __DIR__ . '/../d365_hooks.php';
 
 $action = $_POST['action'] ?? '';
 
@@ -378,6 +379,9 @@ if ($action === 'create_company_employee') {
             }
         }
 
+        // Register the new employee in Dynamics 365 (best effort - failures show "Add to D365" on the employee header)
+        d365_auto_register_employee($conDB, $values[':emp_id']);
+
         echo json_encode(['status' => 'success', 'emp_id' => $values[':emp_id']]);
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => __('database_error') . ': ' . $e->getMessage()]);
@@ -508,6 +512,8 @@ if ($action === 'create_man_power_employee') {
             "Created new manpower employee: $name_emp",
             'employees'
         );
+        // Register the new employee in Dynamics 365 (best effort - failures show "Add to D365" on the employee header)
+        d365_auto_register_employee($conDB, $emp_id);
         echo json_encode(['status' => 'success', 'emp_id' => $emp_id]);
     } else {
         echo json_encode(['status' => 'error', 'message' => 'Error: Could not add employee.']);

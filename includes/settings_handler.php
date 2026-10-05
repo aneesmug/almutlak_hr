@@ -124,6 +124,8 @@ function get_all_settings($conDB) {
     ensure_screen_settings_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
     ensure_theme_config_settings($conDB);
+    ensure_d365_settings($conDB);
+    global $is_system_admin;
 
     $settings = [];
     // db_export_secret_key is auto-generated/rotated from db_export.php's own
@@ -141,6 +143,11 @@ function get_all_settings($conDB) {
 
     if ($result) {
         while ($row = $result->fetch_assoc()) {
+            // D365 Config holds the Entra client secret - only system admins may see it
+            // (other settings-tab delegates can open this endpoint too)
+            if ($row['setting_group'] === 'D365_Config' && !($is_system_admin ?? false)) {
+                continue;
+            }
             $settings[] = $row;
         }
         echo json_encode(['success' => true, 'settings' => $settings]);
@@ -204,7 +211,11 @@ function update_all_settings($conDB) {
 
         // --- Process Text/Select Inputs ---
         $text_inputs = array_diff_key($_POST, ['action' => '']);
+        global $is_system_admin;
         foreach ($text_inputs as $setting_name => $value) {
+            if (strpos((string)$setting_name, 'd365_') === 0 && !($is_system_admin ?? false)) {
+                continue; // D365 Config is system-admin only (see get_all_settings)
+            }
             $stmt->bind_param("ss", $value, $setting_name);
             if (!$stmt->execute()) {
                 throw new Exception('DB update failed for setting: ' . $setting_name);
@@ -866,5 +877,41 @@ function get_special_access_users($conDB) {
     }
 
     echo json_encode(['success' => true, 'users' => $users]);
+}
+
+/**
+ * D365 Config tab (group 'D365_Config', system admins only): connection to Dynamics 365 F&O
+ * used by includes/D365Client.php. Rows are created once with defaults; the client secret
+ * starts empty and is entered by the admin in the tab.
+ */
+function ensure_d365_settings($conDB) {
+    // name => [default, input_type, description, options]
+    $rows = [
+        'd365_tenant_id'     => ['1dd2e950-8575-4619-859c-bdb07e7d4695', 'text', 'D365 Tenant ID (Microsoft Entra)', null],
+        'd365_client_id'     => ['10362ae1-7aa6-48e5-b4a8-3a786648d9c7', 'text', 'D365 Client ID (App registration)', null],
+        'd365_client_secret' => ['', 'password', 'D365 Client Secret', null],
+        'd365_resource_url'  => ['https://almutlak-test.sandbox.operations.dynamics.com', 'text', 'D365 Environment URL (no trailing slash)', null],
+        'd365_environment'   => ['sandbox', 'select', 'D365 Environment', json_encode(['sandbox' => 'Sandbox (test)', 'production' => 'Production (live)'])],
+        'd365_allow_writes'  => ['0', 'select', 'D365 Allow Writes (sync payroll / register workers)', json_encode(['0' => 'No - read only', '1' => 'Yes - allow sending data to D365'])],
+        'd365_journal_names' => ['MHO=GRN_JRN, SANM=GRN_JRN, MSP=RY-GEN, MFF=RY_GEN, RLC=GEN, MTL=01-GV, MRF=01-GV, MMT=01-GV', 'text', 'D365 Payroll Journal Name per Company (COMPANY=JOURNAL, comma separated)', null],
+    ];
+
+    $existing = [];
+    $res = $conDB->query("SELECT setting_name FROM app_settings WHERE setting_name LIKE 'd365\\_%'");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $existing[$r['setting_name']] = true;
+    }
+    $insert = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES (?, ?, 'D365_Config', ?, ?, ?)");
+    if (!$insert) {
+        return;
+    }
+    foreach ($rows as $name => [$value, $type, $desc, $options]) {
+        if (isset($existing[$name])) {
+            continue;
+        }
+        $insert->bind_param('sssss', $name, $value, $desc, $type, $options);
+        $insert->execute();
+    }
+    $insert->close();
 }
 ?>

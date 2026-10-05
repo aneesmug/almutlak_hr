@@ -759,6 +759,13 @@ function __(key, def) {
                             }
                             inputHtml += `</select>`;
                             break;
+                        case 'password':
+                            // Secrets (e.g. D365 client secret): masked, with a show/hide toggle
+                            inputHtml = `<div class="input-group">
+                                <input type="password" id="${id}" name="${setting.setting_name}" class="form-control" autocomplete="new-password" value="${String(setting.setting_value || '').replace(/"/g, '&quot;')}">
+                                <div class="input-group-append"><button type="button" class="btn btn-outline-secondary" onclick="const i=document.getElementById('${id}'); i.type = i.type === 'password' ? 'text' : 'password';"><i class="mdi mdi-eye"></i></button></div>
+                            </div>`;
+                            break;
                         default:
                             inputHtml = `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control" value="${setting.setting_value || ''}">`;
                             break;
