@@ -442,6 +442,19 @@
         .sr-page #settings-container .btn-primary:hover { background: var(--sr-accent-strong); border-color: var(--sr-accent-strong); }
         .sr-page #settings-container .btn-outline-primary { color: var(--sr-accent-strong); border-color: var(--sr-accent); }
         .sr-page #settings-container .btn-outline-primary:hover { background: var(--sr-accent); color: #fff; }
+        /* Button groups (Edit/Delete, Select All/Clear All, ...): the 9px radius above beats Bootstrap's
+           .btn-group rules, so re-join them - only the outer corners stay rounded */
+        .sr-page #settings-container .btn-group > .btn:hover, .sr-page #settings-container .btn-group > .btn:focus { z-index: 1; }
+        .sr-page #settings-container .btn-group > .btn:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .sr-page #settings-container .btn-group > .btn:not(:first-child) { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+        [dir="rtl"] .sr-page #settings-container .btn-group > .btn:not(:last-child) { border-radius: 0 9px 9px 0; }
+        [dir="rtl"] .sr-page #settings-container .btn-group > .btn:not(:first-child) { border-radius: 9px 0 0 9px; margin-left: 0; margin-right: -1px; }
+        [dir="rtl"] .sr-page #settings-container .btn-group > .btn:not(:first-child):not(:last-child) { border-radius: 0; }
+        /* Input + button groups (email lists, recipients): same join */
+        .sr-page #settings-container .input-group > .form-control:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .sr-page #settings-container .input-group-append > .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        [dir="rtl"] .sr-page #settings-container .input-group > .form-control:not(:last-child) { border-radius: 0 10px 10px 0; }
+        [dir="rtl"] .sr-page #settings-container .input-group-append > .btn { border-radius: 9px 0 0 9px; }
         .sr-page #settings-container .alert { border-radius: 12px; font-size: 13px; }
         .sr-page .special-access-category, .sr-page .special-access-user-card { border-color: var(--sr-border); background: var(--sr-surface); }
         .sr-page .special-access-category-header { background: var(--sr-surface-2); border-color: var(--sr-border); color: var(--sr-text); }

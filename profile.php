@@ -2039,6 +2039,11 @@ RTL Support
                     <i class="fa fa-airplay"></i> <?= __('dashboard') ?>
                 </a>
             <?php endif; ?>
+            <?php
+                // Microsoft Dynamics 365 status (+ Sync for system admins / 'd365_sync_employee')
+                $d365WidgetClass = 'is-inline';
+                include __DIR__ . '/includes/d365_widget.php';
+            ?>
 
             </div>
         </div>

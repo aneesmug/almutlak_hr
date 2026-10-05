@@ -1,6 +1,7 @@
 <?php
 /**
- * D365 payroll settings (account mapping) + month overview (system admin only).
+ * D365 payroll settings (account mapping) + month overview.
+ * Page + month sync: system admins and the 'd365_sync_payroll' special access; account mapping (save_settings): system admins only.
  * Syncing is done per month here, or per employee from the D365 / Payrolls tabs of view_employee.php (paid months only), as an UNPOSTED general journal.
  * One journal per environment + month + legal entity; finance reviews and posts it in D365.
  * Line building / logging lives in includes/D365Payroll.php.
@@ -8,9 +9,10 @@
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/D365Payroll.php';
 
-if (!$is_system_admin) {
+$canSyncPayroll = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if (!$canSyncPayroll) {
     http_response_code(403);
-    die('Access Denied: Only system administrators can push payroll to D365');
+    die('Access Denied: You do not have permission to sync payroll to D365');
 }
 
 date_default_timezone_set('Asia/Riyadh');
@@ -75,6 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'save_settings') {
+        if (!$is_system_admin) {
+            http_response_code(403);
+            die('Access Denied: Only system administrators can change the D365 account mapping');
+        }
         $payroll->saveSettings($_POST['s'] ?? [], $userId);
         header('Location: d365_payroll_push.php?month=' . urlencode($_POST['month'] ?? '') . '&entity=' . urlencode($_POST['entity'] ?? '') . '&saved=1#mapping');
         exit;
@@ -411,6 +417,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
         </div>
     </div>
 
+    <?php if ($is_system_admin): ?>
     <div class="sr-card" id="mapping">
         <div class="sr-card-head">
             <div class="sr-card-title">D365 accounts used for payroll</div>
@@ -483,6 +490,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
         </div>
         </details>
     </div>
+    <?php endif; ?>
 
     <datalist id="dlAccounts">
         <?php foreach ($mainAccounts as [$id, $name]): ?><option value="<?= $e($id) ?>"><?= $e($name) ?></option><?php endforeach; ?>

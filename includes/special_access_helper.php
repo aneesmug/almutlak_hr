@@ -72,6 +72,7 @@ if (!function_exists('get_special_access_labels')) {
             'manage_memo_templates' => 'Employee Memos: Add / Edit / Delete Memo Templates',
             'd365_sync_employee' => 'D365: Sync to D365 Button (Employee Header Widget & Payrolls Tab)',
             'view_employee_d365_tab' => 'D365: View Employee Profile\'s D365 Tab',
+            'd365_sync_payroll' => 'D365: Sync Payroll to D365 (Generate Payroll Actions & D365 Payroll Sync Page)',
         ] + get_special_access_page_labels();
     }
 }
@@ -241,6 +242,7 @@ if (!function_exists('get_special_access_categories')) {
                 'keys' => [
                     'd365_sync_employee',
                     'view_employee_d365_tab',
+                    'd365_sync_payroll',
                 ],
             ],
             'Other Special Actions' => [
