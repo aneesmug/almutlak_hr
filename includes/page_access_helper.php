@@ -79,6 +79,7 @@ if (!function_exists('get_default_page_access_roles')) {
             'vacation_balance_history.php' => ['Administrator'],
             'diagnose_double_deduction.php' => ['Administrator'],
             'fix_double_deduction.php' => ['Administrator'],
+            'd365_employee_compare.php' => ['Administrator'],
             'app_settings.php' => ['Administrator'],
         ];
     }
@@ -136,6 +137,7 @@ if (!function_exists('get_page_access_labels')) {
             'vacation_balance_history.php' => 'Vacation Balance History',
             'diagnose_double_deduction.php' => 'Diagnose Double Deduction',
             'fix_double_deduction.php' => 'Fix Double Deduction',
+            'd365_employee_compare.php' => 'D365 Employee Compare',
             'app_settings.php' => 'App Settings',
         ];
     }

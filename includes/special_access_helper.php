@@ -319,7 +319,7 @@ if (!function_exists('get_page_access_subgroups')) {
                     'access_file_manager', 'access_gallery', 'access_language',
                 ],
             ],
-            'System Administration' => ['icon' => 'fa-user-shield', 'keys' => ['access_all_users', 'access_log_activity', 'access_view_activity_logs']],
+            'System Administration' => ['icon' => 'fa-user-shield', 'keys' => ['access_all_users', 'access_log_activity', 'access_view_activity_logs', 'access_d365_employee_compare']],
             'Attendance' => ['icon' => 'fa-calendar-check', 'keys' => ['manage_attendance', 'manage_attendance_config', 'view_employee_attendance_tab']],
             'Reports' => ['icon' => 'fa-chart-bar', 'keys' => ['access_reports']],
         ];

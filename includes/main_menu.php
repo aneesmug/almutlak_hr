@@ -58,6 +58,7 @@ $employeeMemosLink = 'employee_memos.php';
 $vacationBalanceHistoryLink = 'vacation_balance_history.php';
 $vacationDatesEditorLink = 'vacation_dates_by_inv.php';
 $diagnoseDoubleDeductionLink = 'diagnose_double_deduction.php';
+$d365EmployeeCompareLink = 'd365_employee_compare.php';
 $fixDoubleDeductionLink = 'fix_double_deduction.php';
 $appSettingsLink = 'app_settings.php';
 $tableJsonApiLink = 'table_json_api.php';
@@ -243,6 +244,7 @@ $can_see_activity_logs_tool = $is_system_admin || !empty(array_intersect([$user_
 $can_see_language_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['language.php'] ?? []));
 $can_see_diagnose_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['diagnose_double_deduction.php'] ?? []));
 $can_see_fix_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['fix_double_deduction.php'] ?? []));
+$can_see_d365_compare_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['d365_employee_compare.php'] ?? []));
 
 
 // =================================================================================
@@ -943,7 +945,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         // 'access_send_announcement' Special Access grant (see the bypass loop above).
         $can_see_announcement_tool = $is_system_admin || in_array($user_role, $can_see_announcement_page) || in_array($user_type, $can_see_announcement_page);
         ?>
-        <?php if ($is_system_admin || $can_see_announcement_tool || $can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
+        <?php if ($is_system_admin || $can_see_announcement_tool || $can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool || $can_see_d365_compare_tool || $can_see_dynamic_import || $can_see_vacation_date_editor || $can_see_manage_supervisors_tool || $can_view_vac_balance_history || $can_access_app_settings || $can_import_medical_insurance || $can_see_biometric_devices || in_array($user_role, $can_see_employees_group_main) || in_array($user_type, $can_see_employees_group_main) || in_array($user_role, $can_see_import_iqama_page) || in_array($user_type, $can_see_import_iqama_page)): ?>
         <li class="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'mm-active' : '') ?>">
             <a href="javascript:void(0);"><i class="fa-duotone fa-toolbox" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('tools', 'Tools') ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (($current_page_name === 'vacation_dates_by_inv.php' || $current_page_name === 'send_announcement.php' || $current_page_name === 'import_loan_opening_balance.php') ? 'true' : 'false') ?>">
@@ -996,7 +998,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php endif; ?>
-                <?php if ($can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool): ?>
+                <?php if ($can_see_diagnose_deduction_tool || $can_see_fix_deduction_tool || $can_see_d365_compare_tool): ?>
                 <li>
                     <a href="javascript:void(0);"><i class="fa-duotone fa-stethoscope" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnostics', 'Diagnostics') ?></span><span class="float-right fa fa-arrow-right"></span></a>
                     <ul class="nav-third-level" aria-expanded="false">
@@ -1008,6 +1010,9 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                         <?php endif; ?>
                         <?php if ($can_see_fix_deduction_tool): ?>
                         <li><a href="<?= $fixDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-hammer" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('fix_double_deduction', 'Fix Double Deduction') ?></span></a></li>
+                        <?php endif; ?>
+                        <?php if ($can_see_d365_compare_tool): ?>
+                        <li><a href="<?= $d365EmployeeCompareLink ?>" target="_blank"><i class="fa-duotone fa-code-compare" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('d365_employee_compare', 'D365 Employee Compare') ?></span></a></li>
                         <?php endif; ?>
                     </ul>
                 </li>

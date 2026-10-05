@@ -1,6 +1,7 @@
 <?php
 /**
- * HR app employees vs Dynamics 365 workers (system admin only).
+ * HR app employees vs Dynamics 365 workers (system admins, roles allowed in App Settings > Page Access,
+ * or the 'access_d365_employee_compare' special access).
  * Shows who is registered in both, who is missing in D365 (payroll sync skips them),
  * who has a D365 worker but no employment, status differences, and D365-only workers.
  * Match key: employees.emp_id = D365 PersonnelNumber.
@@ -9,10 +10,17 @@ require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/D365Payroll.php';
 require_once __DIR__ . '/includes/D365Workers.php';
 
-if (!$is_system_admin) {
+require_once __DIR__ . '/includes/page_access_helper.php';
+$canCompareD365 = page_role_allowed($conDB, 'd365_employee_compare.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'access_d365_employee_compare', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if (!$canCompareD365) {
     http_response_code(403);
-    die('Access Denied: Only system administrators can compare employees with D365');
+    die('Access Denied: You do not have permission to compare employees with D365');
 }
+// Registering missing workers writes to D365: system admins + 'd365_sync_employee' special access only
+$canRegisterD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+// "Payroll sync" link: system admins + 'd365_sync_payroll' special access only
+$canOpenPayrollSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
 date_default_timezone_set('Asia/Riyadh');
 // D365 (esp. sandbox) can be slow - lift the 25s app-wide limit from includes/db.php for this page
@@ -42,6 +50,10 @@ $environment = $client ? $client->getEnvironment() : 'unknown';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'register') {
     header('Content-Type: application/json; charset=utf-8');
     $regEmp = (string)($_POST['emp_id'] ?? '');
+    if (!$canRegisterD365) {
+        echo json_encode(['ok' => false, 'error' => 'You do not have permission to register employees in D365']);
+        exit;
+    }
     if (!hash_equals($csrf, (string)($_POST['csrf'] ?? ''))) {
         echo json_encode(['ok' => false, 'error' => 'Session expired - reload the page']);
         exit;
@@ -221,12 +233,12 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         </div>
         <div class="sr-head-actions">
             <span class="sr-pill tone-<?= $environment === 'sandbox' ? 'sky' : 'red' ?>" title="<?= $e($client ? $client->getResourceUrl() : '') ?>"><span class="sr-dot"></span><?= $e(ucfirst($environment)) ?></span>
-            <?php if (!$error): ?>
+            <?php if (!$error && $canRegisterD365): ?>
                 <button type="button" class="sr-btn sr-btn-primary" id="btnRegisterAll" <?= $canWrite && !empty($counts['missing']) ? '' : 'disabled' ?>
                     title="<?= $canWrite ? '' : 'Writes are off (App Settings > D365 Config)' ?>">Register missing in D365 (<?= (int)($counts['missing'] ?? 0) ?>)</button>
             <?php endif; ?>
             <a class="sr-btn sr-btn-ghost" href="d365_employee_compare.php?refresh=1">Reload D365 data</a>
-            <a class="sr-btn sr-btn-ghost" href="d365_payroll_push.php">Payroll sync</a>
+            <?php if ($canOpenPayrollSync): ?><a class="sr-btn sr-btn-ghost" href="d365_payroll_push.php">Payroll sync</a><?php endif; ?>
         </div>
     </div>
 
@@ -282,7 +294,7 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
                             <td><?= $emp ? $e(cmp_date($emp['start'])) . ($emp['active'] ? '' : ' (ended)') : '<span class="cmp-muted">-</span>' ?></td>
                             <td><span class="sr-pill tone-<?= $tone ?>"><span class="sr-dot"></span><?= $e($label) ?></span></td>
                             <td style="white-space:nowrap">
-                                <?php if ($r['state'] === 'missing' && $canWrite): ?><button type="button" class="sr-btn sr-btn-primary sr-btn-sm btn-register">Register</button><?php endif; ?>
+                                <?php if ($r['state'] === 'missing' && $canWrite && $canRegisterD365): ?><button type="button" class="sr-btn sr-btn-primary sr-btn-sm btn-register">Register</button><?php endif; ?>
                                 <?php if ($a): ?><a class="sr-btn sr-btn-ghost sr-btn-sm" href="view_employee.php?emp_id=<?= urlencode($r['id']) ?>#d365" target="_blank">Open</a><?php endif; ?>
                             </td>
                         </tr>
