@@ -1720,6 +1720,10 @@ if (mysqli_num_rows($query) == 1) {
 																<div class="profile-field-value"><?= !empty($emprow["subdeptname"]) ? (($is_rtl ?? false) ? $emprow["subdeptname_ar"] : $emprow["subdeptname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
+																<div class="profile-field-label"><?= __('cost_center_label', 'Cost Center') ?></div>
+																<div class="profile-field-value"><?= htmlspecialchars(cost_center_label($conDB, $emprow['cost_center'] ?? '')) ?></div>
+															</div>
+															<div class="profile-field">
 																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
 																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? __('not_available', 'N/A') ?></div>
 															</div>

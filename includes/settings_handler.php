@@ -893,6 +893,7 @@ function ensure_d365_settings($conDB) {
         'd365_resource_url'  => ['https://almutlak-test.sandbox.operations.dynamics.com', 'text', 'D365 Environment URL (no trailing slash)', null],
         'd365_environment'   => ['sandbox', 'select', 'D365 Environment', json_encode(['sandbox' => 'Sandbox (test)', 'production' => 'Production (live)'])],
         'd365_allow_writes'  => ['0', 'select', 'D365 Allow Writes (sync payroll / register workers)', json_encode(['0' => 'No - read only', '1' => 'Yes - allow sending data to D365'])],
+        'd365_department_map' => ['Information Technology=IT, Finance=10, Human Resources=50, Purchase=40, Sales=30, Warehouse=20, Production=81', 'text', 'D365 Department per App Department (APP DEPARTMENT=D365 DEPARTMENT, comma separated) - fills a blank D365 department; departments not listed use the value most colleagues have in D365', null],
         'd365_journal_names' => ['MHO=GRN_JRN, SANM=GRN_JRN, MSP=RY-GEN, MFF=RY_GEN, RLC=GEN, MTL=01-GV, MRF=01-GV, MMT=01-GV', 'text', 'D365 Payroll Journal Name per Company (COMPANY=JOURNAL, comma separated)', null],
     ];
 

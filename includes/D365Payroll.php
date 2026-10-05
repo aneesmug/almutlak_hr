@@ -349,6 +349,7 @@ class D365Payroll
                     'entity' => strtoupper($e['LegalEntityId']),
                     'dims'   => (string)($e['DimensionDisplayValue'] ?? ''),
                     'start'  => $e['EmploymentStartDate'],
+                    'end'    => $e['EmploymentEndDate'],
                     'active' => $active,
                 ];
             }
@@ -508,10 +509,140 @@ class D365Payroll
             return $mainAccount;
         }
         $segments = explode('-', $dims);
+
+        // Preferred: follow the active "formats for data entities" of the connected D365 (they differ
+        // between environments) - each ledger segment takes the employment value of the same dimension name
+        $f = self::$dimFormats;
+        if ($f && $f['default'] && $f['ledger']) {
+            $byName = [];
+            foreach ($f['default'] as $i => $name) {
+                $byName[strtolower($name)] = $segments[$i] ?? '';
+            }
+            $out = [];
+            $hasMain = false;
+            foreach ($f['ledger'] as $name) {
+                if (strtolower($name) === 'mainaccount') {
+                    $out[] = $mainAccount;
+                    $hasMain = true;
+                } else {
+                    $out[] = $byName[strtolower($name)] ?? '';
+                }
+            }
+            if (!$hasMain) {
+                array_unshift($out, $mainAccount);
+            }
+            return implode('-', $out);
+        }
+
         if (count($segments) > 5) {
             $segments = array_slice($segments, 1, 5);
         }
         return $mainAccount . '-' . implode('-', $segments);
+    }
+
+    /** Active D365 dimension formats for data entities: ['default' => [names], 'ledger' => [names]] */
+    private static $dimFormats = null;
+
+    /**
+     * Load the connected D365's active default + ledger dimension formats (cached 6h in the temp dir).
+     * Throws when the ledger format cannot hold the worker dimension, so nothing is booked without it.
+     */
+    /** Active default + ledger dimension formats of a D365 environment (cached 6h in the temp dir) */
+    public static function fetchDimensionFormats(D365Client $client)
+    {
+        $file = self::dimensionFormatFile($client);
+        $formats = (is_file($file) && time() - filemtime($file) < 21600) ? json_decode((string)file_get_contents($file), true) : null;
+        if ($formats) {
+            return $formats;
+        }
+        $r = $client->get('DimensionIntegrationFormats', []);
+        if ($r['error']) {
+            throw new RuntimeException('D365 dimension formats: ' . $r['error']);
+        }
+        $formats = ['default' => [], 'ledger' => []];
+        foreach ($r['data']['value'] ?? [] as $row) {
+            if (($row['IsActive'] ?? '') !== 'Yes') {
+                continue;
+            }
+            $names = array_values(array_filter(explode('-', (string)$row['FinancialDimensionFormat']), 'strlen'));
+            if ($row['DimensionFormatType'] === 'DataEntityDefaultDimensionFormat') {
+                $formats['default'] = $names;
+            } elseif ($row['DimensionFormatType'] === 'DataEntityLedgerDimensionFormat') {
+                $formats['ledger'] = $names;
+            }
+        }
+        @file_put_contents($file, json_encode($formats), LOCK_EX);
+        return $formats;
+    }
+
+    private static function dimensionFormatFile(D365Client $client)
+    {
+        return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_dimfmt_' . md5($client->getResourceUrl()) . '.json';
+    }
+
+    /**
+     * Employment dims with the Department segment filled when it is blank (an existing D365 value is never replaced).
+     * $dims / result are in the default dimension format, e.g. "---5430----" + IT -> "--IT-5430----".
+     */
+    public static function withDepartment($dims, $department, array $defaultFormat)
+    {
+        $department = trim((string)$department);
+        if ($department === '') {
+            return $dims;
+        }
+        $names = $defaultFormat ?: ['MainAccount', 'Company', 'Department', 'Worker', 'Branch', 'Customer', 'FixedAsset', 'LC'];
+        $i = array_search('department', array_map('strtolower', $names), true);
+        if ($i === false) {
+            return $dims;
+        }
+        $segments = explode('-', (string)$dims);
+        $segments = array_pad($segments, count($names), '');
+        if (trim($segments[$i]) !== '') {
+            return $dims;
+        }
+        $segments[$i] = $department;
+        return implode('-', $segments);
+    }
+
+    /** @var D365Workers|null */
+    private $workersHelper = null;
+
+    /** Employment dims with a blank Department filled from the app department (see D365Workers::departmentFor) */
+    private function dimsWithDepartment($empId, $dims, array $employments = null)
+    {
+        if (!$this->client || trim((string)$dims, '-') === '') {
+            return $dims;
+        }
+        try {
+            if (!$this->workersHelper) {
+                require_once __DIR__ . '/D365Workers.php';
+                $this->workersHelper = new D365Workers($this->db, $this->client);
+            }
+            $formats = self::$dimFormats ?: self::fetchDimensionFormats($this->client);
+            return self::withDepartment($dims, $this->workersHelper->departmentFor($empId, $employments), $formats['default'] ?? []);
+        } catch (Throwable $ex) {
+            return $dims; // never block the payroll line on the department lookup
+        }
+    }
+
+    public function loadDimensionFormats()
+    {
+        if (!$this->client) {
+            return null;
+        }
+        $file = self::dimensionFormatFile($this->client);
+        $formats = self::fetchDimensionFormats($this->client);
+        // Payroll lines must carry the worker. D365 ignores DefaultDimensionDisplayValue on ledger lines
+        // (tested), so a ledger format without Worker (e.g. "FixedAsset") cannot be worked around here.
+        if (!$formats['ledger'] || !in_array('worker', array_map('strtolower', $formats['ledger']), true)) {
+            @unlink($file); // re-read on the next try, once fixed in D365
+            throw new RuntimeException('D365 ' . $this->client->getEnvironment() . ': the active ledger dimension format for data entities is "'
+                . implode('-', $formats['ledger']) . '", which has no Worker dimension, so payroll cannot be booked per employee. '
+                . 'In D365 open General ledger > Chart of accounts > Dimensions > Financial dimension configuration for integrating applications, '
+                . 'select "Ledger dimension format" and set the dimensions to MainAccount-Company-Department-Worker-Branch-Customer (same as the sandbox), then sync again.');
+        }
+        self::$dimFormats = $formats;
+        return $formats;
     }
 
     // ---------------------------------------------------------------- push
@@ -537,6 +668,8 @@ class D365Payroll
 
     private function doSyncEmployeeMonth($empId, $month, $transDate, $userId, $environment)
     {
+        // Ledger accounts follow the active D365 dimension formats (see loadDimensionFormats)
+        $this->loadDimensionFormats();
         $rows = $this->getPayrolls($month, [$empId]);
         $p = $rows[$empId] ?? null;
         if (!$p) {
@@ -576,6 +709,7 @@ class D365Payroll
             return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
         }
         $employment['entity'] = self::payrollCompany($settings);
+        $employment['dims'] = $this->dimsWithDepartment($empId, $employment['dims']);
 
         try {
             $journal = $this->ensureJournal($environment, $month, $employment['entity'], $settings, $userId);
@@ -685,7 +819,7 @@ class D365Payroll
     {
         $bodies = [];
         foreach ($built['lines'] as $l) {
-            $bodies[] = [
+            $body = [
                 'dataAreaId'          => strtolower($employment['entity']),
                 'JournalBatchNumber'  => $journal['journal_batch'],
                 'TransDate'           => $transDate . 'T12:00:00Z',
@@ -696,6 +830,7 @@ class D365Payroll
                 'CurrencyCode'        => $settings['currency'] ?: 'SAR',
                 'Text'                => $l['text'],
             ];
+            $bodies[] = $body;
         }
         return $bodies;
     }
@@ -762,6 +897,7 @@ class D365Payroll
 
     private function doSyncMonthChunk($month, array $empIds, array $employments, $userId, $environment)
     {
+        $this->loadDimensionFormats();
         $settings = $this->getSettings();
         $transDate = date('Y-m-t', strtotime($month . '-01'));
 
@@ -812,7 +948,7 @@ class D365Payroll
                         }
                     }
                     if (isset($journals[$company])) {
-                        $employment = ['entity' => $company, 'dims' => $employments[$id]['dims']];
+                        $employment = ['entity' => $company, 'dims' => $this->dimsWithDepartment($id, $employments[$id]['dims'], $employments)];
                         $groups[$id] = self::lineBodies($b, $employment, $journals[$company], $settings, $transDate);
                         $built[$id] = $result;
                         continue;

@@ -2,6 +2,8 @@
 // require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/cost_centers.php';
+cost_center_ensure_column($conDB);
 
 // Request-blocking fields are only writable/visible by admins or employees with the matching special access grant.
 $canManageRequestBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
@@ -16,6 +18,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 	// Process the form submission before any HTML output
 	try {
 		$formData = $_POST;
+		if (isset($formData['cost_center'])) {
+			$formData['cost_center'] = cost_center_clean($conDB, $formData['cost_center']); // D365 cost center, default C30
+		}
 		// Whitelist of allowed database columns
 		$allowedColumns = [
 			'name',
@@ -32,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'city_id',
 			'location_id',
 			'sub_dept_id',
+			'cost_center',
 			'emptype',
 			'supervisor_id',
 			'joining_date',
@@ -454,6 +460,12 @@ if (mysqli_num_rows($query) == 1) {
 												<label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
 												<select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
 												<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
+												<label for="cost_center" class="col-form-label"><?= __("cost_center_label", "Cost Center") ?></label>
+												<select class="form-control select2" name="cost_center" id="cost_center">
+												<?= cost_center_options_html($conDB, $emprow['cost_center'] ?? '') ?>
 												</select>
 											</div>
 											<div class="form-group col-md-2">

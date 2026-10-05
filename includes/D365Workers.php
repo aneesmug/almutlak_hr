@@ -160,6 +160,17 @@ class D365Workers
             if (!$bank['ok']) {
                 $res['warning'] = 'Bank account not synced: ' . $bank['error'];
             }
+            // Department financial dimension of the employment (only filled when blank in D365)
+            try {
+                $dept = $this->syncDepartment($empId);
+            } catch (Throwable $ex) {
+                $dept = ['ok' => false, 'error' => $ex->getMessage()];
+            }
+            $res['department'] = $dept['action'] ?? null;
+            $res['department_value'] = $dept['value'] ?? null;
+            if (!$dept['ok']) {
+                $res['warning'] = trim(($res['warning'] ?? '') . ' Department not synced: ' . $dept['error']);
+            }
         }
         $row = $this->loadStatus($empId);
         if ($res['ok']) {
@@ -168,6 +179,108 @@ class D365Workers
             $this->saveStatus($empId, $row['status'] ?? 'registered', $row['legal_entity'] ?? null, null, 'Sync failed: ' . $res['error']);
         }
         return $res;
+    }
+
+    /** @var array|null app department (id and lower-case name) => D365 Department value */
+    private $departmentMap = null;
+
+    /**
+     * D365 Department value for an employee's app department: D365 Config "Department map" first
+     * (APP DEPARTMENT=VALUE, by name or id), else the value most colleagues of that app department
+     * already have in D365 (cached 24h). '' when unknown.
+     * $employments = D365Payroll::getEmployments() map, to avoid fetching it again.
+     */
+    public function departmentFor($empId, array $employments = null)
+    {
+        if ($this->departmentMap === null) {
+            $this->departmentMap = $this->buildDepartmentMap($employments);
+        }
+        $stmt = $this->db->prepare("SELECT e.dept, d.dep_nme FROM employees e LEFT JOIN department d ON d.id = e.dept WHERE e.emp_id = ?");
+        $stmt->bind_param('s', $empId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$row) {
+            return '';
+        }
+        return $this->departmentMap['id:' . $row['dept']]
+            ?? $this->departmentMap['name:' . mb_strtolower(trim((string)$row['dep_nme']))]
+            ?? $this->departmentMap['vote:' . $row['dept']]
+            ?? '';
+    }
+
+    private function buildDepartmentMap(array $employments = null)
+    {
+        $map = [];
+        $config = D365Client::loadConfig();
+        foreach (preg_split('/[,;\r\n]+/', (string)($config['DEPARTMENT_MAP'] ?? '')) as $pair) {
+            if (strpos($pair, '=') === false) {
+                continue;
+            }
+            [$app, $d365] = array_map('trim', explode('=', $pair, 2));
+            if ($app === '' || $d365 === '') {
+                continue;
+            }
+            $map[(ctype_digit($app) ? 'id:' : 'name:') . mb_strtolower($app)] = $d365;
+        }
+
+        // Fallback: majority vote of colleagues already carrying a Department in D365
+        $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_dept_vote_' . md5($this->client->getResourceUrl()) . '.json';
+        $votes = (is_file($file) && time() - filemtime($file) < 86400) ? json_decode((string)file_get_contents($file), true) : null;
+        if (!is_array($votes)) {
+            require_once __DIR__ . '/D365Payroll.php';
+            $employments = $employments ?? (new D365Payroll($this->db, $this->client))->getEmployments();
+            $formats = D365Payroll::fetchDimensionFormats($this->client);
+            $i = array_search('department', array_map('strtolower', $formats['default'] ?: []), true);
+            $i = $i === false ? 2 : $i;
+            $count = [];
+            $res = $this->db->query("SELECT emp_id, dept FROM employees");
+            while ($res && ($r = $res->fetch_assoc())) {
+                $value = trim(explode('-', (string)($employments[$r['emp_id']]['dims'] ?? ''))[$i] ?? '');
+                if ($value !== '') {
+                    $count[$r['dept']][$value] = ($count[$r['dept']][$value] ?? 0) + 1;
+                }
+            }
+            $votes = [];
+            foreach ($count as $dept => $values) {
+                arsort($values);
+                $votes[$dept] = (string)key($values);
+            }
+            @file_put_contents($file, json_encode($votes), LOCK_EX);
+        }
+        foreach ($votes as $dept => $value) {
+            $map['vote:' . $dept] = $value;
+        }
+        return $map;
+    }
+
+    /**
+     * Fill the Department of the worker's current D365 employment when it is blank (never replaces a value
+     * finance set). Returns ['ok' => bool, 'error' => ?, 'action' => set|unchanged|unknown|skipped, 'value' => ?]
+     */
+    public function syncDepartment($empId)
+    {
+        require_once __DIR__ . '/D365Payroll.php';
+        $employment = (new D365Payroll($this->db, $this->client))->getEmployments($empId)[$empId] ?? null;
+        if (!$employment) {
+            return ['ok' => true, 'error' => null, 'action' => 'skipped'];
+        }
+        $formats = D365Payroll::fetchDimensionFormats($this->client);
+        $dept = $this->departmentFor($empId);
+        if ($dept === '') {
+            return ['ok' => true, 'error' => null, 'action' => 'unknown'];
+        }
+        $newDims = D365Payroll::withDepartment($employment['dims'], $dept, $formats['default'] ?? []);
+        if ($newDims === $employment['dims']) {
+            return ['ok' => true, 'error' => null, 'action' => 'unchanged'];
+        }
+        $q = function ($v) { return "'" . rawurlencode(str_replace("'", "''", (string)$v)) . "'"; };
+        $key = 'Employments(PersonnelNumber=' . $q($empId) . ',LegalEntityId=' . $q($employment['entity'])
+            . ',EmploymentStartDate=' . $employment['start'] . ',EmploymentEndDate=' . $employment['end'] . ')';
+        $res = $this->client->batchUpdate($key, ['DimensionDisplayValue' => $newDims]);
+        // payroll pages cache the employment list - drop it so the next sync sees the department
+        @unlink(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_cache_' . md5($this->client->getResourceUrl() . '|employments') . '.json');
+        return ['ok' => $res['ok'], 'error' => $res['error'], 'action' => 'set', 'value' => $dept];
     }
 
     /** Saudi IBAN bank code (characters 5-6) => [D365 bank name, SWIFT] */

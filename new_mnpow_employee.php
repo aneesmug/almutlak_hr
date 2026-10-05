@@ -1,6 +1,8 @@
 <?php
 	require_once __DIR__ . '/includes/db.php';
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/cost_centers.php';
+	cost_center_ensure_column($conDB);
 
 	// This was included but never used. It can be removed if not needed for other logic.
 	// include("./includes/Hijri_GregorianConvert.php");
@@ -26,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     $city_id = !empty($_POST['city_id']) ? (int)$_POST['city_id'] : null;
     $location_id = !empty($_POST['location_id']) ? (int)$_POST['location_id'] : null;
     $sub_dept_id = !empty($_POST['sub_dept_id']) ? (int)$_POST['sub_dept_id'] : null;
+    $cost_center = cost_center_clean($conDB, $_POST['cost_center'] ?? ''); // D365 cost center, default C30
     $country = trim($_POST['country'] ?? '');
     $dob = trim($_POST['dob'] ?? '');
     $sex = trim($_POST['sex'] ?? 'male');
@@ -73,12 +76,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
             $msg = "<div class=\"alert alert-danger bg-danger text-white border-0\" role=\"alert\">This employee no. (\"$emp_id\") is already registered!</div>";
         } else {
             // Insert new employee record
-            $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `date_reg`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`, `cost_center`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             $stmt_insert = $conDB->prepare($sql);
             $stmt_insert->bind_param(
-                "ssssdsssssiiissss",
+                "ssssdsssssiiissssss", // 18 values (the old type string was one short) + cost_center
                 $name_emp,
                 $emp_id,
                 $iqama,
@@ -96,7 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                 $dob,
                 $sex,
                 $emp_sup_type,
-                $iqama_exp_g
+                $iqama_exp_g,
+                $cost_center
             );
 
             if ($stmt_insert->execute()) {
@@ -312,6 +316,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                                 <label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
                                                 <select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
                                                 <option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group col-md-3">
+                                                <label for="cost_center" class="col-form-label"><?= __("cost_center_label", "Cost Center") ?></label>
+                                                <select class="form-control select2" name="cost_center" id="cost_center">
+                                                <?= cost_center_options_html($conDB, COST_CENTER_DEFAULT) ?>
                                                 </select>
                                             </div>
                                             <div class="form-group col-md-3">

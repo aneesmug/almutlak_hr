@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/D365Workers.php';
+require_once __DIR__ . '/../../includes/D365Payroll.php';
 
 header('Content-Type: text/html; charset=utf-8');
 // D365 can be slow - lift the 25s app-wide limit from includes/db.php
@@ -156,6 +157,16 @@ $money = function ($v) { return number_format((float)$v, 2); };
     <?php endif; ?>
 
     <?php if ($worker):
+        // Department dimension: what D365 has on the current employment vs what the app department maps to
+        $deptFormats = ['default' => []];
+        $deptExpected = '';
+        try {
+            $deptFormats = D365Payroll::fetchDimensionFormats($client);
+            $deptExpected = $workers->departmentFor($targetEmp);
+        } catch (Throwable $ex) {
+        }
+        $deptIdx = array_search('department', array_map('strtolower', $deptFormats['default'] ?: []), true);
+        $deptD365 = trim(explode('-', (string)($current['DimensionDisplayValue'] ?? ''))[$deptIdx === false ? 2 : $deptIdx] ?? '');
         $compare = [
             ['Name', $local['name'] ?? '', $worker['Name'] ?? '', true],
             ['Joining date', $local['joining_date'] ?? '', d365tab_date($current['EmploymentStartDate'] ?? ''), true],
@@ -165,14 +176,14 @@ $money = function ($v) { return number_format((float)$v, 2); };
             ['IBAN', $local['iban'] ?? '', $d['banks'][0]['BankIBAN'] ?? '', true],
             ['Gender', ['1' => 'Male', '2' => 'Female'][(string)($local['sex'] ?? '')] ?? (string)($local['sex'] ?? ''),d365tab_empty($worker['Gender'] ?? '') ? '' : $worker['Gender'], true],
             ['Marital status', $local['mar_status'] ?? '', d365tab_empty($worker['MaritalStatus'] ?? '') ? '' : $worker['MaritalStatus'], false],
-            ['Department', $local['dep_nme'] ?? '', '', false],
+            ['Department' . (!empty($local['dep_nme']) ? ' (' . $local['dep_nme'] . ')' : ''), $deptExpected, $deptD365, true],
             ['Status', isset($local['status']) ? ((string)$local['status'] === '1' ? 'Active' : 'Inactive (' . $local['status'] . ')') : '', $worker['WorkerStatus'] ?? '', false],
         ]; ?>
         <div class="sr-card">
             <div class="sr-card-head">
                 <div class="sr-card-title">HR app vs D365</div>
                 <div class="sr-card-sub">
-                    Sync sends name, birth date, gender, email, mobile, marital status and IBAN from the HR app to D365
+                    Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365
                     <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"' ?>><i class="mdi mdi-sync"></i> Sync to D365</button>
                 </div>
             </div>

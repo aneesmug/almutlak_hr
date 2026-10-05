@@ -167,7 +167,7 @@ if (empty($_SESSION['d365_csrf'])) {
 
 	function doSync() {
 		withSwal(function () {
-			var fields = ['Name', 'Birth date', 'Gender', 'Email', 'Mobile', 'Marital status', 'Salary bank account (IBAN)'];
+			var fields = ['Name', 'Birth date', 'Gender', 'Email', 'Mobile', 'Marital status', 'Salary bank account (IBAN)', 'Department (when blank in D365)'];
 			Swal.fire({
 				title: 'Sync ' + esc(empId) + ' to D365?',
 				html: '<div class="sr-form">'
@@ -195,6 +195,7 @@ if (empty($_SESSION['d365_csrf'])) {
 				if (!r.isConfirmed) return;
 				render(r.value);
 				var bankText = { created: 'Bank account added.', updated: 'Bank account IBAN updated.', unchanged: 'Bank account already up to date.' }[r.value.bank] || '';
+				if (r.value.department === 'set') bankText += ' Department set to ' + r.value.department_value + '.';
 				if (r.value.warning) {
 					Swal.fire({ icon: 'warning', title: 'Synced to D365', text: r.value.warning, customClass: POP });
 				} else {

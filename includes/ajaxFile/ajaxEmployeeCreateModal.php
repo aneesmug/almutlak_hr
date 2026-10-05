@@ -7,6 +7,8 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../d365_hooks.php';
+require_once __DIR__ . '/../cost_centers.php';
+cost_center_ensure_column($conDB);
 
 $action = $_POST['action'] ?? '';
 
@@ -109,6 +111,8 @@ if ($action === 'get_form_data') {
             return $row;
         }, ecm_rows($conDB, "SELECT DISTINCT e.id, e.emp_id, e.name, e.emptype FROM `employees` e WHERE e.status = 1 AND (e.emptype = 'Manager' OR e.emptype = 'Supervisor') ORDER BY e.name")),
         'all_locations' => ecm_rows($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC"),
+        'cost_centers' => array_values(array_filter(cost_center_list($conDB), function ($cc) { return $cc['active']; })),
+        'cost_center_default' => COST_CENTER_DEFAULT,
         'all_sub_departments' => ecm_rows($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC"),
     ]);
     exit;
@@ -218,7 +222,7 @@ if ($action === 'create_company_employee') {
     $allowedColumns = [
         'name', 'emp_id', 'iqama', 'iqama_exp', 'passport_number',
         'passport_exp', 'mobile', 'emg_mobile', 'emg_name', 'country', 'dept',
-        'city_id', 'location_id', 'sub_dept_id', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
+        'city_id', 'location_id', 'sub_dept_id', 'cost_center', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
         'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
         'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
         'iqama_exp_g', 'gosi',
@@ -241,6 +245,7 @@ if ($action === 'create_company_employee') {
     unset($data['action']);
     $data['created_at'] = date('Y-m-d H:i:s');
     $data['fly'] = 0;
+    $data['cost_center'] = cost_center_clean($conDB, $data['cost_center'] ?? ''); // D365 cost center, default C30
     $data['dept'] = $data['department'] ?? null;
     unset($data['department']);
     $data['avatar'] = ($data['sex'] == 1) ? "./assets/emp_pics/defult.png" : "./assets/emp_pics/defultFemale.jpg";
@@ -404,6 +409,7 @@ if ($action === 'create_man_power_employee') {
     $city_id = !empty($_POST['city_id']) ? (int)$_POST['city_id'] : null;
     $location_id = !empty($_POST['location_id']) ? (int)$_POST['location_id'] : null;
     $sub_dept_id = !empty($_POST['sub_dept_id']) ? (int)$_POST['sub_dept_id'] : null;
+    $cost_center = cost_center_clean($conDB, $_POST['cost_center'] ?? ''); // D365 cost center, default C30
     $country = trim($_POST['country'] ?? '');
     $dob = trim($_POST['dob'] ?? '');
     $sex = trim($_POST['sex'] ?? 'male');
@@ -465,12 +471,12 @@ if ($action === 'create_man_power_employee') {
     //  2. Inserts the string 'active' into `status`, an int column - MySQL coerces that to
     //     0 (inactive), so every man-power employee created via the original page ends up
     //     inactive. Inserts 1 here instead, matching what "active" is meant to mean.
-    $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `created_at`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `created_at`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`, `cost_center`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     $stmt_insert = $conDB->prepare($sql);
     $stmt_insert->bind_param(
-        "ssssdsssssiiisssss",
+        "ssssdsssssiiissssss",
         $name_emp,
         $emp_id,
         $iqama,
@@ -488,7 +494,8 @@ if ($action === 'create_man_power_employee') {
         $dob,
         $sex,
         $emp_sup_type,
-        $iqama_exp_g
+        $iqama_exp_g,
+        $cost_center
     );
 
     if ($stmt_insert->execute()) {

@@ -2,6 +2,8 @@
 	// Start output buffering to allow header redirects
 	ob_start();
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/cost_centers.php';
+	cost_center_ensure_column($conDB);
 	include("./includes/Hijri_GregorianConvert.php");
 	$DateConv=new Hijri_GregorianConvert;
 	$format="DD/MM/YYYY";
@@ -20,7 +22,7 @@ if(isset($_POST['submit'])){
 	$allowedColumns = [
 		'name', 'emp_id', 'iqama', 'iqama_exp', 'passport_number',
 		'passport_exp', 'mobile', 'emg_mobile', 'emg_name', 'country', 'dept',
-		'city_id', 'location_id', 'sub_dept_id', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
+		'city_id', 'location_id', 'sub_dept_id', 'cost_center', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
 		'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
 		'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
 		'iqama_exp_g', 'gosi',
@@ -43,6 +45,7 @@ if(isset($_POST['submit'])){
 	// Add auto-generated fields
 	$data['created_at'] = date('Y-m-d H:i:s');
 	$data['fly'] = 0;
+	$data['cost_center'] = cost_center_clean($conDB, $data['cost_center'] ?? ''); // D365 cost center, default C30
 	$data['dept'] = $data['department'] ?? null;
 	unset($data['department']);
 	$data['avatar'] = ($data['sex'] == 1)?"./assets/emp_pics/defult.png":"./assets/emp_pics/defultFemale.jpg";
@@ -435,6 +438,12 @@ if(isset($_POST['submit'])){
 												<label for="sub_dept_id" class="col-form-label"><?= __("sub_department_label", "Sub-Department") ?></label>
 												<select class="form-control select2" name="sub_dept_id" id="sub_dept_id">
 												<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
+												</select>
+											</div>
+											<div class="form-group col-md-2">
+												<label for="cost_center" class="col-form-label"><?= __("cost_center_label", "Cost Center") ?></label>
+												<select class="form-control select2" name="cost_center" id="cost_center">
+												<?= cost_center_options_html($conDB, COST_CENTER_DEFAULT) ?>
 												</select>
 											</div>
 											<div class="form-group col-md-2">

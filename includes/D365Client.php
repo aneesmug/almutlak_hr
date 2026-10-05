@@ -64,6 +64,7 @@ class D365Client
                 'd365_environment'   => 'ENVIRONMENT',
                 'd365_allow_writes'  => 'ALLOW_WRITES',
                 'd365_journal_names' => 'JOURNAL_NAMES',
+                'd365_department_map' => 'DEPARTMENT_MAP',
             ];
             $res = @$conDB->query("SELECT setting_name, setting_value FROM app_settings WHERE setting_name LIKE 'd365\\_%'");
             while ($res && ($r = $res->fetch_assoc())) {
