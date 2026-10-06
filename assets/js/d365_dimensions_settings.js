@@ -515,10 +515,10 @@
     function dimOptions(dim, selected, def) {
         var found = false;
         var html = '<option value="">' + esc(def ? t('default', 'Default') + ': ' + def : '') + '</option>' +
-            (state.dimValues[dim] || []).filter(function (v) { return v.active || v.value === selected; }).map(function (v) {
+            (state.dimValues[dim] || []).filter(function (v) { return v.active; }).map(function (v) {
                 var sel = v.value === selected;
                 found = found || sel;
-                return '<option value="' + esc(v.value) + '"' + (sel ? ' selected' : '') + '>' + esc(v.value + (v.name ? ' - ' + v.name : '')) + '</option>';
+                return '<option value="' + esc(v.value) + '"' + (sel ? ' selected' : '') + '>' + esc(v.value + (v.name ? ' - ' + v.name : '') + (v.active ? '' : ' (' + t('d365_suspended', 'suspended in D365') + ')')) + '</option>';
             }).join('');
         if (selected && !found) { // value D365 no longer has
             html += '<option value="' + esc(selected) + '" selected>' + esc(selected + ' (' + t('d365_not_in_d365', 'not in D365') + ')') + '</option>';
@@ -915,8 +915,8 @@
             var rows = j.departments.map(function (d) {
                 var mapped = d.d365 || '';
                 var opts = '<option value="">' + esc(t('d365_not_mapped', '- not mapped -')) + '</option>' +
-                    d365.filter(function (v) { return v.active || v.value === mapped; }).map(function (v) {
-                        return '<option value="' + esc(v.value) + '"' + (v.value === mapped ? ' selected' : '') + '>' + esc(v.value + (v.name ? ' - ' + v.name : '')) + '</option>';
+                    d365.filter(function (v) { return v.active; }).map(function (v) {
+                        return '<option value="' + esc(v.value) + '"' + (v.value === mapped ? ' selected' : '') + '>' + esc(v.value + (v.name ? ' - ' + v.name : '') + (v.active ? '' : ' (' + t('d365_suspended', 'suspended in D365') + ')')) + '</option>';
                     }).join('') +
                     (mapped && !known[mapped] ? '<option value="' + esc(mapped) + '" selected>' + esc(mapped + ' (' + t('d365_not_in_d365', 'not in D365') + ')') + '</option>' : '') +
                     '<option value="' + NEW + '">+ ' + esc(t('d365_create_new', 'Create new in D365...')) + '</option>';
@@ -926,7 +926,8 @@
                     (!mapped && known[String(d.id)] ? '<div class="sr-cell-sub text-warning">' + esc(t('d365_same_id_exists', 'D365 already has code') + ' ' + d.id + (known[String(d.id)].name ? ' (' + known[String(d.id)].name + ')' : '') + ' - ' + t('d365_pick_it', 'pick it from the list')) + '</div>' : '') +
                     '</td>' +
                     '<td class="text-center">' + esc(d.employees) + '</td>' +
-                    '<td><select class="form-control form-control-sm js-dept" style="min-width:220px">' + opts + '</select>' +
+                    '<td>' + (d.removed ? '<div class="sr-cell-sub text-danger mb-1"><i class="mdi mdi-cancel"></i> ' + esc(d.removed + ' ' + t('d365_removed_suspended', 'was suspended in D365 - mapping removed, pick another')) + '</div>' : '') +
+                    '<select class="form-control form-control-sm js-dept" style="min-width:220px">' + opts + '</select>' +
                     '<div class="js-new" style="display:none;gap:6px;margin-top:6px">' +
                     '<input type="text" class="form-control form-control-sm sr-mono js-code" maxlength="20" style="width:90px" value="' + esc(d.id) + '" placeholder="' + esc(t('code', 'Code')) + '" title="' + esc(t('d365_code_is_app_id', 'Same as the app department ID')) + '">' +
                     '<input type="text" class="form-control form-control-sm js-name" maxlength="60" value="' + esc(d.dep_nme_ar || d.dep_nme) + '" placeholder="' + esc(t('name', 'Name')) + '">' +
@@ -935,6 +936,8 @@
             }).join('');
 
             host.innerHTML =
+                ((j.unmapped_suspended || []).length ? '<div class="sr-notice tone-amber mb-2"><i class="mdi mdi-alert-outline"></i> ' +
+                    esc(t('d365_unmapped_suspended', 'Suspended in D365, removed from the mapping:') + ' ' + j.unmapped_suspended.join(', ')) + '</div>' : '') +
                 '<div class="sr-notice tone-sky mb-3"><i class="mdi mdi-information-outline"></i> ' +
                 esc(t('d365_dept_help', 'Map every app department to its D365 department. Pick "Create new in D365" for a department D365 does not have yet - its code is filled with the app department ID (you can change it) - Create in D365 adds it as a D365 department, which also makes it a Department dimension value. Then Assign to employees sets each active employee\'s Department (Employee Dimensions) from their app department.')) +
                 '<br><small>' + esc(t('d365_environment', 'Environment')) + ': <b>' + esc(j.environment) + '</b>' +
@@ -956,6 +959,7 @@
                 var st;
                 if (v === NEW) st = ['tone-indigo', t('d365_will_create', 'Create in D365')];
                 else if (!v) st = ['tone-slate', t('d365_not_mapped_short', 'Not mapped')];
+                else if (known[v] && !known[v].active) st = ['tone-red', t('d365_suspended_pick_other', 'Suspended in D365 - pick another or "not mapped"')];
                 else if (v !== tr.dataset.orig) st = ['tone-amber', t('d365_unsaved', 'Unsaved')];
                 else st = ['tone-green', t('d365_mapped', 'Mapped')];
                 tr.querySelector('.js-st').innerHTML = '<span class="sr-pill ' + st[0] + '"><span class="sr-dot"></span>' + esc(st[1]) + '</span>';

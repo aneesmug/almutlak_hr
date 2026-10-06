@@ -358,9 +358,37 @@ try {
             $r['d365'] = $map['id:' . $r['id']] ?? $map['name:' . mb_strtolower(trim((string)$r['dep_nme']))] ?? '';
             $rows[] = $r;
         }
-        $values = D365Dimensions::dimensionValues($client, 'Department', !empty($_POST['refresh']));
+        $values = D365Dimensions::dimensionValues($client, 'Department', true); // always live: suspends/creates in D365 show at once
+        // Suspended in D365 = gone: drop it from the list and from the saved mapping
+        $suspended = [];
+        foreach ($values as $v) {
+            if (!$v['active']) {
+                $suspended[$v['value']] = true;
+            }
+        }
+        $values = array_values(array_filter($values, function ($v) { return $v['active']; }));
+        $unmapped = [];
+        if ($suspended) {
+            $ids = d365dept_read_ids($conDB);
+            foreach ($ids as $id => $code) {
+                if (isset($suspended[$code])) {
+                    unset($ids[$id]);
+                    $unmapped[] = $code;
+                }
+            }
+            if ($unmapped) {
+                d365dept_write_map($conDB, $ids);
+                foreach ($rows as &$r) {
+                    if (isset($suspended[$r['d365']])) {
+                        $r['removed'] = $r['d365'];
+                        $r['d365'] = '';
+                    }
+                }
+                unset($r);
+            }
+        }
         echo json_encode(['ok' => true, 'environment' => $client->getEnvironment(), 'can_write' => $client->canWrite(),
-            'departments' => $rows, 'd365' => $values], JSON_UNESCAPED_UNICODE);
+            'departments' => $rows, 'd365' => $values, 'unmapped_suspended' => array_values(array_unique($unmapped))], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
