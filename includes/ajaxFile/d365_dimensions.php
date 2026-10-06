@@ -1,0 +1,477 @@
+<?php
+// App Settings > D365 Config > Account Templates / Employee Dimensions (system admins only).
+// Actions (POST, CSRF = $_SESSION['d365_csrf']):
+//   load            -> companies, templates, ledger format dimensions, dimensions per company structure
+//   save_template   -> company + dims (JSON [{dimension, default}]); empty list removes the template
+//   employees       -> employees whose payroll company = company, with their stored values
+//   save_employee   -> emp_id + values (JSON {dimension: value}) [+ payroll_company]
+//   dim_values      -> D365 values of one dimension (for the pickers)
+//   fill_from_d365  -> fill BLANK values of a company's employees from their D365 employment dims
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../../includes/D365Payroll.php';
+require_once __DIR__ . '/../../includes/D365Workers.php';
+require_once __DIR__ . '/../../includes/D365AccountRules.php';
+require_once __DIR__ . '/../../includes/D365Dimensions.php';
+require_once __DIR__ . '/../../includes/cost_centers.php';
+
+header('Content-Type: application/json; charset=utf-8');
+@set_time_limit(180);
+
+if (!($is_system_admin ?? false)) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Forbidden']);
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_SESSION['d365_csrf']) || !hash_equals($_SESSION['d365_csrf'], (string)($_POST['csrf'] ?? ''))) {
+    echo json_encode(['ok' => false, 'error' => 'Session expired - reload the page']);
+    exit;
+}
+
+$userId = (string)($empid ?? ($_SESSION['user_id'] ?? ''));
+$action = (string)($_POST['action'] ?? '');
+
+/** Active employees with stored + effective payroll company (effective = stored, else D365 employment company) */
+function d365dim_employees(mysqli $db, $environment, array $employments = null)
+{
+    cost_center_ensure_column($db);
+    $stmt = $db->prepare("SELECT e.emp_id, e.name, e.payroll_company,
+            (SELECT ws.legal_entity FROM d365_worker_status ws WHERE ws.emp_id = e.emp_id AND ws.legal_entity <> ''
+             ORDER BY ws.environment = ? DESC, ws.checked_at DESC LIMIT 1) AS employment_company
+        FROM employees e WHERE e.status = 1 ORDER BY CAST(e.emp_id AS UNSIGNED), e.emp_id");
+    $stmt->bind_param('s', $environment);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    foreach ($rows as &$r) {
+        if ($employments !== null && isset($employments[$r['emp_id']])) {
+            $r['employment_company'] = $employments[$r['emp_id']]['entity'];
+        }
+        $r['payroll_company'] = strtoupper(trim((string)$r['payroll_company']));
+        $r['employment_company'] = strtoupper(trim((string)$r['employment_company']));
+        $r['company'] = $r['payroll_company'] !== '' ? $r['payroll_company'] : $r['employment_company'];
+    }
+    return $rows;
+}
+
+/** d365_department_map setting -> ['id:6' => 'IT', 'name:finance' => '10', ...] */
+function d365dept_read_map(mysqli $db)
+{
+    $map = [];
+    $raw = (string)(get_setting($db, 'd365_department_map') ?? '');
+    foreach (preg_split('/[,;\r\n]+/', $raw) as $pair) {
+        if (strpos($pair, '=') === false) {
+            continue;
+        }
+        [$app, $value] = array_map('trim', explode('=', $pair, 2));
+        if ($app !== '' && $value !== '') {
+            $map[(ctype_digit($app) ? 'id:' : 'name:') . mb_strtolower($app)] = $value;
+        }
+    }
+    return $map;
+}
+
+/** Current mapping by app department id: [6 => 'IT', ...] (name entries resolved to ids) */
+function d365dept_read_ids(mysqli $db)
+{
+    $map = d365dept_read_map($db);
+    $out = [];
+    $res = $db->query("SELECT id, dep_nme FROM department");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $v = $map['id:' . $r['id']] ?? $map['name:' . mb_strtolower(trim((string)$r['dep_nme']))] ?? '';
+        if ($v !== '') {
+            $out[(int)$r['id']] = $v;
+        }
+    }
+    return $out;
+}
+
+/** Save [app_dept_id => D365 value] as "ID=VALUE, ..." ('' = not mapped) */
+function d365dept_write_map(mysqli $db, array $map)
+{
+    $pairs = [];
+    foreach ($map as $id => $value) {
+        $value = trim((string)$value);
+        if ((int)$id > 0 && $value !== '') {
+            D365Dimensions::cleanValue($value);
+            $pairs[] = (int)$id . '=' . $value;
+        }
+    }
+    $text = implode(', ', $pairs);
+    $stmt = $db->prepare("UPDATE app_settings SET setting_value = ? WHERE setting_name = 'd365_department_map'");
+    $stmt->bind_param('s', $text);
+    $stmt->execute();
+    $stmt->close();
+}
+
+try {
+    $client = new D365Client();
+    new D365Workers($conDB, $client); // creates d365_worker_status when missing
+    D365Dimensions::ensureTables($conDB);
+
+    if ($action === 'load') {
+        $warnings = [];
+        $hidden = d365_hidden_companies();
+        $ledger = [];
+        try {
+            $formats = D365Payroll::fetchDimensionFormats($client);
+            $ledger = array_values(array_filter($formats['ledger'] ?? [], function ($n) { return strtolower($n) !== 'mainaccount'; }));
+        } catch (Throwable $ex) {
+            $warnings[] = $ex->getMessage();
+        }
+        $companies = [];
+        try {
+            $rules = new D365AccountRules($client);
+            foreach ($rules->companies() as $code => $name) {
+                if (in_array($code, $hidden, true)) {
+                    continue;
+                }
+                $companies[] = ['code' => $code, 'name' => $name, 'structure' => $rules->companyDimensions($code)];
+            }
+        } catch (Throwable $ex) {
+            $warnings[] = 'Account structures: ' . $ex->getMessage();
+        }
+        $templates = D365Dimensions::getTemplates($conDB);
+        foreach (array_keys($templates) as $code) { // template of a company D365 did not list (offline)
+            if (!in_array($code, $hidden, true) && !in_array($code, array_column($companies, 'code'), true)) {
+                $companies[] = ['code' => $code, 'name' => '', 'structure' => []];
+            }
+        }
+        usort($companies, function ($a, $b) { return strcmp($a['code'], $b['code']); });
+        $counts = [];
+        foreach (d365dim_employees($conDB, $client->getEnvironment()) as $r) {
+            $key = $r['company'] !== '' ? $r['company'] : '-';
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
+        echo json_encode(['ok' => true, 'environment' => $client->getEnvironment(), 'ledger' => $ledger, 'companies' => $companies,
+            'templates' => (object)$templates, 'counts' => (object)$counts, 'warnings' => $warnings, 'hidden' => $hidden], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'company_remove' || $action === 'company_restore') {
+        // Closed companies (e.g. MTL): hidden from Account Templates and every company picker - D365 itself is not changed
+        $code = strtoupper(trim((string)($_POST['company'] ?? '')));
+        if (!preg_match('/^[A-Z0-9_]{1,10}$/', $code)) {
+            throw new InvalidArgumentException('Invalid company');
+        }
+        $hidden = d365_hidden_companies();
+        if ($action === 'company_remove') {
+            $hidden[] = $code;
+            D365Dimensions::saveTemplate($conDB, $code, [], $userId); // its template goes too
+        } else {
+            $hidden = array_diff($hidden, [$code]);
+        }
+        $text = implode(', ', array_values(array_unique($hidden)));
+        $stmt = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type)
+            VALUES ('d365_hidden_companies', ?, 'D365_Config', 'D365 Companies removed from the app (closed companies, comma separated, e.g. MTL)', 'text')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $stmt->bind_param('s', $text);
+        $stmt->execute();
+        $stmt->close();
+        // employees still pinned to a removed company keep it until changed - tell the user how many
+        $pinned = 0;
+        $st = $conDB->prepare("SELECT COUNT(*) FROM employees WHERE status = 1 AND payroll_company = ?");
+        $st->bind_param('s', $code);
+        $st->execute();
+        $pinned = (int)$st->get_result()->fetch_row()[0];
+        $st->close();
+        echo json_encode(['ok' => true, 'hidden' => array_values(array_unique($hidden)), 'pinned' => $pinned]);
+        exit;
+    }
+
+    if ($action === 'save_template') {
+        $dims = json_decode((string)($_POST['dims'] ?? '[]'), true);
+        if (!is_array($dims)) {
+            throw new InvalidArgumentException('Invalid template');
+        }
+        D365Dimensions::saveTemplate($conDB, (string)($_POST['company'] ?? ''), $dims, $userId);
+        echo json_encode(['ok' => true, 'templates' => (object)D365Dimensions::getTemplates($conDB)]);
+        exit;
+    }
+
+    if ($action === 'employees') {
+        // company: '*' = all active employees, '-' = no known payroll company, else one company
+        // scope: 'applied' = payroll company has a template (sync uses it), 'unapplied' = the rest, '' = all
+        $company = strtoupper(trim((string)($_POST['company'] ?? '*')));
+        $scope = (string)($_POST['scope'] ?? '');
+        $templates = D365Dimensions::getTemplates($conDB);
+        $rows = array_values(array_filter(d365dim_employees($conDB, $client->getEnvironment()), function ($r) use ($company, $scope, $templates) {
+            $applied = !empty($templates[$r['company']]);
+            if (($scope === 'applied' && !$applied) || ($scope === 'unapplied' && $applied)) {
+                return false;
+            }
+            if ($company === '*' || $company === '') {
+                return true;
+            }
+            return $company === '-' ? $r['company'] === '' : $r['company'] === $company;
+        }));
+        $values = D365Dimensions::getEmployeeValues($conDB, array_column($rows, 'emp_id'));
+        foreach ($rows as &$r) {
+            $tpl = $templates[$r['company']] ?? [];
+            $r['values'] = (object)($values[$r['emp_id']] ?? []);
+            $r['has_template'] = (bool)$tpl;
+            $r['missing'] = $tpl ? D365Dimensions::resolve($tpl, $r['emp_id'], $values[$r['emp_id']] ?? [])['missing'] : [];
+        }
+        unset($r);
+        echo json_encode(['ok' => true, 'company' => $company, 'templates' => (object)$templates, 'employees' => $rows], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'save_employee') {
+        $target = (string)($_POST['emp_id'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9\-]{1,20}$/', $target)) {
+            throw new InvalidArgumentException('Invalid employee ID');
+        }
+        $values = json_decode((string)($_POST['values'] ?? '{}'), true);
+        if (!is_array($values)) {
+            throw new InvalidArgumentException('Invalid values');
+        }
+        D365Dimensions::saveEmployeeValues($conDB, $target, $values, $userId);
+        if (isset($_POST['payroll_company'])) {
+            $pc = payroll_company_clean((string)$_POST['payroll_company']);
+            $pc = $pc === '' ? null : $pc;
+            $stmt = $conDB->prepare("UPDATE employees SET payroll_company = ? WHERE emp_id = ?");
+            $stmt->bind_param('ss', $pc, $target);
+            $stmt->execute();
+            $stmt->close();
+        }
+        echo json_encode(['ok' => true, 'values' => (object)(D365Dimensions::getEmployeeValues($conDB, [$target])[$target] ?? [])]);
+        exit;
+    }
+
+    if ($action === 'save_employees') {
+        // "Add employees" popup: same payroll company + values for several employees at once
+        $ids = json_decode((string)($_POST['emp_ids'] ?? '[]'), true);
+        $values = json_decode((string)($_POST['values'] ?? '{}'), true);
+        if (!is_array($ids) || !$ids || !is_array($values)) {
+            throw new InvalidArgumentException('Pick at least one employee');
+        }
+        $pc = payroll_company_clean((string)($_POST['payroll_company'] ?? ''));
+        if ($pc === '') {
+            throw new InvalidArgumentException('Pick a payroll company');
+        }
+        $values = array_filter($values, function ($v) { return trim((string)$v) !== ''; }); // blanks never clear existing values here
+        foreach ($values as $v) {
+            D365Dimensions::cleanValue($v); // validate before writing anything
+        }
+        $stmt = $conDB->prepare("UPDATE employees SET payroll_company = ? WHERE emp_id = ?");
+        $saved = 0;
+        foreach ($ids as $id) {
+            $id = (string)$id;
+            if (!preg_match('/^[A-Za-z0-9\-]{1,20}$/', $id)) {
+                continue;
+            }
+            $stmt->bind_param('ss', $pc, $id);
+            $stmt->execute();
+            D365Dimensions::saveEmployeeValues($conDB, $id, $values, $userId);
+            $saved++;
+        }
+        $stmt->close();
+        echo json_encode(['ok' => true, 'saved' => $saved]);
+        exit;
+    }
+
+    // ---------------------------------------------------------------- Departments (app -> D365)
+    // Mapping is stored in the D365 Config setting d365_department_map as "APP_DEPT_ID=D365_VALUE, ..."
+    // (D365Workers::departmentFor reads it: id entries win over name entries and the colleagues' vote).
+
+    if ($action === 'dept_load') {
+        $map = d365dept_read_map($conDB);
+        $rows = [];
+        $res = $conDB->query("SELECT d.id, d.dep_nme, d.dep_nme_ar,
+                (SELECT COUNT(*) FROM employees e WHERE e.dept = d.id AND e.status = 1) AS employees
+            FROM department d ORDER BY d.dep_nme");
+        while ($res && ($r = $res->fetch_assoc())) {
+            $r['d365'] = $map['id:' . $r['id']] ?? $map['name:' . mb_strtolower(trim((string)$r['dep_nme']))] ?? '';
+            $rows[] = $r;
+        }
+        $values = D365Dimensions::dimensionValues($client, 'Department', !empty($_POST['refresh']));
+        echo json_encode(['ok' => true, 'environment' => $client->getEnvironment(), 'can_write' => $client->canWrite(),
+            'departments' => $rows, 'd365' => $values], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'dept_save_map') {
+        $map = json_decode((string)($_POST['map'] ?? '{}'), true);
+        if (!is_array($map)) {
+            throw new InvalidArgumentException('Invalid mapping');
+        }
+        d365dept_write_map($conDB, $map);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'dept_create') {
+        // Creates the department (operating unit) in D365 - its Department dimension value follows automatically
+        if (!$client->canWrite()) {
+            throw new RuntimeException('Writes are disabled for the ' . $client->getEnvironment() . ' environment (D365 Config > Allow Writes)');
+        }
+        $deptId = (int)($_POST['dept_id'] ?? 0);
+        $code = trim((string)($_POST['code'] ?? ''));
+        $name = trim((string)($_POST['name'] ?? ''));
+        if ($deptId <= 0 || !preg_match('/^[A-Za-z0-9_]{1,20}$/', $code) || $name === '' || mb_strlen($name) > 60) {
+            throw new InvalidArgumentException('Code must be 1-20 letters/digits (no dashes) and the name 1-60 characters');
+        }
+        foreach (D365Dimensions::dimensionValues($client, 'Department', true) as $v) {
+            if (strcasecmp($v['value'], $code) === 0) {
+                throw new RuntimeException("D365 already has department $code ({$v['name']}) - pick it from the list instead");
+            }
+        }
+        $r = $client->create('OperatingUnits', [
+            'OperatingUnitNumber' => $code,
+            'OperatingUnitType'   => 'OMDepartment',
+            'Name'                => $name,
+            'NameAlias'           => mb_substr($name, 0, 20),
+            'LanguageId'          => 'en-US',
+        ]);
+        if (!empty($r['error'])) {
+            throw new RuntimeException('D365: ' . $r['error']);
+        }
+        $created = (string)($r['data']['OperatingUnitNumber'] ?? $code); // D365 may number it itself
+        $map = d365dept_read_ids($conDB);
+        $map[$deptId] = $created;
+        d365dept_write_map($conDB, $map);
+        D365Dimensions::dimensionValues($client, 'Department', true); // refresh the cached list
+        echo json_encode(['ok' => true, 'code' => $created, 'renumbered' => $created !== $code], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'dept_assign') {
+        // Department dimension of every active employee from their app department (Employee Dimensions)
+        $overwrite = !empty($_POST['overwrite']);
+        $map = d365dept_read_map($conDB);
+        $res = $conDB->query("SELECT e.emp_id, e.dept, d.dep_nme FROM employees e LEFT JOIN department d ON d.id = e.dept WHERE e.status = 1");
+        $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+        $stored = D365Dimensions::getEmployeeValues($conDB, array_column($rows, 'emp_id'));
+        $set = $kept = $unmapped = 0;
+        foreach ($rows as $r) {
+            $value = $map['id:' . $r['dept']] ?? $map['name:' . mb_strtolower(trim((string)$r['dep_nme']))] ?? '';
+            if ($value === '') {
+                $unmapped++;
+                continue;
+            }
+            $current = (string)($stored[$r['emp_id']]['Department'] ?? '');
+            if ($current === $value || ($current !== '' && !$overwrite)) {
+                $kept++;
+                continue;
+            }
+            D365Dimensions::saveEmployeeValues($conDB, $r['emp_id'], ['Department' => $value], $userId);
+            $set++;
+        }
+        echo json_encode(['ok' => true, 'set' => $set, 'kept' => $kept, 'unmapped' => $unmapped]);
+        exit;
+    }
+
+    // ---------------------------------------------------------------- Companies (app company -> D365 company)
+    // Stored in setting d365_company_map as "COMP_ID=CODE, ..." (cost_centers.php d365_company_mapping);
+    // used by the new-employee modal and D365 registration (D365Workers::suggestCompanyFor)
+
+    if ($action === 'comp_load') {
+        $mapping = d365_company_mapping();
+        $suggest = [];
+        $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_company_map_' . md5($client->getResourceUrl()) . '.json';
+        $cached = is_readable($file) ? json_decode((string)@file_get_contents($file), true) : null;
+        foreach ((array)($cached['map'] ?? []) as $id => $code) {
+            $suggest[(int)$id] = $code; // learned from where colleagues are employed in D365
+        }
+        $rows = [];
+        $res = $conDB->query("SELECT c.comp_id, c.comp_name, c.comp_name_ar,
+                (SELECT COUNT(*) FROM employees e WHERE e.comp_no = c.comp_id AND e.status = 1) AS employees
+            FROM companies c ORDER BY c.comp_name");
+        while ($res && ($r = $res->fetch_assoc())) {
+            $id = (int)$r['comp_id'];
+            $r['d365'] = $mapping[$id] ?? '';
+            $r['suggest'] = $suggest[$id] ?? '';
+            $rows[] = $r;
+        }
+        $companies = [];
+        foreach (payroll_company_list() as $code => $c) {
+            $companies[] = ['code' => $code, 'name' => $c['name']];
+        }
+        echo json_encode(['ok' => true, 'app' => $rows, 'companies' => $companies], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'comp_save_map') {
+        $map = json_decode((string)($_POST['map'] ?? '{}'), true);
+        if (!is_array($map)) {
+            throw new InvalidArgumentException('Invalid mapping');
+        }
+        $pairs = [];
+        foreach ($map as $id => $code) {
+            $code = strtoupper(trim((string)$code));
+            if ((int)$id > 0 && preg_match('/^[A-Z0-9_]{1,10}$/', $code)) {
+                $pairs[] = (int)$id . '=' . $code;
+            }
+        }
+        $text = implode(', ', $pairs);
+        $stmt = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type)
+            VALUES ('d365_company_map', ?, 'D365_Config', 'D365 Company per App Company (APP COMPANY ID=D365 COMPANY, comma separated) - set in D365 Config > Companies', 'text')
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $stmt->bind_param('s', $text);
+        $stmt->execute();
+        $stmt->close();
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'dim_values') {
+        $dim = (string)($_POST['dimension'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9_]{1,40}$/', $dim)) {
+            throw new InvalidArgumentException('Invalid dimension');
+        }
+        echo json_encode(['ok' => true, 'values' => D365Dimensions::dimensionValues($client, $dim, !empty($_POST['refresh']))], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'fill_from_d365') {
+        // Copies what D365 already has on each employment (default dimension format) into the app - only
+        // into BLANK values, so nothing typed here is overwritten. Department falls back to the app's
+        // department mapping (D365 Config > department map / colleagues' majority).
+        $company = strtoupper(trim((string)($_POST['company'] ?? '')));
+        $template = D365Dimensions::getTemplate($conDB, $company);
+        if (!$template) {
+            throw new RuntimeException("$company has no account template yet");
+        }
+        $payroll = new D365Payroll($conDB, $client);
+        $employments = $payroll->getEmployments();
+        $format = array_map('strtolower', D365Payroll::fetchDimensionFormats($client)['default'] ?? []);
+        $workers = new D365Workers($conDB, $client);
+        $rows = array_values(array_filter(d365dim_employees($conDB, $client->getEnvironment(), $employments), function ($r) use ($company) {
+            return $r['company'] === $company;
+        }));
+        $stored = D365Dimensions::getEmployeeValues($conDB, array_column($rows, 'emp_id'));
+        $filled = 0;
+        $employeesTouched = 0;
+        foreach ($rows as $r) {
+            $id = $r['emp_id'];
+            $segments = isset($employments[$id]) ? explode('-', (string)$employments[$id]['dims']) : [];
+            $new = [];
+            foreach ($template as $t) {
+                $dim = $t['dimension'];
+                if (D365Dimensions::isAuto($dim) || trim((string)($stored[$id][$dim] ?? '')) !== '') {
+                    continue;
+                }
+                $i = array_search(strtolower($dim), $format, true);
+                $value = $i === false ? '' : trim((string)($segments[$i] ?? ''));
+                if ($value === '' && strtolower($dim) === 'department') {
+                    $value = (string)$workers->departmentFor($id, $employments);
+                }
+                if ($value !== '' && preg_match('/^[\p{L}\p{N}_.\/ ]{1,40}$/u', $value)) {
+                    $new[$dim] = $value;
+                }
+            }
+            if ($new) {
+                D365Dimensions::saveEmployeeValues($conDB, $id, $new, $userId);
+                $filled += count($new);
+                $employeesTouched++;
+            }
+        }
+        echo json_encode(['ok' => true, 'filled' => $filled, 'employees' => $employeesTouched, 'checked' => count($rows)]);
+        exit;
+    }
+
+    echo json_encode(['ok' => false, 'error' => 'Unknown action']);
+} catch (Throwable $ex) {
+    echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
+}

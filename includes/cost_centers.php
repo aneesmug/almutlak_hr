@@ -48,7 +48,11 @@ function payroll_company_list()
         if (!empty($config['CLIENT_SECRET']) && !empty($config['RESOURCE_URL'])) {
             $rules = new D365AccountRules(new D365Client($config));
             $withCc = $rules->companiesWithDimension('CostCenter');
+            $hidden = d365_hidden_companies();
             foreach ($rules->companies() as $code => $name) {
+                if (in_array($code, $hidden, true)) {
+                    continue; // removed in App Settings > D365 Config > Account Templates (closed company)
+                }
                 $list[$code] = ['name' => $name, 'cost_center' => in_array($code, $withCc, true)];
             }
         }
@@ -56,6 +60,56 @@ function payroll_company_list()
         error_log('Payroll companies from D365: ' . $ex->getMessage());
     }
     return $list;
+}
+
+/** D365 companies removed from the app (setting d365_hidden_companies, e.g. closed MTL): ['MTL', ...] */
+function d365_hidden_companies()
+{
+    global $conDB;
+    if (!($conDB instanceof mysqli)) {
+        return [];
+    }
+    $raw = '';
+    $stmt = @$conDB->prepare("SELECT setting_value FROM app_settings WHERE setting_name = 'd365_hidden_companies'");
+    if ($stmt) {
+        $stmt->execute();
+        $raw = (string)($stmt->get_result()->fetch_row()[0] ?? '');
+        $stmt->close();
+    }
+    return array_values(array_filter(array_map(function ($c) { return strtoupper(trim($c)); }, preg_split('/[,;\s]+/', $raw)), 'strlen'));
+}
+
+/**
+ * App company (companies.comp_id = employees.comp_no) -> D365 company, set in App Settings > D365 Config > Companies
+ * (setting d365_company_map "COMP_ID=CODE, ..."): [3 => 'MMT', 4 => 'MHO', ...]
+ */
+function d365_company_mapping()
+{
+    global $conDB;
+    static $map = null;
+    if ($map !== null) {
+        return $map;
+    }
+    $map = [];
+    if (!($conDB instanceof mysqli)) {
+        return $map;
+    }
+    $stmt = @$conDB->prepare("SELECT setting_value FROM app_settings WHERE setting_name = 'd365_company_map'");
+    if ($stmt) {
+        $stmt->execute();
+        $raw = (string)($stmt->get_result()->fetch_row()[0] ?? '');
+        $stmt->close();
+        foreach (preg_split('/[,;\r\n]+/', $raw) as $pair) {
+            if (strpos($pair, '=') === false) {
+                continue;
+            }
+            [$id, $code] = array_map('trim', explode('=', $pair, 2));
+            if ($id !== '' && $code !== '') {
+                $map[(int)$id] = strtoupper($code);
+            }
+        }
+    }
+    return $map;
 }
 
 /** D365 employment company of an employee as last seen by the app (d365_worker_status), '' when unknown */

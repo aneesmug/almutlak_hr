@@ -119,7 +119,8 @@ class D365Workers
         $stmt->execute();
         $comp = $stmt->get_result()->fetch_assoc()['comp_no'] ?? null;
         $stmt->close();
-        return ['company' => $cached['map'][$comp] ?? '', 'entities' => $cached['entities']];
+        $map = self::withCompanyMapping($cached['map'] ?? []); // mapping changes apply at once, not after the 24h cache
+        return ['company' => $map[$comp] ?? '', 'entities' => $cached['entities']];
     }
 
     // ---------------------------------------------------------------- sync (update) + auto register
@@ -413,19 +414,22 @@ class D365Workers
      * Called right after a new employee is saved in the HR app. Never throws - a failure is stored
      * so the employee header shows the manual "Add to D365" button.
      */
-    public function autoRegister($empId)
+    public function autoRegister($empId, $company = '')
     {
         try {
+            $company = strtoupper(trim((string)$company)); // chosen in the new-employee modal ('' = suggest)
             if (!$this->client->canWrite()) {
-                $this->saveStatus($empId, 'pending', null, null, 'Writes to D365 are off - add manually when enabled');
+                $this->saveStatus($empId, 'pending', $company !== '' ? $company : null, null, 'Writes to D365 are off - add manually when enabled');
                 return;
             }
-            $suggest = $this->suggestCompanyFor($empId);
-            if ($suggest['company'] === '') {
+            if ($company === '') {
+                $company = $this->suggestCompanyFor($empId)['company'];
+            }
+            if ($company === '') {
                 $this->saveStatus($empId, 'failed', null, null, 'No D365 company known for this app company - choose it manually');
                 return;
             }
-            $this->register($empId, $suggest['company']);
+            $this->register($empId, $company);
         } catch (Throwable $ex) {
             $this->saveStatus($empId, 'failed', null, null, $ex->getMessage());
         }
@@ -449,6 +453,16 @@ class D365Workers
         foreach ($votes as $comp => $v) {
             arsort($v);
             $map[$comp] = (string)key($v);
+        }
+        return self::withCompanyMapping($map);
+    }
+
+    /** Company mapping of D365 Config > Companies wins over the learned majority vote */
+    private static function withCompanyMapping(array $map)
+    {
+        require_once __DIR__ . '/cost_centers.php';
+        foreach (d365_company_mapping() as $compId => $code) {
+            $map[$compId] = $code;
         }
         return $map;
     }
@@ -538,6 +552,122 @@ class D365Workers
         }
         $out['bank'] = $sync['bank'] ?? null;
         return $out;
+    }
+
+    /** Employments of a worker from EmploymentsV2 (all companies), newest first, with 'active' flag */
+    public function employmentsV2($empId)
+    {
+        $res = $this->client->getAll('EmploymentsV2', [
+            '$filter' => "PersonnelNumber eq '" . str_replace("'", "''", $empId) . "'",
+            '$select' => 'PersonnelNumber,LegalEntityId,EmploymentId,EmploymentStartDate,EmploymentEndDate,DimensionDisplayValue,WorkerType',
+        ], true);
+        if ($res['error']) {
+            throw new RuntimeException('D365 EmploymentsV2: ' . $res['error']);
+        }
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $rows = [];
+        foreach ($res['data']['value'] as $e) {
+            $e['LegalEntityId'] = strtoupper((string)$e['LegalEntityId']);
+            $e['active'] = strcmp((string)$e['EmploymentEndDate'], $now) > 0;
+            $e['start_local'] = self::localDate($e['EmploymentStartDate']);
+            $e['end_local'] = strpos((string)$e['EmploymentEndDate'], '2154') === 0 ? '' : self::localDate($e['EmploymentEndDate']);
+            $rows[] = $e;
+        }
+        usort($rows, function ($a, $b) { return strcmp($b['EmploymentStartDate'], $a['EmploymentStartDate']); });
+        return $rows;
+    }
+
+    /** D365 UTC timestamp -> Riyadh date (Y-m-d) */
+    private static function localDate($utc)
+    {
+        try {
+            return (new DateTime((string)$utc))->setTimezone(new DateTimeZone('Asia/Riyadh'))->format('Y-m-d');
+        } catch (Throwable $ex) {
+            return '';
+        }
+    }
+
+    /**
+     * Move a worker to another D365 company (legal entity) from $date (Y-m-d, Riyadh):
+     *   1. create a new employment in $newCompany starting $date (same financial dimensions; without them if D365 refuses)
+     *   2. end the current employment the day before
+     * The new employment is created first so the worker is never left without one. Positions of the old
+     * company are not moved (assign a position in the new company in D365 when needed).
+     * Returns ['ok' => bool, 'error' => ?, 'warning' => ?, 'from' => 'MHO', 'to' => 'MTL']
+     */
+    public function transferCompany($empId, $newCompany, $date)
+    {
+        if (!$this->client->canWrite()) {
+            return ['ok' => false, 'error' => 'Writes are disabled for the ' . $this->client->getEnvironment() . ' environment (App Settings > D365 Config > Allow Writes)'];
+        }
+        $newCompany = strtoupper(trim((string)$newCompany));
+        if (!preg_match('/^[A-Z0-9]{2,10}$/', $newCompany)) {
+            return ['ok' => false, 'error' => 'Choose the new D365 company'];
+        }
+        $tz = new DateTimeZone('Asia/Riyadh');
+        $start = DateTime::createFromFormat('!Y-m-d', (string)$date, $tz);
+        if (!$start) {
+            return ['ok' => false, 'error' => 'Choose the transfer date'];
+        }
+        $startUtc = (clone $start)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+        $endOldUtc = (clone $start)->modify('-1 second')->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+
+        $all = $this->employmentsV2($empId);
+        $current = null;
+        foreach ($all as $e) {
+            if ($e['active']) {
+                if ($e['LegalEntityId'] === $newCompany) {
+                    return ['ok' => false, 'error' => "Already employed in $newCompany"];
+                }
+                $current = $current ?: $e;
+            }
+        }
+        if (!$current) {
+            return ['ok' => false, 'error' => 'No active employment in D365 to transfer from'];
+        }
+        if (strcmp($startUtc, (string)$current['EmploymentStartDate']) <= 0) {
+            return ['ok' => false, 'error' => 'Transfer date must be after the current employment start (' . $current['start_local'] . ')'];
+        }
+
+        $body = [
+            'PersonnelNumber'     => (string)$empId,
+            'LegalEntityId'       => strtolower($newCompany),
+            'EmploymentStartDate' => $startUtc,
+            'EmploymentEndDate'   => '2154-12-31T23:59:59Z',
+            'WorkerType'          => $current['WorkerType'] ?: 'Employee',
+        ];
+        $warning = null;
+        $dims = (string)($current['DimensionDisplayValue'] ?? '');
+        $created = $this->client->create('EmploymentsV2', $dims !== '' && trim($dims, '-') !== '' ? $body + ['DimensionDisplayValue' => $dims] : $body);
+        if (!empty($created['error']) && trim($dims, '-') !== '') {
+            // dimension values of the old company may not be valid in the new one - create without them
+            $created = $this->client->create('EmploymentsV2', $body);
+            $warning = 'Financial dimensions were not copied (' . $dims . ') - set them on the new employment.';
+        }
+        if (!empty($created['error'])) {
+            return ['ok' => false, 'error' => 'Creating the employment in ' . $newCompany . ' failed: ' . $created['error']];
+        }
+
+        $ended = $this->client->update('EmploymentsV2', [
+            'PersonnelNumber' => $current['PersonnelNumber'],
+            'LegalEntityId'   => strtolower($current['LegalEntityId']),
+            'EmploymentId'    => $current['EmploymentId'],
+        ], ['EmploymentEndDate' => $endOldUtc]);
+        if (!empty($ended['error'])) {
+            $warning = trim(($warning ? $warning . ' ' : '') . 'The new employment was created, but ending the ' . $current['LegalEntityId']
+                . ' employment failed: ' . $ended['error'] . ' - end it in D365 (Worker > Employment history).');
+        }
+
+        $this->saveStatus($empId, 'registered', $newCompany, null, null);
+        // Payroll company pinned to the old company in the app -> back to automatic (= new D365 company)
+        $stmt = $this->db->prepare("UPDATE employees SET payroll_company = NULL WHERE emp_id = ? AND payroll_company = ?");
+        if ($stmt) {
+            $old = $current['LegalEntityId'];
+            $stmt->bind_param('ss', $empId, $old);
+            $stmt->execute();
+            $stmt->close();
+        }
+        return ['ok' => true, 'error' => null, 'warning' => $warning, 'from' => $current['LegalEntityId'], 'to' => $newCompany];
     }
 
     /**

@@ -120,7 +120,8 @@ if (empty($_SESSION['d365_csrf'])) {
 		var sug = (last && last.suggest) || { company: '', entities: [] };
 		withSwal(function () {
 			var opts = '<option value="">- choose -</option>' + (sug.entities || []).map(function (en) {
-				return '<option value="' + esc(en) + '"' + (en === sug.company ? ' selected' : '') + '>' + esc(en) + '</option>';
+				var nm = (sug.names || {})[en];
+				return '<option value="' + esc(en) + '"' + (en === sug.company ? ' selected' : '') + '>' + esc(en + (nm ? ' - ' + nm : '')) + '</option>';
 			}).join('');
 			var env = esc((last.environment || '').toUpperCase());
 			Swal.fire({
@@ -206,9 +207,75 @@ if (empty($_SESSION['d365_csrf'])) {
 			});
 		});
 	}
+	// Change company: end the current D365 employment and start one in the new company (D365Workers::transferCompany)
+	function doTransfer() {
+		withSwal(function () {
+			Swal.fire({ title: 'Loading D365 employment...', allowOutsideClick: false, customClass: POP, didOpen: function () { Swal.showLoading(); } });
+			call('transfer_info').then(function (info) {
+				if (!info.ok) throw new Error(info.error || 'Failed');
+				var active = (info.employments || []).filter(function (e) { return e.active; });
+				var cur = active[0] ? active[0].LegalEntityId : '';
+				var env = esc((info.environment || '').toUpperCase());
+				var today = new Date(); today.setDate(today.getDate() + 1);
+				var tomorrow = today.toISOString().slice(0, 10);
+				var hist = (info.employments || []).map(function (e) {
+					return '<tr><td><b>' + esc(e.LegalEntityId) + '</b></td><td>' + esc(e.start_local) + '</td><td>' + (e.end_local ? esc(e.end_local) : '<span class="sr-pill tone-green"><span class="sr-dot"></span>Active</span>') + '</td><td class="sr-mono">' + esc(e.DimensionDisplayValue || '') + '</td></tr>';
+				}).join('');
+				var opts = '<option value="">- choose -</option>' + (info.companies || []).filter(function (c) { return c.code !== cur; }).map(function (c) {
+					return '<option value="' + esc(c.code) + '">' + esc(c.code + (c.name ? ' - ' + c.name : '')) + '</option>';
+				}).join('');
+				Swal.fire({
+					title: 'Change D365 company - ' + esc(empId),
+					width: '680px',
+					customClass: POP,
+					allowOutsideClick: false,
+					showCancelButton: true,
+					confirmButtonText: '<i class="fa fa-exchange-alt"></i> Change company',
+					showLoaderOnConfirm: true,
+					html: '<div class="sr-form">'
+						+ '<div class="sr-notice tone-amber" style="margin-bottom:12px"><i class="mdi mdi-alert-outline"></i><div>Writes to D365 <b>' + env + '</b>: the employment in <b>' + esc(cur || '?') + '</b> ends the day before the transfer date and a new employment starts in the chosen company (same financial dimensions). Positions are not moved.</div></div>'
+						+ '<div class="sr-fsec"><div class="sr-fsec-head"><span><i class="mdi mdi-history"></i> Employment history</span></div>'
+						+ '<div class="sr-table-wrap"><table class="sr-table"><thead><tr><th>Company</th><th>Start</th><th>End</th><th>Dimensions</th></tr></thead><tbody>' + (hist || '<tr><td colspan="4">None</td></tr>') + '</tbody></table></div></div>'
+						+ '<div class="sr-fsec mb-0"><div class="sr-fgrid">'
+						+ '<div class="sr-fcol c-6"><label>Current company</label><input type="text" class="form-control" value="' + esc(cur || '-') + '" readonly></div>'
+						+ '<div class="sr-fcol c-6"><label for="d365NewCompany">New company <span class="text-danger">*</span></label><select id="d365NewCompany" class="form-control">' + opts + '</select></div>'
+						+ '<div class="sr-fcol c-6"><label for="d365TransferDate">Transfer date (first day in new company) <span class="text-danger">*</span></label><input type="date" id="d365TransferDate" class="form-control" value="' + tomorrow + '"></div>'
+						+ '</div></div></div>',
+					preConfirm: function () {
+						var company = document.getElementById('d365NewCompany').value;
+						var date = document.getElementById('d365TransferDate').value;
+						if (!cur) { Swal.showValidationMessage('No active employment in D365'); return false; }
+						if (!company) { Swal.showValidationMessage('Choose the new company'); return false; }
+						if (!date) { Swal.showValidationMessage('Choose the transfer date'); return false; }
+						return call('transfer', { company: company, date: date }).then(function (res) {
+							if (!res.ok) { Swal.showValidationMessage(res.error || 'Failed'); return false; }
+							return res;
+						}).catch(function (e) { Swal.showValidationMessage(e.message); return false; });
+					}
+				}).then(function (r) {
+					if (!r.isConfirmed) return;
+					render(r.value);
+					document.dispatchEvent(new CustomEvent('d365:synced', { detail: { emp: empId } }));
+					Swal.fire({ icon: r.value.warning ? 'warning' : 'success', title: 'Moved ' + esc(r.value.from) + ' → ' + esc(r.value.to),
+						text: r.value.warning || 'New employment created in D365.', customClass: POP, allowOutsideClick: false })
+						.then(function () { location.reload(); }); // profile D365 block shows the new company
+				});
+			}).catch(function (e) { Swal.fire({ icon: 'error', title: 'D365', text: e.message, customClass: POP }); });
+		});
+	}
+
 	// D365 tab "Sync to D365" button uses the same flow
 	document.addEventListener('d365:sync-request', function () { if (canSync) doSync(); });
 	document.addEventListener('d365:register-request', function () { if (canSync) doRegister(); });
+	// Profile "Dynamics 365" block (view_employee.php) "Change company" button
+	document.addEventListener('d365:transfer-request', function () {
+		if (!canSync) return;
+		if (last && last.can_write === false) {
+			withSwal(function () { Swal.fire({ icon: 'info', title: 'D365', text: 'Writes are off (App Settings > D365 Config > Allow Writes)', customClass: POP }); });
+			return;
+		}
+		doTransfer();
+	});
 
 	box.addEventListener('click', function (ev) {
 		var b = ev.target.closest('[data-act]');
@@ -216,6 +283,7 @@ if (empty($_SESSION['d365_csrf'])) {
 		var act = b.getAttribute('data-act');
 		if (act === 'register') { if (canSync) doRegister(); }
 		else if (act === 'sync') { if (canSync) doSync(); }
+		else if (act === 'transfer') { if (canSync) doTransfer(); }
 		else load(true);
 	});
 	load(false);

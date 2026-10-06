@@ -18,9 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 	// Process the form submission before any HTML output
 	try {
 		$formData = $_POST;
-		if (isset($formData['cost_center'])) {
-			$formData['cost_center'] = cost_center_clean($conDB, $formData['cost_center']); // D365 cost center, default C30
-		}
+		// Cost center is no longer on this form - it is set per employee in App Settings > D365 Config > Employee Dimensions
+		unset($formData['cost_center']);
 		if (isset($formData['payroll_company'])) {
 			$formData['payroll_company'] = payroll_company_clean($formData['payroll_company']); // '' = D365 employment company
 		}
@@ -467,41 +466,11 @@ if (mysqli_num_rows($query) == 1) {
 												</select>
 											</div>
 											<div class="form-group col-md-2">
-												<label for="cost_center" class="col-form-label"><?= __("cost_center_label", "Cost Center") ?></label>
-												<select class="form-control select2" name="cost_center" id="cost_center">
-												<?= cost_center_options_html($conDB, $emprow['cost_center'] ?? '') ?>
-												</select>
-												<?php $ccCompanies = array_keys(array_filter(payroll_company_list(), function ($c) { return $c['cost_center']; })); ?>
-												<?php if ($ccCompanies): ?><small class="text-muted" id="costCenterHint" data-used-in="<?= htmlspecialchars(implode(', ', $ccCompanies)) ?>"><?= __('cost_center_used_in', 'Used on payroll in') ?>: <?= htmlspecialchars(implode(', ', $ccCompanies)) ?></small><?php endif; ?>
-											</div>
-											<div class="form-group col-md-2">
 												<label for="payroll_company" class="col-form-label"><?= __("payroll_company_label", "Payroll Company (D365)") ?></label>
 												<select class="form-control select2" name="payroll_company" id="payroll_company">
 												<?= payroll_company_options_html($emprow['payroll_company'] ?? '', payroll_employment_company($conDB, $emprow['emp_id'] ?? '')) ?>
 												</select>
 											</div>
-											<script>
-											// Cost center is a dimension only some companies' account structures have (MHO) - lock it for the others
-											document.addEventListener('DOMContentLoaded', function () {
-												var pc = document.getElementById('payroll_company'), cc = document.getElementById('cost_center'), hint = document.getElementById('costCenterHint');
-												if (!pc || !cc) return;
-												var apply = function () {
-													var opt = pc.options[pc.selectedIndex];
-													var uses = !opt || opt.getAttribute('data-cost-center') !== '0';
-													var company = opt ? (opt.value || opt.getAttribute('data-company') || '') : '';
-													cc.disabled = !uses; // disabled = not posted, the saved value is kept
-													if (window.jQuery && jQuery(cc).data('select2')) jQuery(cc).trigger('change.select2');
-													if (hint) {
-														hint.className = uses ? 'text-muted' : 'text-warning';
-														hint.textContent = uses
-															? <?= json_encode(__('cost_center_used_in', 'Used on payroll in') . ': ') ?> + hint.getAttribute('data-used-in')
-															: <?= json_encode(__('cost_center_not_used', 'Not used: no cost center in the account structure of')) ?> + ' ' + company;
-													}
-												};
-												if (window.jQuery) jQuery(pc).on('change', apply); else pc.addEventListener('change', apply);
-												apply();
-											});
-											</script>
 											<div class="form-group col-md-2">
 												<label for="emptype" class="col-form-label"><?= __("employee_type_label") ?><span class="text-danger">*</span></label>
 												<select class="form-control" name="emptype" required />

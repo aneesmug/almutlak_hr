@@ -1902,7 +1902,10 @@ if (mysqli_num_rows($query) == 1) {
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('d365_employment_company', 'D365 employment company') ?></div>
 																<div class="profile-field-value"><?php $c = $d365Info['employment_company'];
-																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : '')); ?></div>
+																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : ''));
+																	if (!empty($can_d365_sync) && $d365St && ($d365St['status'] ?? '') === 'registered'): ?>
+																	<button type="button" class="btn btn-sm btn-outline-primary ml-2" style="padding:1px 8px;font-size:12px" onclick="document.dispatchEvent(new CustomEvent('d365:transfer-request'))"><i class="mdi mdi-swap-horizontal"></i> <?= __('d365_change_company', 'Change company') ?></button>
+																	<?php endif; ?></div>
 															</div>
 															<div class="profile-field">
 																<div class="profile-field-label"><?= __('payroll_company_label', 'Payroll Company (D365)') ?></div>

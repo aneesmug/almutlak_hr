@@ -61,8 +61,13 @@ if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
         header("Location: ./index.php");
         exit();
     }
-    session_unset();
-    session_destroy();
+    // Keep a sign-in that is waiting for its OTP: another (signed-out) tab of the same browser
+    // shares this session cookie, and its background polling (e.g. get_online_users.php) used to
+    // destroy the session between login.php and login_verification.php -> OTP page bounced to index.php
+    if (empty($_SESSION['otp_verification'])) {
+        session_unset();
+        session_destroy();
+    }
     header("Location: ./index.php");
     exit();
 }

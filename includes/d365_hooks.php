@@ -7,7 +7,7 @@
  * the save - the result is stored in d365_worker_status, and on failure the employee header
  * (includes/emp_top_info.php) shows the manual "Add to D365" button.
  */
-function d365_auto_register_employee($conDB, $empId)
+function d365_auto_register_employee($conDB, $empId, $company = '')
 {
     // Callers answer with JSON (ajaxEmployeeCreateModal.php) - a stray warning must not break it
     ob_start();
@@ -22,7 +22,7 @@ function d365_auto_register_employee($conDB, $empId)
             return; // D365 not configured - nothing to do
         }
         @set_time_limit(120);
-        (new D365Workers($conDB, new D365Client($config)))->autoRegister($empId);
+        (new D365Workers($conDB, new D365Client($config)))->autoRegister($empId, $company);
     } catch (Throwable $ex) {
         error_log('D365 auto-register ' . $empId . ': ' . $ex->getMessage());
     } finally {

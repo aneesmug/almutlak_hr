@@ -181,6 +181,29 @@ class D365AccountRules
         return null;
     }
 
+    /** Every dimension a company's account structures (+ advanced rules) can carry, in structure order, without MainAccount */
+    public function companyDimensions($company)
+    {
+        $company = strtoupper((string)$company);
+        $dims = [];
+        foreach ($this->data['companies'][$company]['structures'] ?? [] as $structure) {
+            $segs = $this->data['structures'][$structure] ?? [];
+            foreach ($this->data['rules'] as $rule) {
+                if ($rule['structure'] === $structure) {
+                    foreach ($rule['adds'] as $add) {
+                        $segs = array_merge($segs, $this->data['ruleStructures'][$add] ?? []);
+                    }
+                }
+            }
+            foreach ($segs as $seg) {
+                if (strtolower($seg) !== 'mainaccount' && !in_array($seg, $dims, true)) {
+                    $dims[] = $seg;
+                }
+            }
+        }
+        return $dims;
+    }
+
     /** Companies whose structures can carry this dimension anywhere (e.g. CostCenter -> ['MHO']) */
     public function companiesWithDimension($dimension)
     {

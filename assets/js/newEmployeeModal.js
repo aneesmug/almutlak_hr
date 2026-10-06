@@ -729,13 +729,45 @@ function openCompanyStep1(data, w) {
     });
 }
 
-// D365 cost centers (live list from D365, see includes/cost_centers.php) - default C30
-function newEmpCostCenterOptions(selected) {
+// D365 company of the chosen app company - mapped once in App Settings > D365 Config > Companies
+// (form data d365_company_map). Shown under the Company select; an unmapped company cannot be registered.
+function newEmpD365For(compNo) {
     const data = window.NEW_EMP_FORM_DATA || {};
-    const value = selected || data.cost_center_default || 'C30';
-    const list = (data.cost_centers || []).slice();
-    if (!list.some(cc => cc.value === value)) list.unshift({ value: value, name: '' });
-    return list.map(cc => `<option value="${escapeHtml(String(cc.value))}" ${cc.value === value ? 'selected' : ''}>${escapeHtml(String(cc.value) + (cc.name ? ' - ' + cc.name : ''))}</option>`).join('');
+    const code = (data.d365_company_map || {})[compNo] || '';
+    const c = (data.d365_companies || []).find(x => x.code === code);
+    return code ? { code, name: c ? c.name : '' } : null;
+}
+
+function newEmpWireD365Company(compSel) {
+    const data = window.NEW_EMP_FORM_DATA || {};
+    const $comp = $(compSel);
+    const $card = $comp.closest('[class*="col-md-"]').find('.emp-field-card').first();
+    const refresh = () => {
+        let $hint = $card.find('.ne-d365-hint');
+        if (!$hint.length) {
+            $hint = $('<small class="ne-d365-hint d-block mt-1"></small>');
+            $card.append($hint);
+        }
+        if (!$comp.val()) { $hint.text(''); return; }
+        const d = newEmpD365For($comp.val());
+        if (d) {
+            $hint.attr('class', 'ne-d365-hint d-block mt-1 text-muted').text('D365: ' + d.code + (d.name ? ' - ' + d.name : ''));
+        } else if (data.d365_check) {
+            $hint.attr('class', 'ne-d365-hint d-block mt-1 text-danger').text(__('d365_company_not_mapped_short', 'No D365 company mapped - App Settings > D365 Config > Companies'));
+        } else {
+            $hint.text('');
+        }
+    };
+    $comp.on('change', refresh);
+    refresh();
+}
+
+// Required check for the Next/Register buttons
+function newEmpD365Missing(compNo) {
+    const data = window.NEW_EMP_FORM_DATA || {};
+    if (!data.d365_check || !compNo || newEmpD365For(compNo)) return false;
+    Swal.showValidationMessage(__('d365_company_not_mapped', 'This company has no D365 company yet - map it in App Settings > D365 Config > Companies'));
+    return true;
 }
 
 function newEmpCollectEmploymentInfo() {
@@ -744,7 +776,7 @@ function newEmpCollectEmploymentInfo() {
         city_id: $('#ceCityId').val(),
         location_id: $('#ceLocationId').val(),
         sub_dept_id: $('#ceSubDeptId').val(),
-        cost_center: $('#ceCostCenter').val(),
+
         emptype: $('#ceEmptype').val(),
         supervisor_id: $('#ceSupervisorId').val(),
         joining_date: $('#ceJoiningDate').val(),
@@ -769,7 +801,7 @@ function openCompanyStep2(data, w) {
             ${newEmpFieldset('city_label', 'City', `<select id="ceCityId" class="form-control new-emp-select2" required>${newEmpOptionsHtml(data.cities, 'id', 'name_en', 'name_ar', true, w.city_id)}</select>`, 'col-md-3', 'fa-city', true)}
             ${newEmpFieldset('location_label', 'Location', `<select id="ceLocationId" class="form-control new-emp-select2" required><option value="">${__('select_a_city_first', 'Select a City First')}</option></select>`, 'col-md-3', 'fa-map-marker-alt', true)}
             ${newEmpFieldset('sub_department_label', 'Sub-Department', `<select id="ceSubDeptId" class="form-control new-emp-select2"><option value="">${__('select_a_department_first', 'Select a Department First')}</option></select>`, 'col-md-3', 'fa-sitemap')}
-            ${newEmpFieldset('cost_center_label', 'Cost Center', `<select id="ceCostCenter" class="form-control new-emp-select2">${newEmpCostCenterOptions(w.cost_center)}</select>`, 'col-md-3', 'fa-coins')}
+
             ${newEmpFieldset('employee_type_label', 'Employee Type', `<select id="ceEmptype" class="form-control new-emp-select2" required><option value="">${__('select_option', 'Select')}</option>${emptypeOptions}</select>`, 'col-md-3', 'fa-user-tag', true)}
             ${newEmpFieldset('direct_supervisor', 'Direct Supervisor', `<select id="ceSupervisorId" class="form-control new-emp-select2" required><option value="">${__('select_option', 'Select')}</option>${(data.supervisors || []).map(s => `<option value="${String(s.emp_id).replace(/"/g, '&quot;')}" ${String(w.supervisor_id) === String(s.emp_id) ? 'selected' : ''}>${escapeHtml(s.name)} (${escapeHtml(s.emptype)})</option>`).join('')}</select>`, 'col-md-3', 'fa-user-tie', true)}
             ${newEmpFieldset('joining_date', 'Joining date', `<input type="text" id="ceJoiningDate" class="form-control" value="${escapeHtml(w.joining_date || '')}" required>`, 'col-md-3', 'fa-calendar-alt', true)}
@@ -801,6 +833,7 @@ function openCompanyStep2(data, w) {
             if (w.department) newEmpPopulateSubDepts(w.department, $('#ceSubDeptId'), w.sub_dept_id);
 
             $('#ceCityId').on('change', function() { newEmpPopulateLocations($(this).val(), $('#ceLocationId'), ''); });
+            newEmpWireD365Company('#ceCompNo');
             $('#ceDept').on('change', function() { newEmpPopulateSubDepts($(this).val(), $('#ceSubDeptId'), ''); });
 
             $('#ceVacPeriod').on('change', function() {
@@ -836,6 +869,7 @@ function openCompanyStep2(data, w) {
                 ceVacationDays: __('vacation_days', 'Vacation Days'),
                 ceProbation: __('probation_period_label', 'Probation Period')
             })) return false;
+            if (newEmpD365Missing($('#ceCompNo').val())) return false;
             return newEmpCollectEmploymentInfo();
         },
         preDeny: () => newEmpCollectEmploymentInfo()
@@ -977,7 +1011,7 @@ function newEmpCollectManPower() {
         city_id: $('#mpCityId').val(),
         location_id: $('#mpLocationId').val(),
         sub_dept_id: $('#mpSubDeptId').val(),
-        cost_center: $('#mpCostCenter').val(),
+
         mobile: $('#mpMobile').val(),
         joining_date: $('#mpJoiningDate').val(),
         salary: newEmpGetNumeric('mpSalary'),
@@ -1009,7 +1043,7 @@ function openManPowerEmployeeModal(data, w) {
             ${newEmpFieldset('city_label', 'City', `<select id="mpCityId" class="form-control new-emp-select2">${newEmpOptionsHtml(data.cities, 'id', 'name_en', 'name_ar', true, w.city_id)}</select>`, 'col-md-3', 'fa-city')}
             ${newEmpFieldset('location_label', 'Location', `<select id="mpLocationId" class="form-control new-emp-select2"><option value="">${__('select_a_city_first', 'Select a City First')}</option></select>`, 'col-md-3', 'fa-map-marker-alt')}
             ${newEmpFieldset('sub_department_label', 'Sub-Department', `<select id="mpSubDeptId" class="form-control new-emp-select2"><option value="">${__('select_a_department_first', 'Select a Department First')}</option></select>`, 'col-md-3', 'fa-sitemap')}
-            ${newEmpFieldset('cost_center_label', 'Cost Center', `<select id="mpCostCenter" class="form-control new-emp-select2">${newEmpCostCenterOptions(w.cost_center)}</select>`, 'col-md-3', 'fa-coins')}
+
             ${newEmpFieldset('mobile', 'Mobile No.', `<input type="text" id="mpMobile" class="form-control" value="${escapeHtml(w.mobile || '')}">`, 'col-md-3', 'fa-phone')}
             ${newEmpFieldset('joining_date', 'Joining Date', `<input type="text" id="mpJoiningDate" class="form-control" value="${escapeHtml(w.joining_date || '')}">`, 'col-md-3', 'fa-calendar-alt')}
             ${newEmpFieldset('salary', 'Salary', `<input type="text" id="mpSalary" class="form-control autonumber" data-v-max="25000" data-v-min="0" value="${escapeHtml(w.salary || '')}" required>`, 'col-md-3', 'fa-money-bill-wave', true)}
@@ -1047,6 +1081,7 @@ function openManPowerEmployeeModal(data, w) {
             if (w.city_id) newEmpPopulateLocations(w.city_id, $('#mpLocationId'), w.location_id);
             if (w.department) newEmpPopulateSubDepts(w.department, $('#mpSubDeptId'), w.sub_dept_id);
             $('#mpCityId').on('change', function() { newEmpPopulateLocations($(this).val(), $('#mpLocationId'), ''); });
+            newEmpWireD365Company('#mpCompNo');
             $('#mpDepartment').on('change', function() { newEmpPopulateSubDepts($(this).val(), $('#mpSubDeptId'), ''); });
 
             if (w.avatarFile && window.DataTransfer) {
@@ -1069,6 +1104,7 @@ function openManPowerEmployeeModal(data, w) {
                 mpCompNo: __('company_label', 'Company'),
                 mpSalary: __('salary', 'Salary')
             })) return false;
+            if (newEmpD365Missing($('#mpCompNo').val())) return false;
             Object.assign(w, newEmpCollectManPower());
             const draftId = await newEmpDraftBeforeRegister('man_power', w);
 
@@ -1087,7 +1123,8 @@ function openManPowerEmployeeModal(data, w) {
             formData.append('city_id', $('#mpCityId').val());
             formData.append('location_id', $('#mpLocationId').val());
             formData.append('sub_dept_id', $('#mpSubDeptId').val());
-            formData.append('cost_center', $('#mpCostCenter').val());
+
+
             formData.append('country', $('#mpCountry').val());
             formData.append('dob', $('#mpDob').val());
             formData.append('sex', $('input[name=mpSex]:checked').val());

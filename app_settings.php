@@ -612,6 +612,11 @@
         if (container) container.innerHTML = '<pre class="text-danger p-2" style="white-space:pre-wrap;">' + msg.replace(/</g, '&lt;') + '</pre>';
     });
     </script>
+    <?php if ($is_system_admin): ?>
+    <?php if (empty($_SESSION['d365_csrf'])) { $_SESSION['d365_csrf'] = bin2hex(random_bytes(16)); } ?>
+    <script>window.D365_DIM_CSRF = <?= json_encode($_SESSION['d365_csrf']) ?>;</script>
+    <script src="assets/js/d365_dimensions_settings.js?v=<?= @filemtime(__DIR__ . '/assets/js/d365_dimensions_settings.js') ?>"></script>
+    <?php endif; ?>
     <script src="assets/js/app_settings.js?v=<?= filemtime(__DIR__ . '/assets/js/app_settings.js') ?>"></script>
 
     <script>

@@ -1,7 +1,8 @@
 <?php
 // D365 widget in the employee header (includes/emp_top_info.php).
 // 'status' is open to every logged-in user (status pill); register / sync / sync_payroll need
-// system admin or the 'd365_sync_employee' special access.
+// system admin or the 'd365_sync_employee' special access; register / transfer_info / transfer are also
+// allowed with 'd365_register_employee' (D365 Employee Check page: register missing + bulk change company).
 // Actions (POST, CSRF = $_SESSION['d365_csrf']):
 //   status   -> stored/fresh D365 status of the employee (+ company suggestion when not registered)
 //   register -> create worker + employment in D365 (company chosen in the popup)
@@ -15,7 +16,9 @@ header('Content-Type: application/json; charset=utf-8');
 @set_time_limit(120);
 
 $canSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
-if (!$canSync && (string)($_POST['action'] ?? 'status') !== 'status') {
+$canRegister = $canSync || user_has_special_access($conDB, $empid ?? '', 'd365_register_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$requestedAction = (string)($_POST['action'] ?? 'status');
+if ($requestedAction !== 'status' && !($canSync || ($canRegister && in_array($requestedAction, ['register', 'transfer_info', 'transfer'], true)))) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'Forbidden']);
     exit;
@@ -53,6 +56,27 @@ try {
         exit;
     }
 
+    // Transfer to another D365 company: current employments + company list for the popup, then the move itself
+    if ($action === 'transfer_info') {
+        require_once __DIR__ . '/../../includes/cost_centers.php';
+        $companies = [];
+        foreach (payroll_company_list() as $code => $c) {
+            $companies[] = ['code' => $code, 'name' => $c['name']];
+        }
+        echo json_encode(['ok' => true, 'environment' => $client->getEnvironment(), 'can_write' => $client->canWrite(),
+            'employments' => $workers->employmentsV2($targetEmp), 'companies' => $companies], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($action === 'transfer') {
+        $result = $workers->transferCompany($targetEmp, (string)($_POST['company'] ?? ''), (string)($_POST['date'] ?? ''));
+        $result['status'] = $workers->getStatus($targetEmp, 21600);
+        $result['environment'] = $client->getEnvironment();
+        $result['can_write'] = $client->canWrite();
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'register') {
         $result = $workers->register($targetEmp, (string)($_POST['company'] ?? ''));
     } elseif ($action === 'sync') {
@@ -68,6 +92,16 @@ try {
     $result['can_write'] = $client->canWrite();
     if ($canSync && ($status['status'] ?? '') !== 'registered') {
         $result['suggest'] = $workers->suggestCompanyFor($targetEmp);
+        // full company names for the "Add to D365" select; companies removed in Account Templates (closed) left out
+        require_once __DIR__ . '/../../includes/cost_centers.php';
+        $list = payroll_company_list();
+        if ($list) {
+            $result['suggest']['entities'] = array_keys($list);
+            if (!isset($list[$result['suggest']['company']])) {
+                $result['suggest']['company'] = '';
+            }
+        }
+        $result['suggest']['names'] = (object)array_map(function ($c) { return $c['name']; }, $list);
     }
     echo json_encode($result, JSON_UNESCAPED_UNICODE);
 } catch (Throwable $ex) {

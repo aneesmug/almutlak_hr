@@ -17,8 +17,9 @@ if (!$canCompareD365) {
     http_response_code(403);
     die('Access Denied: You do not have permission to compare employees with D365');
 }
-// Registering missing workers writes to D365: system admins + 'd365_sync_employee' special access only
-$canRegisterD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+// Registering missing workers / bulk company change write to D365: system admins + 'd365_sync_employee' or 'd365_register_employee' special access
+$canRegisterD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'd365_register_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 // "Payroll sync" link: system admins + 'd365_sync_payroll' special access only
 $canOpenPayrollSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
@@ -172,6 +173,9 @@ $legalEntities = [];
 if (!$error && $client) {
     $companySuggest = (new D365Workers($conDB, $client))->suggestCompanies($employments);
     $legalEntities = array_values(array_unique(array_column($employments, 'entity')));
+    // companies removed in App Settings > D365 Config > Account Templates (closed) are no target for register/transfer
+    require_once __DIR__ . '/includes/cost_centers.php';
+    $legalEntities = array_values(array_diff($legalEntities, d365_hidden_companies()));
     sort($legalEntities);
 }
 $canWrite = $client && $client->canWrite();
@@ -190,6 +194,28 @@ function cmp_date($v)
 }
 
 $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+
+// Filter dropdown values (only what occurs in the list)
+$filterOpts = ['comp' => [], 'dept' => [], 'd365' => []];
+foreach ($rows as $r) {
+    if ($r['app']) {
+        $filterOpts['comp'][(string)($r['app']['comp_name'] ?? '')] = true;
+        $filterOpts['dept'][(string)($r['app']['dep_nme'] ?? '')] = true;
+    }
+    $filterOpts['d365'][$r['emp'] ? (string)$r['emp']['entity'] : ''] = true;
+}
+foreach ($filterOpts as &$list) {
+    $list = array_keys($list);
+    sort($list, SORT_NATURAL | SORT_FLAG_CASE);
+}
+unset($list);
+$filterSelect = function ($id, $all, array $values, $blankLabel) use ($e) {
+    $html = '<select id="' . $id . '" class="form-control form-control-sm cmp-filter"><option value="*">' . $e($all) . '</option>';
+    foreach ($values as $v) {
+        $html .= '<option value="' . $e($v) . '">' . $e($v === '' ? $blankLabel : $v) . '</option>';
+    }
+    return $html . '</select>';
+};
 ?>
 <!DOCTYPE html>
 <html>
@@ -217,6 +243,7 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
         .cmp-tile .l { font-size: 12px; color: var(--sr-muted); margin-top: 4px; }
         .cmp-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
         .cmp-toolbar input { max-width: 280px; }
+        .cmp-toolbar select { width: auto; max-width: 220px; }
         .cmp-muted { color: var(--sr-muted); }
         .cmp-hint { font-size: 12px; color: var(--sr-muted); }
     </style>
@@ -236,6 +263,8 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
             <?php if (!$error && $canRegisterD365): ?>
                 <button type="button" class="sr-btn sr-btn-primary" id="btnRegisterAll" <?= $canWrite && !empty($counts['missing']) ? '' : 'disabled' ?>
                     title="<?= $canWrite ? '' : 'Writes are off (App Settings > D365 Config)' ?>">Register missing in D365 (<?= (int)($counts['missing'] ?? 0) ?>)</button>
+                <button type="button" class="sr-btn sr-btn-success" id="btnBulkTransfer" <?= $canWrite ? '' : 'disabled' ?>
+                    title="<?= $canWrite ? 'Move many employees to other D365 companies from an Excel file' : 'Writes are off (App Settings > D365 Config)' ?>"><i class="mdi mdi-swap-horizontal"></i> Bulk change company (Excel)</button>
             <?php endif; ?>
             <a class="sr-btn sr-btn-ghost" href="d365_employee_compare.php?refresh=1">Reload D365 data</a>
             <?php if ($canOpenPayrollSync): ?><a class="sr-btn sr-btn-ghost" href="d365_payroll_push.php">Payroll sync</a><?php endif; ?>
@@ -265,6 +294,16 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
             <div class="sr-card-body">
                 <div class="cmp-toolbar">
                     <input type="search" id="cmpSearch" class="form-control" placeholder="Search ID, name, company...">
+                    <select id="fAppStatus" class="form-control form-control-sm cmp-filter">
+                        <option value="*">App status: all</option><option value="1">Active</option><option value="0">Inactive</option><option value="">Not in app</option>
+                    </select>
+                    <?= $filterSelect('fAppComp', 'App company: all', $filterOpts['comp'], '(no company)') ?>
+                    <?= $filterSelect('fDept', 'Department: all', $filterOpts['dept'], '(no department)') ?>
+                    <?= $filterSelect('fD365', 'D365 company: all', $filterOpts['d365'], '(no employment)') ?>
+                    <select id="fEmployment" class="form-control form-control-sm cmp-filter">
+                        <option value="*">D365 employment: all</option><option value="active">Active</option><option value="ended">Ended</option><option value="">None</option>
+                    </select>
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="cmpClear">Clear filters</button>
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="cmpExport">Export CSV</button>
                     <span class="cmp-hint" id="cmpShown"></span>
                 </div>
@@ -282,7 +321,10 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
                         [$tone, $label] = $states[$r['state']];
                         $a = $r['app'];
                         $emp = $r['emp']; ?>
-                        <tr data-state="<?= $e($r['state']) ?>" data-emp="<?= $e($r['id']) ?>"<?php if ($r['state'] === 'missing'): ?>
+                        <tr data-state="<?= $e($r['state']) ?>" data-emp="<?= $e($r['id']) ?>"
+                            data-app-status="<?= $a ? $e((string)$a['status'] === '1' ? '1' : '0') : '' ?>" data-app-comp="<?= $a ? $e($a['comp_name']) : '' ?>"
+                            data-dept="<?= $a ? $e($a['dep_nme']) : '' ?>" data-d365="<?= $emp ? $e($emp['entity']) : '' ?>"
+                            data-employment="<?= $emp ? ($emp['active'] ? 'active' : 'ended') : '' ?>"<?php if ($r['state'] === 'missing'): ?>
                             data-name="<?= $e($a['name']) ?>" data-comp-name="<?= $e($a['comp_name']) ?>" data-company="<?= $e($companySuggest[$a['comp_no']] ?? '') ?>"<?php endif; ?>>
                             <td class="sr-mono"><?= $e($r['id']) ?></td>
                             <td><?= $a ? $e($a['name']) : '<span class="cmp-muted">-</span>' ?></td>
@@ -315,11 +357,22 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
     var search = document.getElementById('cmpSearch');
     var shown = document.getElementById('cmpShown');
     var filter = '';
+    // Dropdown filters: element + row attribute it matches ('*' = all)
+    var selects = [['fAppStatus', 'data-app-status'], ['fAppComp', 'data-app-comp'], ['fDept', 'data-dept'], ['fD365', 'data-d365'], ['fEmployment', 'data-employment']]
+        .map(function (p) { return { el: document.getElementById(p[0]), attr: p[1] }; })
+        .filter(function (s) { return s.el; });
+    selects.forEach(function (s) { s.el.addEventListener('change', function () { apply(); }); });
+    document.getElementById('cmpClear').addEventListener('click', function () {
+        selects.forEach(function (s) { s.el.value = '*'; });
+        search.value = '';
+        apply();
+    });
 
     function apply() {
         var q = search.value.trim().toLowerCase(), n = 0;
         rows.forEach(function (tr) {
-            var ok = (!filter || tr.getAttribute('data-state') === filter) && (!q || tr.textContent.toLowerCase().indexOf(q) !== -1);
+            var ok = (!filter || tr.getAttribute('data-state') === filter) && (!q || tr.textContent.toLowerCase().indexOf(q) !== -1)
+                && selects.every(function (s) { return s.el.value === '*' || tr.getAttribute(s.attr) === s.el.value; });
             tr.style.display = ok ? '' : 'none';
             if (ok) n++;
         });
@@ -358,6 +411,8 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
     var csrf = <?= json_encode($csrf) ?>;
     var env = <?= json_encode($environment) ?>;
     var entities = <?= json_encode($legalEntities) ?>;
+    var entityNames = <?= json_encode((object)array_map(function ($c) { return $c['name']; }, function_exists('payroll_company_list') ? payroll_company_list() : []), JSON_UNESCAPED_UNICODE) ?>;
+    function entityLabel(code) { return code + (entityNames[code] ? ' - ' + entityNames[code] : ''); }
     var popupClass = { popup: 'sr-addline-popup sr-page' };
 
     function esc(s) {
@@ -382,7 +437,7 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
             + list.map(function (r, i) {
                 return '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.name) + '</td><td>' + esc(r.compName) + '</td><td><select data-i="' + i + '">'
                     + '<option value="">- choose -</option>'
-                    + entities.map(function (en) { return '<option value="' + esc(en) + '"' + (en === r.company ? ' selected' : '') + '>' + esc(en) + '</option>'; }).join('')
+                    + entities.map(function (en) { return '<option value="' + esc(en) + '"' + (en === r.company ? ' selected' : '') + '>' + esc(entityLabel(en)) + '</option>'; }).join('')
                     + '</select></td></tr>';
             }).join('') + '</tbody></table></div>';
 
@@ -467,6 +522,252 @@ $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
             }).then(function () { location.href = 'd365_employee_compare.php?refresh=1'; });
         }
     }
+
+    // ------------------------------------------------------------ bulk change company (Excel)
+    // 1. Template = the rows currently shown with an active D365 employment (Emp ID, Name, Current company, New company, Transfer date)
+    // 2. Upload the filled file -> preview with checks -> transfer one by one (includes/ajaxFile/d365_employee.php action=transfer)
+    var btnBulk = document.getElementById('btnBulkTransfer');
+    var XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js';
+
+    function withXlsx(cb) {
+        if (window.XLSX) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = XLSX_URL;
+        s.onload = cb;
+        s.onerror = function () { Swal.fire({ icon: 'error', title: 'Could not load the Excel library', customClass: popupClass }); };
+        document.head.appendChild(s);
+    }
+
+    function rowInfo(id) {
+        var tr = rows.find(function (r) { return r.getAttribute('data-emp') === id; });
+        if (!tr) return null;
+        return {
+            id: id,
+            name: (tr.cells[1].textContent.trim() !== '-' ? tr.cells[1] : tr.cells[2]).textContent.trim(),
+            company: tr.getAttribute('data-d365'),
+            employment: tr.getAttribute('data-employment')
+        };
+    }
+
+    function downloadTemplate() {
+        withXlsx(function () {
+            var data = [['Emp ID', 'Name', 'Current company', 'New company', 'Transfer date (YYYY-MM-DD)']];
+            rows.forEach(function (tr) {
+                if (tr.style.display === 'none' || tr.getAttribute('data-employment') !== 'active') return;
+                var i = rowInfo(tr.getAttribute('data-emp'));
+                data.push([i.id, i.name, i.company, '', '']);
+            });
+            var wb = XLSX.utils.book_new();
+            var ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 26 }];
+            XLSX.utils.book_append_sheet(wb, ws, 'Transfer');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Valid company code', 'Name']].concat(entities.map(function (c) { return [c, entityNames[c] || '']; }))), 'Companies');
+            XLSX.writeFile(wb, 'd365_change_company_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+        });
+    }
+
+    /** Excel cell -> 'YYYY-MM-DD' ('' when empty / unreadable). Accepts Date, Excel serial, 2026-10-07, 7-10-2026, 7/10/2026 */
+    function toIsoDate(v) {
+        if (v === null || v === undefined || v === '') return '';
+        if (v instanceof Date && !isNaN(v)) {
+            return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+        }
+        if (typeof v === 'number') {
+            var d = new Date(Math.round((v - 25569) * 86400000));
+            return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+        }
+        var s = String(v).trim(), m;
+        if ((m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/))) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+        if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/))) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); // day first
+        return null;
+    }
+
+    function parseFile(file, defaultDate) {
+        return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onerror = function () { reject(new Error('Could not read the file')); };
+            reader.onload = function () {
+                try {
+                    var wb = XLSX.read(new Uint8Array(reader.result), { type: 'array', cellDates: true });
+                    var sheet = wb.Sheets[wb.SheetNames[0]];
+                    var aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+                    if (!aoa.length) throw new Error('The file is empty');
+                    var head = aoa[0].map(function (h) { return String(h).toLowerCase().trim(); });
+                    var col = function (re) { return head.findIndex(function (h) { return re.test(h); }); };
+                    var cId = col(/emp|personnel|^id$/), cCo = col(/new\s*company|^company$|new\s*legal/), cDate = col(/date/);
+                    if (cId < 0 || cCo < 0) throw new Error('Columns "Emp ID" and "New company" are required in the first sheet');
+                    var seen = {};
+                    var list = [];
+                    aoa.slice(1).forEach(function (r, i) {
+                        var id = String(r[cId] === undefined ? '' : r[cId]).trim();
+                        var to = String(r[cCo] === undefined ? '' : r[cCo]).trim().toUpperCase();
+                        if (!id && !to) return;
+                        var date = cDate >= 0 ? toIsoDate(r[cDate]) : '';
+                        var item = { line: i + 2, id: id, to: to, date: date || defaultDate, error: null };
+                        var info = rowInfo(id);
+                        item.name = info ? info.name : '';
+                        item.from = info ? info.company : '';
+                        if (!id) item.error = 'No Emp ID';
+                        else if (seen[id]) item.error = 'Duplicate (line ' + seen[id] + ')';
+                        else if (!info) item.error = 'Not in this list';
+                        else if (info.employment !== 'active') item.error = 'No active D365 employment';
+                        else if (!to) item.error = 'No new company';
+                        else if (entities.indexOf(to) === -1) item.error = 'Unknown company ' + to;
+                        else if (to === info.company) item.error = 'Already in ' + to;
+                        else if (date === null || !item.date) item.error = 'Invalid transfer date';
+                        seen[id] = seen[id] || item.line;
+                        list.push(item);
+                    });
+                    if (!list.length) throw new Error('No employees found in the file');
+                    resolve(list);
+                } catch (e) { reject(e); }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function openBulkTransfer() {
+        var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+        Swal.fire({
+            title: 'Bulk change company',
+            width: '640px',
+            customClass: popupClass,
+            allowOutsideClick: false,
+            showCancelButton: true,
+            confirmButtonText: 'Check file',
+            html: '<div class="sr-form" style="text-align:start">'
+                + '<div class="sr-notice tone-sky" style="margin-bottom:12px"><i class="mdi mdi-information-outline"></i><div>'
+                + '<b>1.</b> Filter the list (e.g. D365 company = MTL) and download the template.<br>'
+                + '<b>2.</b> Fill <b>New company</b> (e.g. MMT / MFF) and, if needed, <b>Transfer date</b> per employee.<br>'
+                + '<b>3.</b> Upload the file - you see a check before anything is sent to D365 <b>' + esc(env.toUpperCase()) + '</b>.</div></div>'
+                + '<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="btDownload" style="margin-bottom:12px"><i class="mdi mdi-download"></i> Download template (' + rows.filter(function (tr) { return tr.style.display !== 'none' && tr.getAttribute('data-employment') === 'active'; }).length + ' shown employees)</button>'
+                + '<div class="sr-fgrid">'
+                + '<div class="sr-fcol c-6"><label>Excel file <span class="text-danger">*</span></label><input type="file" id="btFile" class="form-control" accept=".xlsx,.xls,.csv"></div>'
+                + '<div class="sr-fcol c-6"><label>Default transfer date</label><input type="date" id="btDate" class="form-control" value="' + tomorrow + '"><span class="sr-fhint">First day in the new company - used when the row has no date. Today = active at once, later = Pending in D365 until then.</span></div>'
+                + '</div></div>',
+            didOpen: function () { document.getElementById('btDownload').addEventListener('click', downloadTemplate); },
+            preConfirm: function () {
+                var file = document.getElementById('btFile').files[0];
+                var date = document.getElementById('btDate').value;
+                if (!file) { Swal.showValidationMessage('Choose the Excel file'); return false; }
+                if (!date) { Swal.showValidationMessage('Choose the default transfer date'); return false; }
+                return new Promise(function (resolve) { withXlsx(resolve); })
+                    .then(function () { return parseFile(file, date); })
+                    .catch(function (e) { Swal.showValidationMessage(e.message); return false; });
+            }
+        }).then(function (r) { if (r.isConfirmed && r.value) previewTransfer(r.value); });
+    }
+
+    function previewTransfer(list) {
+        var ok = list.filter(function (i) { return !i.error; });
+        var byTarget = {};
+        ok.forEach(function (i) { byTarget[i.to] = (byTarget[i.to] || 0) + 1; });
+        Swal.fire({
+            title: 'Check before sending',
+            width: '820px',
+            customClass: popupClass,
+            allowOutsideClick: false,
+            showCancelButton: true,
+            confirmButtonText: 'Change company of ' + ok.length + ' employee' + (ok.length === 1 ? '' : 's'),
+            html: '<div style="text-align:start">'
+                + '<div class="sr-notice ' + (ok.length ? 'tone-amber' : 'tone-red') + '" style="margin-bottom:10px"><i class="mdi mdi-alert-outline"></i><div>'
+                + '<b>' + ok.length + '</b> ready' + (Object.keys(byTarget).length ? ' (' + Object.keys(byTarget).map(function (k) { return esc(k) + ': ' + byTarget[k]; }).join(', ') + ')' : '')
+                + ' · <b>' + (list.length - ok.length) + '</b> skipped. Each employee gets a new employment in the new company and the old one ends the day before - in D365 <b>' + esc(env.toUpperCase()) + '</b>.</div></div>'
+                + '<div class="rg-list"><table><thead><tr><th>Line</th><th>Emp ID</th><th>Name</th><th>From</th><th>To</th><th>Date</th><th>Check</th></tr></thead><tbody>'
+                + list.map(function (i) {
+                    return '<tr><td>' + i.line + '</td><td>' + esc(i.id) + '</td><td>' + esc(i.name) + '</td><td>' + esc(i.from) + '</td><td><b>' + esc(i.to) + '</b></td><td>' + esc(i.date || '') + '</td><td>'
+                        + (i.error ? '<span class="sr-pill tone-red"><span class="sr-dot"></span>' + esc(i.error) + '</span>' : '<span class="sr-pill tone-green"><span class="sr-dot"></span>OK</span>') + '</td></tr>';
+                }).join('') + '</tbody></table></div></div>',
+            didOpen: function () { if (!ok.length) Swal.getConfirmButton().disabled = true; }
+        }).then(function (r) { if (r.isConfirmed && ok.length) runTransfer(ok); });
+    }
+
+    function runTransfer(list) {
+        var done = 0, okCount = 0, failures = [], warnings = [], stop = false, started = Date.now();
+        Swal.fire({
+            title: 'Changing company...',
+            width: '600px',
+            customClass: popupClass,
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            html: '<div style="text-align:start"><div id="btNow" style="font-size:13px">Starting...</div>'
+                + '<div class="rg-bar"><div id="btBar"></div></div>'
+                + '<div style="display:flex;justify-content:space-between;font-size:12px"><span id="btCount">0 / ' + list.length + '</span><span id="btEta"></span></div>'
+                + '<div style="margin-top:8px;font-size:13px"><span class="text-success">OK <b id="btOk">0</b></span> · <span class="text-danger">Failed <b id="btFail">0</b></span></div>'
+                + '<div class="rg-log" id="btLog"></div>'
+                + '<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="btStop" style="margin-top:10px">Stop after current</button></div>',
+            didOpen: function () {
+                document.getElementById('btStop').addEventListener('click', function () { stop = true; this.disabled = true; this.textContent = 'Stopping...'; });
+                next();
+            }
+        });
+
+        function next() {
+            if (stop || done >= list.length) { finish(); return; }
+            var it = list[done];
+            document.getElementById('btNow').innerHTML = 'Moving <b>' + esc(it.id) + '</b> ' + esc(it.name) + ': ' + esc(it.from) + ' &rarr; <b>' + esc(it.to) + '</b> (' + esc(it.date) + ')';
+            var fd = new FormData();
+            fd.append('action', 'transfer');
+            fd.append('csrf', csrf);
+            fd.append('emp_id', it.id);
+            fd.append('company', it.to);
+            fd.append('date', it.date);
+            fetch('./includes/ajaxFile/d365_employee.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (resp) {
+                    if (resp.redirected) throw new Error('Signed out - log in again and re-run (finished employees are skipped: "Already employed")');
+                    return resp.json().catch(function () { throw new Error('Server error (HTTP ' + resp.status + ')'); });
+                })
+                .then(function (res) {
+                    if (res.ok) {
+                        okCount++;
+                        if (res.warning) { warnings.push(it.id + ': ' + res.warning); addLog(it.id + ' (warning): ' + res.warning); }
+                    } else {
+                        failures.push(it.id + ': ' + (res.error || 'Failed'));
+                        addLog(it.id + ': ' + (res.error || 'Failed'));
+                    }
+                })
+                .catch(function (err) {
+                    failures.push(it.id + ': ' + err.message);
+                    addLog(it.id + ': ' + err.message);
+                    if (/Signed out/.test(err.message)) stop = true;
+                })
+                .then(function () {
+                    done++;
+                    document.getElementById('btBar').style.width = Math.round(done / list.length * 100) + '%';
+                    document.getElementById('btCount').textContent = done + ' / ' + list.length;
+                    document.getElementById('btOk').textContent = okCount;
+                    document.getElementById('btFail').textContent = failures.length;
+                    var per = (Date.now() - started) / done;
+                    var left = Math.round(per * (list.length - done) / 1000);
+                    document.getElementById('btEta').textContent = left > 0 ? '~' + (left >= 60 ? Math.floor(left / 60) + 'm ' : '') + (left % 60) + 's left' : '';
+                    next();
+                });
+        }
+
+        function addLog(text) {
+            var log = document.getElementById('btLog');
+            if (!log) return;
+            var div = document.createElement('div');
+            div.textContent = text;
+            log.appendChild(div);
+        }
+
+        function finish() {
+            var lines = failures.concat(warnings);
+            Swal.fire({
+                icon: failures.length ? 'warning' : 'success',
+                title: okCount + ' of ' + list.length + ' moved' + (stop && done < list.length ? ' (stopped)' : ''),
+                width: '600px',
+                customClass: popupClass,
+                allowOutsideClick: false,
+                html: (failures.length ? failures.length + ' failed' : 'All done') + (warnings.length ? ', ' + warnings.length + ' with warnings' : '')
+                    + (lines.length ? '<div class="rg-log">' + lines.map(function (f) { return '<div>' + esc(f) + '</div>'; }).join('') + '</div>' : ''),
+                confirmButtonText: 'Reload list'
+            }).then(function () { location.href = 'd365_employee_compare.php?refresh=1'; });
+        }
+    }
+
+    if (btnBulk) btnBulk.addEventListener('click', openBulkTransfer);
 
     var btnAll = document.getElementById('btnRegisterAll');
     if (btnAll) btnAll.addEventListener('click', function () { openRegister(missingRows()); });

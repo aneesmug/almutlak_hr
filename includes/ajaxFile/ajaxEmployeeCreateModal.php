@@ -12,6 +12,25 @@ cost_center_ensure_column($conDB);
 
 $action = $_POST['action'] ?? '';
 
+/**
+ * D365 company of an app company from App Settings > D365 Config > Companies. Required: answers the JSON error and
+ * exits when the company is not mapped (skipped while the D365 company list cannot be loaded, so D365 being
+ * unreachable never blocks creating employees).
+ */
+function ecm_d365_company_for($compNo): string
+{
+    $code = d365_company_mapping()[(int)$compNo] ?? '';
+    $list = payroll_company_list();
+    if ($code !== '' && (!$list || isset($list[$code]))) {
+        return $code;
+    }
+    if (!$list) {
+        return '';
+    }
+    echo json_encode(['status' => 'error', 'message' => __('d365_company_not_mapped', 'This company has no D365 company yet - map it in App Settings > D365 Config > Companies')]);
+    exit;
+}
+
 function ecm_rows(mysqli $conDB, string $sql): array
 {
     $rows = [];
@@ -113,6 +132,12 @@ if ($action === 'get_form_data') {
         'all_locations' => ecm_rows($conDB, "SELECT `id`, `city_id`, `name_en`, `name_ar` FROM `locations` ORDER BY `name_en` ASC"),
         'cost_centers' => array_values(array_filter(cost_center_list($conDB), function ($cc) { return $cc['active']; })),
         'cost_center_default' => COST_CENTER_DEFAULT,
+        'd365_companies' => array_map(function ($code, $c) {
+            return ['code' => $code, 'name' => $c['name'], 'cost_center' => (bool)$c['cost_center']];
+        }, array_keys(payroll_company_list()), array_values(payroll_company_list())),
+        // explicit mapping only (D365 Config > Companies); removed (closed) companies left out
+        'd365_company_map' => (object)array_filter(d365_company_mapping(), function ($code) { return !payroll_company_list() || isset(payroll_company_list()[$code]); }),
+        'd365_check' => (bool)payroll_company_list(), // false = D365 list not loadable -> no mapping check
         'all_sub_departments' => ecm_rows($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC"),
     ]);
     exit;
@@ -225,7 +250,7 @@ if ($action === 'create_company_employee') {
         'city_id', 'location_id', 'sub_dept_id', 'cost_center', 'emptype', 'supervisor_id', 'joining_date', 'dob', 'dob_h', 't_shirt_size',
         'sex', 'mar_status', 'blood_type', 'emp_sup_type', 'actual_Job', 'vac_period',
         'vacation_days', 'salary', 'bank_name', 'iban', 'email', 'address',
-        'iqama_exp_g', 'gosi',
+        'iqama_exp_g', 'gosi', 'payroll_company',
         'probation', 'payment_type', 'created_at', 'fly', 'comp_no', 'avatar'
     ];
     $cleanRules = [
@@ -246,6 +271,9 @@ if ($action === 'create_company_employee') {
     $data['created_at'] = date('Y-m-d H:i:s');
     $data['fly'] = 0;
     $data['cost_center'] = cost_center_clean($conDB, $data['cost_center'] ?? ''); // D365 cost center, default C30
+    // D365 company = mapping of the app company (App Settings > D365 Config > Companies) - the worker is registered there
+    unset($data['d365_company']);
+    $d365Company = ecm_d365_company_for($data['comp_no'] ?? '');
     $data['dept'] = $data['department'] ?? null;
     unset($data['department']);
     $data['avatar'] = ($data['sex'] == 1) ? "./assets/emp_pics/defult.png" : "./assets/emp_pics/defultFemale.jpg";
@@ -385,7 +413,7 @@ if ($action === 'create_company_employee') {
         }
 
         // Register the new employee in Dynamics 365 (best effort - failures show "Add to D365" on the employee header)
-        d365_auto_register_employee($conDB, $values[':emp_id']);
+        d365_auto_register_employee($conDB, $values[':emp_id'], $d365Company);
 
         echo json_encode(['status' => 'success', 'emp_id' => $values[':emp_id']]);
     } catch (PDOException $e) {
@@ -410,6 +438,7 @@ if ($action === 'create_man_power_employee') {
     $location_id = !empty($_POST['location_id']) ? (int)$_POST['location_id'] : null;
     $sub_dept_id = !empty($_POST['sub_dept_id']) ? (int)$_POST['sub_dept_id'] : null;
     $cost_center = cost_center_clean($conDB, $_POST['cost_center'] ?? ''); // D365 cost center, default C30
+    $d365Company = ecm_d365_company_for($comp_no); // mapping of the app company (D365 Config > Companies)
     $country = trim($_POST['country'] ?? '');
     $dob = trim($_POST['dob'] ?? '');
     $sex = trim($_POST['sex'] ?? 'male');
@@ -520,7 +549,7 @@ if ($action === 'create_man_power_employee') {
             'employees'
         );
         // Register the new employee in Dynamics 365 (best effort - failures show "Add to D365" on the employee header)
-        d365_auto_register_employee($conDB, $emp_id);
+        d365_auto_register_employee($conDB, $emp_id, $d365Company);
         echo json_encode(['status' => 'success', 'emp_id' => $emp_id]);
     } else {
         echo json_encode(['status' => 'error', 'message' => 'Error: Could not add employee.']);

@@ -161,12 +161,16 @@ class D365Payroll
      * Journal key for a company: "MTL/02" when D365 Config has a journal name for that Company dimension
      * value (MTL keeps 01-GV / 02-GV journals with journal control per division), else just the company.
      */
-    public function journalKey($company, $dims)
+    public function journalKey($company, $dims, $companyDimension = null)
     {
         $company = strtoupper((string)$company);
-        $formats = self::$dimFormats ?: ($this->client ? self::fetchDimensionFormats($this->client) : ['default' => []]);
-        $i = array_search('company', array_map('strtolower', $formats['default'] ?? []), true);
-        $value = $i === false ? '' : trim(explode('-', (string)$dims)[$i] ?? '');
+        if ($companyDimension !== null) {
+            $value = trim((string)$companyDimension); // from the employee's D365 account template values
+        } else {
+            $formats = self::$dimFormats ?: ($this->client ? self::fetchDimensionFormats($this->client) : ['default' => []]);
+            $i = array_search('company', array_map('strtolower', $formats['default'] ?? []), true);
+            $value = $i === false ? '' : trim(explode('-', (string)$dims)[$i] ?? '');
+        }
         if ($value !== '' && $this->client && $this->client->getJournalName($company . '/' . $value)) {
             return $company . '/' . $value;
         }
@@ -633,6 +637,67 @@ class D365Payroll
         return $mainAccount . '-' . implode('-', $segments);
     }
 
+    /**
+     * Ledger account from the company's D365 account template values (App Settings > D365 Config):
+     * segments follow the active ledger dimension format, dimensions outside the template stay blank,
+     * and dimensions the company's account structure does not accept for this main account are dropped.
+     */
+    public static function templateAccount($mainAccount, array $values, array $allowed = null)
+    {
+        $byName = array_change_key_case($values, CASE_LOWER);
+        $out = [];
+        $hasMain = false;
+        foreach (self::$dimFormats['ledger'] ?? [] as $name) {
+            $lower = strtolower($name);
+            if ($lower === 'mainaccount') {
+                $out[] = $mainAccount;
+                $hasMain = true;
+            } elseif ($allowed !== null && !in_array($lower, $allowed, true)) {
+                $out[] = '';
+            } else {
+                $out[] = (string)($byName[$lower] ?? '');
+            }
+        }
+        if (!$hasMain) {
+            array_unshift($out, $mainAccount);
+        }
+        return implode('-', $out);
+    }
+
+    /**
+     * The payroll company's D365 account template filled with the employee's values.
+     * null = the company has no template (old behaviour: dims from the D365 employment);
+     * ['error' => msg] = template cannot be used; ['values' => [dimension => value], 'worker' => bool].
+     */
+    private function templateFor($empId, $company)
+    {
+        require_once __DIR__ . '/D365Dimensions.php';
+        $company = self::keyCompany($company);
+        $template = D365Dimensions::getTemplate($this->db, $company);
+        if (!$template) {
+            return null;
+        }
+        $ledger = array_map('strtolower', self::$dimFormats['ledger'] ?? []);
+        $outside = [];
+        $worker = false;
+        foreach ($template as $t) {
+            if ($ledger && !in_array(strtolower($t['dimension']), $ledger, true)) {
+                $outside[] = $t['dimension'];
+            }
+            $worker = $worker || D365Dimensions::isAuto($t['dimension']);
+        }
+        if ($outside) {
+            return ['error' => "$company account template uses " . implode(', ', $outside) . ', which the D365 ledger dimension format ('
+                . implode('-', self::$dimFormats['ledger']) . ') does not have - add it in D365 (Financial dimension configuration for integrating applications) or remove it from the template'];
+        }
+        $stored = D365Dimensions::getEmployeeValues($this->db, [$empId])[$empId] ?? [];
+        $r = D365Dimensions::resolve($template, $empId, $stored);
+        if ($r['missing']) {
+            return ['error' => 'D365 ' . implode(', ', $r['missing']) . " not set for this employee ($company template) - set it in App Settings > D365 Config > Employee Dimensions"];
+        }
+        return ['values' => $r['values'], 'worker' => $worker];
+    }
+
     /** Active D365 dimension formats for data entities: ['default' => [names], 'ledger' => [names]] */
     private static $dimFormats = null;
 
@@ -832,16 +897,30 @@ class D365Payroll
             return $fail(implode('; ', array_unique($built['errors'])) . ' - fill the account mapping on the Payroll settings page');
         }
 
-        // Booked in the employee's payroll company (Employee Master; default = D365 employment company),
-        // with the dims of the worker's own employment - only those the company's account structure accepts
+        // Booked in the employee's payroll company (Employee Master; default = D365 employment company).
+        // With a D365 account template for that company the dims are the employee's stored values only;
+        // without one, the dims of the worker's own employment - only those the account structure accepts
         $employment = $this->getEmployments($empId)[$empId] ?? null;
-        if (!$employment) {
-            return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
+        $company = $this->payrollCompanyFor($empId, $employment['entity'] ?? '');
+        $tpl = $company !== '' ? $this->templateFor($empId, $company) : null;
+        if ($tpl !== null) {
+            if (isset($tpl['error'])) {
+                return $fail($tpl['error'], $company);
+            }
+            if (!$employment && $tpl['worker']) {
+                return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
+            }
+            $employment = ['entity' => $company, 'dims' => '', 'template' => $tpl['values']];
+            $key = $this->journalKey($company, '', $tpl['values']['Company'] ?? '');
+        } else {
+            if (!$employment) {
+                return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
+            }
+            $employment['dims'] = $this->dimsWithDepartment($empId, $employment['dims']);
+            $employment['extra'] = $this->extraLedgerValues($empId);
+            $employment['entity'] = $company;
+            $key = $this->journalKey($employment['entity'], $employment['dims']);
         }
-        $employment['dims'] = $this->dimsWithDepartment($empId, $employment['dims']);
-        $employment['extra'] = $this->extraLedgerValues($empId);
-        $employment['entity'] = $this->payrollCompanyFor($empId, $employment['entity']);
-        $key = $this->journalKey($employment['entity'], $employment['dims']);
 
         try {
             $journal = $this->ensureJournal($environment, $month, $key, $settings, $userId);
@@ -960,7 +1039,9 @@ class D365Payroll
                 'JournalBatchNumber'  => $journal['journal_batch'],
                 'TransDate'           => $transDate . 'T12:00:00Z',
                 'AccountType'         => 'Ledger',
-                'AccountDisplayValue' => self::ledgerAccount($l['account'], $employment['dims'], $settings, $employment['extra'] ?? [], $allowed),
+                'AccountDisplayValue' => isset($employment['template'])
+                    ? self::templateAccount($l['account'], $employment['template'], $allowed)
+                    : self::ledgerAccount($l['account'], $employment['dims'], $settings, $employment['extra'] ?? [], $allowed),
                 'DebitAmount'         => $l['debit'],
                 'CreditAmount'        => $l['credit'],
                 'CurrencyCode'        => $settings['currency'] ?: 'SAR',
@@ -1064,8 +1145,22 @@ class D365Payroll
             $p = $rows[$id] ?? null;
             // journal key: the employee's payroll company (Employee Master, default = D365 employment company),
             // split by Company dimension where D365 Config has e.g. MTL/02=02-GV
-            $empDims = isset($employments[$id]) ? $this->dimsWithDepartment($id, $employments[$id]['dims'], $employments) : '';
-            $company = isset($employments[$id]) ? $this->journalKey($this->payrollCompanyFor($id, $employments[$id]['entity']), $empDims) : '';
+            $emp = $employments[$id] ?? null;
+            $payrollCompany = isset($pushed[$id]) ? '' : $this->payrollCompanyFor($id, $emp['entity'] ?? '');
+            $tpl = $payrollCompany !== '' ? $this->templateFor($id, $payrollCompany) : null;
+            $empDims = '';
+            $tplError = null;
+            if ($tpl !== null) {
+                // company has a D365 account template: the employee's stored values only
+                $tplError = $tpl['error'] ?? null;
+                $company = ($tplError === null && !$emp && $tpl['worker']) ? ''
+                    : $this->journalKey($payrollCompany, '', $tpl['values']['Company'] ?? '');
+            } elseif ($emp) {
+                $empDims = $this->dimsWithDepartment($id, $emp['dims'], $employments);
+                $company = $this->journalKey($payrollCompany, $empDims);
+            } else {
+                $company = '';
+            }
             $result = ['ok' => false, 'error' => null, 'lines' => 0, 'amount' => 0, 'company' => $company];
             if (isset($pushed[$id])) {
                 $results[$id] = ['ok' => true, 'skipped' => true, 'error' => null, 'lines' => 0, 'amount' => 0, 'company' => $pushed[$id]['legal_entity']];
@@ -1075,6 +1170,8 @@ class D365Payroll
                 $result['error'] = "No payroll for $month";
             } elseif (strtolower((string)$p['status']) !== 'paid') {
                 $result['error'] = 'Payroll is "' . $p['status'] . '" - only paid payroll can be synced';
+            } elseif ($tplError !== null) {
+                $result['error'] = $tplError;
             } elseif ($company === '') {
                 $result['error'] = 'No employment in D365 - register the worker in D365 first';
                 $result['missing_worker'] = true; // the sync popup offers to register these
@@ -1094,7 +1191,9 @@ class D365Payroll
                         }
                     }
                     if (isset($journals[$company])) {
-                        $employment = ['entity' => $company, 'dims' => $empDims, 'extra' => $this->extraLedgerValues($id)];
+                        $employment = $tpl !== null
+                            ? ['entity' => $company, 'dims' => '', 'template' => $tpl['values']]
+                            : ['entity' => $company, 'dims' => $empDims, 'extra' => $this->extraLedgerValues($id)];
                         $groups[$id] = self::lineBodies($b, $employment, $journals[$company], $settings, $transDate);
                         $built[$id] = $result;
                         continue;
