@@ -350,6 +350,9 @@ $user_dept = $emprow['dept'];
 $fname = $emprow['efullname'];
 $avatar = $emprow['eavatar'];
 $empid = $emprow['emp_id'];
+// $empid gets overwritten by employee pages (includes/emp_top_info.php sets it to the VIEWED employee) -
+// permission checks that run later on those pages must use this one
+$logged_in_empid = $empid;
 $user_company = $emprow['comp_no'] ?? 1;
 
 // Dark/light theme - needs $empid for the per-user choice in Screen Settings.

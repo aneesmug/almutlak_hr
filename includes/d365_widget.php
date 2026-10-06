@@ -5,7 +5,7 @@
 // $d365WidgetStatusOnly = true to show the status card only (no Sync / Add buttons, e.g. profile.php).
 // Status is shown to everyone; Sync / Add need system admin or the 'd365_sync_employee' special access
 // (enforced again in includes/ajaxFile/d365_employee.php).
-$d365CanSync = empty($d365WidgetStatusOnly) && user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$d365CanSync = empty($d365WidgetStatusOnly) && user_has_special_access($conDB, $logged_in_empid ?? ($empid ?? ''), 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 if (empty($_SESSION['d365_csrf'])) {
 	$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 }

@@ -7,6 +7,8 @@
 //   save_employee   -> emp_id + values (JSON {dimension: value}) [+ payroll_company]
 //   dim_values      -> D365 values of one dimension (for the pickers)
 //   fill_from_d365  -> fill BLANK values of a company's employees from their D365 employment dims
+//   import_template -> .xlsx of all active employees + current values (edit and upload back)
+//   import          -> upload .xlsx/.csv (file) [+ dry_run=1 for the preview]; saves every valid row at once
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/D365Payroll.php';
@@ -102,6 +104,38 @@ function d365dept_write_map(mysqli $db, array $map)
     $stmt->bind_param('s', $text);
     $stmt->execute();
     $stmt->close();
+}
+
+/** Dimensions of all templates (template order, Worker excluded): ['CostCenter', 'Department', ...] */
+function d365dim_all_dims(array $templates)
+{
+    $dims = [];
+    foreach ($templates as $tpl) {
+        foreach ($tpl as $d) {
+            if (!D365Dimensions::isAuto($d['dimension']) && !in_array($d['dimension'], $dims, true)) {
+                $dims[] = $d['dimension'];
+            }
+        }
+    }
+    return $dims;
+}
+
+/** Header text -> comparable key ("Emp ID" / "emp_id" -> "empid") */
+function d365dim_key($text)
+{
+    return preg_replace('/[^a-z0-9]/', '', strtolower(trim((string)$text)));
+}
+
+/** Excel cell -> trimmed text (whole numbers lose the ".0") */
+function d365dim_cell($v)
+{
+    if ($v === null) {
+        return '';
+    }
+    if (is_float($v) && floor($v) == $v && abs($v) < 1e15) {
+        return (string)(int)$v;
+    }
+    return trim((string)$v);
 }
 
 try {
@@ -412,6 +446,240 @@ try {
         $stmt->execute();
         $stmt->close();
         echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ---------------------------------------------------------------- Excel bulk upload
+    // Columns: Emp ID | Name (ignored) | Payroll Company | one column per template dimension.
+    // Blank cells keep the current value; a blank Payroll Company keeps the employee's company.
+
+    if ($action === 'import_template') {
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        $templates = D365Dimensions::getTemplates($conDB);
+        $dims = d365dim_all_dims($templates);
+        $rows = d365dim_employees($conDB, $client->getEnvironment());
+        $values = D365Dimensions::getEmployeeValues($conDB, array_column($rows, 'emp_id'));
+
+        $book = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $book->getActiveSheet();
+        $sheet->setTitle('Employee Dimensions');
+        $sheet->fromArray(array_merge(['Emp ID', 'Name', 'Payroll Company'], $dims), null, 'A1');
+        $line = 2;
+        foreach ($rows as $r) {
+            $sheet->setCellValueExplicit('A' . $line, (string)$r['emp_id'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('B' . $line, (string)$r['name']);
+            $sheet->setCellValueExplicit('C' . $line, $r['company'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            foreach ($dims as $i => $dim) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(4 + $i);
+                $sheet->setCellValueExplicit($col . $line, (string)($values[$r['emp_id']][$dim] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            }
+            $line++;
+        }
+        $last = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(3 + count($dims));
+        $sheet->getStyle('A1:' . $last . '1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:' . $last . '1')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('DDEBF7');
+        $sheet->getStyle('A:' . $last)->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        $sheet->freezePane('D2');
+        for ($i = 1; $i <= 3 + count($dims); $i++) {
+            $sheet->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
+        }
+
+        // Help sheet: which dimensions each company's template uses
+        $help = $book->createSheet();
+        $help->setTitle('Templates');
+        $help->fromArray(['Payroll Company', 'Dimensions used (fill these columns)'], null, 'A1');
+        $help->getStyle('A1:B1')->getFont()->setBold(true);
+        $line = 2;
+        foreach ($templates as $code => $tpl) {
+            $help->setCellValue('A' . $line, $code);
+            $help->setCellValue('B' . $line, implode(', ', array_filter(array_column($tpl, 'dimension'), function ($d) { return !D365Dimensions::isAuto($d); })));
+            $line++;
+        }
+        $help->setCellValue('A' . ($line + 1), 'Blank cells keep the current value. Values may not contain dashes (-).');
+        $help->getColumnDimension('A')->setAutoSize(true);
+        $help->getColumnDimension('B')->setAutoSize(true);
+        $book->setActiveSheetIndex(0);
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="employee_dimensions_' . date('Ymd') . '.xlsx"');
+        header('Cache-Control: no-store');
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save('php://output');
+        exit;
+    }
+
+    if ($action === 'import') {
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        $dryRun = !empty($_POST['dry_run']);
+        $file = $_FILES['file'] ?? null;
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) {
+            throw new InvalidArgumentException('Pick an Excel file to upload');
+        }
+        $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+            throw new InvalidArgumentException('Only .xlsx, .xls or .csv files');
+        }
+        if ($file['size'] > 5 * 1024 * 1024) {
+            throw new InvalidArgumentException('File is larger than 5 MB');
+        }
+        $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($ext === 'csv' ? 'Csv' : ($ext === 'xls' ? 'Xls' : 'Xlsx'));
+        $reader->setReadDataOnly(true);
+        $data = $reader->load($file['tmp_name'])->getSheet(0)->toArray(null, true, false, false);
+        if (count($data) < 2) {
+            throw new InvalidArgumentException('The file has no rows under the header');
+        }
+
+        // Header -> columns
+        $templates = D365Dimensions::getTemplates($conDB);
+        $known = [];
+        foreach (d365dim_all_dims($templates) as $dim) {
+            $known[d365dim_key($dim)] = $dim;
+        }
+        $empCol = $companyCol = null;
+        $dimCols = [];
+        $ignored = [];
+        foreach ($data[0] as $i => $head) {
+            $k = d365dim_key($head);
+            if ($k === '') {
+                continue;
+            }
+            if (in_array($k, ['empid', 'employeeid', 'id', 'empno', 'personnelnumber'], true)) {
+                $empCol = $i;
+            } elseif ($k === 'payrollcompany') {
+                $companyCol = $i;
+            } elseif (isset($known[$k])) {
+                $dimCols[$i] = $known[$k];
+            } elseif (!in_array($k, ['name', 'employeename', 'empname'], true)) {
+                $ignored[] = trim((string)$head);
+            }
+        }
+        if ($empCol === null) {
+            throw new InvalidArgumentException('Column "Emp ID" not found in the first row');
+        }
+        if (!$dimCols && $companyCol === null) {
+            throw new InvalidArgumentException('No dimension column found - use the headers of the downloaded template (' . implode(', ', array_values($known)) . ')');
+        }
+
+        $employees = [];
+        foreach (d365dim_employees($conDB, $client->getEnvironment()) as $r) {
+            $employees[(string)$r['emp_id']] = $r;
+        }
+        $stored = D365Dimensions::getEmployeeValues($conDB, array_keys($employees));
+        $d365Lists = []; // dimension => [lowercase value => true] (only when D365 / cache answers)
+
+        $valid = $errors = $warnings = [];
+        $seen = [];
+        $changes = $skipped = 0;
+        for ($n = 1; $n < count($data); $n++) {
+            $row = $data[$n];
+            $line = $n + 1;
+            $id = d365dim_cell($row[$empCol] ?? null);
+            $rowValues = [];
+            foreach ($dimCols as $i => $dim) {
+                $rowValues[$dim] = d365dim_cell($row[$i] ?? null);
+            }
+            $company = $companyCol !== null ? strtoupper(d365dim_cell($row[$companyCol] ?? null)) : '';
+            if ($id === '' && $company === '' && !array_filter($rowValues, 'strlen')) {
+                continue; // empty line
+            }
+            if ($id === '' || !isset($employees[$id])) { // only status = 1 employees can be imported
+                $why = 'Emp ID is empty';
+                if ($id !== '') {
+                    $st = $conDB->prepare("SELECT status FROM employees WHERE emp_id = ? LIMIT 1");
+                    $st->bind_param('s', $id);
+                    $st->execute();
+                    $found = $st->get_result()->fetch_row();
+                    $st->close();
+                    $why = $found ? 'Employee is not active (status ' . $found[0] . ') - only active employees are imported' : 'Employee not found';
+                }
+                $errors[] = ['row' => $line, 'emp_id' => $id, 'error' => $why];
+                continue;
+            }
+            if (isset($seen[$id])) {
+                $errors[] = ['row' => $line, 'emp_id' => $id, 'error' => 'Emp ID repeated (first on row ' . $seen[$id] . ')'];
+                continue;
+            }
+            $seen[$id] = $line;
+            if ($company !== '' && payroll_company_clean($company) === '') {
+                $errors[] = ['row' => $line, 'emp_id' => $id, 'error' => "Unknown payroll company \"$company\""];
+                continue;
+            }
+            $values = [];
+            $bad = null;
+            foreach ($rowValues as $dim => $v) {
+                if ($v === '') {
+                    continue; // blank keeps the current value
+                }
+                try {
+                    $values[$dim] = D365Dimensions::cleanValue($v);
+                } catch (InvalidArgumentException $ex) {
+                    $bad = "$dim: " . $ex->getMessage();
+                    break;
+                }
+            }
+            if ($bad !== null) {
+                $errors[] = ['row' => $line, 'emp_id' => $id, 'error' => $bad];
+                continue;
+            }
+            $effective = $company !== '' ? $company : $employees[$id]['company'];
+            if (empty($templates[$effective])) {
+                $warnings[] = ['row' => $line, 'emp_id' => $id, 'warning' => ($effective === '' ? 'No payroll company' : "$effective has no account template") . ' - values are saved but payroll sync will not use them'];
+            }
+            $rowChanges = 0;
+            foreach ($values as $dim => $v) {
+                if ((string)($stored[$id][$dim] ?? '') !== $v) {
+                    $rowChanges++;
+                }
+                if (!array_key_exists($dim, $d365Lists)) {
+                    $d365Lists[$dim] = null;
+                    try {
+                        $d365Lists[$dim] = [];
+                        foreach (D365Dimensions::dimensionValues($client, $dim) as $dv) {
+                            $d365Lists[$dim][strtolower($dv['value'])] = true;
+                        }
+                    } catch (Throwable $ex) {
+                        $d365Lists[$dim] = null; // D365 unreachable - no check
+                    }
+                }
+                if (!empty($d365Lists[$dim]) && !isset($d365Lists[$dim][strtolower($v)])) {
+                    $warnings[] = ['row' => $line, 'emp_id' => $id, 'warning' => "$dim \"$v\" is not a D365 value"];
+                }
+            }
+            if ($company !== '' && $company !== $employees[$id]['payroll_company']) {
+                $rowChanges++;
+            }
+            if (!$rowChanges) {
+                $skipped++;
+                continue; // nothing new for this employee
+            }
+            $changes += $rowChanges;
+            $valid[] = ['emp_id' => $id, 'company' => $company, 'values' => $values];
+        }
+
+        $saved = 0;
+        if (!$dryRun && $valid) {
+            $pcStmt = $conDB->prepare("UPDATE employees SET payroll_company = ? WHERE emp_id = ?");
+            $conDB->begin_transaction();
+            try {
+                foreach ($valid as $v) {
+                    if ($v['company'] !== '') {
+                        $pcStmt->bind_param('ss', $v['company'], $v['emp_id']);
+                        $pcStmt->execute();
+                    }
+                    if ($v['values']) {
+                        D365Dimensions::saveEmployeeValues($conDB, $v['emp_id'], $v['values'], $userId);
+                    }
+                    $saved++;
+                }
+                $conDB->commit();
+            } catch (Throwable $ex) {
+                $conDB->rollback();
+                throw $ex;
+            }
+            $pcStmt->close();
+        }
+        echo json_encode(['ok' => true, 'dry_run' => $dryRun, 'columns' => array_values($dimCols), 'company_column' => $companyCol !== null,
+            'ignored' => $ignored, 'employees' => count($valid), 'changes' => $changes, 'unchanged' => $skipped, 'saved' => $saved,
+            'errors' => $errors, 'warnings' => array_slice($warnings, 0, 300), 'warning_count' => count($warnings)], JSON_UNESCAPED_UNICODE);
         exit;
     }
 

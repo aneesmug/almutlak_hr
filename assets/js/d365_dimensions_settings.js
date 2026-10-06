@@ -320,6 +320,7 @@
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimAdd"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-account-plus"></i> ' +
                 esc(t('d365_add_employees', 'Add employees')) + ' <span class="sr-chip" style="margin-left:4px" title="' + esc(t('d365_not_applied', 'Without an applied template')) + '">' + unapplied + '</span></button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="dimFill"><i class="mdi mdi-cloud-download-outline"></i> ' + esc(t('d365_fill_blanks', 'Fill blanks from D365')) + '</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimExcel"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-file-excel-outline"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + '</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="dimSaveAll" disabled><i class="mdi mdi-content-save"></i> ' + esc(t('d365_save_changed', 'Save changed')) + ' (<span id="dimDirtyCount">0</span>)</button>' +
                 '</div><div id="dimGrid"></div>';
             var go = host.querySelector('#dimGoTemplates');
@@ -341,6 +342,13 @@
             host.querySelector('#dimOnlyMissing').addEventListener('change', function () { filterGrid(host); });
             host.querySelector('#dimSaveAll').addEventListener('click', function () { saveAll(host); });
             host.querySelector('#dimFill').addEventListener('click', function () { fillFromD365(host, grid, sel.value); });
+            host.querySelector('#dimExcel').addEventListener('click', function () {
+                if (grid.querySelector('tr.is-dirty')) {
+                    Swal.fire('', t('d365_save_first', 'Save or discard your changes first'), 'info');
+                    return;
+                }
+                excelDialog(host);
+            });
             host.querySelector('#dimAdd').addEventListener('click', function () {
                 if (grid.querySelector('tr.is-dirty')) {
                     Swal.fire('', t('d365_save_first', 'Save or discard your changes first'), 'info');
@@ -705,6 +713,187 @@
                 text: r.value.filled + ' ' + t('d365_values_filled', 'values filled for') + ' ' + r.value.employees + ' / ' + r.value.checked + ' ' + t('employees', 'employees') });
             loadGrid(host, grid, company);
         });
+    }
+
+    // ------------------------------------------------------------ Excel bulk upload
+    // Download: every active employee with current values (one column per template dimension).
+    // Upload: preview first (dry run), then save every valid row at once. Blank cells keep the current value.
+
+    function postFile(action, file, data) {
+        var body = new FormData();
+        body.append('action', action);
+        body.append('csrf', window.D365_DIM_CSRF || '');
+        Object.keys(data || {}).forEach(function (k) { body.append(k, data[k]); });
+        if (file) body.append('file', file);
+        return fetch(URL, { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) {
+                if (r.redirected) throw new Error(t('d365_signed_out', 'You were signed out - reload the page'));
+                return r.json();
+            })
+            .then(function (j) {
+                if (!j.ok) throw new Error(j.error || 'Request failed');
+                return j;
+            });
+    }
+
+    function downloadExcel(btn) {
+        btn.disabled = true;
+        var body = new URLSearchParams({ action: 'import_template', csrf: window.D365_DIM_CSRF || '' });
+        fetch(URL, { method: 'POST', body: body, credentials: 'same-origin' })
+            .then(function (r) {
+                if (r.redirected) throw new Error(t('d365_signed_out', 'You were signed out - reload the page'));
+                if ((r.headers.get('Content-Type') || '').indexOf('json') !== -1) {
+                    return r.json().then(function (j) { throw new Error(j.error || 'Request failed'); });
+                }
+                var name = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '');
+                return r.blob().then(function (b) { return { blob: b, name: name ? name[1] : 'employee_dimensions.xlsx' }; });
+            })
+            .then(function (f) {
+                var a = document.createElement('a');
+                a.href = window.URL.createObjectURL(f.blob);
+                a.download = f.name;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () { window.URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+            })
+            .catch(function (e) { Swal.fire('Error', e.message, 'error'); })
+            .then(function () { btn.disabled = false; });
+    }
+
+    /** "Excel Import" popup: summary, explanation of every column, rules, Download template + Upload buttons */
+    function excelDialog(host) {
+        var meta = state.meta || {};
+        var templates = meta.templates || {};
+        var tplCodes = Object.keys(templates).sort();
+        var applied = 0, unapplied = 0;
+        Object.keys(meta.counts || {}).forEach(function (k) {
+            if (tplCodes.indexOf(k) !== -1) applied += meta.counts[k]; else unapplied += meta.counts[k];
+        });
+        // dimension -> companies whose template uses it (template order, Worker excluded)
+        var dims = [], usedBy = {};
+        tplCodes.forEach(function (code) {
+            (templates[code] || []).forEach(function (d) {
+                if (isWorker(d.dimension)) return;
+                if (!usedBy[d.dimension]) { usedBy[d.dimension] = []; dims.push(d.dimension); }
+                usedBy[d.dimension].push(code + (d['default'] ? ' (' + t('default', 'default') + ': ' + d['default'] + ')' : ''));
+            });
+        });
+        var dimInfo = {
+            costcenter: t('d365_col_costcenter', 'Cost center code. Saved on the employee record (same field as Edit Employee).'),
+            department: t('d365_col_department', 'D365 department code (see the Departments tab for the app → D365 mapping).'),
+            branch: t('d365_col_branch', 'D365 branch code of the employee.'),
+            company: t('d365_col_company', 'Company financial dimension value (not the payroll company).')
+        };
+        var badge = function (text, tone) { return '<span class="sr-chip ' + (tone || '') + '" style="margin:1px 2px">' + esc(text) + '</span>'; };
+        var colRow = function (name, need, desc) {
+            return '<tr><td style="white-space:nowrap"><b>' + esc(name) + '</b></td><td style="white-space:nowrap">' + need + '</td><td>' + desc + '</td></tr>';
+        };
+        var cols = colRow('Emp ID', badge(t('required', 'Required'), 'tone-red'),
+                esc(t('d365_col_empid', 'Employee number of an ACTIVE employee. Each employee only once in the file.'))) +
+            colRow('Name', badge(t('info_only', 'Info only'), 'tone-slate'),
+                esc(t('d365_col_name', 'Employee name, only to help you read the file - ignored on upload.'))) +
+            colRow('Payroll Company', badge(t('optional', 'Optional'), ''),
+                esc(t('d365_col_company_payroll', 'D365 company that pays the employee - decides which template (columns) applies. Blank keeps the current company.')) +
+                '<br>' + tplCodes.map(function (c) { return badge(c + (companyName(c) ? ' - ' + companyName(c) : ''), 'tone-green'); }).join('')) +
+            dims.map(function (d) {
+                return colRow(d, badge(t('d365_needed_for', 'Needed for'), 'tone-amber') + '<br>' + usedBy[d].map(function (c) { return badge(c); }).join(''),
+                    esc(dimInfo[d.toLowerCase()] || t('d365_col_dim', 'Value of this D365 financial dimension.')) +
+                    ' ' + esc(t('d365_col_dim_blank', 'Blank keeps the current value.')));
+            }).join('');
+        var html = '<div style="text-align:left;font-size:13px">' +
+            '<div class="sr-notice tone-sky mb-2"><i class="mdi mdi-information-outline"></i> ' +
+            esc(t('d365_excel_summary', 'Set the D365 dimensions of many employees at once: download the Excel (all active employees with their current values), edit it, then upload it back. You see a preview with every change and error before anything is saved.')) + '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
+            badge(t('d365_companies_with_template', 'Companies with a template') + ': ' + tplCodes.length, 'tone-green') +
+            badge(t('d365_emps_applied', 'Employees in those companies') + ': ' + applied, '') +
+            badge(t('d365_not_applied', 'Without an applied template') + ': ' + unapplied, 'tone-amber') +
+            badge(t('d365_dimension_columns', 'Dimension columns') + ': ' + dims.length, 'tone-slate') +
+            '</div>' +
+            '<div style="font-weight:600;margin:6px 0 4px">' + esc(t('d365_excel_columns', 'Columns')) + '</div>' +
+            '<div style="max-height:300px;overflow:auto;border:1px solid rgba(0,0,0,.08);border-radius:6px">' +
+            '<table class="table table-sm mb-0" style="font-size:12px"><thead><tr><th>' + esc(t('column', 'Column')) + '</th><th>' +
+            esc(t('status', 'Status')) + '</th><th>' + esc(t('description', 'Description')) + '</th></tr></thead><tbody>' + cols + '</tbody></table></div>' +
+            '<div style="font-weight:600;margin:10px 0 4px">' + esc(t('d365_excel_rules', 'Rules')) + '</div>' +
+            '<ul style="margin:0 0 10px 18px;padding:0">' +
+            '<li>' + esc(t('d365_rule_blank', 'Blank cells never clear anything - they keep the current value.')) + '</li>' +
+            '<li>' + esc(t('d365_rule_dash', 'Values may not contain a dash (-): D365 uses it as the account separator.')) + '</li>' +
+            '<li>' + esc(t('d365_rule_errors', 'Rows with errors (unknown/inactive Emp ID, repeated Emp ID, unknown payroll company, invalid value) are skipped; all other rows are saved.')) + '</li>' +
+            '<li>' + esc(t('d365_rule_warn', 'Warnings (value not in D365, company without template) do not stop the row.')) + '</li>' +
+            '<li>' + esc(t('d365_rule_format', 'Keep the header row. Column order does not matter. Formats: .xlsx, .xls, .csv - max 5 MB. Worker is filled automatically.')) + '</li>' +
+            '</ul>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding-top:6px;border-top:1px solid rgba(0,0,0,.08)">' +
+            '<button type="button" class="sr-btn sr-btn-ghost" id="xlDownload"><i class="mdi mdi-download"></i> ' + esc(t('d365_download_excel', 'Download Excel')) + '</button>' +
+            '<button type="button" class="sr-btn sr-btn-success" id="xlUpload"><i class="mdi mdi-upload"></i> ' + esc(t('d365_upload_excel', 'Upload Excel')) + '</button>' +
+            '<input type="file" id="xlFile" accept=".xlsx,.xls,.csv" style="display:none">' +
+            '</div></div>';
+        Swal.fire({
+            title: '<i class="mdi mdi-file-excel-outline" style="color:#1d6f42"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + ' - ' + esc(t('d365_employee_dimensions', 'Employee Dimensions')),
+            html: html,
+            width: 860,
+            showConfirmButton: false,
+            showCloseButton: true,
+            didOpen: function (popup) {
+                var file = popup.querySelector('#xlFile');
+                popup.querySelector('#xlDownload').addEventListener('click', function () { downloadExcel(this); });
+                popup.querySelector('#xlUpload').addEventListener('click', function () { file.value = ''; file.click(); });
+                file.addEventListener('change', function () {
+                    if (this.files && this.files[0]) uploadExcel(host, this.files[0]);
+                });
+            }
+        });
+    }
+
+    function importReport(j) {
+        var html = '<div style="text-align:left">' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">' +
+            '<span class="sr-chip tone-green">' + esc(t('d365_import_employees', 'Employees to update')) + ': ' + j.employees + '</span>' +
+            '<span class="sr-chip">' + esc(t('d365_import_changes', 'Values changed')) + ': ' + j.changes + '</span>' +
+            '<span class="sr-chip tone-slate">' + esc(t('d365_import_unchanged', 'Unchanged')) + ': ' + j.unchanged + '</span>' +
+            (j.errors.length ? '<span class="sr-chip tone-red">' + esc(t('errors', 'Errors')) + ': ' + j.errors.length + '</span>' : '') +
+            (j.warning_count ? '<span class="sr-chip tone-amber">' + esc(t('warnings', 'Warnings')) + ': ' + j.warning_count + '</span>' : '') +
+            '</div>' +
+            '<div class="small text-muted mb-2">' + esc(t('d365_import_columns', 'Columns read')) + ': ' +
+            (j.company_column ? chip('Payroll Company', 'tone-slate') : '') + (j.columns || []).map(function (c) { return chip(c); }).join('') +
+            (j.ignored && j.ignored.length ? '<br>' + esc(t('d365_import_ignored', 'Ignored columns')) + ': ' + esc(j.ignored.join(', ')) : '') + '</div>';
+        var list = j.errors.map(function (e) {
+            return '<tr><td>' + e.row + '</td><td>' + esc(e.emp_id) + '</td><td class="text-danger">' + esc(e.error) + '</td></tr>';
+        }).concat(j.warnings.map(function (w) {
+            return '<tr><td>' + w.row + '</td><td>' + esc(w.emp_id) + '</td><td style="color:#b26a00">' + esc(w.warning) + '</td></tr>';
+        }));
+        if (list.length) {
+            html += '<div style="max-height:260px;overflow:auto;border:1px solid rgba(0,0,0,.08);border-radius:6px">' +
+                '<table class="table table-sm mb-0" style="font-size:12px"><thead><tr><th>' + esc(t('row', 'Row')) + '</th><th>' +
+                esc(t('emp_id', 'Emp ID')) + '</th><th>' + esc(t('message', 'Message')) + '</th></tr></thead><tbody>' + list.join('') + '</tbody></table></div>' +
+                (j.errors.length ? '<div class="small text-muted mt-1">' + esc(t('d365_import_error_rows_skipped', 'Rows with errors are skipped - the rest is saved.')) + '</div>' : '');
+        }
+        return html + '</div>';
+    }
+
+    function uploadExcel(host, file) {
+        Swal.fire({ title: t('loading', 'Loading...'), allowOutsideClick: false, didOpen: function () { Swal.showLoading(); } });
+        postFile('import', file, { dry_run: 1 }).then(function (j) {
+            Swal.fire({
+                title: t('d365_upload_excel', 'Upload Excel') + ' - ' + esc(file.name),
+                html: importReport(j),
+                width: 760,
+                icon: j.employees ? 'question' : 'info',
+                showCancelButton: !!j.employees,
+                showConfirmButton: true,
+                confirmButtonText: j.employees ? t('d365_import_save', 'Save') + ' (' + j.employees + ')' : t('close', 'Close'),
+                cancelButtonText: t('cancel', 'Cancel'),
+                allowOutsideClick: false,
+                showLoaderOnConfirm: true,
+                preConfirm: function () {
+                    if (!j.employees) return true;
+                    return postFile('import', file, { dry_run: 0 }).catch(function (e) { Swal.showValidationMessage(e.message); });
+                }
+            }).then(function (r) {
+                if (!r.isConfirmed || !j.employees || !r.value) return;
+                Swal.fire({ icon: 'success', title: t('done', 'Done'),
+                    text: r.value.saved + ' ' + t('d365_import_saved', 'employees updated') });
+                renderEmployees(host);
+            });
+        }).catch(function (e) { Swal.fire('Error', e.message, 'error'); });
     }
 
     // ------------------------------------------------------------ Departments (app -> D365)
