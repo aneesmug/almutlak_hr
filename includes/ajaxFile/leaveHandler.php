@@ -6197,6 +6197,12 @@ elseif ($ajaxType == 'addManualVacationHistory') {
             throw new Exception(__('user_not_authenticated'));
         }
 
+        // Only annual vacation types (Fly / Local Vacation / Encashed) deduct from balance.
+        // Excuse leave types (Sick, Exam, Hajj, Maternity, Marriage, Newborn, Death, Business Trip, ...)
+        // must NEVER reduce the employee's vacation balance.
+        $balance_deductible_types = ['fly', 'local vacation', 'encashed'];
+        $is_balance_deductible = in_array(strtolower($vac_type), $balance_deductible_types, true) ? 1 : 0;
+
         // Generate unique request invoice number for manual entry
         $request_inv_no = 'MANUAL-' . date('YmdHis') . '-' . $emp_id;
 
@@ -6205,7 +6211,7 @@ elseif ($ajaxType == 'addManualVacationHistory') {
         $sql_insert = "INSERT INTO `emp_vacation` 
                     (`emp_id`, `submitted_by_emp_id`, `vac_type`, `fly_type`, `start_date`, `return_date`, `vacdays`, `permit_no`, `remarks`, `request_inv_no`, `current_status`, `current_approval_level`, `is_deductible`, `review`, `created_at`) 
                 VALUES 
-                    (:emp_id, :submitted_by, :vac_type, :fly_type, :start_date, :return_date, :vacdays, :permit_no, :remarks, :request_inv_no, 'approved', 3, 1, 'A', NOW())";
+                    (:emp_id, :submitted_by, :vac_type, :fly_type, :start_date, :return_date, :vacdays, :permit_no, :remarks, :request_inv_no, 'approved', 3, :is_deductible, 'A', NOW())";
 
         $stmt_insert = $pdo->prepare($sql_insert);
         $stmt_insert->execute([
@@ -6218,17 +6224,21 @@ elseif ($ajaxType == 'addManualVacationHistory') {
             ':vacdays' => $vacdays,
             ':permit_no' => $permit_no,
             ':remarks' => $remarks,
-            ':request_inv_no' => $request_inv_no
+            ':request_inv_no' => $request_inv_no,
+            ':is_deductible' => $is_balance_deductible
         ]);
 
         $vacation_id = $pdo->lastInsertId();
 
-        // Deduct vacation days from employee's balance
-        $sql_balance = "SELECT `id`, `available_balance`, `remaining_balance`, `used_days`, `carryover_days`, `total_days`, `period_start`, `period_end` FROM `emp_vacation_balance`
-                       WHERE `emp_id` = :emp_id ORDER BY `last_updated` DESC LIMIT 1";
-        $stmt_balance = $pdo->prepare($sql_balance);
-        $stmt_balance->execute([':emp_id' => $emp_id]);
-        $balance_record = $stmt_balance->fetch(PDO::FETCH_ASSOC);
+        // Deduct vacation days from employee's balance (skipped for excuse leave types)
+        $balance_record = false;
+        if ($is_balance_deductible) {
+            $sql_balance = "SELECT `id`, `available_balance`, `remaining_balance`, `used_days`, `carryover_days`, `total_days`, `period_start`, `period_end` FROM `emp_vacation_balance`
+                           WHERE `emp_id` = :emp_id ORDER BY `last_updated` DESC LIMIT 1";
+            $stmt_balance = $pdo->prepare($sql_balance);
+            $stmt_balance->execute([':emp_id' => $emp_id]);
+            $balance_record = $stmt_balance->fetch(PDO::FETCH_ASSOC);
+        }
 
         if ($balance_record) {
             // Calculate new balance after deducting vacation days
