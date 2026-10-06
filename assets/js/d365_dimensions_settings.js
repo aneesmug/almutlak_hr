@@ -312,7 +312,11 @@
                   ' <button type="button" class="sr-btn sr-btn-sm sr-btn-primary ml-2" id="dimGoTemplates"><i class="mdi mdi-arrow-right"></i> ' +
                   esc(t('d365_account_templates', 'Account Templates')) + '</button></div>'
                 : '';
-            host.innerHTML = warningsHtml(meta) + noTpl +
+            var autoNote = meta.auto_filled
+                ? '<div class="sr-notice tone-green mb-2"><i class="mdi mdi-auto-fix"></i> ' + meta.auto_filled + ' ' +
+                  esc(t('d365_pc_auto_filled', 'employees got their Payroll Company automatically (D365 employment company, else the company mapped to their app company). Change any of them in the Payroll Company column.')) + '</div>'
+                : '';
+            host.innerHTML = warningsHtml(meta) + autoNote + noTpl +
                 '<div class="sr-toolbar mb-2" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
                 '<select class="form-control form-control-sm" id="dimCompany" style="max-width:340px">' + options + '</select>' +
                 '<div class="sr-search" style="flex:1;min-width:180px"><i class="mdi mdi-magnify"></i><input type="search" id="dimSearch" placeholder="' + esc(t('search', 'Search')) + '..."></div>' +
@@ -917,11 +921,14 @@
                     (mapped && !known[mapped] ? '<option value="' + esc(mapped) + '" selected>' + esc(mapped + ' (' + t('d365_not_in_d365', 'not in D365') + ')') + '</option>' : '') +
                     '<option value="' + NEW + '">+ ' + esc(t('d365_create_new', 'Create new in D365...')) + '</option>';
                 return '<tr data-id="' + esc(d.id) + '" data-orig="' + esc(mapped) + '">' +
-                    '<td><div class="sr-cell-title">' + esc(d.dep_nme) + '</div><div class="sr-cell-sub">' + esc(d.dep_nme_ar || '') + '</div></td>' +
+                    '<td><div class="sr-cell-title">' + esc(d.dep_nme) + '</div><div class="sr-cell-sub"><span class="sr-chip sr-mono" style="font-size:10px" title="' +
+                    esc(t('d365_app_dept_id', 'App department ID - used as the D365 code when creating it')) + '">ID ' + esc(d.id) + '</span> ' + esc(d.dep_nme_ar || '') + '</div>' +
+                    (!mapped && known[String(d.id)] ? '<div class="sr-cell-sub text-warning">' + esc(t('d365_same_id_exists', 'D365 already has code') + ' ' + d.id + (known[String(d.id)].name ? ' (' + known[String(d.id)].name + ')' : '') + ' - ' + t('d365_pick_it', 'pick it from the list')) + '</div>' : '') +
+                    '</td>' +
                     '<td class="text-center">' + esc(d.employees) + '</td>' +
                     '<td><select class="form-control form-control-sm js-dept" style="min-width:220px">' + opts + '</select>' +
                     '<div class="js-new" style="display:none;gap:6px;margin-top:6px">' +
-                    '<input type="text" class="form-control form-control-sm sr-mono js-code" maxlength="20" style="width:90px" placeholder="' + esc(t('code', 'Code')) + '">' +
+                    '<input type="text" class="form-control form-control-sm sr-mono js-code" maxlength="20" style="width:90px" value="' + esc(d.id) + '" placeholder="' + esc(t('code', 'Code')) + '" title="' + esc(t('d365_code_is_app_id', 'Same as the app department ID')) + '">' +
                     '<input type="text" class="form-control form-control-sm js-name" maxlength="60" value="' + esc(d.dep_nme_ar || d.dep_nme) + '" placeholder="' + esc(t('name', 'Name')) + '">' +
                     '</div></td>' +
                     '<td class="js-st"></td></tr>';
@@ -929,7 +936,7 @@
 
             host.innerHTML =
                 '<div class="sr-notice tone-sky mb-3"><i class="mdi mdi-information-outline"></i> ' +
-                esc(t('d365_dept_help', 'Map every app department to its D365 department. Pick "Create new in D365" for a department D365 does not have yet and type its code (e.g. 71) - Create in D365 adds it as a D365 department, which also makes it a Department dimension value. Then Assign to employees sets each active employee\'s Department (Employee Dimensions) from their app department.')) +
+                esc(t('d365_dept_help', 'Map every app department to its D365 department. Pick "Create new in D365" for a department D365 does not have yet - its code is filled with the app department ID (you can change it) - Create in D365 adds it as a D365 department, which also makes it a Department dimension value. Then Assign to employees sets each active employee\'s Department (Employee Dimensions) from their app department.')) +
                 '<br><small>' + esc(t('d365_environment', 'Environment')) + ': <b>' + esc(j.environment) + '</b>' +
                 (j.can_write ? '' : ' - <span class="text-danger">' + esc(t('d365_writes_off', 'writes are OFF, creating departments is disabled')) + '</span>') + '</small></div>' +
                 '<div class="sr-toolbar mb-2" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
@@ -1020,6 +1027,7 @@
                 });
             });
             chain.then(function () {
+                delete state.dimValues.Department; // Employee Dimensions reloads the list with the new departments
                 Swal.fire({ title: t('done', 'Done'), html: '<div class="text-left">' + results.join('<br>') + '</div>', allowOutsideClick: false });
                 renderDepartments(host, true);
             }).catch(function (e) { Swal.fire('Error', e.message, 'error'); });

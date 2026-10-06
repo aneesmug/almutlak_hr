@@ -56,6 +56,44 @@ function d365dim_employees(mysqli $db, $environment, array $employments = null)
     return $rows;
 }
 
+/**
+ * Fills BLANK employees.payroll_company of active employees by emp_id: their D365 employment company when
+ * known, else the D365 company mapped to their app company (D365 Config > Companies, d365_company_map).
+ * Values already set (by hand or earlier) are never changed. Returns [emp_id => company] of what was filled.
+ */
+function d365dim_autofill_companies(mysqli $db, $environment)
+{
+    cost_center_ensure_column($db);
+    $mapping = d365_company_mapping();
+    $hidden = d365_hidden_companies();
+    $stmt = $db->prepare("SELECT e.emp_id, e.comp_no,
+            (SELECT ws.legal_entity FROM d365_worker_status ws WHERE ws.emp_id = e.emp_id AND ws.legal_entity <> ''
+             ORDER BY ws.environment = ? DESC, ws.checked_at DESC LIMIT 1) AS employment_company
+        FROM employees e WHERE e.status = 1 AND (e.payroll_company IS NULL OR TRIM(e.payroll_company) = '')");
+    $stmt->bind_param('s', $environment);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+    $filled = [];
+    $up = $db->prepare("UPDATE employees SET payroll_company = ? WHERE emp_id = ? AND (payroll_company IS NULL OR TRIM(payroll_company) = '')");
+    foreach ($rows as $r) {
+        $code = strtoupper(trim((string)$r['employment_company']));
+        if ($code === '' || in_array($code, $hidden, true)) {
+            $code = (string)($mapping[(int)$r['comp_no']] ?? '');
+        }
+        if ($code === '' || in_array($code, $hidden, true) || !preg_match('/^[A-Z0-9_]{1,10}$/', $code)) {
+            continue; // nothing known - stays blank, pick it by hand
+        }
+        $up->bind_param('ss', $code, $r['emp_id']);
+        $up->execute();
+        if ($up->affected_rows > 0) {
+            $filled[$r['emp_id']] = $code;
+        }
+    }
+    $up->close();
+    return $filled;
+}
+
 /** d365_department_map setting -> ['id:6' => 'IT', 'name:finance' => '10', ...] */
 function d365dept_read_map(mysqli $db)
 {
@@ -145,6 +183,7 @@ try {
 
     if ($action === 'load') {
         $warnings = [];
+        $autoFilled = d365dim_autofill_companies($conDB, $client->getEnvironment());
         $hidden = d365_hidden_companies();
         $ledger = [];
         try {
@@ -178,7 +217,7 @@ try {
             $counts[$key] = ($counts[$key] ?? 0) + 1;
         }
         echo json_encode(['ok' => true, 'environment' => $client->getEnvironment(), 'ledger' => $ledger, 'companies' => $companies,
-            'templates' => (object)$templates, 'counts' => (object)$counts, 'warnings' => $warnings, 'hidden' => $hidden], JSON_UNESCAPED_UNICODE);
+            'templates' => (object)$templates, 'counts' => (object)$counts, 'auto_filled' => count($autoFilled), 'warnings' => $warnings, 'hidden' => $hidden], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -342,6 +381,9 @@ try {
         }
         $deptId = (int)($_POST['dept_id'] ?? 0);
         $code = trim((string)($_POST['code'] ?? ''));
+        if ($code === '' && $deptId > 0) {
+            $code = (string)$deptId; // D365 code = app department ID
+        }
         $name = trim((string)($_POST['name'] ?? ''));
         if ($deptId <= 0 || !preg_match('/^[A-Za-z0-9_]{1,20}$/', $code) || $name === '' || mb_strlen($name) > 60) {
             throw new InvalidArgumentException('Code must be 1-20 letters/digits (no dashes) and the name 1-60 characters');
@@ -455,6 +497,7 @@ try {
 
     if ($action === 'import_template') {
         require_once __DIR__ . '/../../vendor/autoload.php';
+        d365dim_autofill_companies($conDB, $client->getEnvironment());
         $templates = D365Dimensions::getTemplates($conDB);
         $dims = d365dim_all_dims($templates);
         $rows = d365dim_employees($conDB, $client->getEnvironment());

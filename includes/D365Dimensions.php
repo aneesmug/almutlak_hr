@@ -259,8 +259,25 @@ class D365Dimensions
         }
         $list = [];
         foreach ($r['data']['value'] ?? [] as $v) {
-            $list[] = ['value' => (string)$v['DimensionValue'], 'name' => (string)($v['Description'] ?? ''), 'active' => ($v['IsSuspended'] ?? 'No') !== 'Yes'];
+            $list[$v['DimensionValue']] = ['value' => (string)$v['DimensionValue'], 'name' => (string)($v['Description'] ?? ''), 'active' => ($v['IsSuspended'] ?? 'No') !== 'Yes'];
         }
+        if (strtolower($dimension) === 'department') {
+            // Department is backed by the D365 departments (operating units): a just-created one can come back
+            // without a description, or not be listed yet - take the name (and the value) from the department itself
+            $ou = $client->getAll('OperatingUnits', ['$select' => 'OperatingUnitNumber,Name,OperatingUnitType']);
+            foreach ($ou['error'] ? [] : ($ou['data']['value'] ?? []) as $u) {
+                if (($u['OperatingUnitType'] ?? '') !== 'OMDepartment' || (string)$u['OperatingUnitNumber'] === '') {
+                    continue;
+                }
+                $code = (string)$u['OperatingUnitNumber'];
+                if (!isset($list[$code])) {
+                    $list[$code] = ['value' => $code, 'name' => (string)$u['Name'], 'active' => true];
+                } elseif ($list[$code]['name'] === '') {
+                    $list[$code]['name'] = (string)$u['Name'];
+                }
+            }
+        }
+        $list = array_values($list);
         usort($list, function ($a, $b) { return strnatcasecmp($a['value'], $b['value']); });
         @file_put_contents($file, json_encode($list, JSON_UNESCAPED_UNICODE), LOCK_EX);
         return $list;
