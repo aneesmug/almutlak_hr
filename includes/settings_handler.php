@@ -138,7 +138,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -881,12 +881,14 @@ function get_special_access_users($conDB) {
 
 /**
  * D365 Config tab (group 'D365_Config', system admins only): connection to Dynamics 365 F&O
- * used by includes/D365Client.php. Rows are created once with defaults; the client secret
+ * used by includes/D365/D365Client.php. Rows are created once with defaults; the client secret
  * starts empty and is entered by the admin in the tab.
  */
 function ensure_d365_settings($conDB) {
     // name => [default, input_type, description, options]
     $rows = [
+        // Master switch - edited by the toggle at the top of the D365 Config tab (not listed with the other fields)
+        'd365_enabled'       => ['1', 'select', 'Enable Microsoft Dynamics 365 integration', json_encode(['1' => 'Enabled', '0' => 'Disabled'])],
         'd365_tenant_id'     => ['1dd2e950-8575-4619-859c-bdb07e7d4695', 'text', 'D365 Tenant ID (Microsoft Entra)', null],
         'd365_client_id'     => ['10362ae1-7aa6-48e5-b4a8-3a786648d9c7', 'text', 'D365 Client ID (App registration)', null],
         'd365_client_secret' => ['', 'password', 'D365 Client Secret', null],

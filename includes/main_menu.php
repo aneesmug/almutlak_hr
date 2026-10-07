@@ -221,7 +221,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty($isSupervisor) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['employee_memos.php'] ?? [])) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['manage_holidays.php'] ?? [])) ||
-                       user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+                       (d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
 
 $show_approvals_menu = !empty($is_system_admin) ||
                        (!$isAllVacationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_applied_vac_page))) ||
@@ -245,7 +245,7 @@ $can_see_activity_logs_tool = $is_system_admin || !empty(array_intersect([$user_
 $can_see_language_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['language.php'] ?? []));
 $can_see_diagnose_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['diagnose_double_deduction.php'] ?? []));
 $can_see_fix_deduction_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['fix_double_deduction.php'] ?? []));
-$can_see_d365_compare_tool = $is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['d365_employee_compare.php'] ?? []));
+$can_see_d365_compare_tool = d365_enabled($conDB) && ($is_system_admin || !empty(array_intersect([$user_role, $user_type], $page_roles['d365_employee_compare.php'] ?? [])));
 
 
 // =================================================================================
@@ -820,7 +820,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (in_array($user_role, $can_see_employees_payroll_page) || in_array($user_type, $can_see_employees_payroll_page)): ?>
                     <li><a href="<?= $payrollLink ?>"><i class="fa-duotone fa-money-bill-transfer" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
-                <?php if (user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
+                <?php if (d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
                     <li><a href="d365_employee_dimensions.php" target="_blank"><i class="mdi mdi-microsoft" style="color:#0078d4"></i><span><?=__('d365_employee_dimensions', 'D365 Employee Dimensions') ?></span></a></li>
                 <?php endif; ?>
                 <?php /* ?>

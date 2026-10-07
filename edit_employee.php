@@ -463,12 +463,14 @@ if (mysqli_num_rows($query) == 1) {
 												<option value=""><?= __("select_a_department_first", "Select a Department First") ?></option>
 												</select>
 											</div>
+											<?php if (d365_enabled($conDB)): /* hidden while D365 is off - the stored value is kept (not posted) */ ?>
 											<div class="form-group col-md-2">
 												<label for="payroll_company" class="col-form-label"><?= __("payroll_company_label", "Payroll Company (D365)") ?></label>
 												<select class="form-control select2" name="payroll_company" id="payroll_company">
 												<?= payroll_company_options_html($emprow['payroll_company'] ?? '', payroll_employment_company($conDB, $emprow['emp_id'] ?? '')) ?>
 												</select>
 											</div>
+											<?php endif; ?>
 											<div class="form-group col-md-2">
 												<label for="emptype" class="col-form-label"><?= __("employee_type_label") ?><span class="text-danger">*</span></label>
 												<select class="form-control" name="emptype" required />

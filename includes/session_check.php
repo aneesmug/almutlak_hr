@@ -614,6 +614,7 @@ if (defined('SKIP_PAGE_ACCESS_CONTROL') && SKIP_PAGE_ACCESS_CONTROL === true) {
 // for every other employee. Key follows the 'access_<page-slug>' convention
 // used throughout get_special_access_page_labels().
 require_once __DIR__ . '/special_access_helper.php';
+require_once __DIR__ . '/D365/d365_feature.php'; // d365_enabled(): Microsoft Dynamics 365 master switch
 $current_page_special_key = 'access_' . strtolower(pathinfo($current_page, PATHINFO_FILENAME));
 $has_current_page_special_access = user_has_special_access($conDB, $empid ?? '', $current_page_special_key, '', $user_type ?? '', false);
 

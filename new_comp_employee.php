@@ -208,7 +208,7 @@ if(isset($_POST['submit'])){
 			}
 		}
 		// Register the new employee in Dynamics 365 (best effort - failures show "Add to D365" on the employee header)
-		require_once __DIR__ . '/includes/d365_hooks.php';
+		require_once __DIR__ . '/includes/D365/d365_hooks.php';
 		d365_auto_register_employee($conDB, str_replace(',', '', $data['emp_id']));
 
 		// Store alert data in session for display on the view page

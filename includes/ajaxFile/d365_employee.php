@@ -9,12 +9,18 @@
 //   sync     -> push the app's person details to the existing D365 worker
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
-require_once __DIR__ . '/../../includes/D365Workers.php';
+require_once __DIR__ . '/../../includes/D365/D365Workers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 // D365 can be slow - lift the 25s app-wide limit from includes/db.php
 @set_time_limit(120);
 
+// Microsoft Dynamics 365 switched off in App Settings > D365 Config
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Microsoft Dynamics 365 integration is turned off']);
+    exit;
+}
 $canSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $canRegister = $canSync || user_has_special_access($conDB, $empid ?? '', 'd365_register_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $requestedAction = (string)($_POST['action'] ?? 'status');
@@ -41,7 +47,7 @@ try {
 
     // Payrolls tab (view_employee.php): sync one paid month of this employee
     if ($action === 'sync_payroll') {
-        require_once __DIR__ . '/../../includes/D365Payroll.php';
+        require_once __DIR__ . '/../../includes/D365/D365Payroll.php';
         $month = (string)($_POST['month'] ?? '');
         if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
             echo json_encode(['ok' => false, 'error' => 'Invalid month']);

@@ -7,8 +7,13 @@
  * includes/ajaxFile/d365_dimensions.php allows only the employee actions to this special access.
  */
 require_once __DIR__ . '/includes/session_check.php';
-require_once __DIR__ . '/includes/D365Client.php';
+require_once __DIR__ . '/includes/D365/D365Client.php';
 
+// Microsoft Dynamics 365 switched off in App Settings > D365 Config
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    die('Microsoft Dynamics 365 integration is turned off (App Settings > D365 Config)');
+}
 if (!user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     http_response_code(403);
     die('Access Denied: You do not have permission to manage D365 employee dimensions');

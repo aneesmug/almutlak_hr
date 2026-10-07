@@ -42,8 +42,12 @@ function payroll_company_list()
         return $list;
     }
     $list = [];
+    require_once __DIR__ . '/D365/d365_feature.php';
+    if (!d365_enabled()) {
+        return $list; // Microsoft Dynamics 365 switched off - no D365 companies
+    }
     try {
-        require_once __DIR__ . '/D365AccountRules.php';
+        require_once __DIR__ . '/D365/D365AccountRules.php';
         $config = D365Client::loadConfig();
         if (!empty($config['CLIENT_SECRET']) && !empty($config['RESOURCE_URL'])) {
             $rules = new D365AccountRules(new D365Client($config));
@@ -117,7 +121,7 @@ function payroll_employment_company($conDB, $empId)
 {
     try {
         $env = '';
-        require_once __DIR__ . '/D365Client.php';
+        require_once __DIR__ . '/D365/D365Client.php';
         $env = (string)(new D365Client(D365Client::loadConfig()))->getEnvironment();
     } catch (Throwable $ex) {
     }
@@ -146,7 +150,7 @@ function d365_profile_info($conDB, array $emprow)
         'uses_cost_center' => true, 'department' => ''];
     $client = null;
     try {
-        require_once __DIR__ . '/D365Workers.php';
+        require_once __DIR__ . '/D365/D365Workers.php';
         $client = new D365Client(D365Client::loadConfig());
         $info['environment'] = (string)$client->getEnvironment();
         $workers = new D365Workers($conDB, $client);
@@ -229,7 +233,7 @@ function cost_center_list($conDB, $refresh = false)
 
     $fresh = null;
     try {
-        require_once __DIR__ . '/D365Client.php';
+        require_once __DIR__ . '/D365/D365Client.php';
         $config = D365Client::loadConfig();
         if (!empty($config['CLIENT_SECRET']) && !empty($config['RESOURCE_URL'])) {
             $r = (new D365Client($config))->getAll('FinancialDimensionValues', [

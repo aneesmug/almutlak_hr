@@ -8,6 +8,8 @@
  *
  * Settings come from includes/d365_config.ini (git-ignored, see d365_config.ini.example).
  */
+require_once __DIR__ . '/d365_feature.php';
+
 class D365Client
 {
     private $tenantId;
@@ -52,6 +54,10 @@ class D365Client
      */
     public static function loadConfig()
     {
+        // Master switch off (App Settings > D365 Config) - nothing may reach D365
+        if (!d365_enabled()) {
+            throw new RuntimeException('Microsoft Dynamics 365 integration is turned off (App Settings > D365 Config)');
+        }
         $config = [];
 
         global $conDB;

@@ -9,4 +9,4 @@
 /sql/
 
 # D365 F&O credentials (client secret) - local only
-/includes/d365_config.ini
+/includes/D365/d365_config.ini

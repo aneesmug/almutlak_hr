@@ -6,8 +6,8 @@
 // app is listed per month and in the Transactions table, but kept out of the financial summary).
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
-require_once __DIR__ . '/../../includes/D365Workers.php';
-require_once __DIR__ . '/../../includes/D365Payroll.php';
+require_once __DIR__ . '/../../includes/D365/D365Workers.php';
+require_once __DIR__ . '/../../includes/D365/D365Payroll.php';
 
 header('Content-Type: text/html; charset=utf-8');
 // D365 can be slow - lift the 25s app-wide limit from includes/db.php
@@ -15,6 +15,10 @@ header('Content-Type: text/html; charset=utf-8');
 
 $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
 
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    exit('<div class="sr-notice tone-amber">Microsoft Dynamics 365 integration is turned off.</div>');
+}
 if (!user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     http_response_code(403);
     exit('<div class="sr-notice tone-red">You do not have access to D365 data.</div>');

@@ -7,9 +7,14 @@
  * Match key: employees.emp_id = D365 PersonnelNumber.
  */
 require_once __DIR__ . '/includes/session_check.php';
-require_once __DIR__ . '/includes/D365Payroll.php';
-require_once __DIR__ . '/includes/D365Workers.php';
+require_once __DIR__ . '/includes/D365/D365Payroll.php';
+require_once __DIR__ . '/includes/D365/D365Workers.php';
 
+// Microsoft Dynamics 365 switched off in App Settings > D365 Config
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    die('Microsoft Dynamics 365 integration is turned off (App Settings > D365 Config)');
+}
 require_once __DIR__ . '/includes/page_access_helper.php';
 $canCompareD365 = page_role_allowed($conDB, 'd365_employee_compare.php', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
     || user_has_special_access($conDB, $empid ?? '', 'access_d365_employee_compare', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);

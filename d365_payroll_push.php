@@ -4,11 +4,16 @@
  * Page + month sync: system admins and the 'd365_sync_payroll' special access; account mapping (save_settings): system admins only.
  * Syncing is done per month here, or per employee from the D365 / Payrolls tabs of view_employee.php (paid months only), as an UNPOSTED general journal.
  * One journal per environment + month + legal entity; finance reviews and posts it in D365.
- * Line building / logging lives in includes/D365Payroll.php.
+ * Line building / logging lives in includes/D365/D365Payroll.php.
  */
 require_once __DIR__ . '/includes/session_check.php';
-require_once __DIR__ . '/includes/D365Payroll.php';
+require_once __DIR__ . '/includes/D365/D365Payroll.php';
 
+// Microsoft Dynamics 365 switched off in App Settings > D365 Config
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    die('Microsoft Dynamics 365 integration is turned off (App Settings > D365 Config)');
+}
 $canSyncPayroll = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 if (!$canSyncPayroll) {
     http_response_code(403);
@@ -100,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$client) {
             d365_json(['error' => $clientError], 400);
         }
-        require_once __DIR__ . '/includes/D365Workers.php';
+        require_once __DIR__ . '/includes/D365/D365Workers.php';
         $workers = new D365Workers($conDB, $client);
         $valid = function ($id) { return preg_match('/^[A-Za-z0-9\-]{1,20}$/', $id); };
         try {

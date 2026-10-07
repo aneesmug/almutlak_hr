@@ -66,7 +66,7 @@ $all_report_options = [
 
 $current_emp_id_for_reports = (string)($_SESSION['empid'] ?? ($empid ?? ''));
 // D365 Employee Report: same gate as the D365 tab in view_employee.php
-$can_view_d365_report = user_has_special_access($conDB, $current_emp_id_for_reports, 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$can_view_d365_report = d365_enabled($conDB) && user_has_special_access($conDB, $current_emp_id_for_reports, 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 if ($can_view_d365_report && empty($_SESSION['d365_csrf'])) {
     $_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 }

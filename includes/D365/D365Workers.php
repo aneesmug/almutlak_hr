@@ -460,7 +460,7 @@ class D365Workers
     /** Company mapping of D365 Config > Companies wins over the learned majority vote */
     private static function withCompanyMapping(array $map)
     {
-        require_once __DIR__ . '/cost_centers.php';
+        require_once __DIR__ . '/../cost_centers.php';
         foreach (d365_company_mapping() as $compId => $code) {
             $map[$compId] = $code;
         }

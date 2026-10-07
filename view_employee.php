@@ -201,9 +201,9 @@ if (mysqli_num_rows($query) == 1) {
 			}
 		}
 		// D365 tab (system admins + 'view_employee_d365_tab' special access) - content loaded on first open from includes/ajaxFile/d365_employee_tab.php
-		$show_d365_tab = user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		$show_d365_tab = d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		// "Sync to D365" (header widget + Payrolls tab): system admins + 'd365_sync_employee' special access
-		$can_d365_sync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		$can_d365_sync = d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		if ($show_d365_tab && empty($_SESSION['d365_csrf'])) {
 			$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 		}
@@ -211,9 +211,9 @@ if (mysqli_num_rows($query) == 1) {
 		// D365 sync state per paid month (status shown to everyone, Sync button needs $can_d365_sync; local push log, no D365 call)
 		$d365_pay_state = null;
 		$d365_pay_env = '';
-		if (!empty($payroll_history)) {
+		if (d365_enabled($conDB) && !empty($payroll_history)) {
 			try {
-				require_once __DIR__ . '/includes/D365Payroll.php';
+				require_once __DIR__ . '/includes/D365/D365Payroll.php';
 				$d365_pay_client = new D365Client();
 				$d365_pay_env = $d365_pay_client->getEnvironment();
 				$d365_payroll = new D365Payroll($conDB, $d365_pay_client);
@@ -1870,6 +1870,7 @@ if (mysqli_num_rows($query) == 1) {
 													</div>
 												</div>
 
+												<?php if (d365_enabled($conDB)): /* Microsoft Dynamics 365 switched off - no D365 section */ ?>
 												<!-- Dynamics 365 Section -->
 												<?php $d365Info = d365_profile_info($conDB, $emprow); $d365St = $d365Info['status']; $d365Companies = payroll_company_list(); ?>
 												<div class="profile-section">
@@ -1931,6 +1932,7 @@ if (mysqli_num_rows($query) == 1) {
 														</div>
 													</div>
 												</div>
+												<?php endif; ?>
 
 												<!-- Insurance Information Section -->
 												<div class="profile-section">

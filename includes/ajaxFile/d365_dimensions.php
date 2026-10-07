@@ -13,15 +13,21 @@
 //   import          -> upload .xlsx/.csv (file) [+ dry_run=1 for the preview]; saves every valid row at once
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
-require_once __DIR__ . '/../../includes/D365Payroll.php';
-require_once __DIR__ . '/../../includes/D365Workers.php';
-require_once __DIR__ . '/../../includes/D365AccountRules.php';
-require_once __DIR__ . '/../../includes/D365Dimensions.php';
+require_once __DIR__ . '/../../includes/D365/D365Payroll.php';
+require_once __DIR__ . '/../../includes/D365/D365Workers.php';
+require_once __DIR__ . '/../../includes/D365/D365AccountRules.php';
+require_once __DIR__ . '/../../includes/D365/D365Dimensions.php';
 require_once __DIR__ . '/../../includes/cost_centers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 @set_time_limit(180);
 
+// Microsoft Dynamics 365 switched off in App Settings > D365 Config
+if (!d365_enabled($conDB)) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'error' => 'Microsoft Dynamics 365 integration is turned off']);
+    exit;
+}
 // Actions of the Employee Dimensions screen (read setup + edit employees' payroll company and values)
 const D365DIM_EMPLOYEE_ACTIONS = ['load', 'employees', 'save_employee', 'save_employees', 'dim_values'];
 $d365DimAllowed = ($is_system_admin ?? false)

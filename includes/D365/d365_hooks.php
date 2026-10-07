@@ -17,6 +17,9 @@ function d365_auto_register_employee($conDB, $empId, $company = '')
             return;
         }
         require_once __DIR__ . '/D365Workers.php';
+        if (!d365_enabled($conDB)) {
+            return; // Microsoft Dynamics 365 switched off in App Settings > D365 Config
+        }
         $config = D365Client::loadConfig();
         if (empty($config['CLIENT_SECRET']) || empty($config['RESOURCE_URL'])) {
             return; // D365 not configured - nothing to do

@@ -460,6 +460,8 @@
         // itself (it's a genuinely static file) - kept to just booleans, nothing sensitive.
         window.APP_SETTINGS_PERMISSIONS = <?= json_encode([
             'isFullSettingsAdmin' => (bool) $is_system_admin,
+            // Microsoft Dynamics 365 master switch (D365 Config tab) - off hides every D365 option on this page
+            'd365Enabled' => d365_enabled($conDB),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

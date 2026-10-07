@@ -6,7 +6,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
-require_once __DIR__ . '/../d365_hooks.php';
+require_once __DIR__ . '/../D365/d365_hooks.php';
 require_once __DIR__ . '/../cost_centers.php';
 cost_center_ensure_column($conDB);
 
@@ -19,6 +19,9 @@ $action = $_POST['action'] ?? '';
  */
 function ecm_d365_company_for($compNo): string
 {
+    if (!d365_enabled()) {
+        return ''; // Microsoft Dynamics 365 switched off - no D365 company needed
+    }
     $code = d365_company_mapping()[(int)$compNo] ?? '';
     $list = payroll_company_list();
     if ($code !== '' && (!$list || isset($list[$code]))) {
@@ -136,8 +139,8 @@ if ($action === 'get_form_data') {
             return ['code' => $code, 'name' => $c['name'], 'cost_center' => (bool)$c['cost_center']];
         }, array_keys(payroll_company_list()), array_values(payroll_company_list())),
         // explicit mapping only (D365 Config > Companies); removed (closed) companies left out
-        'd365_company_map' => (object)array_filter(d365_company_mapping(), function ($code) { return !payroll_company_list() || isset(payroll_company_list()[$code]); }),
-        'd365_check' => (bool)payroll_company_list(), // false = D365 list not loadable -> no mapping check
+        'd365_company_map' => !d365_enabled($conDB) ? (object)[] : (object)array_filter(d365_company_mapping(), function ($code) { return !payroll_company_list() || isset(payroll_company_list()[$code]); }),
+        'd365_check' => d365_enabled($conDB) && (bool)payroll_company_list(), // false = D365 list not loadable -> no mapping check
         'all_sub_departments' => ecm_rows($conDB, "SELECT `id`, `department_id`, `name_en`, `name_ar` FROM `sub_departments` ORDER BY `name_en` ASC"),
     ]);
     exit;

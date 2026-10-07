@@ -8,7 +8,7 @@
         $canUngeneratePayroll = user_has_special_access($conDB, $empid ?? '', 'ungenerate_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         $canAssignPayrollSupervisor = user_has_special_access($conDB, $empid ?? '', 'assign_payroll_supervisor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         // Sync Payroll to D365 (system admins + 'd365_sync_payroll' special access) - posts to d365_payroll_push.php, which shares this CSRF token
-        $canSyncD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $canSyncD365 = d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         if ($canSyncD365 && empty($_SESSION['d365_csrf'])) {
             $_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
         }

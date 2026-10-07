@@ -377,7 +377,7 @@ if ($isEmployee !== true) {
 						<?php if ($emprow["status"] == 1) : ?>
 						<div class="more-actions-wrapper" style="text-align:center; position:relative;">
 							<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) {
-								include __DIR__ . '/d365_widget.php'; // Microsoft Dynamics 365 status + Sync
+								include __DIR__ . '/D365/d365_widget.php'; // Microsoft Dynamics 365 status + Sync
 							} ?>
 							<button type="button" id="moreActionsBtn" class="more-actions-btn">
 								<i class="fa fa-bars"></i> <?= __('more') ?>

@@ -60,6 +60,11 @@ function __(key, def) {
         let screenSettingsDefaults = { scale: 100, width: 1920, height: 1080, fullscreen: 0, theme: 'default' };
         let companiesTimetablesCache = [];
         const settingsContainer = document.getElementById('settings-container');
+        // Microsoft Dynamics 365 master switch (D365 Config tab). While off, D365 permissions / reports are
+        // hidden here but kept in the saved data, so switching it back on restores every grant.
+        const D365_ON = (window.APP_SETTINGS_PERMISSIONS || {}).d365Enabled !== false;
+        const isD365Key = key => /(^|_)d365(_|$)/.test(String(key || ''));
+        const d365Visible = key => D365_ON || !isD365Key(key);
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
 
@@ -141,7 +146,7 @@ function __(key, def) {
         // not listed in getSpecialAccessCategories() falling back into a trailing "Other" bucket.
         function buildSpecialAccessPanelData() {
             const categories = getSpecialAccessCategories();
-            const catalog = getSpecialAccessCatalog();
+            const catalog = getSpecialAccessCatalog().filter(item => d365Visible(item.value));
             const labelByKey = new Map(catalog.map(item => [item.value, item.label]));
             const placedKeys = new Set();
             const panels = [];
@@ -265,8 +270,8 @@ function __(key, def) {
                 return html;
             }
 
-            const catalog = getReportTypeCatalog();
-            const allTypeValues = catalog.map(item => item.value);
+            const catalog = getReportTypeCatalog().filter(item => d365Visible(item.value));
+            const allTypeValues = getReportTypeCatalog().map(item => item.value);
             const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
             const selectedSet = new Set(hasExplicit ? normalizeReportTypeList(reportPermissionMap[empId]) : allTypeValues);
 
@@ -573,7 +578,7 @@ function __(key, def) {
             // their own handler (bypassing the outer settings form entirely) - the generic
             // bottom-right "Save Changes" button does nothing for them and only misleads
             // users into thinking their change was saved when it wasn't. Hide it here.
-            const SELF_SAVING_GROUPS = ['org_structure', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'temp_role_transfer', 'vacation_blackout_dates'];
+            const SELF_SAVING_GROUPS = ['org_structure', 'approval', 'request_type_blocks', 'payroll_settings', 'special_access', 'license', 'asset_clearance', 'temp_role_transfer', 'vacation_blackout_dates', 'integrations'];
             const saveBtnWrapper = document.getElementById('saveBtnWrapper');
             if (saveBtnWrapper) {
                 saveBtnWrapper.style.display = SELF_SAVING_GROUPS.includes(normalizedGroupName) ? 'none' : '';
@@ -633,6 +638,12 @@ function __(key, def) {
             // Vacation Blackout Dates: specific date ranges where no vacation can be applied for
             if (normalizedGroupName === 'vacation_blackout_dates') {
                 renderVacationBlackoutSettings();
+                return;
+            }
+
+            // Integrations: on/off switches for external systems (Microsoft Dynamics 365)
+            if (normalizedGroupName === 'integrations') {
+                renderIntegrationsSettings();
                 return;
             }
 
@@ -2335,6 +2346,7 @@ function __(key, def) {
             // category label (same categories as the edit grid) instead of one flat run -
             // makes it scannable at a glance instead of a wall of identical blue badges.
             function buildGroupedBadges(grantedKeys) {
+                grantedKeys = grantedKeys.filter(d365Visible);
                 const grantedSet = new Set(grantedKeys);
                 const placed = new Set();
                 let out = '';
@@ -2360,7 +2372,7 @@ function __(key, def) {
             // nothing to call out.
             function buildReportAccessBadges(empId) {
                 if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
-                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]);
+                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]).filter(d365Visible);
                 let out = `<div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div>`;
                 if (!grantedTypes.length) {
                     out += `<span class="badge badge-danger mr-1 mb-1">${__('no_reports', 'No reports')}</span>`;
@@ -2659,6 +2671,13 @@ function __(key, def) {
                 if (!result.isConfirmed) return;
 
                 const { abilities, reportAccessApplicable, reportAccessMode: finalMode, reportAccessValues: finalValues } = result.value || {};
+                // D365 switched off: its keys were not shown - keep the ones this user already had
+                if (!D365_ON) {
+                    abilities.push(...(specialAccessMap[targetEmpId] || []).filter(isD365Key));
+                    if (Array.isArray(finalValues) && Object.prototype.hasOwnProperty.call(reportPermissionMap, targetEmpId)) {
+                        finalValues.push(...(reportPermissionMap[targetEmpId] || []).filter(isD365Key));
+                    }
+                }
 
                 specialAccessMap[targetEmpId] = normalizeSpecialAccessList(abilities || []);
                 updateSpecialAccessHiddenValue();
@@ -3201,6 +3220,67 @@ function __(key, def) {
 
             document.getElementById('trt-add-btn').addEventListener('click', openGrantModal);
             loadList();
+        }
+
+        // --- Integrations tab (system admins) ---
+        // One switch per external system; saves straight away and reloads, because menus, tabs and
+        // permissions across the app follow the switch. Microsoft Dynamics 365 = setting d365_enabled.
+        function renderIntegrationsSettings() {
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-integrations" role="tabpanel">
+                    <h5 class="mb-0">${__('integrations', 'Integrations')}</h5>
+                    <p class="text-muted font-14 mt-2">${__('integrations_hint', 'Turn connections to external systems on or off for the whole app.')}</p>
+                    <div class="card mt-3">
+                        <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                            <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                                <span style="display:grid;grid-template-columns:11px 11px;gap:2px;flex:none" aria-hidden="true">
+                                    <i style="width:11px;height:11px;background:#f25022"></i><i style="width:11px;height:11px;background:#7fba00"></i>
+                                    <i style="width:11px;height:11px;background:#00a4ef"></i><i style="width:11px;height:11px;background:#ffb900"></i>
+                                </span>
+                                <div style="min-width:0">
+                                    <b>Microsoft Dynamics 365</b>
+                                    <span class="badge ${D365_ON ? 'badge-success' : 'badge-secondary'} ml-1">${D365_ON ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span><br>
+                                    <small class="text-muted">${D365_ON
+                                        ? __('d365_enabled_hint', 'On - D365 tabs, status, sync buttons, reports and pages are shown to the people allowed to see them.')
+                                        : __('d365_disabled_hint', 'Off - every D365 tab, status, sync button, report, menu link and page is hidden, and nothing is sent to D365. Settings and permissions are kept.')}</small>
+                                </div>
+                            </div>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="d365-enabled-toggle" ${D365_ON ? 'checked' : ''}>
+                                <label class="custom-control-label" for="d365-enabled-toggle">${__('d365_enable_label', 'Enable Microsoft Dynamics 365')}</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('d365-enabled-toggle').addEventListener('change', async function () {
+                const toggle = this;
+                const on = toggle.checked;
+                const answer = await Swal.fire({
+                    icon: on ? 'question' : 'warning',
+                    title: on ? __('d365_enable_confirm', 'Turn Microsoft Dynamics 365 on?') : __('d365_disable_confirm', 'Turn Microsoft Dynamics 365 off?'),
+                    text: on
+                        ? __('d365_enable_confirm_text', 'D365 tabs, status, sync buttons, reports and pages come back for the people allowed to see them.')
+                        : __('d365_disable_confirm_text', 'All D365 tabs, status, sync buttons, reports, menu links and pages are hidden for everyone and nothing is sent to D365. Settings and permissions are kept.'),
+                    showCancelButton: true,
+                    confirmButtonText: on ? __('turn_on', 'Turn on') : __('turn_off', 'Turn off'),
+                    cancelButtonText: __('cancel', 'Cancel')
+                });
+                if (!answer.isConfirmed) { toggle.checked = !on; return; }
+                try {
+                    const res = await fetch('./includes/settings_handler.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ action: 'update_settings', d365_enabled: on ? '1' : '0' })
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                    location.reload(); // menus, tabs and permissions all follow the switch
+                } catch (e) {
+                    toggle.checked = !on;
+                    Swal.fire(__('error', 'Error'), e.message, 'error');
+                }
+            });
         }
 
         async function renderLicenseSettings() {
@@ -6395,6 +6475,9 @@ function __(key, def) {
                     groupedSettings['theme_config'] = [];
                 }
                 if (isFullSettingsAdmin) {
+                if (!groupedSettings['integrations']) {
+                    groupedSettings['integrations'] = [];
+                }
                 if (!groupedSettings['license']) {
                     groupedSettings['license'] = [];
                 }
@@ -6416,7 +6499,8 @@ function __(key, def) {
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
                 const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
-                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g)).sort(); // Sort groups alphabetically
+                // D365 Config is hidden while Microsoft Dynamics 365 is switched off (Integrations tab)
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config')).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {

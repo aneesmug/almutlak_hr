@@ -2043,7 +2043,7 @@ RTL Support
                 // Microsoft Dynamics 365 status only - no Sync / Add to D365 buttons on the profile
                 $d365WidgetClass = 'is-inline';
                 $d365WidgetStatusOnly = true;
-                include __DIR__ . '/includes/d365_widget.php';
+                include __DIR__ . '/includes/D365/d365_widget.php';
             ?>
 
             </div>
