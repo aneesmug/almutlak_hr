@@ -29,6 +29,12 @@ $company_filter = getCompanyFilterSQL('comp_no', true);
 $department_filter = getDepartmentFilterSQL('dept', true);
 $employee_filter = getEmployeeFilterSQL('emp_id', true);
 
+// Inactive employees are only listed for users holding the 'view_inactive_employees'
+// special access (system admins always pass). Inactive = same rule as the status tile.
+$can_view_inactive = user_has_special_access($conDB, $empid ?? '', 'view_inactive_employees', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$inactive_scope_sql = $can_view_inactive ? '' : ' AND (status = 1 OR fly = 1)';
+$employee_filter .= $inactive_scope_sql;
+
 if (!empty($search_term)) {
     $where_conditions[] = "(name LIKE ? OR emp_id LIKE ? OR mobile LIKE ? OR iqama LIKE ?)";
     $search_param = "%{$search_term}%";
@@ -41,6 +47,9 @@ if (!empty($search_term)) {
 
 // Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
 $status_filter = in_array(($_POST['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_POST['emp_status'] : '';
+if ($status_filter === 'inactive' && !$can_view_inactive) {
+    $status_filter = '';
+}
 if ($status_filter === 'active') {
     $where_conditions[] = "(status = 1 AND fly = 0)";
 } elseif ($status_filter === 'fly') {

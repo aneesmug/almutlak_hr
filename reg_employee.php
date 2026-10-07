@@ -35,6 +35,12 @@ $company_filter = getCompanyFilterSQL('comp_no', true);
 $department_filter = getDepartmentFilterSQL('dept', true);
 $employee_filter = getEmployeeFilterSQL('emp_id', true);
 
+// Inactive employees are only listed for users holding the 'view_inactive_employees'
+// special access (system admins always pass). Inactive = same rule as the status tile.
+$can_view_inactive = user_has_special_access($conDB, $empid ?? '', 'view_inactive_employees', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$inactive_scope_sql = $can_view_inactive ? '' : ' AND (status = 1 OR fly = 1)';
+$employee_filter .= $inactive_scope_sql;
+
 // Add search term filter if it exists
 if (!empty($search_term)) {
     $where_conditions[] = "(name LIKE ? OR emp_id LIKE ? OR mobile LIKE ? OR iqama LIKE ?)";
@@ -48,6 +54,9 @@ if (!empty($search_term)) {
 
 // Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
 $status_filter = in_array(($_GET['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_GET['emp_status'] : '';
+if ($status_filter === 'inactive' && !$can_view_inactive) {
+    $status_filter = '';
+}
 if ($status_filter === 'active') {
     $where_conditions[] = "(status = 1 AND fly = 0)";
 } elseif ($status_filter === 'fly') {
@@ -224,10 +233,12 @@ $can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in
                             <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('on_vacation', 'On vacation') ?></span>
                             <span class="sr-tile-value"><?= $emp_counts['fly'] ?></span>
                         </button>
+                        <?php if ($can_view_inactive): ?>
                         <button type="button" class="sr-tile<?= $status_filter === 'inactive' ? ' active' : '' ?>" data-key="inactive">
                             <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('inactive', 'Inactive') ?></span>
                             <span class="sr-tile-value"><?= $emp_counts['inactive'] ?></span>
                         </button>
+                        <?php endif; ?>
                     </div>
 
                     <div class="sr-card">

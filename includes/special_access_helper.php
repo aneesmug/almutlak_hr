@@ -47,6 +47,7 @@ if (!function_exists('get_special_access_labels')) {
             'view_employee_other_income' => 'Employee Master: View & Manage Other Income (Scheduled Bonus/Income)',
             'access_ctc_report' => 'Reports: CTC (Cost To Company) Report',
             'view_all_employees' => 'View All Employees (Cross-Department/Company Access)',
+            'view_inactive_employees' => 'Employee Master: Show Inactive Employees in All Employees List',
             'view_employee_banking_details' => 'Employee Master: View Banking/IBAN/GOSI Details',
             'view_employee_documents' => 'Employee Master: View Uploaded Documents (Passport/Iqama, etc.)',
             'delete_employee_documents' => 'Employee Master: Delete Uploaded Documents (Documents Tab)',
@@ -162,6 +163,7 @@ if (!function_exists('get_special_access_categories')) {
                 'icon' => 'fa-id-badge',
                 'keys' => [
                     'view_all_employees',
+                    'view_inactive_employees',
                     'view_employee_eos_value',
                     'view_employee_salary_value',
                     'view_employee_additional_info',
