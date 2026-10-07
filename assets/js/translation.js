@@ -16,6 +16,28 @@
 var translationCache = window.translationCache || {};
 window.translationCache = translationCache;
 
+// Translations are also kept in localStorage, so a name translated once is never requested
+// again on later pages/visits (each request can take seconds - see makeTranslationRequest).
+var TRANSLATION_STORE_KEY = 'almutlak_translation_cache_v1';
+(function () {
+    try {
+        var stored = JSON.parse(localStorage.getItem(TRANSLATION_STORE_KEY) || '{}');
+        for (var k in stored) {
+            if (!translationCache[k]) translationCache[k] = stored[k];
+        }
+    } catch (e) { /* storage blocked - memory cache only */ }
+})();
+
+function persistTranslationCache() {
+    try {
+        var keys = Object.keys(translationCache);
+        // keep the newest 2000 entries so the store stays small
+        var store = {};
+        keys.slice(-2000).forEach(function (k) { store[k] = translationCache[k]; });
+        localStorage.setItem(TRANSLATION_STORE_KEY, JSON.stringify(store));
+    } catch (e) { /* quota / blocked - ignore */ }
+}
+
 /**
  * Get current language from HTML or document
  * @returns {string} Language code ('en' or 'ar')
@@ -137,12 +159,51 @@ function translateName(text, sourceOrCurrentLang, targetOrCallback, callback) {
  * @param {string} target - Target language code
  * @param {function} callback - Callback function with translated text
  */
+// A page can ask for dozens of names at once (e.g. every employee in a dropdown). Each request
+// may wait seconds on the external translation API, and firing them all in parallel used to
+// exhaust the server's per-connection request slots - so the next real action (e.g. submitting
+// a vacation in Arabic) was refused with "Too many concurrent requests". Requests are therefore
+// queued (max 2 in flight) and identical texts share one request.
+var TRANSLATION_MAX_PARALLEL = 2;
+var translationQueue = [];
+var translationInFlight = 0;
+var translationWaiting = {}; // cacheKey -> [callbacks] for requests already queued/in flight
+
 function makeTranslationRequest(text, source, target, callback) {
-    // Use jQuery if available, otherwise use Fetch API
-    if (typeof jQuery !== 'undefined' && typeof jQuery.ajax === 'function') {
-        makeTranslationRequestJQuery(text, source, target, callback);
-    } else {
-        makeTranslationRequestFetch(text, source, target, callback);
+    var cacheKey = getCacheKey(text, source, target);
+    if (translationWaiting[cacheKey]) {
+        translationWaiting[cacheKey].push(callback);
+        return;
+    }
+    translationWaiting[cacheKey] = [callback];
+    translationQueue.push({ text: text, source: source, target: target, cacheKey: cacheKey });
+    pumpTranslationQueue();
+}
+
+function pumpTranslationQueue() {
+    while (translationInFlight < TRANSLATION_MAX_PARALLEL && translationQueue.length) {
+        var job = translationQueue.shift();
+        translationInFlight++;
+        var done = (function (job) {
+            var finished = false;
+            return function (result) {
+                if (finished) return;
+                finished = true;
+                translationInFlight--;
+                var callbacks = translationWaiting[job.cacheKey] || [];
+                delete translationWaiting[job.cacheKey];
+                callbacks.forEach(function (cb) {
+                    try { cb(result); } catch (e) { console.error(e); }
+                });
+                pumpTranslationQueue();
+            };
+        })(job);
+        // Use jQuery if available, otherwise use Fetch API
+        if (typeof jQuery !== 'undefined' && typeof jQuery.ajax === 'function') {
+            makeTranslationRequestJQuery(job.text, job.source, job.target, done);
+        } else {
+            makeTranslationRequestFetch(job.text, job.source, job.target, done);
+        }
     }
 }
 
@@ -165,6 +226,7 @@ function makeTranslationRequestJQuery(text, source, target, callback) {
             if (response.success && response.translation) {
                 const cacheKey = getCacheKey(text, source, target);
                 translationCache[cacheKey] = response.translation;
+                persistTranslationCache();
                 callback(response.translation);
             } else {
                 console.warn('Translation failed:', response.error || 'Unknown error');
@@ -198,6 +260,7 @@ function makeTranslationRequestFetch(text, source, target, callback) {
         if (data.success && data.translation) {
             const cacheKey = getCacheKey(text, source, target);
             translationCache[cacheKey] = data.translation;
+            persistTranslationCache();
             callback(data.translation);
         } else {
             console.warn('Translation failed:', data.error || 'Unknown error');

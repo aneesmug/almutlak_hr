@@ -33,8 +33,9 @@ function translate_http_get(string $url, ?int &$httpCode = null): ?string {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    // Kept short: two providers are tried in a row and the caller waits on both.
+    curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
     $response = curl_exec($ch);
@@ -254,6 +255,21 @@ function auto_translate_text(string $text, string $source = 'en', string $target
 // ========================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['text'])) {
     header('Content-Type: application/json');
+
+    // Release the session lock at once: this endpoint never writes the session, but it can wait
+    // seconds on the external API, and PHP blocks every other request of the same user on the
+    // locked session meanwhile (each still holding one of db.php's per-IP request slots). In
+    // Arabic, the vacation form translates a whole employee list this way, which piled up and
+    // got the actual vacation submit refused with "Too many concurrent requests".
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    // Direct calls never loaded the DB, so the shared translation_cache table was skipped and
+    // every name went to the external API again on each page. Use it.
+    if (empty($GLOBALS['conDB'])) {
+        require_once __DIR__ . '/../db.php';
+    }
     
     $text = $_POST['text'] ?? '';
     $source = $_POST['source'] ?? 'en';

@@ -244,9 +244,11 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         return `
             <div class="sr-page">
             <div class="sr-form">
-                <div class="sr-notice tone-amber" style="margin-bottom:12px;">
-                    <i class="mdi mdi-alert"></i>
-                    <div>${__('you_already_have_active_business_trip', 'You already have an active business trip request. New request is not allowed until current one is completed.')}</div>
+                <div class="sr-notice ${res.overlap ? 'tone-amber' : 'tone-sky'}" style="margin-bottom:12px;">
+                    <i class="mdi ${res.overlap ? 'mdi-alert' : 'mdi-information-outline'}"></i>
+                    <div>${res.overlap
+                        ? escHtml(res.message ? String(res.message).split('\n')[0] : __('business_trip_dates_overlap_existing', 'Your selected dates overlap with an existing business trip request. Please choose different dates.'))
+                        : __('you_have_business_trip_in_progress', 'You already have a business trip request in progress. You can apply for another business trip with different dates.')}</div>
                 </div>
 
                 <div class="sr-fsec">
@@ -273,12 +275,21 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         `;
     };
 
+    // Shows the employee's in-progress trip (status + approval chain). Like the vacation
+    // modal, a button lets them apply for another trip - on different dates (the calendar
+    // blocks booked days and the server rejects overlaps).
     const showActiveRequestModal = (res) => {
         const modalWidth = (window.innerWidth && window.innerWidth < 768) ? '95%' : '640px';
         Swal.fire({
-            title: '<i class="fa fa-plane" style="margin-right: 8px;"></i> ' + (res.title || __('active_request_exists')),
+            title: '<i class="fa fa-plane" style="margin-right: 8px;"></i> ' + (res.overlap
+                ? (res.title || __('business_trip_date_conflict', 'Trip Dates Already Booked'))
+                : (__('business_trip_in_progress', 'Business Trip In Progress'))),
             html: buildActiveRequestHtml(res),
-            showConfirmButton: false,
+            showConfirmButton: true,
+            confirmButtonColor: APP_COLORS.primary,
+            confirmButtonText: '<i class="fa fa-plus"></i> ' + (res.overlap
+                ? __('choose_different_dates', 'Choose Different Dates')
+                : __('apply_another_business_trip', 'Apply Another Business Trip')),
             showCancelButton: true,
             cancelButtonColor: APP_COLORS.danger_dark,
             cancelButtonText: '<i class="fa fa-times"></i> ' + (__('close', 'Close')),
@@ -286,8 +297,17 @@ function openBusinessTripApplyModal(empid, deptId, country) {
             width: modalWidth,
             scrollbarPadding: false,
             customClass: { popup: 'sr-addline-popup sr-page' }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                openApplyTripFormModal(true);
+            }
         });
     };
+
+    // Date ranges of the employee's existing trips (not rejected/cancelled) - blocked in the
+    // calendar and re-checked on submit; the server enforces the same overlap rule.
+    let bookedTripRanges = [];
+    const findBookedOverlap = (start, end) => bookedTripRanges.find(r => start <= r.to && end >= r.from) || null;
 
     let passportEligibility = {
         passport_valid: true,
@@ -296,8 +316,10 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         message: ''
     };
 
-    const openApplyTripFormModal = () => Swal.fire({
-        title: '<i class="fa fa-plane" style="margin-right: 8px;"></i> ' + (__('apply_business_trip') || 'Apply Business Trip Request'),
+    const openApplyTripFormModal = (isAnother) => Swal.fire({
+        title: '<i class="fa fa-plane" style="margin-right: 8px;"></i> ' + (isAnother
+            ? __('apply_another_business_trip', 'Apply Another Business Trip')
+            : (__('apply_business_trip') || 'Apply Business Trip Request')),
         html: businessTripForm_HTML(),
         showCancelButton: true,
         confirmButtonColor: APP_COLORS.primary,
@@ -542,9 +564,40 @@ function openBusinessTripApplyModal(empid, deptId, country) {
             const fp = AppDate.range($tripDateRange, {
                 format: 'm/d/Y',
                 defaultDate: [defaultDate, defaultDate],
-                onChange: showDays
+                onChange: function(dates) {
+                    if (dates.length === 2) {
+                        // A range may not jump over an already booked trip either
+                        const hit = findBookedOverlap(moment(dates[0]).format('YYYY-MM-DD'), moment(dates[1]).format('YYYY-MM-DD'));
+                        if (hit) {
+                            fp.clear();
+                            $('#trip_days_count').val('');
+                            Swal.showValidationMessage((__('business_trip_dates_already_booked', 'These dates overlap your trip request') + ' ' + hit.request_inv_no + ' (' + hit.from + ' - ' + hit.to + ')'));
+                            return;
+                        }
+                        Swal.resetValidationMessage();
+                    }
+                    showDays(dates);
+                }
             });
             showDays(fp.selectedDates);
+
+            // Block the days of the employee's existing trips
+            $.ajax({
+                url: './includes/ajaxFile/ajaxBusinessTrip.php',
+                type: 'POST',
+                dataType: 'JSON',
+                data: { ajaxType: 'getBusinessTripBookedDates', emp_id: empid }
+            }).done(function(res) {
+                bookedTripRanges = (res && Array.isArray(res.ranges)) ? res.ranges : [];
+                if (!bookedTripRanges.length) return;
+                fp.set('disable', bookedTripRanges.map(r => ({ from: r.from, to: r.to })));
+                // Default (tomorrow) may itself be booked - then start empty
+                const sel = fp.selectedDates;
+                if (sel.length === 2 && findBookedOverlap(moment(sel[0]).format('YYYY-MM-DD'), moment(sel[1]).format('YYYY-MM-DD'))) {
+                    fp.clear();
+                    $('#trip_days_count').val('');
+                }
+            });
         },
         preConfirm: () => {
             const trip_type = $('input[name="trip_type"]:checked').val();
@@ -573,6 +626,12 @@ function openBusinessTripApplyModal(empid, deptId, country) {
 
             if (startDate > endDate) {
                 Swal.showValidationMessage(`${__('end_date_must_be_after_start_date') || 'End date must be after or equal to start date'}`);
+                return false;
+            }
+
+            const bookedHit = findBookedOverlap(startDate.format('YYYY-MM-DD'), endDate.format('YYYY-MM-DD'));
+            if (bookedHit) {
+                Swal.showValidationMessage(__('business_trip_dates_already_booked', 'These dates overlap your trip request') + ' ' + bookedHit.request_inv_no + ' (' + bookedHit.from + ' - ' + bookedHit.to + ')');
                 return false;
             }
 
@@ -703,12 +762,9 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         }
     });
 
-    // Duplicate active-request check disabled intentionally.
-    // Backend submitBusinessTrip already enforces the active request guard.
-    // If you want pre-open blocking UX again, uncomment the AJAX block below.
-    openApplyTripFormModal();
-
-    /*
+    // In-progress request? Show its status first, with a button to apply for another trip
+    // on different dates (same flow as Apply Vacation). Any failure just opens the form -
+    // submitBusinessTrip enforces the date-overlap rule anyway.
     $.ajax({
         url: './includes/ajaxFile/ajaxBusinessTrip.php',
         dataType: 'JSON',
@@ -730,7 +786,6 @@ function openBusinessTripApplyModal(empid, deptId, country) {
             openApplyTripFormModal();
         }
     });
-    */
 }
 
 function cancelBusinessTripRequest(tripInvNo) {

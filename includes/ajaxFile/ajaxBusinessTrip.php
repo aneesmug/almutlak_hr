@@ -334,6 +334,31 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'checkPassportEligibilit
  * Check active business trip request before opening apply form
  * If active request exists, return applied information + approval chain
  */
+// Date ranges already taken by the employee's business trips (anything not rejected/cancelled).
+// The apply form blocks these days in its calendar; submitBusinessTrip enforces the same rule.
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripBookedDates') {
+    $emp_id_str = (string)(int)($_POST['emp_id'] ?? 0);
+    $ranges = [];
+    $stmt = mysqli_prepare($conDB, "SELECT request_inv_no, trip_start_date, trip_end_date, current_status FROM emp_business_trip WHERE emp_id = ? AND current_status NOT IN ('rejected','cancelled') AND trip_start_date IS NOT NULL AND trip_end_date IS NOT NULL ORDER BY trip_start_date ASC");
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, "s", $emp_id_str);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        while ($res && ($row = mysqli_fetch_assoc($res))) {
+            $ranges[] = [
+                'from' => (string)$row['trip_start_date'],
+                'to' => (string)$row['trip_end_date'],
+                'request_inv_no' => (string)$row['request_inv_no'],
+                'status' => (string)$row['current_status']
+            ];
+        }
+        if ($res) mysqli_free_result($res);
+        mysqli_stmt_close($stmt);
+    }
+    echo json_encode(['status' => 'success', 'ranges' => $ranges]);
+    exit;
+}
+
 if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'checkActiveBusinessTrip') {
     try {
         $emp_id = trim((string)($_POST['emp_id'] ?? ''));
@@ -1107,12 +1132,27 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
             }
         }
 
-        // Strict rule: block new request if employee already has an active (not completed/rejected/cancelled) trip request
+        // Trip dates must be real Y-m-d dates, start <= end
+        $start_dt = DateTime::createFromFormat('!Y-m-d', $trip_start_date);
+        $end_dt = DateTime::createFromFormat('!Y-m-d', $trip_end_date);
+        if (!$start_dt || !$end_dt || $start_dt->format('Y-m-d') !== $trip_start_date || $end_dt->format('Y-m-d') !== $trip_end_date || $start_dt > $end_dt) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => __('validation_error', 'Validation Error'),
+                'message' => __('end_date_must_be_after_start_date', 'End date must be after or equal to start date'),
+                'type' => 'error'
+            ]);
+            exit;
+        }
+
+        // Same rule as vacation requests: a new trip may not overlap the dates of any of the
+        // employee's existing trips (pending, approved or completed - rejected/cancelled ones
+        // free their dates). Trips on other dates are allowed.
         $existing_request = null;
-        $active_req_stmt = mysqli_prepare($conDB, "SELECT bt.id, bt.request_inv_no, bt.trip_type, bt.trip_start_date, bt.trip_end_date, bt.from_city_id, bt.to_city_id, bt.destination_country, bt.current_status, bt.created_at, fc." . $cityColumn . " AS from_city_route_name, tc." . $cityColumn . " AS to_city_route_name FROM emp_business_trip bt LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id WHERE bt.emp_id = ? AND bt.current_status NOT IN ('completed','rejected','cancelled') ORDER BY bt.id DESC LIMIT 1");
+        $active_req_stmt = mysqli_prepare($conDB, "SELECT bt.id, bt.request_inv_no, bt.trip_type, bt.trip_start_date, bt.trip_end_date, bt.from_city_id, bt.to_city_id, bt.destination_country, bt.current_status, bt.created_at, fc." . $cityColumn . " AS from_city_route_name, tc." . $cityColumn . " AS to_city_route_name FROM emp_business_trip bt LEFT JOIN saudi_cities fc ON bt.from_city_id = fc.id LEFT JOIN saudi_cities tc ON bt.to_city_id = tc.id WHERE bt.emp_id = ? AND bt.current_status NOT IN ('rejected','cancelled') AND bt.trip_start_date <= ? AND bt.trip_end_date >= ? ORDER BY bt.trip_start_date ASC LIMIT 1");
         if ($active_req_stmt) {
             $emp_id_str = (string)$emp_id;
-            mysqli_stmt_bind_param($active_req_stmt, "s", $emp_id_str);
+            mysqli_stmt_bind_param($active_req_stmt, "sss", $emp_id_str, $trip_end_date, $trip_start_date);
             mysqli_stmt_execute($active_req_stmt);
             $active_res = mysqli_stmt_get_result($active_req_stmt);
             if ($active_res && ($active_row = mysqli_fetch_assoc($active_res))) {
@@ -1157,8 +1197,13 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
                 }
             }
 
+            $overlap_text = sprintf(
+                __('business_trip_dates_overlap_existing', 'Your selected dates (%s to %s) overlap with an existing business trip request. Please choose different dates.'),
+                $trip_start_date,
+                $trip_end_date
+            );
             $message_lines = [
-                'You already have an active business trip request. New request is not allowed until current one is completed.',
+                $overlap_text,
                 '',
                 'Applied Information:',
                 'Request ID: ' . (string)$existing_request['request_inv_no'],
@@ -1184,7 +1229,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
 
             $summary_html =
                 '<div style="text-align:left;">'
-                . '<p style="margin:0 0 8px 0;">You already have an active business trip request. New request is not allowed until current one is completed.</p>'
+                . '<p style="margin:0 0 8px 0;">' . htmlspecialchars($overlap_text, ENT_QUOTES, 'UTF-8') . '</p>'
                 . '<p style="margin:0 0 6px 0;"><strong>Applied Information</strong></p>'
                 . '<ul style="margin:0 0 8px 18px;">'
                 . '<li>Request ID: ' . htmlspecialchars((string)$existing_request['request_inv_no'], ENT_QUOTES, 'UTF-8') . '</li>'
@@ -1202,10 +1247,12 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
 
             echo json_encode([
                 'status' => 'error',
-                'title' => 'Active Request Exists',
+                'title' => __('business_trip_date_conflict', 'Trip Dates Already Booked'),
                 'message' => implode("\n", $message_lines),
                 'html' => $summary_html,
                 'type' => 'warning',
+                'overlap' => true,
+                'requested_dates' => ['start' => $trip_start_date, 'end' => $trip_end_date],
                 'existing_request' => $existing_request,
                 'approval_chain' => $approval_chain
             ]);

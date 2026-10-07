@@ -148,8 +148,13 @@ function repair_translation_placeholders($conDB): void {
         } else {
             $GLOBALS['translations'][$key] = $en;
         }
-        error_log("Translation '{$key}' has broken sprintf placeholders - fix it in language.php. Using "
-            . ($GLOBALS['translations'][$key] === $en ? 'English' : 'auto-repaired') . ' text for now.');
+        // Logged at most once an hour per key (this runs on every request)
+        $marker = sys_get_temp_dir() . '/almutlak_bad_translation_' . md5($key);
+        if (!is_file($marker) || filemtime($marker) < time() - 3600) {
+            @touch($marker);
+            error_log("Translation '{$key}' has broken sprintf placeholders - fix it in language.php. Using "
+                . ($GLOBALS['translations'][$key] === $en ? 'English' : 'auto-repaired') . ' text for now.');
+        }
     }
 }
 }
