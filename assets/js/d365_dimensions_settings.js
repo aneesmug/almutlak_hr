@@ -288,6 +288,15 @@
 
     function isWorker(dim) { return String(dim).toLowerCase() === 'worker'; }
 
+    // Dimension value pre-selected when a payroll company is picked: MMT books payroll on Company 01,
+    // MRF on Company 02 (their 01-GV / 02-GV divisions). Used by the row Payroll Company select and the
+    // Add employees popup, in App Settings and on d365_employee_dimensions.php.
+    var PC_DIMENSION_DEFAULTS = { MMT: { company: '01' }, MRF: { company: '02' } };
+    function pcDefault(company, dim) {
+        var m = PC_DIMENSION_DEFAULTS[String(company || '').toUpperCase()];
+        return (m && m[String(dim).toLowerCase()]) || '';
+    }
+
     // opts.allEmployees (standalone d365_employee_dimensions.php): every active employee, company filter over all
     // companies, without the Add employees / Fill blanks from D365 / Excel Import buttons. App Settings passes no opts.
     function renderEmployees(host, opts) {
@@ -444,7 +453,7 @@
                         box.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + tpl.map(function (d) {
                             if (isWorker(d.dimension)) return '<div><div class="sr-cell-sub">Worker</div><span class="sr-chip">' + esc(t('d365_worker_auto', 'Automatic = employee ID')) + '</span></div>';
                             return '<div style="width:220px"><div class="sr-cell-sub">' + esc(d.dimension) + '</div><select class="form-control form-control-sm js-add-dim" style="width:220px"' +
-                                ' data-dim="' + esc(d.dimension) + '">' + dimOptions(d.dimension, '', d.default) + '</select></div>';
+                                ' data-dim="' + esc(d.dimension) + '">' + dimOptions(d.dimension, pcDefault(popup.querySelector('#addCompany').value, d.dimension), d.default) + '</select></div>';
                         }).join('') + '</div>';
                         initDimSelects(box, popup, function () {});
                     };
@@ -612,6 +621,16 @@
         if (window.jQuery && jQuery.fn.select2) {
             jQuery(cell).find('select.select2-hidden-accessible').select2('destroy');
         }
+        // blank values get the payroll company default (MMT -> Company 01, MRF -> Company 02); the row is
+        // then marked changed so Save / Save changed stores it
+        var filled = false;
+        (state.templates[rowCompany(tr)] || []).forEach(function (d) {
+            var def = pcDefault(rowCompany(tr), d.dimension);
+            if (def && !(tr._values[d.dimension] || '').trim()) {
+                tr._values[d.dimension] = def;
+                filled = true;
+            }
+        });
         cell.innerHTML = dimsHtml(tr);
         initDimSelects(cell, null, function (sel) {
             tr._values[sel.dataset.dim] = (sel.value || '').trim();
@@ -619,6 +638,7 @@
             markDirty(host, tr);
         });
         updateStatus(tr);
+        if (filled) markDirty(host, tr);
     }
 
     function rowState(tr) {
@@ -677,6 +697,11 @@
 
     function bindRow(host, tr) {
         tr.querySelector('.js-pc').addEventListener('change', function () {
+            // company defaults (MMT -> Company 01, MRF -> Company 02) for the new company's template dimensions
+            (state.templates[rowCompany(tr)] || []).forEach(function (d) {
+                var def = pcDefault(rowCompany(tr), d.dimension);
+                if (def) tr._values[d.dimension] = def;
+            });
             drawRow(host, tr); // inputs follow the template of the newly chosen company
             markDirty(host, tr);
         });

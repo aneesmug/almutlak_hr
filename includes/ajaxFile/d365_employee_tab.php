@@ -2,7 +2,8 @@
 // Employee master "D365" tab (view_employee.php) - system admins + 'view_employee_d365_tab' special access.
 // POST csrf (= $_SESSION['d365_csrf']), emp_id, refresh=1 to bypass the 10 min session cache.
 // Returns an HTML fragment: HR app vs D365 comparison, worker record, employments, positions,
-// bank accounts and the financial transactions of the worker (general journal lines, payroll excluded).
+// bank accounts and the financial transactions of the worker (general journal lines; the payroll synced by this
+// app is listed per month and in the Transactions table, but kept out of the financial summary).
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/D365Workers.php';
@@ -95,8 +96,9 @@ foreach ($employments as $emp) {
     }
 }
 
-// Financial transactions of the worker in D365 (general journal lines), payroll left out:
-// lines synced by this app ("PAY yyyy-mm ...") and finance's salary entries (رواتب)
+// Financial transactions of the worker in D365 (general journal lines). Payroll synced by this app ("PAY yyyy-mm ...")
+// goes to $payroll (per month card + Transactions table) and stays out of the summary / by-account totals;
+// finance's own salary entries (رواتب) are left out
 $accountNames = $worker ? $workers->mainAccountNames() : [];
 $fin = [];
 $totDebit = 0.0;
@@ -104,9 +106,28 @@ $totCredit = 0.0;
 $byAccount = [];
 $byCompany = [];
 $postedCount = 0;
+$payroll = [];       // app payroll lines
+$payrollMonths = []; // 'yyyy-mm' => company, journal, posted, debit, credit, net, lines
 foreach ($d['journal_lines'] as $jl) {
     $text = (string)$jl['Text'];
-    if (strpos($text, 'PAY ') === 0 || mb_strpos($text, 'رواتب') !== false) {
+    if (strpos($text, 'PAY ') === 0) {
+        $header = ($d['journals'] ?? [])[strtolower($jl['dataAreaId']) . '|' . $jl['JournalBatchNumber']] ?? null;
+        $jl['_main'] = explode('-', (string)$jl['AccountDisplayValue'])[0];
+        $jl['_posted'] = $header ? ($header['IsPosted'] === 'Yes') : null;
+        $jl['_type'] = 'payroll';
+        $payroll[] = $jl;
+        $month = explode(' ', $text)[1] ?? '';
+        $pm = &$payrollMonths[$month];
+        $pm = [
+            'company' => strtoupper($jl['dataAreaId']), 'journal' => $jl['JournalBatchNumber'], 'posted' => $jl['_posted'],
+            'debit' => ($pm['debit'] ?? 0) + (float)$jl['DebitAmount'], 'credit' => ($pm['credit'] ?? 0) + (float)$jl['CreditAmount'],
+            'net' => ($pm['net'] ?? 0) + (stripos($text, 'Net salary') !== false ? (float)$jl['CreditAmount'] : 0),
+            'lines' => ($pm['lines'] ?? 0) + 1,
+        ];
+        unset($pm);
+        continue;
+    }
+    if (mb_strpos($text, 'رواتب') !== false) {
         continue;
     }
     $debit = (float)$jl['DebitAmount'];
@@ -118,6 +139,7 @@ foreach ($d['journal_lines'] as $jl) {
     $jl['_main'] = $main;
     $jl['_posted'] = $posted;
     $jl['_journal'] = $header;
+    $jl['_type'] = 'other';
     $fin[] = $jl;
     $totDebit += $debit;
     $totCredit += $credit;
@@ -131,6 +153,12 @@ foreach ($d['journal_lines'] as $jl) {
 }
 uasort($byAccount, function ($x, $y) { return abs($y['debit'] - $y['credit']) <=> abs($x['debit'] - $x['credit']); });
 ksort($byCompany);
+krsort($payrollMonths);
+// Transactions table: other lines + payroll lines, newest first
+$allLines = array_merge($fin, $payroll);
+usort($allLines, function ($a, $b) {
+    return strcmp($b['TransDate'], $a['TransDate']) ?: strcmp($a['JournalBatchNumber'], $b['JournalBatchNumber']) ?: $a['LineNumber'] <=> $b['LineNumber'];
+});
 $money = function ($v) { return number_format((float)$v, 2); };
 ?>
 <div class="d365tab">
@@ -297,7 +325,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
         <div class="sr-card">
             <div class="sr-card-head">
                 <div class="sr-card-title">Financial summary</div>
-                <div class="sr-card-sub">General journal lines of <?= $e($targetEmp) ?> in D365 (fees, advances, loans, settlements, transfers...) · payroll excluded</div>
+                <div class="sr-card-sub">General journal lines of <?= $e($targetEmp) ?> in D365 (fees, advances, loans, settlements, transfers...) · payroll shown separately below</div>
             </div>
             <div class="sr-card-body">
                 <div class="d365fin-tiles">
@@ -346,16 +374,52 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
+                <div class="sr-card-title"><i class="mdi mdi-cash-multiple"></i> Payroll in D365</div>
+                <div class="sr-card-sub">Payroll synced by the HR app, per month (lines "PAY yyyy-mm <?= $e($targetEmp) ?> ...")</div>
+            </div>
+            <div class="sr-table-wrap">
+                <table class="sr-table">
+                    <thead><tr><th>Month</th><th>Company</th><th>Journal</th><th class="text-right">Lines</th><th class="text-right">Gross (debit)</th><th class="text-right">Net salary</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($payrollMonths as $m => $pm): ?>
+                        <tr>
+                            <td><b><?= $e($m !== '' ? date('F Y', strtotime($m . '-01')) : '-') ?></b></td>
+                            <td><span class="sr-chip"><?= $e($pm['company']) ?></span></td>
+                            <td>
+                                <div class="sr-mono"><?= $e($pm['journal']) ?></div>
+                                <?php if ($pm['posted'] === true): ?><span class="sr-pill tone-green"><span class="sr-dot"></span>Posted</span>
+                                <?php elseif ($pm['posted'] === false): ?><span class="sr-pill tone-amber"><span class="sr-dot"></span>Not posted</span><?php endif; ?>
+                            </td>
+                            <td class="text-right"><?= $pm['lines'] ?></td>
+                            <td class="text-right"><?= $money($pm['debit']) ?></td>
+                            <td class="text-right"><b class="d365fin-credit"><?= $money($pm['net']) ?></b></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <?php if (!$payrollMonths): ?><tr><td colspan="6" class="d365tab-muted">No payroll synced to D365 yet</td></tr><?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="sr-card">
+            <div class="sr-card-head">
                 <div class="sr-card-title">Transactions</div>
-                <div class="sr-card-sub">Newest first · amount = debit (+) / credit (-)</div>
+                <div class="sr-card-sub">Newest first · amount = debit (+) / credit (-)
+                    <span class="d365fin-filter" style="margin-left:8px">
+                        <button type="button" class="d365tab-btn is-active" data-fin-type="">All (<?= count($allLines) ?>)</button>
+                        <button type="button" class="d365tab-btn" data-fin-type="Payroll">Payroll (<?= count($payroll) ?>)</button>
+                        <button type="button" class="d365tab-btn" data-fin-type="Other">Other (<?= count($fin) ?>)</button>
+                    </span>
+                </div>
             </div>
             <div class="sr-table-wrap" style="padding:0 12px 12px">
                 <table class="sr-table" id="d365FinTable" style="width:100%">
-                    <thead><tr><th>Date</th><th>Company</th><th>Journal</th><th>Voucher</th><th>Account</th><th>Description</th><th class="text-right">Amount</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Type</th><th>Company</th><th>Journal</th><th>Voucher</th><th>Account</th><th>Description</th><th class="text-right">Amount</th></tr></thead>
                     <tbody>
-                    <?php foreach ($fin as $jl): $amt = (float)$jl['DebitAmount'] - (float)$jl['CreditAmount']; ?>
+                    <?php foreach ($allLines as $jl): $amt = (float)$jl['DebitAmount'] - (float)$jl['CreditAmount']; ?>
                         <tr>
                             <td data-order="<?= $e(substr((string)$jl['TransDate'], 0, 10)) ?>"><?= $e(d365tab_date($jl['TransDate'])) ?></td>
+                            <td><?= $jl['_type'] === 'payroll' ? '<span class="sr-pill tone-sky"><span class="sr-dot"></span>Payroll</span>' : '<span class="sr-pill tone-slate"><span class="sr-dot"></span>Other</span>' ?></td>
                             <td><span class="sr-chip"><?= $e(strtoupper($jl['dataAreaId'])) ?></span></td>
                             <td>
                                 <div class="sr-mono"><?= $e($jl['JournalBatchNumber']) ?></div>

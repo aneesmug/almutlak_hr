@@ -5422,6 +5422,8 @@ if (mysqli_num_rows($query) == 1) {
 			.d365tab-btn i { color: var(--sr-accent); font-size: 1rem; line-height: 1; }
 			.d365tab-btn:hover { background: var(--sr-surface-2); }
 			.d365tab-btn:disabled { opacity: .55; cursor: default; }
+			.d365fin-filter .d365tab-btn { padding: 4px 10px; font-size: .78rem; }
+			.d365tab-btn.is-active { background: var(--sr-accent); color: #fff; border-color: var(--sr-accent); }
 			.d365fin-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 			.d365fin-tile { border: 1px solid var(--sr-border, #e2e8f0); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
 			.d365fin-tile span { font-size: 12px; color: var(--sr-muted, #64748b); }
@@ -5450,7 +5452,14 @@ if (mysqli_num_rows($query) == 1) {
 						$body.html(html);
 						$pane.attr('data-loaded', '1');
 						if ($.fn.DataTable && $('#d365FinTable tbody tr').length) {
-							$('#d365FinTable').DataTable({ order: [[0, 'desc']], pageLength: 25, autoWidth: false });
+							var finTable = $('#d365FinTable').DataTable({ order: [[0, 'desc']], pageLength: 25, autoWidth: false });
+							// All / Payroll / Other buttons filter the Type column
+							$body.find('[data-fin-type]').on('click', function () {
+								$body.find('[data-fin-type]').removeClass('is-active');
+								$(this).addClass('is-active');
+								var type = $(this).attr('data-fin-type');
+								finTable.column(1).search(type ? '^' + type + '$' : '', true, false).draw();
+							});
 						}
 					}).fail(function (xhr) {
 						$body.html('<div class="sr-notice tone-red">Could not load D365 data (HTTP ' + xhr.status + '). <a href="#" id="d365TabRetry">Retry</a></div>');

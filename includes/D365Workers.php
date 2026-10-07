@@ -715,6 +715,24 @@ class D365Workers
                 $firstStart = $emp['EmploymentStartDate'];
             }
         }
+        // payroll can be booked in another company (Payroll Company in the Employee Master) - look there too
+        if ($companies) {
+            try {
+                $pc = $this->payrollCompany($empId, '');
+                if ($pc !== '') {
+                    $companies[strtolower($pc)] = true;
+                }
+                $stmt = $this->db->prepare("SELECT DISTINCT legal_entity FROM d365_payroll_push_log WHERE emp_id = ? AND environment = ? AND status = 'ok'");
+                $env = $this->client->getEnvironment();
+                $stmt->bind_param('ss', $empId, $env);
+                $stmt->execute();
+                foreach ($stmt->get_result()->fetch_all() as $row) {
+                    $companies[strtolower(explode('/', (string)$row[0], 2)[0])] = true;
+                }
+                $stmt->close();
+            } catch (Throwable $ex) {
+            }
+        }
         if ($companies) {
             $since = gmdate('Y-m-d\T00:00:00\Z', strtotime(substr($firstStart, 0, 10) . ' -90 days'));
             $companyFilter = implode(' or ', array_map(function ($c) { return "dataAreaId eq '" . $c . "'"; }, array_keys($companies)));
