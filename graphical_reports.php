@@ -222,6 +222,10 @@ $graph_report_types = array_filter($graph_report_types, function ($key) use ($al
 // any selected column becomes a chartable Group By axis (fetched live via the existing
 // includes/ajaxFile/getTableColumns.php + generateCustomReport() in ajaxReports.php -
 // no new backend code, this just points the same engine at a chart instead of a table).
+// Attendance switched off in App Settings > Integrations - no attendance report / table
+if (!attendance_enabled($conDB)) {
+    unset($graph_report_types['attendance']);
+}
 $graph_custom_tables_enabled = isset($allowed_report_types_map['custom']);
 if ($graph_custom_tables_enabled) {
     $graph_table_names = [
@@ -253,6 +257,9 @@ if ($graph_custom_tables_enabled) {
     ];
     if (can_acknowledge_evaluations($user_type, $user_role)) {
         $graph_table_names['emp_evaluations'] = __('employee_evaluations');
+    }
+    if (!attendance_enabled($conDB)) {
+        unset($graph_table_names['attendance']);
     }
 }
 

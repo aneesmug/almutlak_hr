@@ -30,6 +30,11 @@ if (!$conDB) {
     fwrite(STDERR, "[ZK] Could not connect to database.\n");
     exit(1);
 }
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conDB)) {
+    fwrite(STDERR, "[ZK] Attendance is turned off (App Settings > Integrations) - nothing to do.\n");
+    exit(0);
+}
 
 $result = mysqli_query(
     $conDB,

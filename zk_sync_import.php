@@ -40,6 +40,39 @@
 require_once __DIR__ . '/includes/zk_helpers.php';
 require_once __DIR__ . '/includes/attendance_helpers.php';
 
+/**
+ * This server has no cron jobs - the BioTime sync push is the only thing that runs on a
+ * timer - so the once-a-day "temporary role expires tomorrow" reminder email
+ * (cron_temp_role_expiry_reminder.php's logic) is piggybacked here with the same daily
+ * guard file that script uses. Failures must never break the attendance sync itself.
+ * Runs even while attendance is switched off.
+ */
+function zk_sync_run_daily_reminder()
+{
+    global $conDB;
+    $tempRoleReminderReport = __DIR__ . '/cron_logs/last_temp_role_expiry_reminder_report.json';
+    $tempRoleReminderDone = false;
+    if (file_exists($tempRoleReminderReport)) {
+        $lastReminder = json_decode((string) @file_get_contents($tempRoleReminderReport), true);
+        $tempRoleReminderDone = is_array($lastReminder) && substr((string) ($lastReminder['timestamp'] ?? ''), 0, 10) === date('Y-m-d');
+    }
+    if (!$tempRoleReminderDone) {
+        try {
+            require_once __DIR__ . '/includes/db.php';
+            require_once __DIR__ . '/includes/helper_functions.php';
+            $reminderSummary = sendTempRoleExpiryReminders($conDB);
+            @file_put_contents($tempRoleReminderReport, json_encode([
+                'timestamp' => date('Y-m-d H:i:s'),
+                'notified' => $reminderSummary['notified'],
+                'skipped' => $reminderSummary['skipped'],
+                'errors' => $reminderSummary['errors'],
+            ], JSON_PRETTY_PRINT));
+        } catch (\Throwable $e) {
+            error_log('[ZK] temp role expiry reminder failed: ' . $e->getMessage());
+        }
+    }
+}
+
 header('Content-Type: application/json; charset=UTF-8');
 
 $conn = zk_get_db_connection();
@@ -68,6 +101,15 @@ if (!zk_sync_ip_is_allowed($allowedIp, $remoteIp)) {
     zk_record_sync_rejected_ip($conn, $remoteIp);
     http_response_code(403);
     echo json_encode(['status' => 'error', 'message' => 'IP address not allowed (request came from ' . $remoteIp . ').']);
+    exit;
+}
+
+// Attendance switched off (App Settings > Integrations): run the daily reminder, then refuse the
+// batch so the sync agent keeps its punches and sends them again once attendance is switched back on
+if (!attendance_enabled($conn)) {
+    zk_sync_run_daily_reminder();
+    http_response_code(503);
+    echo json_encode(['status' => 'error', 'message' => 'Attendance is turned off (App Settings > Integrations).']);
     exit;
 }
 
@@ -224,31 +266,7 @@ foreach ($affectedDays as $day) {
 // Runs at most once per calendar day (no-op on every other sync).
 $purged = zk_purge_old_attendance($conn);
 
-// This server has no cron jobs - the BioTime sync push is the only thing that runs on a
-// timer - so the once-a-day "temporary role expires tomorrow" reminder email
-// (cron_temp_role_expiry_reminder.php's logic) is piggybacked here with the same daily
-// guard file that script uses. Failures must never break the attendance sync itself.
-$tempRoleReminderReport = __DIR__ . '/cron_logs/last_temp_role_expiry_reminder_report.json';
-$tempRoleReminderDone = false;
-if (file_exists($tempRoleReminderReport)) {
-    $lastReminder = json_decode((string) @file_get_contents($tempRoleReminderReport), true);
-    $tempRoleReminderDone = is_array($lastReminder) && substr((string) ($lastReminder['timestamp'] ?? ''), 0, 10) === date('Y-m-d');
-}
-if (!$tempRoleReminderDone) {
-    try {
-        require_once __DIR__ . '/includes/db.php';
-        require_once __DIR__ . '/includes/helper_functions.php';
-        $reminderSummary = sendTempRoleExpiryReminders($conDB);
-        @file_put_contents($tempRoleReminderReport, json_encode([
-            'timestamp' => date('Y-m-d H:i:s'),
-            'notified' => $reminderSummary['notified'],
-            'skipped' => $reminderSummary['skipped'],
-            'errors' => $reminderSummary['errors'],
-        ], JSON_PRETTY_PRINT));
-    } catch (\Throwable $e) {
-        error_log('[ZK] temp role expiry reminder failed: ' . $e->getMessage());
-    }
-}
+zk_sync_run_daily_reminder();
 
 echo json_encode([
     'status' => 'success',

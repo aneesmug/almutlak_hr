@@ -417,6 +417,9 @@ try {
             $result = generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $status, $employeeId, $companies, $countries);
             break;
         case 'attendance':
+            if (!attendance_enabled($conDB)) {
+                throw new Exception('Attendance is turned off');
+            }
             $result = generateAttendanceReport($conDB, $columns, $departments, $dateFrom, $dateTo, $hasFullAccess, $userDept, $employeeId, $companies, $countries);
             break;
         case 'document':
@@ -460,6 +463,9 @@ try {
             break;
         case 'custom':
             $customTables = isset($_POST['customTables']) ? $_POST['customTables'] : [];
+            if (!attendance_enabled($conDB)) { // Attendance switched off - no attendance tables
+                $customTables = array_values(array_diff((array)$customTables, ['attendance', 'zk_attendance', 'zk_attendance_raw', 'emp_attendance']));
+            }
             $customDepartments = isset($_POST['customDepartments']) ? $_POST['customDepartments'] : [];
             $result = generateCustomReport($conDB, $columns, $customTables, $customDepartments, $dateFrom, $dateTo, $status);
             break;

@@ -21,6 +21,11 @@ if (!$conn) {
     fwrite(STDERR, "[ZK] Could not connect to database.\n");
     exit(1);
 }
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conn)) {
+    fwrite(STDERR, "[ZK] Attendance is turned off (App Settings > Integrations) - nothing to do.\n");
+    exit(0);
+}
 
 $result = mysqli_query($conn, "SELECT id, serial_number, device_name, pull_host, pull_port FROM zk_devices WHERE pull_port IS NOT NULL AND pull_port > 0");
 if (!$result) {

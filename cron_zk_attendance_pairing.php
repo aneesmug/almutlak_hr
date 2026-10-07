@@ -22,6 +22,11 @@
  */
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/attendance_helpers.php';
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conDB)) {
+    fwrite(STDERR, "Attendance is turned off (App Settings > Integrations) - nothing to do.\n");
+    exit(0);
+}
 
 // db.php sets max_execution_time = 25 (meant to bound web requests) - this
 // backfill deliberately runs long over large datasets when re-deriving

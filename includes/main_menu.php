@@ -926,7 +926,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <?php if ($is_admin || $is_system_admin || in_array($user_role, $can_see_asstet_inventory_page)): ?>
             <li><a href="<?= $assetInventoryLink ?>"><i class="fa-duotone fa-box" style="--fa-primary-color:#fbbf24;--fa-secondary-color:#fbbf24;--fa-secondary-opacity:.4"></i><span><?=__('asset_inventory', 'Asset Inventory') ?></span></a></li>
         <?php endif; ?>
-        <?php if ($is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
+        <?php if (attendance_enabled($conDB) && ($is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false))): ?>
             <li><a href="<?= $attendanceLink ?>"><i class="fa-duotone fa-calendar-check" style="--fa-primary-color:#60a5fa;--fa-secondary-color:#60a5fa;--fa-secondary-opacity:.4"></i><span><?=__('attendance_record', 'Attendance Record') ?></span></a></li>
         <?php endif; ?>
 
@@ -941,8 +941,8 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
         $can_import_medical_insurance = $is_system_admin
             || user_has_special_access($conDB, $empid ?? '', 'access_import_medical_insurance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
-        $can_see_biometric_devices = $is_system_admin
-            || user_has_special_access($conDB, $empid ?? '', 'manage_device_monitor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $can_see_biometric_devices = attendance_enabled($conDB) && ($is_system_admin
+            || user_has_special_access($conDB, $empid ?? '', 'manage_device_monitor', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
         $can_see_dynamic_import = $is_system_admin
             || user_has_special_access($conDB, $empid ?? '', 'access_import_excel_dynamic', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
         // $can_see_announcement_page already includes this user's role when they hold the

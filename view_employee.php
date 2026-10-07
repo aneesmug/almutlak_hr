@@ -101,7 +101,7 @@ if (mysqli_num_rows($query) == 1) {
 		// Attendance Record tab - hidden from everyone except sys admin unless an
 		// explicitly granted 'view_employee_attendance_tab' special access (App Settings ->
 		// Special Access). Unlike salary/EOS above, HR/Dept HR do NOT get this by default.
-		$canViewAttendanceTab = (
+		$canViewAttendanceTab = attendance_enabled($conDB) && (
 			($is_system_admin ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'view_employee_attendance_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
@@ -115,7 +115,7 @@ if (mysqli_num_rows($query) == 1) {
 		$canViewMemosTab = memo_user_can($conDB, 'send', $empid ?? '', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 		// Manually add/edit a day's punch (e.g. employee forgot to clock in/out) - same
 		// 'manage_attendance' key that already gates the standalone Attendance Record page.
-		$canManageAttendanceRecord = (
+		$canManageAttendanceRecord = attendance_enabled($conDB) && (
 			($is_system_admin ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);

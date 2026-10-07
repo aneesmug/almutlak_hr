@@ -462,6 +462,8 @@
             'isFullSettingsAdmin' => (bool) $is_system_admin,
             // Microsoft Dynamics 365 master switch (D365 Config tab) - off hides every D365 option on this page
             'd365Enabled' => d365_enabled($conDB),
+            // Attendance master switch (Integrations tab) - off hides Attendance Config and attendance permissions
+            'attendanceEnabled' => attendance_enabled($conDB),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

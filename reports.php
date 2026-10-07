@@ -379,6 +379,7 @@ if (mysqli_num_rows($query) == 1) {
                     if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) continue;
                     if ($report_key === 'ctc' && !$can_view_ctc_report) continue;
                     if ($report_key === 'd365' && !$can_view_d365_report) continue;
+                    if ($report_key === 'attendance' && !attendance_enabled($conDB)) continue;
                     $visible_reports[$report_key] = $report_label;
                 }
                 $grouped_reports = [];
@@ -593,6 +594,9 @@ if (mysqli_num_rows($query) == 1) {
                                                 $table_names['emp_evaluations'] = __('employee_evaluations');
                                             }
 
+                                            if (!attendance_enabled($conDB)) {
+                                                unset($table_names['attendance']); // Attendance switched off
+                                            }
                                             foreach ($table_names as $table_key => $table_display_name) {
                                                 echo '<option value="' . $table_key . '">' . $table_display_name . '</option>';
                                             }

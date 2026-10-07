@@ -3,6 +3,13 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../special_access_helper.php';
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conDB)) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['status' => 'error', 'message' => 'Attendance is turned off']);
+    exit;
+}
 require_once __DIR__ . '/../attendance_helpers.php';
 
 $canViewAttendanceTab = ($is_system_admin ?? false)

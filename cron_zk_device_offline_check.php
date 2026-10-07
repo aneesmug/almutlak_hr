@@ -15,6 +15,11 @@ if (!$conn) {
     fwrite(STDERR, "[ZK] Could not connect to database.\n");
     exit(1);
 }
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conn)) {
+    fwrite(STDERR, "[ZK] Attendance is turned off (App Settings > Integrations) - nothing to do.\n");
+    exit(0);
+}
 
 $thresholdMinutes = zk_get_offline_threshold_minutes($conn);
 

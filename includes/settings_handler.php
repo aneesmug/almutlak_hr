@@ -116,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  */
 function get_all_settings($conDB) {
     ensure_attendance_retention_setting($conDB);
+    ensure_attendance_enabled_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -138,7 +139,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -161,6 +162,7 @@ function get_all_settings($conDB) {
  */
 function update_all_settings($conDB) {
     ensure_attendance_retention_setting($conDB);
+    ensure_attendance_enabled_setting($conDB);
     ensure_report_visibility_setting($conDB);
     ensure_special_access_setting($conDB);
     ensure_page_role_access_setting($conDB);
@@ -213,8 +215,8 @@ function update_all_settings($conDB) {
         $text_inputs = array_diff_key($_POST, ['action' => '']);
         global $is_system_admin;
         foreach ($text_inputs as $setting_name => $value) {
-            if (strpos((string)$setting_name, 'd365_') === 0 && !($is_system_admin ?? false)) {
-                continue; // D365 Config is system-admin only (see get_all_settings)
+            if ((strpos((string)$setting_name, 'd365_') === 0 || $setting_name === 'attendance_enabled') && !($is_system_admin ?? false)) {
+                continue; // D365 Config and the Integrations switches are system-admin only (see get_all_settings)
             }
             $stmt->bind_param("ss", $value, $setting_name);
             if (!$stmt->execute()) {
@@ -318,6 +320,16 @@ function ensure_attendance_retention_setting($conDB) {
         $insert->execute();
         $insert->close();
     }
+}
+
+/**
+ * Attendance module master switch (App Settings > Integrations > "Enable Attendance"),
+ * read by attendance_enabled() in includes/attendance_feature.php. Created once as ON.
+ */
+function ensure_attendance_enabled_setting($conDB) {
+    $conDB->query("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
+        SELECT 'attendance_enabled', '1', 'integrations', 'Enable Attendance (biometric devices, attendance records, timetables)', 'select', '{\"1\":\"Enabled\",\"0\":\"Disabled\"}'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_name = 'attendance_enabled')");
 }
 
 /**

@@ -2,6 +2,11 @@
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 require_once __DIR__ . '/includes/zk_helpers.php';
+// Attendance switched off in App Settings > Integrations
+if (!attendance_enabled($conDB)) {
+    http_response_code(403);
+    die('Attendance is turned off (App Settings > Integrations)');
+}
 include(__DIR__ . '/includes/avatar_select.php');
 
 $isSystemAdmin = $is_system_admin ?? false;

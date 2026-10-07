@@ -64,7 +64,12 @@ function __(key, def) {
         // hidden here but kept in the saved data, so switching it back on restores every grant.
         const D365_ON = (window.APP_SETTINGS_PERMISSIONS || {}).d365Enabled !== false;
         const isD365Key = key => /(^|_)d365(_|$)/.test(String(key || ''));
-        const d365Visible = key => D365_ON || !isD365Key(key);
+        // Attendance master switch (Integrations tab): same idea for the attendance permissions / report
+        const ATTENDANCE_ON = (window.APP_SETTINGS_PERMISSIONS || {}).attendanceEnabled !== false;
+        const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
+        // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
+        const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
+        const featureVisible = key => !isHiddenFeatureKey(key);
         const settingsNav = document.getElementById('settings-nav');
         const settingsForm = document.getElementById('settingsForm');
 
@@ -146,7 +151,7 @@ function __(key, def) {
         // not listed in getSpecialAccessCategories() falling back into a trailing "Other" bucket.
         function buildSpecialAccessPanelData() {
             const categories = getSpecialAccessCategories();
-            const catalog = getSpecialAccessCatalog().filter(item => d365Visible(item.value));
+            const catalog = getSpecialAccessCatalog().filter(item => featureVisible(item.value));
             const labelByKey = new Map(catalog.map(item => [item.value, item.label]));
             const placedKeys = new Set();
             const panels = [];
@@ -270,7 +275,7 @@ function __(key, def) {
                 return html;
             }
 
-            const catalog = getReportTypeCatalog().filter(item => d365Visible(item.value));
+            const catalog = getReportTypeCatalog().filter(item => featureVisible(item.value));
             const allTypeValues = getReportTypeCatalog().map(item => item.value);
             const hasExplicit = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
             const selectedSet = new Set(hasExplicit ? normalizeReportTypeList(reportPermissionMap[empId]) : allTypeValues);
@@ -965,6 +970,9 @@ function __(key, def) {
                 let formHtml = '';
                 data.settings.forEach(setting => {
                     const id = `payroll-param-${setting.setting_name}`;
+                    if (!ATTENDANCE_ON && setting.setting_name.includes('_auto_attendance_')) {
+                        return; // attendance switched off (Integrations) - kept as saved, not shown
+                    }
                     if (PAYROLL_BOOLEAN_SETTING_NAMES.includes(setting.setting_name)) {
                         formHtml += `
                             <div class="form-group row">
@@ -1852,28 +1860,29 @@ function __(key, def) {
                     `;
                 });
                 checkboxesHtml += '</div>';
+                if (ATTENDANCE_ON) { // attendance switched off (Integrations) - switch hidden, saved value kept
                 checkboxesHtml += `
                     <div class="custom-control custom-switch mt-3">
                         <input type="checkbox" class="custom-control-input" id="deduction-auto-attendance-toggle" ${autoAttendanceEnabled ? 'checked' : ''}>
                         <label class="custom-control-label" for="deduction-auto-attendance-toggle">${autoAttendanceLabel}</label>
                     </div>
                 `;
+                }
                 checkboxesHtml += `<button type="button" class="btn btn-primary mt-3" id="btn-save-deduction-base">${__('save', 'Save')}</button>`;
                 container.innerHTML = checkboxesHtml;
 
                 document.getElementById('btn-save-deduction-base').addEventListener('click', async function() {
                     const chosen = Array.from(container.querySelectorAll('.deduction-base-component-checkbox:checked')).map(cb => cb.value);
-                    const autoAttendance = document.getElementById('deduction-auto-attendance-toggle').checked ? '1' : '0';
+                    const autoAttendanceToggle = document.getElementById('deduction-auto-attendance-toggle');
                     try {
                         const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: new URLSearchParams({
+                            body: new URLSearchParams(Object.assign({
                                 action: 'update_payroll_settings',
                                 group: 'deduction_settings',
-                                deduction_base_components: JSON.stringify(chosen),
-                                deduction_auto_attendance_enabled: autoAttendance
-                            })
+                                deduction_base_components: JSON.stringify(chosen)
+                            }, autoAttendanceToggle ? { deduction_auto_attendance_enabled: autoAttendanceToggle.checked ? '1' : '0' } : {}))
                         });
                         const saveResult = await saveResponse.json();
                         if (saveResult.success) {
@@ -2346,7 +2355,7 @@ function __(key, def) {
             // category label (same categories as the edit grid) instead of one flat run -
             // makes it scannable at a glance instead of a wall of identical blue badges.
             function buildGroupedBadges(grantedKeys) {
-                grantedKeys = grantedKeys.filter(d365Visible);
+                grantedKeys = grantedKeys.filter(featureVisible);
                 const grantedSet = new Set(grantedKeys);
                 const placed = new Set();
                 let out = '';
@@ -2372,7 +2381,7 @@ function __(key, def) {
             // nothing to call out.
             function buildReportAccessBadges(empId) {
                 if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
-                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]).filter(d365Visible);
+                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible);
                 let out = `<div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div>`;
                 if (!grantedTypes.length) {
                     out += `<span class="badge badge-danger mr-1 mb-1">${__('no_reports', 'No reports')}</span>`;
@@ -2671,11 +2680,11 @@ function __(key, def) {
                 if (!result.isConfirmed) return;
 
                 const { abilities, reportAccessApplicable, reportAccessMode: finalMode, reportAccessValues: finalValues } = result.value || {};
-                // D365 switched off: its keys were not shown - keep the ones this user already had
-                if (!D365_ON) {
-                    abilities.push(...(specialAccessMap[targetEmpId] || []).filter(isD365Key));
+                // Switched-off integration (D365 / Attendance): its keys were not shown - keep the ones this user already had
+                if (!D365_ON || !ATTENDANCE_ON) {
+                    abilities.push(...(specialAccessMap[targetEmpId] || []).filter(isHiddenFeatureKey));
                     if (Array.isArray(finalValues) && Object.prototype.hasOwnProperty.call(reportPermissionMap, targetEmpId)) {
-                        finalValues.push(...(reportPermissionMap[targetEmpId] || []).filter(isD365Key));
+                        finalValues.push(...(reportPermissionMap[targetEmpId] || []).filter(isHiddenFeatureKey));
                     }
                 }
 
@@ -3223,45 +3232,64 @@ function __(key, def) {
         }
 
         // --- Integrations tab (system admins) ---
-        // One switch per external system; saves straight away and reloads, because menus, tabs and
-        // permissions across the app follow the switch. Microsoft Dynamics 365 = setting d365_enabled.
+        // One switch per module / external system; saves straight away and reloads, because menus,
+        // tabs and permissions across the app follow the switch.
         function renderIntegrationsSettings() {
+            const msLogo = `<span style="display:grid;grid-template-columns:11px 11px;gap:2px;flex:none" aria-hidden="true">
+                    <i style="width:11px;height:11px;background:#f25022"></i><i style="width:11px;height:11px;background:#7fba00"></i>
+                    <i style="width:11px;height:11px;background:#00a4ef"></i><i style="width:11px;height:11px;background:#ffb900"></i>
+                </span>`;
+            const integrations = [
+                {
+                    setting: 'd365_enabled', on: D365_ON, icon: msLogo,
+                    name: 'Microsoft Dynamics 365',
+                    label: __('d365_enable_label', 'Enable Microsoft Dynamics 365'),
+                    onHint: __('d365_enabled_hint', 'On - D365 tabs, status, sync buttons, reports and pages are shown to the people allowed to see them.'),
+                    offHint: __('d365_disabled_hint', 'Off - every D365 tab, status, sync button, report, menu link and page is hidden, and nothing is sent to D365. Settings and permissions are kept.'),
+                    confirmOn: __('d365_enable_confirm_text', 'D365 tabs, status, sync buttons, reports and pages come back for the people allowed to see them.'),
+                    confirmOff: __('d365_disable_confirm_text', 'All D365 tabs, status, sync buttons, reports, menu links and pages are hidden for everyone and nothing is sent to D365. Settings and permissions are kept.'),
+                },
+                {
+                    setting: 'attendance_enabled', on: ATTENDANCE_ON,
+                    icon: '<i class="fa-duotone fa-fingerprint" style="font-size:24px;color:#2563eb;flex:none" aria-hidden="true"></i>',
+                    name: __('attendance', 'Attendance'),
+                    label: __('attendance_enable_label', 'Enable Attendance'),
+                    onHint: __('attendance_enabled_hint', 'On - attendance records, biometric devices, timetables, the employee Attendance tab and the attendance report are shown to the people allowed to see them.'),
+                    offHint: __('attendance_disabled_hint', 'Off - attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden; devices keep their punches until it is switched back on; payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
+                    confirmOn: __('attendance_enable_confirm_text', 'Attendance pages, devices, the Attendance tab and the report come back. Devices then send the punches they kept while it was off.'),
+                    confirmOff: __('attendance_disable_confirm_text', 'Attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden for everyone. Devices stop being accepted (they keep their punches), and payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
+                },
+            ];
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-integrations" role="tabpanel">
                     <h5 class="mb-0">${__('integrations', 'Integrations')}</h5>
-                    <p class="text-muted font-14 mt-2">${__('integrations_hint', 'Turn connections to external systems on or off for the whole app.')}</p>
+                    <p class="text-muted font-14 mt-2">${__('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.')}</p>
+                    ${integrations.map(it => `
                     <div class="card mt-3">
                         <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
                             <div style="display:flex;align-items:center;gap:12px;min-width:0">
-                                <span style="display:grid;grid-template-columns:11px 11px;gap:2px;flex:none" aria-hidden="true">
-                                    <i style="width:11px;height:11px;background:#f25022"></i><i style="width:11px;height:11px;background:#7fba00"></i>
-                                    <i style="width:11px;height:11px;background:#00a4ef"></i><i style="width:11px;height:11px;background:#ffb900"></i>
-                                </span>
+                                ${it.icon}
                                 <div style="min-width:0">
-                                    <b>Microsoft Dynamics 365</b>
-                                    <span class="badge ${D365_ON ? 'badge-success' : 'badge-secondary'} ml-1">${D365_ON ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span><br>
-                                    <small class="text-muted">${D365_ON
-                                        ? __('d365_enabled_hint', 'On - D365 tabs, status, sync buttons, reports and pages are shown to the people allowed to see them.')
-                                        : __('d365_disabled_hint', 'Off - every D365 tab, status, sync button, report, menu link and page is hidden, and nothing is sent to D365. Settings and permissions are kept.')}</small>
+                                    <b>${it.name}</b>
+                                    <span class="badge ${it.on ? 'badge-success' : 'badge-secondary'} ml-1">${it.on ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span><br>
+                                    <small class="text-muted">${it.on ? it.onHint : it.offHint}</small>
                                 </div>
                             </div>
                             <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="d365-enabled-toggle" ${D365_ON ? 'checked' : ''}>
-                                <label class="custom-control-label" for="d365-enabled-toggle">${__('d365_enable_label', 'Enable Microsoft Dynamics 365')}</label>
+                                <input type="checkbox" class="custom-control-input integration-toggle" id="integration-${it.setting}" data-setting="${it.setting}" ${it.on ? 'checked' : ''}>
+                                <label class="custom-control-label" for="integration-${it.setting}">${it.label}</label>
                             </div>
                         </div>
-                    </div>
+                    </div>`).join('')}
                 </div>
             `;
-            document.getElementById('d365-enabled-toggle').addEventListener('change', async function () {
-                const toggle = this;
+            settingsContainer.querySelectorAll('.integration-toggle').forEach(toggle => toggle.addEventListener('change', async function () {
+                const it = integrations.find(x => x.setting === toggle.dataset.setting);
                 const on = toggle.checked;
                 const answer = await Swal.fire({
                     icon: on ? 'question' : 'warning',
-                    title: on ? __('d365_enable_confirm', 'Turn Microsoft Dynamics 365 on?') : __('d365_disable_confirm', 'Turn Microsoft Dynamics 365 off?'),
-                    text: on
-                        ? __('d365_enable_confirm_text', 'D365 tabs, status, sync buttons, reports and pages come back for the people allowed to see them.')
-                        : __('d365_disable_confirm_text', 'All D365 tabs, status, sync buttons, reports, menu links and pages are hidden for everyone and nothing is sent to D365. Settings and permissions are kept.'),
+                    title: (on ? __('turn_on_q', 'Turn on') : __('turn_off_q', 'Turn off')) + ' ' + it.name + '?',
+                    text: on ? it.confirmOn : it.confirmOff,
                     showCancelButton: true,
                     confirmButtonText: on ? __('turn_on', 'Turn on') : __('turn_off', 'Turn off'),
                     cancelButtonText: __('cancel', 'Cancel')
@@ -3271,7 +3299,7 @@ function __(key, def) {
                     const res = await fetch('./includes/settings_handler.php', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ action: 'update_settings', d365_enabled: on ? '1' : '0' })
+                        body: new URLSearchParams({ action: 'update_settings', [it.setting]: on ? '1' : '0' })
                     });
                     const data = await res.json();
                     if (!data.success) throw new Error(data.message || __('error', 'Error'));
@@ -3280,7 +3308,7 @@ function __(key, def) {
                     toggle.checked = !on;
                     Swal.fire(__('error', 'Error'), e.message, 'error');
                 }
-            });
+            }));
         }
 
         async function renderLicenseSettings() {
@@ -6344,7 +6372,7 @@ function __(key, def) {
                     if (canAccessLoanSettingsTab || canAccessVacationPayrollTab || canAccessOvertimeSettingsTab || canAccessDeductionSettingsTab || canAccessSalaryIncrementSettingsTab || canAccessResignationSettingsTab) {
                         groupedSettings['payroll_settings'] = [];
                     }
-                    if (canAccessAttendanceConfigTab) {
+                    if (canAccessAttendanceConfigTab && ATTENDANCE_ON) {
                         groupedSettings['attendance_config'] = [];
                     }
                     if (canAccessScreenSettingsTab) {
@@ -6500,7 +6528,7 @@ function __(key, def) {
                 // outer nav so they don't also show up as their own top-level tabs.
                 const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
                 // D365 Config is hidden while Microsoft Dynamics 365 is switched off (Integrations tab)
-                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config')).sort(); // Sort groups alphabetically
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config')).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {

@@ -1275,7 +1275,7 @@ function addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSal
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction IN ('Late Deduction', 'Early Leave Deduction')");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
 
-    if ((string) get_setting($conDB, 'deduction_auto_attendance_enabled') !== '1') {
+    if ((string) get_setting($conDB, 'deduction_auto_attendance_enabled') !== '1' || !attendance_enabled($pdo)) {
         return;
     }
 
@@ -1343,7 +1343,7 @@ function addOrUpdateAttendanceOvertime($pdo, $empId, $monthYear, $totalGrossSala
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits WHERE emp_id = :emp_id AND month = :month_year AND benefit = 'Overtime (Auto)'");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
 
-    if ((string) get_setting($conDB, 'overtime_auto_attendance_enabled') !== '1') {
+    if ((string) get_setting($conDB, 'overtime_auto_attendance_enabled') !== '1' || !attendance_enabled($pdo)) {
         return;
     }
 

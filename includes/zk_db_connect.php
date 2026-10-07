@@ -5,6 +5,8 @@
 // HTML/JSON error pages are all wrong here - device firmware expects a bare
 // "OK"/text response on every request and will retry-storm on anything else
 // (a redirect or an HTML error page looks like "no data" to it, forever).
+require_once __DIR__ . '/attendance_feature.php'; // attendance_enabled(): Attendance module master switch
+
 if (!function_exists('zk_get_db_connection')) {
     function zk_get_db_connection() {
         static $conn = null;

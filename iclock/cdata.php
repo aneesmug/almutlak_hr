@@ -31,6 +31,14 @@ zk_touch_device($conn, $serial, $_SERVER['REMOTE_ADDR'] ?? null);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+// Attendance switched off (App Settings > Integrations): refuse uploads so the device keeps its
+// punches and sends them again once attendance is switched back on
+if ($method === 'POST' && !attendance_enabled($conn)) {
+    http_response_code(503);
+    echo 'ERROR: attendance disabled';
+    exit;
+}
+
 if ($method === 'GET') {
     // Handshake/ping - standard ADMS option response so the device proceeds to push data.
     echo "GET OPTION FROM: {$serial}\n";

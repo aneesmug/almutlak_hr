@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/attendance_feature.php'; // attendance_enabled(): Attendance module master switch
 
 if (defined('ATTENDANCE_HELPERS_INCLUDED')) {
     return;
