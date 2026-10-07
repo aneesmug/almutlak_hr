@@ -60,7 +60,11 @@ function load_language(string $lang_code = 'en') {
             }
             mysqli_free_result($result);
         }
-        
+
+        if ($lang_code !== 'en') {
+            repair_translation_placeholders($conDB);
+        }
+
     } catch (Exception $e) {
         // Log error if something goes wrong, but don't crash the application.
         error_log("Could not load language '{$lang_code}': " . $e->getMessage());
@@ -68,6 +72,85 @@ function load_language(string $lang_code = 'en') {
     }
     
     $is_loaded = true; // Mark as loaded for this request.
+}
+}
+
+/**
+ * sprintf() placeholder check for a translation string:
+ *  'count' - real placeholders (%s, %d, %u, %f, %.2f, %1$s ...)
+ *  'pure'  - every '%' is such a placeholder (or '%%'), i.e. the text is a sprintf format
+ *  'safe'  - PHP 8's sprintf() would not throw on it (no '%' outside a valid conversion)
+ */
+if (!function_exists('translation_placeholder_info')) {
+function translation_placeholder_info(string $text): array {
+    $text = str_replace('%%', '', $text);
+    $real = '/%(?:\d+\$)?(?:\.\d+)?[sdfu]/';
+    $anyPhp = '/%(?:\d+\$)?[-+ 0\'#]*\d*(?:\.\d+)?[bcdeEfFgGosuxX]/';
+    return [
+        'count' => (int) preg_match_all($real, $text),
+        'pure'  => strpos(preg_replace($real, '', $text), '%') === false,
+        'safe'  => strpos(preg_replace($anyPhp, '', $text), '%') === false,
+    ];
+}
+}
+
+/**
+ * Non-English translations are typed in an RTL editor, which easily turns "%s" into "s%"
+ * (or leaves a stray "%"). The code passes these strings to sprintf(), so on PHP 8 one bad
+ * translation makes the whole request fail - but only for users of that language (e.g. a
+ * vacation request that submits fine in English errors out in Arabic).
+ * For every loaded translation whose English source has placeholders: flipped placeholders
+ * are repaired; if it is still unusable (stray '%', or more placeholders than English) the
+ * English text is used instead. Each bad key is logged so it can be fixed in language.php.
+ */
+if (!function_exists('repair_translation_placeholders')) {
+function repair_translation_placeholders($conDB): void {
+    $suspect = [];
+    foreach ($GLOBALS['translations'] as $key => $text) {
+        if (is_string($text) && strpos($text, '%') !== false) {
+            $suspect[$key] = $text;
+        }
+    }
+    if (!$suspect) {
+        return;
+    }
+
+    $keys = implode(',', array_map(function ($k) use ($conDB) {
+        return "'" . mysqli_real_escape_string($conDB, $k) . "'";
+    }, array_keys($suspect)));
+    $english = [];
+    $res = mysqli_query($conDB, "SELECT lang_key, translation FROM translations WHERE lang_code = 'en' AND lang_key IN ($keys)");
+    if ($res) {
+        while ($row = mysqli_fetch_assoc($res)) {
+            $english[$row['lang_key']] = (string) $row['translation'];
+        }
+        mysqli_free_result($res);
+    }
+
+    foreach ($suspect as $key => $text) {
+        $en = $english[$key] ?? null;
+        $enInfo = $en !== null ? translation_placeholder_info($en) : null;
+        // Only strings whose English version is a real sprintf format matter here
+        // (plain texts like "Up to 50% of salary" are never passed to sprintf).
+        if (!$enInfo || !$enInfo['pure'] || $enInfo['count'] === 0) {
+            continue;
+        }
+        $info = translation_placeholder_info($text);
+        if ($info['pure'] && $info['count'] <= $enInfo['count']) {
+            continue;
+        }
+
+        // "s%" / "d%" written right-to-left -> "%s" / "%d" (only where no valid placeholder follows)
+        $repaired = preg_replace('/(?<![%\w])([sdfu])%(?![-+ 0\'#]*\d*(?:\.\d+)?[bcdeEfFgGosuxX])/u', '%$1', $text);
+        $repairedInfo = translation_placeholder_info($repaired);
+        if ($repairedInfo['pure'] && $repairedInfo['count'] === $enInfo['count']) {
+            $GLOBALS['translations'][$key] = $repaired;
+        } else {
+            $GLOBALS['translations'][$key] = $en;
+        }
+        error_log("Translation '{$key}' has broken sprintf placeholders - fix it in language.php. Using "
+            . ($GLOBALS['translations'][$key] === $en ? 'English' : 'auto-repaired') . ' text for now.');
+    }
 }
 }
 
