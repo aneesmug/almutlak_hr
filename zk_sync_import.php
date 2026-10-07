@@ -71,6 +71,22 @@ function zk_sync_run_daily_reminder()
             error_log('[ZK] temp role expiry reminder failed: ' . $e->getMessage());
         }
     }
+
+    // Iqama / work permit / passport expiry alerts (includes/doc_expiry_helper.php), same daily guard.
+    $docExpiryReport = __DIR__ . '/cron_logs/last_doc_expiry_alert_report.json';
+    $lastDocExpiry = file_exists($docExpiryReport) ? json_decode((string) @file_get_contents($docExpiryReport), true) : null;
+    if (!(is_array($lastDocExpiry) && substr((string) ($lastDocExpiry['timestamp'] ?? ''), 0, 10) === date('Y-m-d'))) {
+        try {
+            require_once __DIR__ . '/includes/db.php';
+            require_once __DIR__ . '/includes/doc_expiry_helper.php';
+            // Claim today first: sending can take a while and the next sync push must not send again.
+            @file_put_contents($docExpiryReport, json_encode(['timestamp' => date('Y-m-d H:i:s'), 'status' => 'running']));
+            $docExpirySummary = doc_expiry_run_daily($conDB);
+            @file_put_contents($docExpiryReport, json_encode(['timestamp' => date('Y-m-d H:i:s')] + $docExpirySummary, JSON_PRETTY_PRINT));
+        } catch (\Throwable $e) {
+            error_log('[ZK] document expiry alerts failed: ' . $e->getMessage());
+        }
+    }
 }
 
 header('Content-Type: application/json; charset=UTF-8');

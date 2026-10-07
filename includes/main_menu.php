@@ -54,6 +54,7 @@ $userActivityLink = 'user_activity.php';
 $activityLoggerLink = 'view_activity_logs.php';
 $manageEmployeeSupervisorsLink = 'manage_employee_supervisors.php';
 $manageHolidaysLink = 'manage_holidays.php?status=1';
+$documentExpiryLink = 'document_expiry.php';
 $employeeMemosLink = 'employee_memos.php';
 $vacationBalanceHistoryLink = 'vacation_balance_history.php';
 $vacationDatesEditorLink = 'vacation_dates_by_inv.php';
@@ -221,6 +222,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty($isSupervisor) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['employee_memos.php'] ?? [])) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['manage_holidays.php'] ?? [])) ||
+                       !empty(array_intersect([$user_role, $user_type], $page_roles['document_expiry.php'] ?? [])) ||
                        (d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
 
 $show_approvals_menu = !empty($is_system_admin) ||
@@ -850,6 +852,10 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 
                 <?php if ($is_system_admin || in_array($user_role, $page_roles['manage_holidays.php'] ?? []) || in_array($user_type, $page_roles['manage_holidays.php'] ?? [])): ?>
                     <li><a href="<?= $manageHolidaysLink ?>"><i class="fa-duotone fa-calendar-days" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('holiday_management', 'Holiday Management') ?></span></a></li>
+                <?php endif; ?>
+
+                <?php if ($is_system_admin || in_array($user_role, $page_roles['document_expiry.php'] ?? []) || in_array($user_type, $page_roles['document_expiry.php'] ?? [])): ?>
+                    <li><a href="<?= $documentExpiryLink ?>"><i class="fa-duotone fa-passport" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('document_expiry', 'Document Expiry') ?></span></a></li>
                 <?php endif; ?>
 
                 <?php if ($is_system_admin): ?>
