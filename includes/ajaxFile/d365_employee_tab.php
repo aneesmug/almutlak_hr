@@ -75,6 +75,39 @@ if (!empty($_POST['refresh']) || !$cached || time() - $cached['t'] > 600) {
     }
     // keep the header widget status in line with what was just read
     $workers->getStatus($targetEmp, $details['worker'] ? 21600 : 0);
+} elseif (!empty($cached['v']['journal_lines'])) {
+    // Cached data: journals can be deleted / posted in D365 meanwhile - re-read their headers (one small query)
+    // so lines of a deleted journal disappear and the Posted state is current
+    $keys = [];
+    foreach ($cached['v']['journal_lines'] as $jl) {
+        $keys[strtolower($jl['dataAreaId']) . '|' . $jl['JournalBatchNumber']] = true;
+    }
+    $headers = [];
+    $checked = true;
+    foreach (array_chunk(array_keys($keys), 15) as $chunk) {
+        $or = implode(' or ', array_map(function ($k) {
+            [$c, $b] = explode('|', $k, 2);
+            return "(dataAreaId eq '" . $c . "' and JournalBatchNumber eq '" . str_replace("'", "''", $b) . "')";
+        }, $chunk));
+        $r = $client->get('LedgerJournalHeaders', ['$filter' => $or, '$select' => 'dataAreaId,JournalBatchNumber,JournalName,Description,IsPosted'], true);
+        if ($r['error']) {
+            $checked = false; // D365 unreachable - show the cache as it is
+            break;
+        }
+        foreach ($r['data']['value'] ?? [] as $h) {
+            $headers[strtolower($h['dataAreaId']) . '|' . $h['JournalBatchNumber']] = $h;
+        }
+    }
+    if ($checked) {
+        $before = count($cached['v']['journal_lines']);
+        $cached['v']['journals'] = $headers;
+        $cached['v']['journal_lines'] = array_values(array_filter($cached['v']['journal_lines'], function ($jl) use ($headers) {
+            return isset($headers[strtolower($jl['dataAreaId']) . '|' . $jl['JournalBatchNumber']]);
+        }));
+        if (count($cached['v']['journal_lines']) !== $before) {
+            @file_put_contents($cacheFile, json_encode($cached, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        }
+    }
 }
 $d = $cached['v'];
 $loadedAt = date('Y-m-d H:i', $cached['t']);
