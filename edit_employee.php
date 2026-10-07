@@ -272,9 +272,7 @@ if (mysqli_num_rows($query) == 1) {
 		<!-- Plugins css -->
 		<link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
 		<link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
 		<link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-		<link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
 
 		<link rel="stylesheet" href="./plugins/croppie/croppie.css">
 
@@ -927,7 +925,6 @@ if (mysqli_num_rows($query) == 1) {
 		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.js"></script>
 		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepicker.min.js"></script>
 		<script src="./plugins/bootstrap-timepicker/hijri/bootstrap-hijri-datetimepickermin.js"></script>
-		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 		<script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 		<script src="./plugins/croppie/croppie.js" type="text/javascript"></script>
 		<script src="./plugins/croppie/croppie.min.js" type="text/javascript"></script>
@@ -1164,13 +1161,13 @@ if (mysqli_num_rows($query) == 1) {
 
 				/***********Date of ID**********/
 				const initDateOfIDPickers = () => {
-					$('#iqama_exp').datepicker({
-						format: 'yyyy-mm-dd',
-						autoclose: true,
-						todayHighlight: true
-					}).on('changeDate', function(e) {
-						const hijriDate = moment(e.date).format('iYYYY-iMM-iDD');
-						$('#dateofidHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
+					// Gregorian (AppDate) and Hijri pickers keep each other in sync
+					AppDate.single('#iqama_exp', {
+						onChange: function(dates) {
+							if (!dates.length) return;
+							const hijriDate = moment(dates[0]).format('iYYYY-iMM-iDD');
+							$('#dateofidHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
+						}
 					});
 					$('#dateofidHijri').hijriDatePicker({
 						format: 'iYYYY-iMM-iDD',
@@ -1179,7 +1176,7 @@ if (mysqli_num_rows($query) == 1) {
 					}).on('dp.change', function(e) {
 						if (e.date) {
 							const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-							$('#iqama_exp').val(gregorianDate).datepicker('update', gregorianDate);
+							AppDate.get('#iqama_exp').setDate(gregorianDate, false);
 						}
 					});
 				};
@@ -1187,13 +1184,14 @@ if (mysqli_num_rows($query) == 1) {
 				/***********Date of ID**********/
 				/***********Date of Birth**********/
 				const initDateOfBirthPickers = () => {
-					$('#dob').datepicker({
-						format: 'yyyy-mm-dd',
-						autoclose: true,
-						todayHighlight: true
-					}).on('changeDate', function(e) {
-						const hijriDate = moment(e.date).format('iYYYY-iMM-iDD');
-						$('#dateofbirthHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
+					// Future dates blocked; Gregorian and Hijri pickers keep each other in sync
+					AppDate.single('#dob', {
+						maxDate: 'today',
+						onChange: function(dates) {
+							if (!dates.length) return;
+							const hijriDate = moment(dates[0]).format('iYYYY-iMM-iDD');
+							$('#dateofbirthHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
+						}
 					});
 					$('#dateofbirthHijri').hijriDatePicker({
 						format: 'iYYYY-iMM-iDD',
@@ -1202,7 +1200,7 @@ if (mysqli_num_rows($query) == 1) {
 					}).on('dp.change', function(e) {
 						if (e.date) {
 							const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-							$('#dob').val(gregorianDate).datepicker('update', gregorianDate);
+							AppDate.get('#dob').setDate(gregorianDate, false);
 						}
 					});
 				};

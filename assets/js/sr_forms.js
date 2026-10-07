@@ -1,6 +1,6 @@
 /* Shared helpers for the sectioned SweetAlert2 forms (car_forms.js, asset_inventory.php).
    Markup/styling: assets/css/smart_request.css (.sr-form, .sr-fsec, .sr-fgrid, .sr-fcol ...).
-   Exposes window.SRForm. Needs jQuery and SweetAlert2 (select2 / bootstrap-datepicker optional). */
+   Exposes window.SRForm. Needs jQuery and SweetAlert2 (select2 / AppDate optional). */
 (function (window, $) {
     'use strict';
 
@@ -171,9 +171,12 @@
         return $el.select2($.extend({ width: '100%', dropdownParent: $(Swal.getPopup()) }, opts || {}));
     }
 
+    // AppDate (flatpickr) single-date picker, value Y-m-d. opts: minDate / maxDate
+    // ('today', '+0d', 'Y-m-d', Date) and the other AppDate options (disableDates, ...).
     function datepicker($el, opts) {
-        if (!$.fn.datepicker || !$el.length) return $el;
-        return $el.datepicker($.extend({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true }, opts || {}));
+        if (!window.AppDate || !$el.length) return $el;
+        $el.each(function () { AppDate.single(this, opts || {}); });
+        return $el;
     }
 
     /* POST that resolves with the server JSON or shows the error inside the popup (resolves undefined).

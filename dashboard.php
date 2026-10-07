@@ -329,9 +329,7 @@ if(isset($_POST['submit'])){
 
         <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
 
 		<link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css" rel="stylesheet">
         <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
@@ -1144,8 +1142,6 @@ if(isset($_POST['submit'])){
 
         <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
         <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 		
         <script src="./plugins/bootstrap-filestyle/js/bootstrap-filestyle.min.js" type="text/javascript"></script>
 
@@ -1555,16 +1551,7 @@ if(isset($_POST['submit'])){
 							inline: true,
 							ignoreReadonly: true,
 						});
-						jQuery('#iq_id_exp_greg').hijriDatePicker({
-							locale: "<?= ($is_rtl ?? false) ? 'ar-sa' : 'en-us' ?>",
-							hijri: false,
-							format: "YYYY-MM-DD",
-							dayViewHeaderFormat: "MMMM YYYY",
-							// showTodayButton: true,
-							inline: true,
-							ignoreReadonly: true,
-							showSwitcher: false
-						});
+						AppDate.inline('#iq_id_exp_greg');
 						$("input[name$='note']").click(function(){
 							var value = $(this).val();
 							if(value=='hijri') {

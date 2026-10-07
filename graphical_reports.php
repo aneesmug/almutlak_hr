@@ -279,7 +279,6 @@ if (mysqli_num_rows($query) == 1) {
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
@@ -520,7 +519,6 @@ if (mysqli_num_rows($query) == 1) {
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
@@ -563,10 +561,10 @@ if (mysqli_num_rows($query) == 1) {
         }
 
         $(function() {
-            $('#graphDateFrom, #graphDateTo').datepicker({
-                format: 'yyyy-mm-dd',
-                autoclose: true,
-                todayHighlight: true
+            // To can't be before From
+            const graphToPicker = AppDate.single('#graphDateTo');
+            AppDate.single('#graphDateFrom', {
+                onChange: function(dates) { if (graphToPicker) graphToPicker.set('minDate', dates[0] || null); }
             });
 
             $('#graphCustomTables').select2({

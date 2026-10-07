@@ -7,7 +7,7 @@
  * then follows the chain configured in App Settings -> Approval
  * (approval_chain_employee_transfer_request).
  *
- * Dependencies: jQuery, Select2, SweetAlert2 (Swal), bootstrap-daterangepicker,
+ * Dependencies: jQuery, Select2, SweetAlert2 (Swal), AppDate (app_datepicker.js),
  * moment.js, translation.js (__ function), APP_COLORS (global)
  *
  * Usage:
@@ -222,47 +222,21 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
             allowOutsideClick: false,
             customClass: { popup: 'sr-addline-popup sr-page' },
             didOpen: () => {
-                const canUseDateRangePicker = (typeof $.fn.daterangepicker === 'function' && typeof moment === 'function');
-                const popup = Swal.getPopup();
-
                 if (!isRange) {
                     const $input = $('#et_date_picker_input');
-                    if (!canUseDateRangePicker) {
+                    if (!window.AppDate) {
                         $input.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY');
                         if (formState && formState.effectiveDate) {
                             $input.val(formState.effectiveDate);
                         }
                         return;
                     }
-                    try {
-                        $input.daterangepicker({
-                            singleDatePicker: true,
-                            locale: { format: 'MM/DD/YYYY' },
-                            autoUpdateInput: true,
-                            // Pass minDate as a string, not a moment object - this page loads a
-                            // second, older moment.js (visible in the console stack trace as
-                            // moment.js/2.18.1 from cdnjs) alongside the one bundled in
-                            // plugins/moment/, and daterangepicker.js captured whichever loaded
-                            // first internally. Handing it a live moment *object* built from
-                            // window.moment (whichever instance that resolves to at call time)
-                            // crashes deep in its clone logic when the two don't match; a plain
-                            // string sidesteps the whole cross-version object problem.
-                            minDate: moment().format('MM/DD/YYYY'),
-                            startDate: (formState && formState.effectiveDate) ? formState.effectiveDate : moment().format('MM/DD/YYYY'),
-                            parentEl: popup || document.body
-                        });
-                        $input.trigger('click');
-                        const picker = $input.data('daterangepicker');
-                        if (picker && picker._outsideClickProxy) {
-                            $(document).off('mousedown.daterangepicker touchend.daterangepicker focusin.daterangepicker', picker._outsideClickProxy);
-                        }
-                    } catch (err) {
-                        console.error('employeeTransfer.js: single date picker init failed, falling back to manual entry.', err);
-                        $input.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY');
-                        if (formState && formState.effectiveDate) {
-                            $input.val(formState.effectiveDate);
-                        }
-                    }
+                    // Inline calendar under the field; days before today are blocked.
+                    AppDate.inline($input, {
+                        format: 'm/d/Y',
+                        minDate: 'today',
+                        defaultDate: (formState && formState.effectiveDate) ? formState.effectiveDate : 'today'
+                    });
                     return;
                 }
 
@@ -281,7 +255,7 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
                 const $endInput = $('#et_range_end_input');
                 const $daysBadge = $('#et_range_days_badge');
 
-                if (!canUseDateRangePicker) {
+                if (!window.AppDate) {
                     $startInput.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY').val(startVal);
                     $endInput.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY').val(endVal);
                     return;
@@ -299,88 +273,27 @@ function openEmployeeTransferModal(requesterEmpId, presetTargetEmpId) {
                     }
                 };
 
-                const unbindOutsideClick = ($el) => {
-                    const picker = $el.data('daterangepicker');
-                    if (picker && picker._outsideClickProxy) {
-                        $(document).off('mousedown.daterangepicker touchend.daterangepicker focusin.daterangepicker', picker._outsideClickProxy);
-                    }
-                    return picker;
-                };
-
-                // $.fn.daterangepicker already removes/replaces any existing instance on the
-                // element itself, so init doesn't need to do that manually first.
-                const initEndPicker = (minVal, presetVal) => {
-                    $endInput.daterangepicker({
-                        singleDatePicker: true,
-                        locale: { format: 'MM/DD/YYYY' },
-                        autoUpdateInput: true,
-                        minDate: minVal,
-                        startDate: presetVal,
-                        parentEl: popup || document.body
-                    });
-                    unbindOutsideClick($endInput);
-                    $endInput.off('apply.daterangepicker.employeeTransfer').on('apply.daterangepicker.employeeTransfer', renderRangeBadge);
-                };
-
-                // Picker setup is wrapped defensively - if the plugin throws for any reason,
-                // fall back to plain manual-entry text fields instead of leaving the modal
-                // stuck with two dead, unclickable inputs.
-                try {
-                    try {
-                        $startInput.daterangepicker({
-                            singleDatePicker: true,
-                            locale: { format: 'MM/DD/YYYY' },
-                            autoUpdateInput: true,
-                            // String, not a moment object - see the comment on the single-date
-                            // picker above for why passing a live moment object breaks here.
-                            minDate: moment().format('MM/DD/YYYY'),
-                            startDate: startVal,
-                            parentEl: popup || document.body
-                        });
-                    } catch (err) {
-                        console.error('employeeTransfer.js: START picker construction threw.', err);
-                        throw err;
-                    }
-
-                    try {
-                        unbindOutsideClick($startInput);
-                    } catch (err) {
-                        console.error('employeeTransfer.js: START unbindOutsideClick threw.', err);
-                        throw err;
-                    }
-
-                    try {
-                        initEndPicker(startVal, endVal);
-                    } catch (err) {
-                        console.error('employeeTransfer.js: END picker construction threw.', err);
-                        throw err;
-                    }
-
-                    try {
+                // Start: days before today blocked. End: days before the start blocked; moving
+                // the start past the end pulls the end along, never the other way round.
+                const endPicker = AppDate.single($endInput, {
+                    format: 'm/d/Y',
+                    minDate: startVal,
+                    defaultDate: endVal,
+                    onChange: renderRangeBadge
+                });
+                AppDate.single($startInput, {
+                    format: 'm/d/Y',
+                    minDate: 'today',
+                    defaultDate: startVal,
+                    onChange: (dates) => {
+                        if (!dates.length) return;
+                        endPicker.set('minDate', dates[0]);
+                        const end = endPicker.selectedDates[0];
+                        if (!end || end < dates[0]) endPicker.setDate(dates[0], false);
                         renderRangeBadge();
-                    } catch (err) {
-                        console.error('employeeTransfer.js: renderRangeBadge threw.', err);
-                        throw err;
                     }
-
-                    // Start date changed - keep the end picker's own minDate (and, if it would
-                    // now precede the new start, its value) in sync, without ever touching the
-                    // start field itself. This is the reset the range-picker version couldn't avoid.
-                    $startInput.off('apply.daterangepicker.employeeTransfer').on('apply.daterangepicker.employeeTransfer', function(ev, picker) {
-                        const newStart = picker.startDate.format('MM/DD/YYYY');
-                        const currentEndVal = $endInput.val();
-                        const currentEndMoment = moment(currentEndVal, 'MM/DD/YYYY');
-                        const newEndPreset = (currentEndMoment.isValid() && !currentEndMoment.isBefore(picker.startDate, 'day'))
-                            ? currentEndVal
-                            : newStart;
-                        initEndPicker(newStart, newEndPreset);
-                        renderRangeBadge();
-                    });
-                } catch (err) {
-                    console.error('employeeTransfer.js: date range picker init failed, falling back to manual entry.', err);
-                    $startInput.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY').val(startVal);
-                    $endInput.prop('readonly', false).attr('placeholder', 'MM/DD/YYYY').val(endVal);
-                }
+                });
+                renderRangeBadge();
             },
             preConfirm: () => {
                 if (isRange) {

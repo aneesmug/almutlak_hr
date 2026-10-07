@@ -35,7 +35,6 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
         <meta content="Anees Afzal" name="author" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge" />
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
@@ -176,7 +175,6 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
         <script src="assets/js/waves.js"></script>
         <script src="assets/js/jquery.slimscroll.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
         <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
@@ -184,15 +182,7 @@ if (!$isHR && !$is_system_admin && !$isDeptHr && !user_has_special_access($conDB
         <script>
             $(document).ready(function() {
 
-                function initializeDatepicker(selector) {
-                    $(selector).datepicker({
-                        format: 'yyyy-mm-dd',
-                        autoclose: true,
-                        todayHighlight: true
-                    });
-                }
-
-                initializeDatepicker('.datepicker');
+                AppDate.all('.datepicker');
                 SRForm.bindFilePicker($('#manualLoanForm'));
 
                 function initials(name) {

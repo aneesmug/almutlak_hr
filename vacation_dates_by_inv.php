@@ -139,7 +139,6 @@ if ($search_emp_id !== '') {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
@@ -267,7 +266,6 @@ if ($search_emp_id !== '') {
 
 <script src="assets/js/jquery.min.js"></script>
 <script src="assets/js/bootstrap.bundle.min.js"></script>
-<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="assets/js/metisMenu.min.js"></script>
 <script src="assets/js/waves.js"></script>
@@ -362,33 +360,19 @@ if ($search_emp_id !== '') {
                         $swDaysDiff.text(days + ' day(s)').css('color', '');
                     }
 
-                    $swStart.datepicker({
-                        format: 'yyyy-mm-dd',
-                        autoclose: true,
-                        todayHighlight: true
-                    }).on('changeDate', function (e) {
-                        if (e.date) {
-                            $swArrival.datepicker('setStartDate', e.date);
+                    // Arrival can't be before the start date
+                    var swArrivalPicker = AppDate.single($swArrival, {
+                        defaultDate: effectiveArrivalDate || null,
+                        minDate: startDate || null,
+                        onChange: function () { updateDaysDifference(); }
+                    });
+                    AppDate.single($swStart, {
+                        defaultDate: startDate || null,
+                        onChange: function (dates) {
+                            if (dates.length) swArrivalPicker.set('minDate', dates[0]);
+                            updateDaysDifference();
                         }
-                        updateDaysDifference();
                     });
-
-                    $swArrival.datepicker({ 
-                        format: 'yyyy-mm-dd',
-                        autoclose: true,
-                        todayHighlight: true
-                    }).on('changeDate', function () {
-                        updateDaysDifference();
-                    });
-
-                    if (startDate) {
-                        $swStart.datepicker('setDate', startDate);
-                        $swArrival.datepicker('setStartDate', startDate);
-                    }
-
-                    if (effectiveArrivalDate) {
-                        $swArrival.datepicker('setDate', effectiveArrivalDate);
-                    }
 
                     updateDaysDifference();
                 },

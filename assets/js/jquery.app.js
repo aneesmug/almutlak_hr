@@ -94,6 +94,17 @@ loadResource('./plugins/bootstrap-daterangepicker/daterangepicker.js', 'js', { a
 loadResource('./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/clockpicker/js/bootstrap-clockpicker.min.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js', 'js', { async: true, defer: true }, 'head');
+// AppDate (flatpickr) - the RTL-safe date picker replacing bootstrap-datepicker. Pages that
+// already link it statically (view_employee.php, ...) are skipped; elsewhere it is loaded
+// here in order (flatpickr before the wrapper) for the global modals below (vacation, leave).
+if (!window.flatpickr) {
+    loadResource('./plugins/flatpickr/flatpickr.min.css', 'css');
+    loadResource('./assets/css/app_datepicker.css', 'css');
+    loadResource('./plugins/flatpickr/plugins/monthSelect/style.css', 'css');
+    loadResource('./plugins/flatpickr/flatpickr.min.js', 'js', { async: false, defer: true }, 'head');
+    loadResource('./plugins/flatpickr/plugins/monthSelect/index.js', 'js', { async: false, defer: true }, 'head');
+    loadResource('./assets/js/app_datepicker.js', 'js', { async: false, defer: true }, 'head');
+}
 // Validate
 loadResource('./assets/js/jquery.validate.js', 'js', { async: true, defer: true }, 'head');
 // Select 2
@@ -190,9 +201,9 @@ function newEmpWireHijriCalendar($container, initialHijri, onSelect) {
 // Generic date picker opened as its own separate SweetAlert2 modal. SweetAlert2 only ever
 // shows one popup at a time, so opening this while another modal is showing replaces it -
 // the caller's `ctx` (below) re-fires that modal afterwards so it looks like the picker sat
-// on top. Gregorian fields get the proven-reliable bootstrap-datepicker inline calendar;
-// Hijri fields get the custom grid above - both keep the sibling representation in sync
-// via moment.js.
+// on top. Gregorian fields get an inline AppDate (flatpickr, RTL-aware) calendar; Hijri
+// fields get the custom grid above - both keep the sibling representation in sync via
+// moment.js.
 function newEmpDatePickerModal(opts) {
     opts = opts || {};
     const isHijri = !!opts.isHijri;
@@ -221,12 +232,17 @@ function newEmpDatePickerModal(opts) {
                     selectedGregorian = moment(hijriVal, 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
                 });
             } else {
-                const $cal = $('#empDpCal');
-                $cal.datepicker({ format: 'yyyy-mm-dd' }).on('changeDate', function(e) {
-                    selectedGregorian = moment(e.date).format('YYYY-MM-DD');
-                    selectedHijri = moment(e.date).format('iYYYY-iMM-iDD');
+                $('#empDpCal').html('<input type="hidden" id="empDpCalInput">');
+                AppDate.inline('#empDpCalInput', {
+                    defaultDate: selectedGregorian || null,
+                    minDate: opts.minDate || null,
+                    maxDate: opts.maxDate || null,
+                    onChange: function(dates) {
+                        if (!dates.length) return;
+                        selectedGregorian = moment(dates[0]).format('YYYY-MM-DD');
+                        selectedHijri = moment(dates[0]).format('iYYYY-iMM-iDD');
+                    }
                 });
-                if (selectedGregorian) $cal.datepicker('update', selectedGregorian);
             }
         },
         preConfirm: () => {
@@ -245,7 +261,7 @@ function newEmpDatePickerModal(opts) {
 // it afterwards either way, so the picker always "returns" to where the user was.
 function newEmpWireDatepicker(id, key, ctx) {
     const $el = $('#' + id);
-    if (!$el.length || typeof jQuery.fn.datepicker !== 'function') return;
+    if (!$el.length || !window.AppDate) return;
     $el.prop('readonly', true).addClass('emp-dp-trigger').on('click', function() {
         if (ctx) Object.assign(ctx.w, ctx.collect());
         newEmpDatePickerModal({ value: $el.val() }).then(function(result) {
@@ -262,7 +278,7 @@ function newEmpWireDatepicker(id, key, ctx) {
 function newEmpWireHijriPair(gregorianId, hijriId, gKey, hKey, ctx) {
     const $g = $('#' + gregorianId);
     const $h = $('#' + hijriId);
-    if (!$g.length || !$h.length || typeof jQuery.fn.datepicker !== 'function' || typeof moment === 'undefined') {
+    if (!$g.length || !$h.length || !window.AppDate || typeof moment === 'undefined') {
         return;
     }
     const applyResult = function(result) {
@@ -1854,12 +1870,7 @@ function addCustomerAtter(){
         willOpen: function(){
             $('#injazat_no').autoNumeric('init');
             $("#location").select2();
-            jQuery('#card_exp').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                startDate: '+2y',
-            });
+            AppDate.single('#card_exp', { minDate: '+2y' }); // anything sooner than 2 years is blocked
             $.ajax({
                 url: './includes/ajaxFile/ajaxLocation.php',
                 dataType: 'JSON',
@@ -1955,12 +1966,7 @@ $(document).on('click', '.editCustomerAtter', function (e) {
             $("#location").val(location);
             $('#injazat_no').autoNumeric('init');
             $("#location").select2();
-            jQuery('#card_exp').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                startDate: '+2y',
-            });
+            AppDate.single('#card_exp', { minDate: '+2y' }); // anything sooner than 2 years is blocked
             $.ajax({
                 url: './includes/ajaxFile/ajaxLocation.php',
                 dataType: 'JSON',
@@ -2043,12 +2049,7 @@ $(document).on('click', '.cardUpdateAttr', function (e) {
             $('input[name="id"]').val(id);
             $('input[name="injazat_no"]').val(injazat_no);
             $("#location").select2();
-            jQuery('#card_exp').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                startDate: '+2y',
-            });
+            AppDate.single('#card_exp', { minDate: '+2y' }); // anything sooner than 2 years is blocked
             $.ajax({
                 url: './includes/ajaxFile/ajaxLocation.php',
                 dataType: 'JSON',
@@ -2118,12 +2119,7 @@ $(document).on('click', '.cardAddAttr', function (e) {
             $('input[name="acc_no"]').val(acc_no);
             $("#location").select2();
             $('input[name="injazat_no"]').autoNumeric('init');
-            jQuery('#card_exp').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                startDate: '+2y',
-            });
+            AppDate.single('#card_exp', { minDate: '+2y' }); // anything sooner than 2 years is blocked
             $.ajax({
                 url: './includes/ajaxFile/ajaxLocation.php',
                 dataType: 'JSON',
@@ -2954,11 +2950,13 @@ $(document).on('click', '.endOfService', function (e) {
             $('input[name="empid"]').val(empid);
             $('input[name="salary"]').val(salary);
             $('input[name="joining_date"]').val(joining_date);
-            $('#event_period').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                inputs: [$('#joining_date'),$('#end_date')],
-                todayBtn: true,
+            // End of service can't be before the joining date
+            const eosEndPicker = AppDate.single('#end_date', {
+                minDate: joining_date || null,
+                onChange: function() { getTotalCost($('#end_date').attr('for')); }
+            });
+            AppDate.single('#joining_date', {
+                onChange: function(dates) { if (dates.length) eosEndPicker.set('minDate', dates[0]); }
             });
             $("#inputPeriod").on("change", function() {
                 $.ajax({
@@ -3859,12 +3857,7 @@ function loadDateForEOS(){
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
         willOpen: function() {
-            jQuery('#eos_date').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                todayBtn: "linked",
-            });
+            AppDate.single('#eos_date');
         },
         preConfirm: function() {
             var eos_date = $('input[name="eos_date"]').val();
@@ -3948,15 +3941,11 @@ function assignAsset(empId) {
                     confirmButtonText: __('assign'),
                     showLoaderOnConfirm: true,
                     didOpen: () => {
-                        $('#swal-assigned-date').datepicker({
-                            format: "yyyy-mm-dd",
-                            todayHighlight: true,
-                            autoclose: true,
-                        });
+                        AppDate.single('#swal-assigned-date');
                         const fields = [
                             { id: 'swal-asset-id',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_asset_type_validation') },
                             { id: 'swal-serial-number',  event: 'change', validation: (value) => value !== "", requiredMessage: __('enter_asset_identity_serial_validation') },
-                            { id: 'swal-assigned-date',  event: 'changeDate', validation: (value) => value !== "", requiredMessage: __('select_assigned_date_validation') },
+                            { id: 'swal-assigned-date',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_assigned_date_validation') },
                         ];
                         const onFirstInteraction = () => { hasUserInteracted = true; };
                         setupDynamicValidation(fields, onFirstInteraction);
@@ -4112,15 +4101,10 @@ function unassignAsset(assetRecordId) {
         showLoaderOnConfirm: true,
         allowOutsideClick: false,
         didOpen: () => {
-            $('#swal-return-date').datepicker({
-                    format: "yyyy-mm-dd",
-                    todayHighlight: true,
-                    autoclose: true,
-                    // startDate: '+0d'
-                });
+            AppDate.single('#swal-return-date');
                 const fields = [
                     { id: 'swal-return-status',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_return_status_validation') },
-                    { id: 'swal-return-date',  event: 'changeDate', validation: (value) => value !== "", requiredMessage: __('select_return_date_validation') },
+                    { id: 'swal-return-date',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_return_date_validation') },
                     { id: 'swal-return-attachment',  event: 'change', validation: (value) => value !== "", requiredMessage: __('select_proof_of_return_file_validation') },
                 ];
                 const onFirstInteraction = () => { hasUserInteracted = true; };
@@ -4704,34 +4688,30 @@ $(document).on('click', '.applyLeaveRequest', function(e) {
             });
         },
         didOpen: () => {
-            setupGlobalRTLDatepicker();
             // Initialize Select2
             $('#leave_type_select').select2({
                 placeholder: __("select_leave_type_placeholder"),
                 dropdownParent: $('.swal2-container') // Important for positioning
             });
 
-            // Initialize datepickers and add event listeners
-            $('#start_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: '-10d'
-            }).on('changeDate', function(e) {
-                $('#end_date').datepicker('setStartDate', e.date);
-                if ($('#leave_type_select').val() === 'Compensatory Leave') {
-                    $('#end_date').val($(this).val()).datepicker('update');
-                }
-                calculateTotalDays();
+            // Start: blocked more than 10 days back. End: blocked before today, then
+            // before the chosen start. Compensatory Leave is a single day (end = start).
+            const leaveMinStart = new Date();
+            leaveMinStart.setDate(leaveMinStart.getDate() - 10);
+            const leaveEndPicker = AppDate.single('#end_date', {
+                minDate: 'today',
+                onChange: calculateTotalDays
             });
-
-            $('#end_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: '+0d'
-            }).on('changeDate', function(e) {
-                calculateTotalDays();
+            AppDate.single('#start_date', {
+                minDate: leaveMinStart,
+                onChange: function(dates) {
+                    if (!dates.length) return;
+                    leaveEndPicker.set('minDate', dates[0]);
+                    if ($('#leave_type_select').val() === 'Compensatory Leave') {
+                        leaveEndPicker.setDate(dates[0], false);
+                    }
+                    calculateTotalDays();
+                }
             });
 
             // Add event listener for the Select2 dropdown
@@ -5335,127 +5315,66 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 return flyType === 'emergency';
             };
 
-            setupGlobalRTLDatepicker();
-            
             // Helper function to initialize date pickers with proper restrictions
             const initializeDatePickers = () => {
-                const isEmergency = isEmergencySelected();
-                
-                // Helper to format date as YYYY-MM-DD
-                const formatDateToString = (date) => {
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                };
-                
                 // Determine the minimum start date
                 let minStartDate = null;
-                
+
                 // If there's an active return date, start from day after return
                 if (activeReturnDate) {
-                    const parts = activeReturnDate.split('-');
-                    minStartDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    minStartDate = AppDate.parse(activeReturnDate);
                     minStartDate.setDate(minStartDate.getDate() + 1); // Day AFTER return date
-                    const formattedDate = formatDateToString(minStartDate);
-                    console.log('✅ Active vacation found - Return date:', activeReturnDate, '- Min start date for 2nd vacation:', formattedDate);
                 } else {
                     // No active vacation - allow from 3 days ago onwards
                     minStartDate = new Date();
                     minStartDate.setDate(minStartDate.getDate() - 3); // 3 days ago
-                    const formattedDate = formatDateToString(minStartDate);
-                    console.log('✅ No active vacation - Min start date:', formattedDate);
                 }
-                
-                const minStartDateString = formatDateToString(minStartDate);
-                console.log('🔄 initializeDatePickers called - activeReturnDate:', activeReturnDate, 'minStartDate:', minStartDateString);
-                
-                const startDateConfig = {
-                    format: "yyyy-mm-dd",
-                    todayHighlight: false,
-                    autoclose: true,
-                    startDate: minStartDateString,
-                    beforeShowDay: window.vacationBlackoutBeforeShowDay
-                };
-                
-                const endDateConfig = {
-                    format: "yyyy-mm-dd",
-                    todayHighlight: false,
-                    autoclose: true,
-                    startDate: minStartDateString,
-                    beforeShowDay: window.vacationBlackoutBeforeShowDay
-                };
-                
-                console.log('📅 Date picker configuration - startDate (string):', minStartDateString);
-                console.log('📅 Date picker configuration - startDate (object):', minStartDate);
-                
-                // Try both string and Date object formats for better compatibility
-                startDateConfig.startDate = minStartDate;  // Use Date object
-                endDateConfig.startDate = minStartDate;    // Use Date object
-                
-                // Remove existing datepicker instances before creating new ones
-                try {
-                    $('#start_date').datepicker('destroy');
-                    $('#end_date').datepicker('destroy');
-                } catch(e) {
-                    console.log('Date pickers not yet initialized');
-                }
-                
-                $('#start_date').datepicker(startDateConfig);
-                // Use setStartDate method to ensure proper restriction even for past dates
-                $('#start_date').datepicker('setStartDate', minStartDate);
-                $('#start_date').on('changeDate', function (e) {
-                    var startDate = e.date;
-                    $('#end_date').datepicker('setStartDate', startDate);
-                    $('#departure_date').datepicker('setStartDate', startDate);
-                    $('#arrival_date').datepicker('setStartDate', startDate);
-                    window.checkVacationBlackoutOverlap('#start_date', '#end_date');
-                    calculateVacationDays();
-                });
 
-                $('#end_date').datepicker(endDateConfig);
-                // Use setStartDate method to ensure proper restriction even for past dates
-                $('#end_date').datepicker('setStartDate', minStartDate);
-                $('#end_date').on('changeDate', function (e) {
-                    var endDate = e.date;
-                    $('#start_date').datepicker('setEndDate', endDate);
-                    $('#departure_date').datepicker('setEndDate', endDate);
-                    $('#arrival_date').datepicker('setEndDate', endDate);
-                    window.checkVacationBlackoutOverlap('#start_date', '#end_date');
-                    calculateVacationDays();
+                // Days before minStartDate and App Settings blackout days are blocked.
+                // Start/end also tighten each other and the departure/arrival pickers.
+                const isBlackout = (date) => !!window.vacationBlackoutBeforeShowDay(date);
+                const setOn = (sel, key, date) => {
+                    const fp = AppDate.get(sel);
+                    if (fp) fp.set(key, date);
+                };
+
+                const endPicker = AppDate.single('#end_date', {
+                    minDate: minStartDate,
+                    disableFn: isBlackout,
+                    onChange: function (dates) {
+                        if (!dates.length) { calculateVacationDays(); return; }
+                        startPicker.set('maxDate', dates[0]);
+                        setOn('#departure_date', 'maxDate', dates[0]);
+                        setOn('#arrival_date', 'maxDate', dates[0]);
+                        window.checkVacationBlackoutOverlap('#start_date', '#end_date');
+                        calculateVacationDays();
+                    }
+                });
+                const startPicker = AppDate.single('#start_date', {
+                    minDate: minStartDate,
+                    disableFn: isBlackout,
+                    onChange: function (dates) {
+                        if (!dates.length) return;
+                        endPicker.set('minDate', dates[0]);
+                        setOn('#departure_date', 'minDate', dates[0]);
+                        setOn('#arrival_date', 'minDate', dates[0]);
+                        window.checkVacationBlackoutOverlap('#start_date', '#end_date');
+                        calculateVacationDays();
+                    }
                 });
             };
-            // If forceEmergency is true, pre-select Fly and Emergency vacation
-            // if (forceEmergency) {
-            //     setTimeout(() => {
-            //         // Select "Fly" vacation type
-            //         $('#inlineRadio1').prop('checked', true).trigger('change');
-                    
-            //         // Show flyTypeSection and select "emergency"
-            //         setTimeout(() => {
-            //             $('#vac_type2').prop('checked', true).trigger('change');
-            //             // Initialize date pickers AFTER emergency is selected
-            //             setTimeout(() => {
-            //                 initializeDatePickers();
-            //             }, 50);
-            //         }, 100);
-            //     }, 100);
-            // } else {
-            //     // Initialize date pickers normally if not emergency
-            //     initializeDatePickers();
-            // }
             initializeDatePickers();
 
             // Function to calculate and display vacation days
             function calculateVacationDays() {
-                var startDate = $('#start_date').datepicker('getDate');
-                var endDate = $('#end_date').datepicker('getDate');
-                
+                var startDate = AppDate.parse($('#start_date').val());
+                var endDate = AppDate.parse($('#end_date').val());
+
                 if (startDate && endDate) {
                     // Calculate difference in days (inclusive)
                     var timeDiff = endDate.getTime() - startDate.getTime();
-                    var daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1;
-                    
+                    var daysDiff = Math.round(timeDiff / (1000 * 3600 * 24)) + 1;
+
                     // Display the vacation days
                     $('#vacation_days_count').text(daysDiff);
                     $('#vacation_days_display').removeClass('d-none');
@@ -5475,12 +5394,12 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     return;
                 }
 
-                const startDate = $('#start_date').datepicker('getDate') || ($('#start_date').val() ? new Date($('#start_date').val()) : null);
-                const endDate = $('#end_date').datepicker('getDate') || ($('#end_date').val() ? new Date($('#end_date').val()) : null);
+                const startDate = AppDate.parse($('#start_date').val());
+                const endDate = AppDate.parse($('#end_date').val());
 
                 let localVacationDays = 0;
                 if (startDate instanceof Date && !isNaN(startDate) && endDate instanceof Date && !isNaN(endDate)) {
-                    localVacationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
+                    localVacationDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
                 }
 
                 // Below 20 days, the payroll-vs-end-of-service choice has no effect on payroll
@@ -5503,25 +5422,19 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 }
             }
 
-            // Initialize departure and arrival date pickers
-            $('#departure_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: false,
-                autoclose: true,
-                startDate: '+1d'
-            }).on('changeDate', function (e) {
-                var departureDate = e.date;
-                $('#arrival_date').datepicker('setStartDate', departureDate);
+            // Departure / arrival: blocked before tomorrow and outside the vacation dates
+            // (the start/end pickers above tighten their min/max as those change).
+            const arrivalPicker = AppDate.single('#arrival_date', {
+                minDate: new Date().fp_incr(1),
+                onChange: function (dates) {
+                    if (dates.length) departurePicker.set('maxDate', dates[0]);
+                }
             });
-
-            $('#arrival_date').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: false,
-                autoclose: true,
-                startDate: '+1d'
-            }).on('changeDate', function (e) {
-                var arrivalDate = e.date;
-                $('#departure_date').datepicker('setEndDate', arrivalDate);
+            const departurePicker = AppDate.single('#departure_date', {
+                minDate: new Date().fp_incr(1),
+                onChange: function (dates) {
+                    if (dates.length) arrivalPicker.set('minDate', dates[0]);
+                }
             });
 
             // Replacement Person is required only for Sales (dept 14) and Finance (dept 2)
@@ -8643,12 +8556,7 @@ function setupDynamicValidation(fieldsToValidate, onFirstInteraction = null) {
 }
 
 function dateofbirth(selector){
-    $(selector).datepicker({
-        format: "yyyy-mm-dd",
-        todayHighlight: true,
-        autoclose: true,
-        endDate: '+0d' // disable future dates
-    });
+    AppDate.all(selector, { maxDate: 'today' }); // future dates blocked
 }
 
 
@@ -9115,13 +9023,8 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
         allowOutsideClick: false,
         width: '500px',
         didOpen: function() {
-            // Initialize date picker for rejoin_date
-            $('#rejoin_date').datepicker({
-                format: "yyyy-mm-dd",
-                autoclose: true,
-                todayHighlight: true,
-                startDate: '+0d'
-            });
+            // Rejoin date picker - past days blocked
+            AppDate.single('#rejoin_date', { minDate: 'today' });
         },
         preConfirm: function() {
             var rejoin_date = $('#rejoin_date').val();
@@ -11340,21 +11243,10 @@ function addManualVacationHistory(empid, empname, country) {
                 }
             });
 
-            // Setup date pickers
-            setupGlobalRTLDatepicker();
-            $('#mvh_start_date').datepicker({
-                format: 'yyyy-mm-dd',
-                todayHighlight: false,
-                autoclose: true
-            });
-            $('#mvh_return_date').datepicker({
-                format: 'yyyy-mm-dd',
-                todayHighlight: false,
-                autoclose: true
-            });
-
-            $('#mvh_start_date').on('changeDate', function(e) {
-                $('#mvh_return_date').datepicker('setStartDate', e.date);
+            // Setup date pickers - return date can't be before the start date
+            const mvhReturnPicker = AppDate.single('#mvh_return_date');
+            AppDate.single('#mvh_start_date', {
+                onChange: function(dates) { if (dates.length) mvhReturnPicker.set('minDate', dates[0]); }
             });
         },
         preConfirm: function() {
@@ -11464,7 +11356,11 @@ function addManualVacationHistory(empid, empname, country) {
                     text: 'Vacation requests are not allowed during ' + range + '.' + (ranges[i].reason ? ' Reason: ' + ranges[i].reason : '') + ' Please choose different dates.',
                     allowOutsideClick: false
                 });
-                $(endSel).datepicker('clearDates');
+                if (window.AppDate && AppDate.get(endSel)) {
+                    AppDate.get(endSel).clear();
+                } else {
+                    $(endSel).datepicker('clearDates');
+                }
                 return true;
             }
         }

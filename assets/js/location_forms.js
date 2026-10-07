@@ -3,7 +3,7 @@
    - .editLocationAttr click    -> Edit Location           (ajaxType=edit_location, data-* on the button)
    - .addLocContractAttr click  -> Add Contract            (ajaxType=add_contract, data-id = location id)
    Moved here from assets/js/jquery.app.js. Styling: assets/css/smart_request.css (.sr-form*).
-   Needs jQuery, SweetAlert2, autoNumeric, bootstrap-datepicker and the hijri date picker. */
+   Needs jQuery, SweetAlert2, autoNumeric, AppDate (app_datepicker.js) and the hijri date picker. */
 (function (window, $) {
     'use strict';
 
@@ -317,8 +317,8 @@
                 var $form = $('#submitlocationContractForm');
                 $form.find('input[name="locid"]').val(locid);
                 if ($.fn.autoNumeric) { $form.find('.autonumber').autoNumeric('init'); }
-                if ($.fn.datepicker) {
-                    $('#start_cont_date, #end_cont_date').datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true });
+                if (window.AppDate) {
+                    AppDate.all('#start_cont_date, #end_cont_date');
                 }
 
                 function recalc() {

@@ -25,9 +25,7 @@
 		<!-- Plugins css -->
         <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
         <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
 		<!-- DataTables -->
@@ -461,8 +459,6 @@ while ($rec = mysqli_fetch_array($query_loc)) {
         <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
         <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
         <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 
         <!-- App js -->
 		<!-- <script src="assets/pages/jquery.form-pickers.init.js"></script> -->
@@ -525,12 +521,8 @@ while ($rec = mysqli_fetch_array($query_loc)) {
 <script type="text/javascript">
 
     jQuery(document).ready(function () {
-        $('.card_exp').datepicker({
-            format: "dd-mm-yyyy",
-            autoclose: true,
-            todayHighlight: true,
-            startDate: '+2y',
-        });
+        // Card expiry: anything sooner than 2 years is blocked
+        AppDate.all('.card_exp', { format: 'd-m-Y', minDate: '+2y' });
     });
 
     $(document).on('click', '.cardUpdateAttrX', function (e) {

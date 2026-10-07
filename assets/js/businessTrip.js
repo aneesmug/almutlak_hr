@@ -10,7 +10,7 @@
  * Dependencies:
  *  - jQuery
  *  - SweetAlert2 (Swal)
- *  - jquery.datepicker
+ *  - AppDate (assets/js/app_datepicker.js, flatpickr)
  *  - translation.js (for __ function)
  *  - APP_COLORS (global)
  * 
@@ -527,36 +527,24 @@ function openBusinessTripApplyModal(empid, deptId, country) {
         },
         didOpen: () => {
             const $tripDateRange = $('#trip_date_range');
-            if ($tripDateRange.length === 0 || typeof $.fn.daterangepicker !== 'function') {
+            if ($tripDateRange.length === 0 || !window.AppDate) {
                 return;
             }
 
-            if ($tripDateRange.data('daterangepicker')) {
-                $tripDateRange.data('daterangepicker').remove();
-            }
-
-            const defaultDate = moment().add(1, 'day').format('MM/DD/YYYY');
-            $tripDateRange.daterangepicker({
-                locale: {
-                    format: 'MM/DD/YYYY'
-                },
-                startDate: defaultDate,
-                endDate: defaultDate,
-                autoUpdateInput: true
-            });
-
-            const picker = $tripDateRange.data('daterangepicker');
-            if (picker) {
-                const initialDays = picker.endDate.diff(picker.startDate, 'days') + 1;
-                $('#trip_days_count').val(initialDays + ' days');
-            }
-
-            $tripDateRange
-                .off('apply.daterangepicker.businessTrip')
-                .on('apply.daterangepicker.businessTrip', function(ev, selectedPicker) {
-                    const daysCount = selectedPicker.endDate.diff(selectedPicker.startDate, 'days') + 1;
+            // Value stays "MM/DD/YYYY - MM/DD/YYYY" - preConfirm parses that format.
+            const showDays = function(dates) {
+                if (dates.length === 2) {
+                    const daysCount = moment(dates[1]).diff(moment(dates[0]), 'days') + 1;
                     $('#trip_days_count').val(daysCount + ' days');
-                });
+                }
+            };
+            const defaultDate = moment().add(1, 'day').toDate();
+            const fp = AppDate.range($tripDateRange, {
+                format: 'm/d/Y',
+                defaultDate: [defaultDate, defaultDate],
+                onChange: showDays
+            });
+            showDays(fp.selectedDates);
         },
         preConfirm: () => {
             const trip_type = $('input[name="trip_type"]:checked').val();
@@ -860,18 +848,12 @@ function openBusinessTripAllowanceModal(tripId, employeeName) {
             didOpen: () => {
                 const $returnDate = $('#allowance_return_date');
 
-                if ($returnDate.length && typeof $returnDate.datepicker === 'function') {
-                    $returnDate.datepicker({
-                        format: 'yyyy-mm-dd',
-                        autoclose: true,
-                        todayHighlight: true
+                if ($returnDate.length && window.AppDate) {
+                    // Days before the trip start are blocked.
+                    AppDate.single($returnDate, {
+                        minDate: tripStartDate || null,
+                        defaultDate: tripEndDate || tripStartDate || null
                     });
-
-                    if (tripStartDate) {
-                        $returnDate.datepicker('setStartDate', tripStartDate);
-                    }
-
-                    $returnDate.datepicker('update', tripEndDate || tripStartDate || '');
                 }
             },
             preConfirm: () => {

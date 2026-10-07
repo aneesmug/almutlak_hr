@@ -525,7 +525,7 @@
                 return '<textarea rows="3"' + attrs + '>' + esc(value) + '</textarea>';
             }
             if (field.type === 'date') {
-                // The app's bootstrap-datepicker (initialised in renderFields), same as other pages.
+                // AppDate picker (initialised in renderFields), same as other pages.
                 return '<div class="input-group"><input type="text" autocomplete="off" placeholder="yyyy-mm-dd"' + attrs.replace('class="form-control', 'class="form-control memo-date') + ' value="' + esc(value) + '">'
                     + '<div class="input-group-append"><span class="input-group-text"><i class="fa fa-calendar"></i></span></div></div>';
             }
@@ -598,13 +598,9 @@
             initLocationCascades();
             initAssetPickers();
             updateSalaryTotal();
-            if ($.fn.datepicker) {
-                $('#memoFields .memo-date').datepicker({
-                    format: 'yyyy-mm-dd',
-                    autoclose: true,
-                    todayHighlight: true,
-                    clearBtn: true
-                });
+            if (window.AppDate) {
+                // allowInput: the date can still be typed or cleared by hand.
+                $('#memoFields .memo-date').appDate({ allowInput: true });
             }
         }
 
@@ -725,7 +721,7 @@
 
         // Clicking the calendar icon opens the picker too.
         $('#memoFields').on('click', '.input-group-text', function () {
-            $(this).closest('.input-group').find('.memo-date').datepicker('show');
+            $(this).closest('.input-group').find('.memo-date').appDate('open');
         });
 
         $('#memoFields').on('input change', '.memo-field-input', function (e) {

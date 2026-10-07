@@ -1533,7 +1533,7 @@ function __(key, def) {
                     });
                     $empSelect.trigger('change');
 
-                    if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
+                    if (window.AppDate && typeof moment !== 'undefined') {
                         const $range = $('#tt-daterange');
                         const $duration = $('#tt-daterange-duration');
                         const fmt = 'YYYY-MM-DD';
@@ -1554,25 +1554,18 @@ function __(key, def) {
                             $duration.text(`${__('duration', 'Duration')}: ${parts.join(', ')} (${totalDays} ${__('days_total', 'days total')})`);
                         };
 
-                        $range.daterangepicker({
-                            locale: { format: fmt },
-                            autoUpdateInput: true,
-                            parentEl: '.swal2-popup',
-                            sideBySide: true,
-                            opens: 'center',
-                            drops: 'down',
-                            startDate: startVal,
-                            endDate: endVal,
+                        // Value stays "YYYY-MM-DD - YYYY-MM-DD" (read back on save).
+                        AppDate.range($range, {
+                            defaultDate: (t.start_date && t.end_date) ? [t.start_date, t.end_date] : null,
+                            onChange: (dates) => {
+                                if (dates.length === 2) updateDuration(moment(dates[0]), moment(dates[1]));
+                            }
                         });
                         if (!t.start_date || !t.end_date) {
-                            $range.val('');
                             $duration.text('');
                         } else {
                             updateDuration(startVal, endVal);
                         }
-                        $range.off('apply.daterangepicker.timetableDuration').on('apply.daterangepicker.timetableDuration', function(ev, picker) {
-                            updateDuration(picker.startDate, picker.endDate);
-                        });
                     }
 
                     const syncSections = () => {
@@ -1587,6 +1580,7 @@ function __(key, def) {
                     $('#tt-use-daterange').on('change', function () {
                         $('#tt-daterange-wrap').toggle(this.checked);
                         if (!this.checked) {
+                            if (window.AppDate && AppDate.get('#tt-daterange')) AppDate.get('#tt-daterange').clear();
                             $('#tt-daterange').val('');
                             $('#tt-daterange-duration').text('');
                         }
@@ -2909,37 +2903,30 @@ function __(key, def) {
                     cancelButtonText: '' + __('cancel') + '',
                     allowOutsideClick: false,
                     didOpen: () => {
-                        if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
-                            const fmt = 'YYYY-MM-DD';
-                            const start = moment();
-                            const end = moment();
-                            const $range = $('#vbd-daterange');
+                        if (window.AppDate && typeof moment !== 'undefined') {
                             const $duration = $('#vbd-duration');
                             const updateDuration = (s, e) => {
-                                const days = e.clone().add(1, 'day').diff(s, 'days');
+                                const days = moment(e).add(1, 'day').diff(moment(s), 'days');
                                 $duration.text(`${__('duration', 'Duration')}: ${days} ${__('day_s', 'day(s)')}`);
                             };
-                            $range.daterangepicker({
-                                locale: { format: fmt },
-                                autoUpdateInput: true,
-                                parentEl: '.swal2-popup',
-                                minDate: moment(),
-                                startDate: start,
-                                endDate: end
-                            }, updateDuration);
-                            $range.val(`${start.format(fmt)} - ${end.format(fmt)}`);
-                            updateDuration(start, end);
+                            // Past days are blocked
+                            AppDate.range('#vbd-daterange', {
+                                minDate: 'today',
+                                defaultDate: ['today', 'today'],
+                                onChange: (dates) => { if (dates.length === 2) updateDuration(dates[0], dates[1]); }
+                            });
+                            updateDuration(new Date(), new Date());
                         }
                     },
                     preConfirm: () => {
-                        const picker = $('#vbd-daterange').data('daterangepicker');
-                        if (!picker) {
+                        const [startDate, endDate] = window.AppDate ? AppDate.rangeValues('#vbd-daterange') : ['', ''];
+                        if (!startDate || !endDate) {
                             Swal.showValidationMessage('' + __('select_blocked_period', 'Please select a period.') + '');
                             return false;
                         }
                         return {
-                            start_date: picker.startDate.format('YYYY-MM-DD'),
-                            end_date: picker.endDate.format('YYYY-MM-DD'),
+                            start_date: startDate,
+                            end_date: endDate,
                             reason: $('#vbd-reason').val().trim()
                         };
                     }
@@ -3145,11 +3132,9 @@ function __(key, def) {
                             $roleHint.removeClass('text-danger text-success').text('');
                         });
 
-                        if ($.fn && typeof $.fn.daterangepicker === 'function' && typeof moment !== 'undefined') {
-                            const fmt = 'YYYY-MM-DD';
+                        if (window.AppDate && typeof moment !== 'undefined') {
                             const start = moment();
                             const end = moment().add(1, 'days');
-                            const $range = $('#trt-daterange');
                             const $duration = $('#trt-duration');
 
                             const updateDuration = (s, e) => {
@@ -3163,23 +3148,19 @@ function __(key, def) {
                                 $duration.text(`${__('duration', 'Duration')}: ${parts.join(', ')}`);
                             };
 
-                            $range.daterangepicker({
-                                locale: { format: fmt },
-                                autoUpdateInput: true,
-                                parentEl: '.swal2-popup',
-                                minDate: moment(),
-                                startDate: start,
-                                endDate: end
-                            }, updateDuration);
-                            $range.val(`${start.format(fmt)} - ${end.format(fmt)}`);
+                            // Past days are blocked
+                            AppDate.range('#trt-daterange', {
+                                minDate: 'today',
+                                defaultDate: [start.toDate(), end.toDate()],
+                                onChange: (dates) => { if (dates.length === 2) updateDuration(moment(dates[0]), moment(dates[1])); }
+                            });
                             updateDuration(start, end);
                         }
                     },
                     preConfirm: () => {
                         const employee_emp_id = $('#trt-employee').val();
                         const replacement_emp_id = $('#trt-replacement').val();
-                        const $range = $('#trt-daterange');
-                        const picker = $range.data('daterangepicker');
+                        const [validFrom, validTo] = window.AppDate ? AppDate.rangeValues('#trt-daterange') : ['', ''];
                         if (!employee_emp_id || !replacement_emp_id) {
                             Swal.showValidationMessage('' + __('select_both_employees', 'Please select both employees.') + '');
                             return false;
@@ -3188,15 +3169,15 @@ function __(key, def) {
                             Swal.showValidationMessage('' + __('replacement_cannot_match', 'Replacement cannot be the same employee.') + '');
                             return false;
                         }
-                        if (!picker) {
+                        if (!validFrom || !validTo) {
                             Swal.showValidationMessage('' + __('select_coverage_period', 'Please select a coverage period.') + '');
                             return false;
                         }
                         return {
                             employee_emp_id,
                             replacement_emp_id,
-                            valid_from: picker.startDate.format('YYYY-MM-DD'),
-                            valid_to: picker.endDate.format('YYYY-MM-DD')
+                            valid_from: validFrom,
+                            valid_to: validTo
                         };
                     }
                 }).then(result => {

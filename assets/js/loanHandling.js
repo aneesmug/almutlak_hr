@@ -19,7 +19,7 @@
  * 9. AJAX SUBMISSION: The selected number of installments is now sent along with the loan application data.
  * 10. DISABLE SUBMIT BUTTON: The "Submit Application" button is now disabled if the entered loan amount is invalid or exceeds the maximum allowed limit.
  * 11. MONTHLY DEDUCTION DISPLAY: A new read-only field shows the calculated monthly deduction, updating in real-time.
- * 12. DATEPICKER INTEGRATION: The "Start Date of Deduction" input now uses the bootstrap-datepicker library for a better user experience.
+ * 12. DATEPICKER INTEGRATION: The "Start Date of Deduction" input uses AppDate (assets/js/app_datepicker.js, flatpickr).
  * 13. MANDATORY RECEIPT & ATTACHMENT: In the "Add Manual Payment" modal, the "Receipt ID" and "Attachment" fields are now required.
  * 14. SPECIFIC ERROR MESSAGES: Added specific validation checks to show an error message if the Receipt ID is empty or if no attachment is selected.
  * 15. REAL-TIME PAYMENT VALIDATION: The "Add Manual Payment" modal now validates the payment amount in real-time. If the amount exceeds the remaining balance, the submit button is disabled and an error message is shown.
@@ -585,13 +585,8 @@ $(document).on('click', '.addManualPayment', async function(e) {
                 width: '600px',
                 showLoaderOnConfirm: true,
                 didOpen: () => {
-                    // Initialize Datepicker
-                    $('#payment_date').datepicker({
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true,
-                        endDate: new Date() // Can't be a future date
-                    }).datepicker('setDate', new Date());
+                    // Future dates are blocked
+                    AppDate.single('#payment_date', { defaultDate: 'today', maxDate: 'today' });
 
                     const paymentAmountInput = $('#payment_amount');
                     const paymentFeedback = $('#payment_feedback');
@@ -840,12 +835,7 @@ $(document).on('click', '.addManualLoan', function(e) {
         allowOutsideClick: false,
         showLoaderOnConfirm: true,
         didOpen: () => {
-            $('#manual_loan_date').datepicker({
-                format: 'yyyy-mm-dd',
-                todayHighlight: true,
-                autoclose: true,
-                endDate: new Date()
-            }).datepicker('setDate', new Date());
+            AppDate.single('#manual_loan_date', { defaultDate: 'today', maxDate: 'today' });
 
             function calculateRemaining() {
                 const total = parseFloat($('#manual_total_loan_amount').val()) || 0;
@@ -948,13 +938,8 @@ $(document).on('click', '.applyEmergencyLoan', function(e) {
         showCancelButton: true,
         cancelButtonText: __('cancel'),
         didOpen: () => {
-            jQuery('#start_date_emergency').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: new Date(),
-                cancelButtonColor:'#d33',
-                cancelButtonText:__('cancel')});
+            // Past dates are blocked
+            AppDate.single('#start_date_emergency', { minDate: 'today' });
 
             const loanAmountInput = $('#loan_amount_emergency');
             const installmentsInput = $('#installments_emergency');

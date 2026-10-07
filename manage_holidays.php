@@ -418,7 +418,6 @@ if (mysqli_num_rows($query) == 1) {
         <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
         <!-- Plugins css -->
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
         <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
         <!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -469,21 +468,6 @@ if (mysqli_num_rows($query) == 1) {
             .hol-formula { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, .55); font-weight: 600; }
             html.app-dark .hol-formula { background: rgba(0, 0, 0, .2); }
 
-            /* Keep date-range calendars side-by-side inside SweetAlert modals */
-            .swal2-container .daterangepicker {
-                z-index: 2200 !important;
-                min-width: 650px;
-            }
-            .swal2-container .daterangepicker .drp-calendar { max-width: none; }
-            .swal2-container .daterangepicker.show-calendar .drp-calendar.left,
-            .swal2-container .daterangepicker.show-calendar .drp-calendar.right {
-                display: inline-block;
-                float: none;
-                vertical-align: top;
-            }
-            @media (max-width: 767px) {
-                .swal2-container .daterangepicker { min-width: 0; width: 100%; }
-            }
         </style>
     </head>
 
@@ -725,7 +709,6 @@ if (mysqli_num_rows($query) == 1) {
 
         <!-- Date Range Picker -->
         <script src="./plugins/moment/moment.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
         <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 
         <!-- App js -->
@@ -866,19 +849,17 @@ if (mysqli_num_rows($query) == 1) {
 
             function initRange(start, end) {
                 const $input = $('#hRange');
-                if (!$.fn.daterangepicker || typeof moment === 'undefined') return;
+                if (!window.AppDate || typeof moment === 'undefined') return;
                 const s = start && moment(start, ['YYYY-MM-DD', DATE_FMT]).isValid() ? moment(start, ['YYYY-MM-DD', DATE_FMT]) : moment();
                 const e = end && moment(end, ['YYYY-MM-DD', DATE_FMT]).isValid() ? moment(end, ['YYYY-MM-DD', DATE_FMT]) : s.clone();
-                $input.daterangepicker({
-                    locale: { format: DATE_FMT },
-                    autoUpdateInput: true,
-                    parentEl: '.swal2-popup',
-                    opens: 'center',
-                    drops: 'down',
-                    startDate: s,
-                    endDate: e
+                // Value stays "MM/DD/YYYY - MM/DD/YYYY" (server parses m/d/Y)
+                AppDate.range($input, {
+                    format: 'm/d/Y',
+                    defaultDate: [s.toDate(), e.toDate()],
+                    onChange: function(dates) {
+                        if (dates.length === 2) { $input.removeClass('is-invalid'); updateDays(); }
+                    }
                 });
-                $input.on('apply.daterangepicker', function() { $(this).removeClass('is-invalid'); updateDays(); });
                 updateDays();
             }
 

@@ -6,7 +6,7 @@
    - .addDocuAtter click   -> Add document     (ajaxType=document_add, data-id = car id)
    New car models and maintenance types are added inline (ajaxType=model_add / maint_type_add).
    "Return car" (.addRtrnDrvrAtter) stays in jquery.app.js - emp_end_of_service.php uses it too.
-   Moved here from assets/js/jquery.app.js. Needs sr_forms.js, select2 and bootstrap-datepicker. */
+   Moved here from assets/js/jquery.app.js. Needs sr_forms.js, select2 and AppDate (app_datepicker.js). */
 (function (window, $) {
     'use strict';
 
@@ -260,7 +260,7 @@
                 $form.find('input[name="cid"]').val(cid);
                 F.select2($('#car_user'), { placeholder: t('select', 'Select') });
                 F.select2($('#maint_type'), { placeholder: t('select', 'Select') });
-                F.datepicker($('#maint_date'), { endDate: '+0d' });
+                F.datepicker($('#maint_date'), { maxDate: 'today' });
                 loadDrivers($('#car_user'), caruser);
                 loadTypes();
 
@@ -338,7 +338,7 @@
                 F.liveClear($form);
                 $form.find('input[name="cid"]').val(cid);
                 F.select2($('#car_user'), { placeholder: t('select', 'Select') });
-                F.datepicker($('#rcv_date'), { endDate: '+0d' });
+                F.datepicker($('#rcv_date'), { maxDate: 'today' });
                 loadDrivers($('#car_user'));
             },
             preConfirm: function () {
@@ -384,7 +384,7 @@
                 var $form = $('#submitDocumentsForm');
                 F.liveClear($form);
                 F.bindFilePicker($form);
-                F.datepicker($('#issue_date'), { endDate: '+0d' });
+                F.datepicker($('#issue_date'), { maxDate: 'today' });
                 F.datepicker($('#exp_date'));
                 $form.on('change input', '#issue_date, #exp_date', function () {
                     var s = new Date($('#issue_date').val()), en = new Date($('#exp_date').val()), $d = $form.find('.js-duration');

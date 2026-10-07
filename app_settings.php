@@ -41,20 +41,8 @@
 
     <!-- Plugins -->
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
     <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    <style>
-        /* Keep the date-range calendars side-by-side inside SweetAlert modals - same override manage_holidays.php uses */
-        .swal2-container .daterangepicker { z-index: 2200 !important; min-width: 650px; }
-        .swal2-container .daterangepicker .drp-calendar { max-width: none; }
-        .swal2-container .daterangepicker.show-calendar .drp-calendar.left,
-        .swal2-container .daterangepicker.show-calendar .drp-calendar.right { display: inline-block; float: none; vertical-align: top; }
-        @media (max-width: 767px) {
-            .swal2-container .daterangepicker { min-width: 0; width: 100%; }
-        }
-    </style>
-
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />

@@ -1,0 +1,152 @@
+/* AppDate (flatpickr) theme + RTL fixes - see assets/js/app_datepicker.js.
+   Load after ./plugins/flatpickr/flatpickr.min.css. Colours follow the sr-* tokens of
+   smart_request.css; the calendar lives on <body> (outside .sr-page) so it has its own. */
+
+.flatpickr-calendar.app-dp {
+    --dp-accent: #6366f1;
+    --dp-accent-strong: #4f46e5;
+    --dp-accent-soft: #eef2ff;
+    --dp-surface: #ffffff;
+    --dp-surface-2: #f1f5f9;
+    --dp-ink: #0f172a;
+    --dp-muted: #94a3b8;
+    --dp-line: #e2e8f0;
+    --dp-block-bg: repeating-linear-gradient(135deg, transparent 0 4px, rgba(148, 163, 184, .18) 4px 6px);
+
+    background: var(--dp-surface);
+    border: 1px solid var(--dp-line);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+    font-family: inherit;
+    z-index: 100000; /* above Bootstrap modals (1050) and SweetAlert2 (1060) */
+}
+html.app-dark .flatpickr-calendar.app-dp {
+    --dp-accent: #818cf8;
+    --dp-accent-strong: #a5b4fc;
+    --dp-accent-soft: #252b4a;
+    --dp-surface: #161c2a;
+    --dp-surface-2: #252e44;
+    --dp-ink: #e2e8f0;
+    --dp-muted: #64748b;
+    --dp-line: #2d374d;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+}
+.flatpickr-calendar.app-dp.arrowTop:before,
+.flatpickr-calendar.app-dp.arrowTop:after { border-bottom-color: var(--dp-line); }
+.flatpickr-calendar.app-dp.arrowTop:after { border-bottom-color: var(--dp-surface); }
+.flatpickr-calendar.app-dp.arrowBottom:before { border-top-color: var(--dp-line); }
+.flatpickr-calendar.app-dp.arrowBottom:after { border-top-color: var(--dp-surface); }
+.flatpickr-calendar.app-dp.app-dp-inline { box-shadow: none; margin: 0 auto; }
+
+/* Header */
+.app-dp .flatpickr-months { padding: 4px 0; }
+.app-dp .flatpickr-months .flatpickr-month,
+.app-dp .flatpickr-current-month input.cur-year { color: var(--dp-ink); fill: var(--dp-ink); }
+.app-dp .flatpickr-current-month { font-size: 14px; font-weight: 600; }
+.app-dp .flatpickr-current-month .flatpickr-monthDropdown-months {
+    color: var(--dp-ink); background: transparent; font-weight: 600;
+}
+.app-dp .flatpickr-current-month .flatpickr-monthDropdown-months option { background: var(--dp-surface); color: var(--dp-ink); }
+.app-dp .flatpickr-months .flatpickr-prev-month,
+.app-dp .flatpickr-months .flatpickr-next-month { color: var(--dp-muted); fill: var(--dp-muted); top: 4px; }
+.app-dp .flatpickr-months .flatpickr-prev-month:hover svg,
+.app-dp .flatpickr-months .flatpickr-next-month:hover svg { fill: var(--dp-accent); }
+.app-dp .numInputWrapper span.arrowUp:after { border-bottom-color: var(--dp-muted); }
+.app-dp .numInputWrapper span.arrowDown:after { border-top-color: var(--dp-muted); }
+
+/* Week days + days */
+.app-dp span.flatpickr-weekday { color: var(--dp-muted); font-size: 11px; font-weight: 600; }
+.app-dp .flatpickr-day { color: var(--dp-ink); border-radius: 8px; }
+.app-dp .flatpickr-day:hover,
+.app-dp .flatpickr-day:focus { background: var(--dp-surface-2); border-color: var(--dp-surface-2); }
+.app-dp .flatpickr-day.today { border-color: var(--dp-accent); }
+.app-dp .flatpickr-day.today:hover { background: var(--dp-accent-soft); color: var(--dp-ink); }
+.app-dp .flatpickr-day.prevMonthDay,
+.app-dp .flatpickr-day.nextMonthDay { color: var(--dp-muted); opacity: .6; }
+.app-dp .flatpickr-day.selected,
+.app-dp .flatpickr-day.startRange,
+.app-dp .flatpickr-day.endRange,
+.app-dp .flatpickr-day.selected:hover,
+.app-dp .flatpickr-day.startRange:hover,
+.app-dp .flatpickr-day.endRange:hover {
+    background: var(--dp-accent); border-color: var(--dp-accent); color: #fff;
+}
+.app-dp .flatpickr-day.inRange,
+.app-dp .flatpickr-day.inRange:hover {
+    background: var(--dp-accent-soft); border-color: var(--dp-accent-soft);
+    box-shadow: -5px 0 0 var(--dp-accent-soft), 5px 0 0 var(--dp-accent-soft);
+    border-radius: 0;
+}
+.app-dp .flatpickr-day.selected.startRange + .endRange:not(:nth-child(7n+1)),
+.app-dp .flatpickr-day.startRange.startRange + .endRange:not(:nth-child(7n+1)),
+.app-dp .flatpickr-day.endRange.startRange + .endRange:not(:nth-child(7n+1)) {
+    box-shadow: -10px 0 0 var(--dp-accent);
+}
+
+/* Blocked (disabled / out of min-max) days: hatched + not-allowed cursor */
+.app-dp .flatpickr-day.flatpickr-disabled,
+.app-dp .flatpickr-day.flatpickr-disabled:hover {
+    color: var(--dp-muted); background: var(--dp-block-bg); border-color: transparent;
+    cursor: not-allowed; text-decoration: line-through; opacity: .7;
+}
+
+/* Range caps (flatpickr default is a 50px pill) */
+.app-dp .flatpickr-day.selected.startRange,
+.app-dp .flatpickr-day.startRange.startRange,
+.app-dp .flatpickr-day.endRange.startRange { border-radius: 8px 0 0 8px; }
+.app-dp .flatpickr-day.selected.endRange,
+.app-dp .flatpickr-day.startRange.endRange,
+.app-dp .flatpickr-day.endRange.endRange { border-radius: 0 8px 8px 0; }
+.app-dp .flatpickr-day.startRange.endRange { border-radius: 8px; }
+
+/* ---------- RTL ----------
+   Day/weekday rows are flex containers, so dir="rtl" (set on the calendar by AppDate)
+   already lays the week out right-to-left. What flatpickr gets wrong is everything that
+   is direction-specific in its stylesheet: the nav arrows' glyphs, the range caps and the
+   range-joining shadows. */
+.app-dp .flatpickr-months .flatpickr-prev-month { left: 0; right: auto; }
+.app-dp .flatpickr-months .flatpickr-next-month { right: 0; left: auto; }
+.app-dp-rtl .flatpickr-months .flatpickr-prev-month { right: 0; left: auto; }
+.app-dp-rtl .flatpickr-months .flatpickr-next-month { left: 0; right: auto; }
+.app-dp-rtl .flatpickr-months .flatpickr-prev-month svg,
+.app-dp-rtl .flatpickr-months .flatpickr-next-month svg { transform: scaleX(-1); }
+.app-dp-rtl .flatpickr-current-month { direction: rtl; }
+.app-dp-rtl .flatpickr-current-month .numInputWrapper { direction: ltr; }
+
+.app-dp-rtl .flatpickr-day.selected.startRange,
+.app-dp-rtl .flatpickr-day.startRange.startRange,
+.app-dp-rtl .flatpickr-day.endRange.startRange { border-radius: 0 8px 8px 0; }
+.app-dp-rtl .flatpickr-day.selected.endRange,
+.app-dp-rtl .flatpickr-day.startRange.endRange,
+.app-dp-rtl .flatpickr-day.endRange.endRange { border-radius: 8px 0 0 8px; }
+.app-dp-rtl .flatpickr-day.startRange.endRange { border-radius: 8px; }
+.app-dp-rtl .flatpickr-day.selected.startRange + .endRange:not(:nth-child(7n+1)),
+.app-dp-rtl .flatpickr-day.startRange.startRange + .endRange:not(:nth-child(7n+1)),
+.app-dp-rtl .flatpickr-day.endRange.startRange + .endRange:not(:nth-child(7n+1)) {
+    box-shadow: 10px 0 0 var(--dp-accent);
+}
+.app-dp-rtl .flatpickr-day.week.selected { box-shadow: 5px 0 0 var(--dp-accent), -5px 0 0 var(--dp-accent); }
+
+/* static calendars (inside Bootstrap modals): hang from the input's right edge in RTL */
+.flatpickr-calendar.app-dp.static { top: calc(100% + 4px); }
+.flatpickr-calendar.app-dp-rtl.static { left: auto; right: 0; }
+
+/* Values are always Latin Y-m-d; keep "from - to" in reading order inside RTL forms */
+[dir="rtl"] .app-dp-input { direction: ltr; text-align: right; }
+
+/* Input: readonly only to stop typing - it must not look disabled */
+.form-control.app-dp-input[readonly]:not(.app-dp-locked):not(:disabled) { background-color: #fff; cursor: pointer; }
+html.app-dark .form-control.app-dp-input[readonly]:not(.app-dp-locked):not(:disabled) {
+    background-color: var(--ad-input) !important; color: var(--ad-text) !important;
+}
+.app-dp-input.app-dp-locked { cursor: not-allowed; }
+
+/* Month picker (AppDate.month, monthSelect plugin) */
+.app-dp .flatpickr-monthSelect-months { padding: 6px 8px 10px; }
+.app-dp .flatpickr-monthSelect-month { color: var(--dp-ink); border-radius: 8px; width: 33.3%; margin: 2px 0; }
+.app-dp .flatpickr-monthSelect-month:hover,
+.app-dp .flatpickr-monthSelect-month:focus { background: var(--dp-surface-2); border-color: var(--dp-surface-2); }
+.app-dp .flatpickr-monthSelect-month.today { border-color: var(--dp-accent); }
+.app-dp .flatpickr-monthSelect-month.selected,
+.app-dp .flatpickr-monthSelect-month.selected:hover { background: var(--dp-accent); border-color: var(--dp-accent); color: #fff; }
+.app-dp .flatpickr-monthSelect-month.flatpickr-disabled { color: var(--dp-muted); background: var(--dp-block-bg); cursor: not-allowed; }

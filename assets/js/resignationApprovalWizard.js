@@ -66,12 +66,7 @@ function openResignationApprovalWizard(resignationId, empId, empName, iqama, des
     
     // Initialize date picker
     setTimeout(() => {
-        $('#hr_last_working_day').datepicker({
-            format: "yyyy-mm-dd",
-            todayHighlight: true,
-            autoclose: true,
-            startDate: new Date()
-        });
+        AppDate.single('#hr_last_working_day', { minDate: 'today' }); // past days blocked
     }, 300);
 }
 
@@ -268,12 +263,7 @@ function showReplacementStep() {
                     initializeReplacementToggle();
                     
                     // Initialize date picker for joining date
-                    $('#replacement_join_date').datepicker({
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true,
-                        startDate: new Date()
-                    });
+                    AppDate.single('#replacement_join_date', { minDate: 'today' }); // past days blocked
                 }, 300);
             }
         },

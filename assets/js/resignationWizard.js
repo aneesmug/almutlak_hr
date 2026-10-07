@@ -101,11 +101,8 @@ function openResignationWizard(empId, empName, preselectedReason = '', preselect
     
     // Initialize date picker for Step 1 (startDate tightened by loadResignationDateLimit)
     setTimeout(() => {
-        $('#last_working_day').datepicker({
-            format: "yyyy-mm-dd",
-            todayHighlight: true,
-            autoclose: true,
-            startDate: (window.resignationDateLimit && window.resignationDateLimit.minDate) || new Date()
+        AppDate.single('#last_working_day', {
+            minDate: (window.resignationDateLimit && window.resignationDateLimit.minDate) || 'today'
         });
     }, 300);
 }
@@ -132,9 +129,8 @@ function loadResignationDateLimit() {
                 backdateDays: parseInt(response.backdate_days, 10) || 0,
                 minDate: response.min_last_working_day || null
             };
-            const $input = $('#last_working_day');
-            if (window.resignationDateLimit.minDate && $input.data('datepicker')) {
-                $input.datepicker('setStartDate', window.resignationDateLimit.minDate);
+            if (window.resignationDateLimit.minDate) {
+                $('#last_working_day').appDate('setMin', window.resignationDateLimit.minDate);
             }
         }
     });

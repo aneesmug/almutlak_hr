@@ -32,7 +32,6 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -161,7 +160,6 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         </div>
     </div>
     <script src="assets/js/jquery.min.js"></script>
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
@@ -334,8 +332,9 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 didOpen: function() {
                     const $form = $('#rjForm');
                     F.liveClear($form);
-                    const opts = { format: 'yyyy-mm-dd', todayHighlight: true, autoclose: true };
-                    if (!window.isRejoinElevated) { opts.startDate = reqDate; opts.endDate = toDate; }
+                    // Non-elevated users: days outside the leave window are blocked.
+                    const opts = {};
+                    if (!window.isRejoinElevated) { opts.minDate = reqDate; opts.maxDate = toDate; }
                     F.datepicker($('#adjustmentDate'), opts);
                     function sync() {
                         const a = $form.find('input[name="action"]:checked').val();

@@ -3563,32 +3563,16 @@ if (mysqli_num_rows($query) == 1) {
 					confirmButtonColor: APP_COLORS.primary,
 					cancelButtonColor: APP_COLORS.danger,
 					allowOutsideClick: false,
-					willOpen: () => {
-						var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
-						jQuery('#rejoinDate').datepicker({
-							format: "yyyy-mm-dd",
-							todayHighlight: true,
-							autoclose: true,
-							startDate: parsedDate, // Can't select before planned date
-							orientation: isRTL ? 'bottom auto' : 'bottom auto'
-						}).datepicker('setDate', parsedDate);
-						
-						if (isRTL) {
-							$('#rejoinDate').on('show', function(e) {
-								var input = $(e.target);
-								var datepicker = input.data('datepicker').picker;
-								var offset = input.offset();
-								var inputWidth = input.outerWidth();
-								var pickerWidth = datepicker.outerWidth();
-								
-								setTimeout(function() {
-									datepicker.css({
-										'left': (offset.left + inputWidth - pickerWidth) + 'px',
-										'top': (offset.top + input.outerHeight()) + 'px'
-									});
-								}, 0);
-							});
-						}
+					didOpen: () => {
+						// Days before the planned return, or more than 7 days after it, are blocked
+						// (same rule preConfirm enforces below).
+						const rejoinMax = new Date(parsedDate);
+						rejoinMax.setDate(rejoinMax.getDate() + 7);
+						AppDate.single('#rejoinDate', {
+							defaultDate: formattedDate,
+							minDate: formattedDate,
+							maxDate: AppDate.format(rejoinMax)
+						});
 					},
 					preConfirm: () => {
 						const rejoinDate = document.getElementById('rejoinDate').value;
@@ -4204,31 +4188,8 @@ if (mysqli_num_rows($query) == 1) {
 						cancelButtonText: __('cancel'),
 						cancelButtonColor: APP_COLORS.danger,
 						allowOutsideClick: false,
-						willOpen: function() {
-							var isRTL = $('html').attr('dir') === 'rtl' || $('body').attr('dir') === 'rtl';
-							$('#view-emp-return-date-input').datepicker({
-								format: "yyyy-mm-dd",
-								todayHighlight: true,
-								autoclose: true,
-								orientation: isRTL ? 'bottom auto' : 'bottom auto'
-							});
-							
-							if (isRTL) {
-								$('#view-emp-return-date-input').on('show', function(e) {
-									var input = $(e.target);
-									var datepicker = input.data('datepicker').picker;
-									var offset = input.offset();
-									var inputWidth = input.outerWidth();
-									var pickerWidth = datepicker.outerWidth();
-									
-									setTimeout(function() {
-										datepicker.css({
-											'left': (offset.left + inputWidth - pickerWidth) + 'px',
-											'top': (offset.top + input.outerHeight()) + 'px'
-										});
-									}, 0);
-								});
-							}
+						didOpen: function() {
+							AppDate.single('#view-emp-return-date-input');
 						},
 						preConfirm: () => {
 							const selectedDate = $('#view-emp-return-date-input').val();
@@ -4813,7 +4774,7 @@ if (mysqli_num_rows($query) == 1) {
 			// Attendance tab - client-side DataTable (fetches this employee's full
 			// filtered history in one call, no server-side pagination) so the Buttons
 			// export below can cover everything matched, not just whatever page is on
-			// screen. A single daterangepicker field drives the From/To filter, defaulting
+			// screen. A single AppDate range field drives the From/To filter, defaulting
 			// to the current month; "Show all records" disables it and bypasses the filter.
 			let attendanceTable;
 			let attendanceTableInitialized = false;
@@ -4830,19 +4791,13 @@ if (mysqli_num_rows($query) == 1) {
 				};
 
 				const $range = $('#AttendanceDateRange');
-				if ($.fn.daterangepicker && typeof moment !== 'undefined') {
-					$range.daterangepicker({
-						locale: { format: 'YYYY-MM-DD' },
-						autoUpdateInput: true,
-						opens: 'left',
-						startDate: moment(firstOfMonth),
-						endDate: moment(today),
-					}).on('apply.daterangepicker', function() {
-						attendanceTable.ajax.reload();
-					});
-				} else {
-					$range.val(fmt(firstOfMonth) + ' - ' + fmt(today));
-				}
+				$range.val(fmt(firstOfMonth) + ' - ' + fmt(today));
+				AppDate.range($range, {
+					defaultDate: [fmt(firstOfMonth), fmt(today)],
+					onClose: function(selected) {
+						if (selected.length) attendanceTable.ajax.reload();
+					}
+				});
 
 				attendanceTable = $('#attendance_tbl').DataTable({
 					processing: true,
@@ -4992,8 +4947,8 @@ if (mysqli_num_rows($query) == 1) {
 			}
 
 			function initProfileAttendancePickers(dateDisabled) {
-				if (!dateDisabled && $.fn.datepicker) {
-					$('#pAttDate').datepicker({ format: 'yyyy-mm-dd', autoclose: true, todayHighlight: true });
+				if (!dateDisabled) {
+					AppDate.single('#pAttDate');
 				}
 				if ($.fn.clockpicker) {
 					$('.clockpicker').clockpicker({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' });
@@ -5123,11 +5078,7 @@ if (mysqli_num_rows($query) == 1) {
 					cancelButtonColor: APP_COLORS.secondary,
 					allowOutsideClick: false,
 					didOpen: () => {
-						$('#directRejoinDate').datepicker({
-							format: "yyyy-mm-dd",
-							todayHighlight: true,
-							autoclose: true
-						}).datepicker('setDate', new Date());
+						AppDate.single('#directRejoinDate', { defaultDate: 'today' });
 					},
 					preConfirm: () => {
 						const rejoinDate = $('#directRejoinDate').val();
@@ -5992,28 +5943,21 @@ if (mysqli_num_rows($query) == 1) {
 			}
 
 			// Standalone picker popup for Saudi Engineering Council Expiry - uses an INLINE
-			// calendar (bootstrap-datepicker's `inline: true`) instead of a dropdown, since a
-			// dropdown calendar gets clipped by the parent Swal's own scroll container.
+			// calendar (AppDate.inline) instead of a dropdown, since a dropdown calendar gets
+			// clipped by the parent Swal's own scroll container.
 			function openEngCouncilExpiryPicker(empId, snapshot) {
 				Swal.fire({
 					title: '<?= __('select_expiry_date_placeholder') ?>',
-					html: `<input type="text" id="aiEngCouncilExpiryInline" class="form-control text-center" placeholder="YYYY-MM-DD" autocomplete="off" readonly>`,
-					width: '25%',
+					html: `<input type="hidden" id="aiEngCouncilExpiryInline">`,
+					width: '360px',
 					showCancelButton: true,
 					confirmButtonText: '<?= __('select', 'Select') ?>',
 					cancelButtonText: '<?= __('cancel') ?>',
 					allowOutsideClick: false,
 					didOpen: () => {
-						const $inline = $('#aiEngCouncilExpiryInline');
-						$inline.datepicker({
-							format: 'yyyy-mm-dd',
-							todayHighlight: true,
-							autoclose: true,
-							orientation: 'bottom auto'
+						AppDate.inline('#aiEngCouncilExpiryInline', {
+							defaultDate: snapshot.eng_council_expiry || null
 						});
-						if (snapshot.eng_council_expiry) {
-							$inline.datepicker('setDate', snapshot.eng_council_expiry);
-						}
 					},
 					preConfirm: () => {
 						return $('#aiEngCouncilExpiryInline').val() || '';
@@ -6072,12 +6016,7 @@ if (mysqli_num_rows($query) == 1) {
 					cancelButtonText: '<?= __('cancel') ?>',
 					allowOutsideClick: false,
 					didOpen: () => {
-						$('#miExpiry').datepicker({
-							format: 'yyyy-mm-dd',
-							todayHighlight: true,
-							autoclose: true,
-							orientation: 'bottom auto'
-						});
+						AppDate.single('#miExpiry');
 					},
 					preConfirm: () => {
 						const insuranceNo = $('#miInsuranceNo').val().trim();

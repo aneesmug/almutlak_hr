@@ -398,13 +398,8 @@ function showHRStep1EmployeeInfo(data) {
             cancelButton: 'btn-lg'
         },
         didOpen: () => {
-            // Initialize datepicker
-            $('#hr_last_working_day').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: new Date()
-            });
+            // Past days are blocked
+            AppDate.single('#hr_last_working_day', { minDate: 'today' });
         },
         preConfirm: () => {
             const hrLastWorkingDay = $('#hr_last_working_day').val().trim();
@@ -1078,13 +1073,8 @@ function showStep3ReplacementDetails(data) {
         confirmButtonColor: '#28a745',
         denyButtonColor: '#6c757d',
         didOpen: () => {
-            // Initialize datepicker
-            $('#date_of_joining').datepicker({
-                format: "yyyy-mm-dd",
-                todayHighlight: true,
-                autoclose: true,
-                startDate: new Date()
-            ,cancelButtonColor:'#d33',cancelButtonText:__('cancel')});
+            // Past days are blocked
+            AppDate.single('#date_of_joining', { minDate: 'today' });
         },
         preConfirm: () => {
             // Validate all fields

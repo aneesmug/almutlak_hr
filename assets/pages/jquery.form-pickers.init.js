@@ -49,181 +49,32 @@ jQuery(document).ready(function () {
         autoclose: true,
     });*/
 /*****************************/
-    jQuery('#joining_date').datepicker({
-        format: "yyyy-mm-dd",
-        // format: "dd/mm/yyyy",
-        autoclose: true,
-        todayHighlight: true,
-        
-        endDate: '+0d',
-//      ignoreReadonly: true,
-    });
-    jQuery('#dob').datepicker({
-        format: "yyyy-mm-dd",
-        // format: "dd/mm/yyyy",
-        autoclose: true,
-        todayHighlight: true,
-        endDate: '+0d',
-        
-//      ignoreReadonly: true,
-    });/*.on('changeDate', function (selected) {
-            $(this).attr("readonly",true);
-    });*/
-    jQuery('#rcv_date').datepicker({
-        format: "yyyy-mm-dd",
-        todayHighlight: true,
-        startDate: '+0d',
-        toggleActive: true,
-        
-//      ignoreReadonly: true,
-    });
-    jQuery('#return_dated').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        todayHighlight: true,
-        //startDate: '+0d',
-        toggleActive: true,
-        
-//      ignoreReadonly: true,
-    });
-    jQuery('#arrived_date').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        todayHighlight: true,
-//      endDate: '+0d',
-        toggleActive: true,
-        
-//      ignoreReadonly: true,
-    });/*.on('changeDate', function (selected) {
-            $(this).attr("readonly",true);
-    });*/
-    jQuery('#last_vac_date').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        endDate: '+0d',
-//      ignoreReadonly: true,
-    });
-    jQuery('#next_vac_date').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        startDate: '+0d',
-//      ignoreReadonly: true,
-    });
-    jQuery('#passport_exp').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        startDate: '+0d',
-//      ignoreReadonly: true,
-    });
-    jQuery('#insurance_exp').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        startDate: '+0d',
-//      ignoreReadonly: true,
-    });
-    jQuery('#return_date_v').datepicker({
-        // format: "dd/mm/yyyy",
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        
-        startDate: '+0d',
-        
-//      ignoreReadonly: true,
-    });/*.on('changeDate', function (selected) {
-            $(this).attr("readonly",true);
-    });*/
-jQuery('#rcv_date').datepicker({
-        format: "yyyy-mm-dd",
-        autoclose: true,
-        todayHighlight: true,
-        
-        endDate: '+0d',
-        
-//      ignoreReadonly: true,
-    });/*.on('changeDate', function (selected) {
-            $(this).attr("readonly",true);
-    });*/
-//jQuery('#exp_date').datepicker({
-//      format: "dd/mm/yyyy",
-//        autoclose: true,
-//        todayHighlight: true,
-//      
-//      startDate: '+0d',
-//      
-////        ignoreReadonly: true,
-//    });/*.on('changeDate', function (selected) {
-//            $(this).attr("readonly",true);
-//    });*/
-//
-    
-    jQuery('#date_select').datepicker({
-        // format: "dd-mm-yyyy",
-        format: "yyyy-mm-dd",
-        toggleActive: true,
-//      startDate: '+0d',
-//      language: 'ar'
-    });
+    // Date pickers (AppDate / flatpickr, see assets/js/app_datepicker.js). Runs after every
+    // page's own document.ready code and skips inputs a page already set up itself (with
+    // AppDate or the old bootstrap-datepicker), so page-specific options always win.
+    // minDate/maxDate: earlier/later days are blocked.
+    setTimeout(function () {
+        if (!window.AppDate) return;
+        var pickers = {
+            '#joining_date':  { maxDate: 'today' },
+            '#dob':           { maxDate: 'today' },
+            '#rcv_date':      { minDate: 'today' },
+            '#return_dated':  {},
+            '#arrived_date':  {},
+            '#last_vac_date': { maxDate: 'today' },
+            '#next_vac_date': { minDate: 'today' },
+            '#passport_exp':  { minDate: 'today' },
+            '#insurance_exp': { minDate: 'today' },
+            '#return_date_v': { minDate: 'today' },
+            '#date_select':   {}
+        };
+        Object.keys(pickers).forEach(function (sel) {
+            var el = document.querySelector(sel);
+            if (!el || el.tagName !== 'INPUT' || el._flatpickr || jQuery(el).data('datepicker')) return;
+            AppDate.single(el, pickers[sel]);
+        });
+    }, 0);
 
-    
-    /*
-    $("#equipment_purchaseDate").datepicker({
-        dateFormat: 'dd/mm/yy',
-        onSelect: function(dateStr) {
-            var d = $.datepicker.parseDate('dd/mm/yy', dateStr);
-            var years = 3;
-
-            d.setFullYear(d.getFullYear() + years);
-
-            $('#equipment_warrentyExpires').datepicker('setDate', d);
-        }
-    });
-    $("#equipment_warrentyExpires").datepicker({
-        dateFormat: 'dd/mm/yy'
-    });
-    */
-    
-    
-////     $('#txtIssueDate').datepicker();   
-////      $('#txtEshtablishedDate').datepicker(); // Umm ALqura Calendar 
-//    $('#txtExpiryDateHijri').datepicker({ 
-//        locale: { 
-//            calender: 'ummalqura', lang: 'ar' 
-//        } 
-//    });
-////      $('#txtEshtablishedDateHijri').datepicker({ locale: { calender: 'ummalqura', lang: 'ar' } });
-////      $('#txtCRIssueDateHijri').datepicker({ locale: { calender: 'ummalqura', lang: 'ar' } }); 
-////        $('#datetimepicker2').datetimepicker({
-//      $('#datetimepicker2').datetimepicker({
-//          locale: {
-//              calender: 'ummalqura', 
-//              lang: 'ar'
-//          }
-//          
-//      });
-
-//
-
-    
-/*****************************/
-    jQuery('#datepicker-inline').datepicker();
-    jQuery('#datepicker-multiple-date').datepicker({
-        format: "mm/dd/yyyy",
-        clearBtn: true,
-        multidate: true,
-        multidateSeparator: ","
-    });
-    jQuery('#date-range').datepicker({
-        toggleActive: true
-    });
     //Clock Picker
     $('.clockpicker').clockpicker({
         donetext: 'Done'
@@ -242,78 +93,5 @@ jQuery('#rcv_date').datepicker({
             .clockpicker('toggleView', 'minutes');
     });
 
-
-    //Date range picker
-    $('.input-daterange-datepicker').daterangepicker({
-        buttonClasses: ['btn', 'btn-sm'],
-        applyClass: 'btn-success',
-        cancelClass: 'btn-light'
-    });
-    $('.input-daterange-timepicker').daterangepicker({
-        timePicker: true,
-        timePickerIncrement: 30,
-        locale: {
-            format: 'MM/DD/YYYY h:mm A'
-        },
-        buttonClasses: ['btn', 'btn-sm'],
-        applyClass: 'btn-success',
-        cancelClass: 'btn-light'
-    });
-    $('.input-limit-datepicker').daterangepicker({
-        format: 'MM/DD/YYYY',
-        minDate: '06/01/2018',
-        maxDate: '06/30/2018',
-        buttonClasses: ['btn', 'btn-sm'],
-        applyClass: 'btn-success',
-        cancelClass: 'btn-light',
-        dateLimit: {
-            days: 6
-        }
-    });
-
-    $('#reportrange span').html(moment().subtract(29, 'days').format('MMMM D, YYYY') + ' - ' + moment().format('MMMM D, YYYY'));
-
-    $('#reportrange').daterangepicker({
-        format: 'MM/DD/YYYY',
-        startDate: moment().subtract(29, 'days'),
-        endDate: moment(),
-        minDate: '01/01/2017',
-        maxDate: '12/31/2020',
-        dateLimit: {
-            days: 60
-        },
-        showDropdowns: true,
-        showWeekNumbers: false,
-        timePicker: false,
-        timePickerIncrement: 1,
-        timePicker12Hour: true,
-        ranges: {
-            'Today': [moment(), moment()],
-            'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-            'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-            'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-            'This Month': [moment().startOf('month'), moment().endOf('month')],
-            'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-        },
-        opens: 'left',
-        drops: 'down',
-        buttonClasses: ['btn', 'btn-sm'],
-        applyClass: 'btn-success',
-        cancelClass: 'btn-light',
-        separator: ' to ',
-        locale: {
-            applyLabel: 'Submit',
-            cancelLabel: 'Cancel',
-            fromLabel: 'From',
-            toLabel: 'To',
-            customRangeLabel: 'Custom',
-            daysOfWeek: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
-            monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-            firstDay: 1
-        }
-    }, function (start, end, label) {
-        console.log(start.toISOString(), end.toISOString(), label);
-        $('#reportrange span').html(start.format('MMMM D, YYYY') + ' - ' + end.format('MMMM D, YYYY'));
-    });
 
 });

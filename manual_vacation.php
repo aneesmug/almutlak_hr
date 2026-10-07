@@ -88,7 +88,6 @@ if (!$is_system_admin && !$isHR && !$isDeptHr && !user_has_special_access($conDB
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
     <script>
@@ -153,12 +152,14 @@ if (!$is_system_admin && !$isHR && !$isDeptHr && !user_has_special_access($conDB
                 showLoaderOnConfirm: true,
                 width: '800px',
                 didOpen: () => {
-                    $('#period_start, #period_end').datepicker({
-                        format: "yyyy-mm-dd",
-                        todayHighlight: true,
-                        autoclose: true
+                    // Period end can't be before period start
+                    const periodEndPicker = AppDate.single('#period_end', { onChange: calculateDays });
+                    AppDate.single('#period_start', {
+                        onChange: function(dates) {
+                            if (dates.length) periodEndPicker.set('minDate', dates[0]);
+                            calculateDays();
+                        }
                     });
-                    $('#period_start, #period_end').on('changeDate', calculateDays);
                 },
                 preConfirm: () => {
                     const period_start = $('#period_start').val();

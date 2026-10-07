@@ -45,7 +45,6 @@
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
 
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -195,7 +194,6 @@
     <script src="assets/js/jquery.core.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="./plugins/datatables/dataTables.buttons.min.js"></script>
@@ -681,7 +679,7 @@
                     const $form = $('#returnAssetForm');
                     F.liveClear($form);
                     F.bindFilePicker($form);
-                    F.datepicker($('#return-date'), { endDate: '+0d' });
+                    F.datepicker($('#return-date'), { maxDate: 'today' });
                 },
                 preConfirm: function() {
                     const $form = $('#returnAssetForm');

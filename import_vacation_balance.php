@@ -34,7 +34,6 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
     <!-- Plugins css -->
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
 
     <!-- App css -->
@@ -183,7 +182,6 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
     <script src="assets/js/jquery.slimscroll.js"></script>
 
     <!-- Plugins js -->
-    <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
 
     <!-- App js -->
@@ -194,13 +192,8 @@ if (!$isHR && !$is_system_admin && !$isDeptHr) {
             // A variable to store the annual days for the selected employee
             let annualVacationDays = 0;
 
-            // Initialize Datepicker
-            $('.datepicker').datepicker({
-                format: 'yyyy-mm-dd',
-                autoclose: true,
-                todayHighlight: true,
-                endDate: '0d' // Disallow future dates
-            });
+            // Future dates are blocked
+            AppDate.all('.datepicker', { maxDate: 'today' });
 
             // Initialize Select2
             $('#employee_search').select2({

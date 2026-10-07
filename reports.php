@@ -118,7 +118,6 @@ if (mysqli_num_rows($query) == 1) {
         <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
         <!-- Date Picker -->
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
 
         <!-- <link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css"> -->
         <!-- <link rel="stylesheet" href="./plugins/select2/css/select2.min.css"> -->
@@ -241,12 +240,6 @@ if (mysqli_num_rows($query) == 1) {
             html.app-dark .detail-column { background: #1f2638; border-color: #2c3550; border-inline-start-color: #6366f1; }
             html.app-dark .detail-column .detail-label { color: #8b98ad; }
             html.app-dark .detail-column .detail-value { color: #e2e8f0; }
-
-            /* Wide month picker for payroll filter */
-            .payroll-month-picker { min-width: 280px !important; width: 280px !important; }
-            .payroll-month-picker .datepicker-months table { width: 100%; }
-            .payroll-month-picker .datepicker-months table tr td span { width: 22% !important; margin: 1% !important; }
-            .payroll-month-picker .datepicker-switch { font-size: 15px; font-weight: 600; }
 
             @media (max-width: 575px) {
                 .rp-type-grid { grid-template-columns: 1fr; }
@@ -519,7 +512,7 @@ if (mysqli_num_rows($query) == 1) {
 
                                     <div class="col-sm-6 col-md-4 col-xl-3 mb-3" id="payrollMonthFilterWrapper" style="display:none;">
                                         <label for="payrollMonthFilter"><?= __('month') ?></label>
-                                        <div class="rp-ico-input" onclick="$('#payrollMonthFilter').datepicker('show');">
+                                        <div class="rp-ico-input" onclick="AppDate.get('#payrollMonthFilter') && AppDate.get('#payrollMonthFilter').open();">
                                             <input type="text" class="form-control" id="payrollMonthFilter" placeholder="YYYY-MM" readonly>
                                             <i class="mdi mdi-calendar"></i>
                                         </div>
@@ -734,7 +727,6 @@ if (mysqli_num_rows($query) == 1) {
         <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
 
         <!-- Date Picker -->
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 
         <!-- SweetAlert2 -->
         <!-- <script src="./assets/plugins/sweet-alert2/sweetalert2.min.js"></script> -->
@@ -756,19 +748,11 @@ if (mysqli_num_rows($query) == 1) {
                 $('#dateFrom').closest('.col-md-4, .form-group').hide();
                 $('#dateTo').closest('.col-md-4, .form-group').hide();
                 
-                // Initialize date pickers with RTL support (using global function)
-                initializeDatepickerRTL();
+                // Date pickers (AppDate - RTL aware)
+                AppDate.all('.datepicker');
 
-                // Initialize month picker for payroll month filter
-                $('#payrollMonthFilter').datepicker({
-                    format: 'yyyy-mm',
-                    viewMode: 'months',
-                    minViewMode: 'months',
-                    autoclose: true,
-                    orientation: 'auto'
-                }).on('show', function() {
-                    $(this).data('datepicker').picker.addClass('payroll-month-picker');
-                }).datepicker('setDate', new Date());
+                // Month picker for payroll month filter (value YYYY-MM)
+                AppDate.month('#payrollMonthFilter', { defaultDate: new Date() });
 
                 const currentMonthValue = new Date().toISOString().slice(0, 7);
 
@@ -4324,7 +4308,7 @@ if (mysqli_num_rows($query) == 1) {
                     $('#deptFilter').val('');
                     $('#dateFrom').val('');
                     $('#dateTo').val('');
-                    $('#payrollMonthFilter').datepicker('setDate', new Date());
+                    AppDate.get('#payrollMonthFilter').setDate(new Date(), false);
                     $('#statusFilter').val('');
                     $('#vacationTypeFilter').val('');
                     $('#employeeFilter').val('').trigger('change');

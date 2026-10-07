@@ -390,7 +390,6 @@ if ($can_see_all_depts) {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 
     <script src="assets/js/modernizr.min.js"></script>
@@ -508,12 +507,6 @@ if ($can_see_all_depts) {
 
         .detail-item {
             flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>;
-        }
-        .datepicker table tr td.disabled, .datepicker table tr td.disabled:hover {
-            background: 0 0;
-            color: var(--danger);
-            background-color: #ffe6e9;
-            cursor: default;
         }
     </style>
     <?php if ($is_rtl): ?>
@@ -1220,40 +1213,23 @@ if ($can_see_all_depts) {
                         }
                     };
 
-                    $startInput.datepicker({
-                        format: 'yyyy-mm-dd',
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        if (e.date) {
-                            $returnInput.datepicker('setStartDate', e.date);
+                    // Start can't be after return, return can't be before start
+                    const adminStartPicker = AppDate.single($startInput, {
+                        defaultDate: currentStartDate || null,
+                        maxDate: currentReturnDate || null,
+                        onChange: function(dates) {
+                            if (dates.length) adminReturnPicker.set('minDate', dates[0]);
+                            updatePreview();
                         }
-                        updatePreview();
                     });
-
-                    $returnInput.datepicker({
-                        format: 'yyyy-mm-dd',
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        if (e.date) {
-                            $startInput.datepicker('setEndDate', e.date);
+                    const adminReturnPicker = AppDate.single($returnInput, {
+                        defaultDate: currentReturnDate || null,
+                        minDate: currentStartDate || null,
+                        onChange: function(dates) {
+                            if (dates.length) adminStartPicker.set('maxDate', dates[0]);
+                            updatePreview();
                         }
-                        updatePreview();
                     });
-
-                    if (currentStartDate) {
-                        $startInput.datepicker('setDate', currentStartDate);
-                    }
-
-                    if (currentReturnDate) {
-                        $returnInput.datepicker('setDate', currentReturnDate);
-                        $startInput.datepicker('setEndDate', currentReturnDate);
-                    }
-
-                    if (currentStartDate) {
-                        $returnInput.datepicker('setStartDate', currentStartDate);
-                    }
 
                     updatePreview();
                 },
@@ -2887,6 +2863,21 @@ if ($can_see_all_depts) {
                     };
 
                     // --- Initialize Date Pickers for Payment / Travel / Return Fields ---
+                    // Departure/arrival stay inside the vacation dates and limit each other.
+                    const initFlightDatePickers = (departureDate, arrivalDate) => {
+                        const arrivalPicker = AppDate.single('#swal_arrival_date', {
+                            minDate: vacStartDate,
+                            maxDate: vacEndDate,
+                            defaultDate: arrivalDate || null,
+                            onChange: (dates) => { if (dates.length) departurePicker.set('maxDate', dates[0]); }
+                        });
+                        const departurePicker = AppDate.single('#swal_departure_date', {
+                            minDate: vacStartDate,
+                            maxDate: vacEndDate,
+                            defaultDate: departureDate || null,
+                            onChange: (dates) => { if (dates.length) arrivalPicker.set('minDate', dates[0]); }
+                        });
+                    };
                     if ((isHR_Assistant || isHR_Payroll || isGR_Officer) && isFlyVacation) {
                         // Fetch existing departure and arrival dates from database
                         $.ajax({
@@ -2899,62 +2890,13 @@ if ($can_see_all_depts) {
                             },
                             success: function(res) {
                                 if (res.status === 200) {
-                                    // Initialize departure date picker (Bootstrap Datepicker)
-                                    $('#swal_departure_date').datepicker({
-                                        format: "yyyy-mm-dd",
-                                        startDate: vacStartDate,
-                                        endDate: vacEndDate,
-                                        todayHighlight: true,
-                                        autoclose: true
-                                    }).on('changeDate', function(e) {
-                                        var departureDate = e.date;
-                                        $('#swal_arrival_date').datepicker('setStartDate', departureDate);
-                                    });
-
-                                    // Initialize arrival date picker (Bootstrap Datepicker)
-                                    $('#swal_arrival_date').datepicker({
-                                        format: "yyyy-mm-dd",
-                                        startDate: vacStartDate,
-                                        endDate: vacEndDate,
-                                        todayHighlight: true,
-                                        autoclose: true
-                                    }).on('changeDate', function(e) {
-                                        var arrivalDate = e.date;
-                                        $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
-                                    });
-
-                                    // Set initial values if they exist
-                                    if (res.departure_date) {
-                                        $('#swal_departure_date').datepicker('setDate', res.departure_date);
-                                    }
-                                    if (res.arrival_date) {
-                                        $('#swal_arrival_date').datepicker('setDate', res.arrival_date);
-                                    }
+                                    // Departure / arrival: days outside the vacation are blocked
+                                    initFlightDatePickers(res.departure_date, res.arrival_date);
                                 }
                             },
                             error: function() {
                                 // Initialize with default vacation range even if fetch fails
-                                $('#swal_departure_date').datepicker({
-                                    format: "yyyy-mm-dd",
-                                    startDate: vacStartDate,
-                                    endDate: vacEndDate,
-                                    todayHighlight: true,
-                                    autoclose: true
-                                }).on('changeDate', function(e) {
-                                    var departureDate = e.date;
-                                    $('#swal_arrival_date').datepicker('setStartDate', departureDate);
-                                });
-
-                                $('#swal_arrival_date').datepicker({
-                                    format: "yyyy-mm-dd",
-                                    startDate: vacStartDate,
-                                    endDate: vacEndDate,
-                                    todayHighlight: true,
-                                    autoclose: true
-                                }).on('changeDate', function(e) {
-                                    var arrivalDate = e.date;
-                                    $('#swal_departure_date').datepicker('setEndDate', arrivalDate);
-                                });
+                                initFlightDatePickers(null, null);
                             }
                         });
                     }
@@ -3891,161 +3833,124 @@ if ($can_see_all_depts) {
                     const returnPickerEnd = new Date(appliedEnd);
                     returnPickerEnd.setDate(returnPickerEnd.getDate() + 5);
                     
-                    // Initialize start_date picker (with ±5 day flexibility around applied start)
-                    $('#start_date_update').datepicker({
-                        format: "yyyy-mm-dd",
-                        startDate: startPickerStart,
-                        endDate: startPickerEnd,
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        calculateVacationDays();
-                        
-                        // Automatically update Departure Date to match Start Date
-                        const selectedStart = new Date(e.date);
-                        const departureInput = $('#departure_date_update');
-                        departureInput.datepicker('setDate', selectedStart);
-                        departureInput.val(formatDateForInput(selectedStart));
-                        
-                        // Get current return date
-                        const returnDateVal = document.getElementById('return_date_update').value;
-                        
-                        // Adjust return_date picker minimum to be after selected start date
-                        const minReturnDate = new Date(selectedStart);
-                        minReturnDate.setDate(minReturnDate.getDate() + (appliedDays - 1)); // Set to minimum required return date
-                        $('#return_date_update').datepicker('setStartDate', minReturnDate);
-                        
-                        // Keep returnPickerEnd as the maximum for return_date picker
-                        $('#return_date_update').datepicker('setEndDate', returnPickerEnd);
-                        
-                        // Adjust departure_date picker to start from selected start date
-                        $('#departure_date_update').datepicker('setStartDate', selectedStart);
-                        
-                        // If return date is set, adjust arrival picker max date
-                        if (returnDateVal) {
-                            const returnDate = new Date(returnDateVal);
-                            $('#arrival_date_update').datepicker('setEndDate', returnDate);
-                        }
-                    });
-                    
-                    // Initialize return_date picker (with ±5 day flexibility around applied end)
-                    $('#return_date_update').datepicker({
-                        format: "yyyy-mm-dd",
-                        startDate: returnPickerStart,
-                        endDate: returnPickerEnd,
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        calculateVacationDays();
-                        
-                        // Automatically update Arrival Date to match Return Date
-                        const selectedReturn = new Date(e.date);
-                        const arrivalInput = $('#arrival_date_update');
-                        arrivalInput.datepicker('setDate', selectedReturn);
-                        arrivalInput.val(formatDateForInput(selectedReturn));
-                        
-                        // Get current start date
-                        const startDateVal = document.getElementById('start_date_update').value;
-                        
-                        // Adjust start_date picker maximum
-                        const maxStartDate = new Date(selectedReturn);
-                        maxStartDate.setDate(maxStartDate.getDate() - (appliedDays - 1));
-                        $('#start_date_update').datepicker('setEndDate', maxStartDate);
-                        
-                        // Keep startPickerStart as the minimum for start_date picker
-                        $('#start_date_update').datepicker('setStartDate', startPickerStart);
-                        
-                        // Adjust arrival_date picker to end at selected return date
-                        $('#arrival_date_update').datepicker('setEndDate', selectedReturn);
-                        
-                        // If start date is set, adjust departure picker min date
-                        if (startDateVal) {
-                            const startDate = new Date(startDateVal);
-                            $('#departure_date_update').datepicker('setStartDate', startDate);
-                        }
-                    });
+                    // Start / return: blocked outside ±5 days around the applied dates; picking one
+                    // keeps the applied day count possible on the other and moves departure/arrival.
+                    // Departure / arrival: blocked outside that whole window and limit each other.
+                    const startPicker = AppDate.single('#start_date_update', {
+                        minDate: startPickerStart,
+                        maxDate: startPickerEnd,
+                        defaultDate: null,
+                        onChange: function(dates) {
+                            if (!dates.length) return;
+                            calculateVacationDays();
 
-                    // Initialize departure date picker (constrained between start and return dates with ±5 flexibility)
-                    $('#departure_date_update').datepicker({
-                        format: "yyyy-mm-dd",
-                        startDate: startPickerStart,
-                        endDate: returnPickerEnd,
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        var departureDate = e.date;
-                        // Only update arrival picker if departure date is valid
-                        if (departureDate && departureDate instanceof Date) {
-                            $('#arrival_date_update').datepicker('setStartDate', departureDate);
-                        }
-                    });
+                            // Automatically update Departure Date to match Start Date
+                            const selectedStart = dates[0];
+                            departurePicker.setDate(selectedStart, false);
 
-                    // Initialize arrival date picker (with ±5 day flexibility)
-                    $('#arrival_date_update').datepicker({
-                        format: "yyyy-mm-dd",
-                        startDate: startPickerStart,
-                        endDate: returnPickerEnd,
-                        todayHighlight: true,
-                        autoclose: true
-                    }).on('changeDate', function(e) {
-                        var arrivalDate = e.date;
-                        
-                        // Exit if arrivalDate is not valid
-                        if (!arrivalDate || !(arrivalDate instanceof Date)) {
-                            return;
-                        }
-                        
-                        // Ensure arrival date is within start/return bounds
-                        if (appliedStart && arrivalDate < appliedStart) {
-                            arrivalDate.setTime(appliedStart.getTime());
-                        }
-                        if (appliedEnd && arrivalDate > appliedEnd) {
-                            arrivalDate.setTime(appliedEnd.getTime());
-                        }
-                        
-                        // Update the input value with proper format
-                        const year = arrivalDate.getFullYear();
-                        const month = String(arrivalDate.getMonth() + 1).padStart(2, '0');
-                        const day = String(arrivalDate.getDate()).padStart(2, '0');
-                        const formattedArrivalDate = `${year}-${month}-${day}`;
-                        $('#arrival_date_update').val(formattedArrivalDate);
-                        
-                        // Adjust departure_date picker maximum
-                        $('#departure_date_update').datepicker('setEndDate', arrivalDate);
-                        
-                        // Ensure departure date is not after arrival date
-                        const departureInput = $('#departure_date_update').val();
-                        if (departureInput) {
-                            const [depYear, depMonth, depDay] = departureInput.split('-');
-                            const departureDate = new Date(depYear, parseInt(depMonth) - 1, depDay);
-                            if (departureDate > arrivalDate) {
-                                $('#departure_date_update').datepicker('setDate', arrivalDate);
-                                $('#departure_date_update').val(formattedArrivalDate);
+                            // Return date: minimum required return date, max stays returnPickerEnd
+                            const minReturnDate = new Date(selectedStart);
+                            minReturnDate.setDate(minReturnDate.getDate() + (appliedDays - 1));
+                            returnPicker.set('minDate', minReturnDate);
+                            returnPicker.set('maxDate', returnPickerEnd);
+
+                            // Departure starts from the selected start date
+                            departurePicker.set('minDate', selectedStart);
+
+                            // If return date is set, arrival can't be after it
+                            const returnDateVal = document.getElementById('return_date_update').value;
+                            if (returnDateVal) {
+                                arrivalPicker.set('maxDate', returnDateVal);
                             }
                         }
-                        
-                        // Trigger days calculation
-                        calculateVacationDays();
+                    });
+
+                    const returnPicker = AppDate.single('#return_date_update', {
+                        minDate: returnPickerStart,
+                        maxDate: returnPickerEnd,
+                        defaultDate: null,
+                        onChange: function(dates) {
+                            if (!dates.length) return;
+                            calculateVacationDays();
+
+                            // Automatically update Arrival Date to match Return Date
+                            const selectedReturn = dates[0];
+                            arrivalPicker.setDate(selectedReturn, false);
+
+                            // Start date: latest start that still fits the applied days
+                            const maxStartDate = new Date(selectedReturn);
+                            maxStartDate.setDate(maxStartDate.getDate() - (appliedDays - 1));
+                            startPicker.set('maxDate', maxStartDate);
+                            startPicker.set('minDate', startPickerStart);
+
+                            // Arrival ends at the selected return date
+                            arrivalPicker.set('maxDate', selectedReturn);
+
+                            // If start date is set, departure can't be before it
+                            const startDateVal = document.getElementById('start_date_update').value;
+                            if (startDateVal) {
+                                departurePicker.set('minDate', startDateVal);
+                            }
+                        }
+                    });
+
+                    const departurePicker = AppDate.single('#departure_date_update', {
+                        minDate: startPickerStart,
+                        maxDate: returnPickerEnd,
+                        defaultDate: null,
+                        onChange: function(dates) {
+                            if (dates.length) arrivalPicker.set('minDate', dates[0]);
+                        }
+                    });
+
+                    const arrivalPicker = AppDate.single('#arrival_date_update', {
+                        minDate: startPickerStart,
+                        maxDate: returnPickerEnd,
+                        defaultDate: null,
+                        onChange: function(dates) {
+                            if (!dates.length) return;
+                            const arrivalDate = new Date(dates[0]);
+
+                            // Ensure arrival date is within start/return bounds
+                            if (appliedStart && arrivalDate < appliedStart) {
+                                arrivalDate.setTime(appliedStart.getTime());
+                            }
+                            if (appliedEnd && arrivalDate > appliedEnd) {
+                                arrivalDate.setTime(appliedEnd.getTime());
+                            }
+                            if (arrivalDate.getTime() !== dates[0].getTime()) {
+                                arrivalPicker.setDate(arrivalDate, false);
+                            }
+
+                            // Departure can't be after arrival
+                            departurePicker.set('maxDate', arrivalDate);
+                            const departureDate = departurePicker.selectedDates[0];
+                            if (departureDate && departureDate > arrivalDate) {
+                                departurePicker.setDate(arrivalDate, false);
+                            }
+
+                            // Trigger days calculation
+                            calculateVacationDays();
+                        }
                     });
 
                     // Set initial values
-                    // For start_date and return_date, use applied dates initially
+                    // For start_date and return_date, use applied dates initially (runs their
+                    // change handlers, which also preset departure/arrival and the limits)
                     if (appliedStartDate && appliedStartDate !== '') {
-                        $('#start_date_update').datepicker('setDate', appliedStart);
-                        $('#start_date_update').val(appliedStartDate);
+                        startPicker.setDate(appliedStart, true);
                     }
                     if (appliedEndDate && appliedEndDate !== '') {
-                        $('#return_date_update').datepicker('setDate', appliedEnd);
-                        $('#return_date_update').val(appliedEndDate);
+                        returnPicker.setDate(appliedEnd, true);
                     }
                     if (currentDepartureDate && currentDepartureDate !== '' && currentDepartureDate !== '0000-00-00') {
-                        $('#departure_date_update').val(currentDepartureDate);
+                        departurePicker.setDate(currentDepartureDate, false);
                     }
                     if (currentArrivalDate && currentArrivalDate !== '' && currentArrivalDate !== '0000-00-00') {
-                        $('#arrival_date_update').val(currentArrivalDate);
+                        arrivalPicker.setDate(currentArrivalDate, false);
                     } else if (appliedEndDate && appliedEndDate !== '') {
                         // Default to applied end date if no current arrival date
-                        $('#arrival_date_update').val(appliedEndDate);
+                        arrivalPicker.setDate(appliedEndDate, false);
                     }
                     
                     // Initial calculation

@@ -358,6 +358,9 @@ $user_company = $emprow['comp_no'] ?? 1;
 // Dark/light theme - needs $empid for the per-user choice in Screen Settings.
 require_once __DIR__ . '/theme_dark.php';
 
+// AppDate date picker (flatpickr) injected into <head> of every page.
+require_once __DIR__ . '/app_datepicker_head.php';
+
 // --- Temporary role coverage (vacation replacement) ---
 // If this employee is currently covering someone's vacation (granted via the
 // "Transfer Role (Temp)" button on the employee master page), their effective

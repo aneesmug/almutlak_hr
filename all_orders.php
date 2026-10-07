@@ -25,9 +25,7 @@
 		<!-- Plugins css -->
         <link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
         <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
         <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
 		<!-- DataTables -->
         <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
         <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
@@ -170,8 +168,6 @@
         <script src="./plugins/bootstrap-timepicker/bootstrap-timepicker.js"></script>
         <script src="./plugins/bootstrap-colorpicker/js/bootstrap-colorpicker.min.js"></script>
         <script src="./plugins/clockpicker/js/bootstrap-clockpicker.min.js"></script>
-        <script src="./plugins/bootstrap-daterangepicker/daterangepicker.js"></script>
-        <script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
 
         <!-- App js -->
 		<!-- <script src="assets/pages/jquery.form-pickers.init.js"></script> -->
@@ -227,12 +223,8 @@
 <script type="text/javascript">
 
     jQuery(document).ready(function () {
-        $('.card_exp').datepicker({
-            format: "dd-mm-yyyy",
-            autoclose: true,
-            todayHighlight: true,
-            startDate: '+2y',
-        });
+        // Card expiry: anything sooner than 2 years is blocked
+        AppDate.all('.card_exp', { format: 'd-m-Y', minDate: '+2y' });
     });
 
     $(document).on('click', '.cardUpdateAttr', function (e) {
@@ -555,12 +547,7 @@ function newexportaction(e, dt, button, config) {
                 $('#uStatus option[value="'+status+'"]').prop("selected", "selected");
                 $("#noteDIV").hide();
                 $("#dateDIV").hide();
-                jQuery('.delivery_date').datepicker({
-                    format: "yyyy-mm-dd",
-                    todayHighlight: true,
-                    startDate: '+0d',
-                    toggleActive: true,
-                });
+                AppDate.all('.delivery_date', { minDate: 'today' }); // past days blocked
 
                 $('#uStatus').click(function(){      
                     var value = $(this).val();

@@ -230,7 +230,6 @@ if ($can_see_all_depts) {
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?= get_setting($conDB, 'favicon') ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
@@ -407,7 +406,6 @@ if ($can_see_all_depts) {
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
@@ -463,24 +461,9 @@ if ($can_see_all_depts) {
                 showLoaderOnConfirm: true,
                 allowOutsideClick: false,
                 didOpen: () => {
-                    const $lastIncrementDate = $('#si_last_increment_date');
-                    if ($lastIncrementDate.length && typeof $lastIncrementDate.datepicker === 'function') {
-                        $lastIncrementDate.datepicker({
-                            format: 'yyyy-mm-dd',
-                            autoclose: true,
-                            todayHighlight: true,
-                            endDate: '0d'
-                        });
-                    }
-                    const $gmEffectiveDate = $('#si_gm_effective_date');
-                    if ($gmEffectiveDate.length && typeof $gmEffectiveDate.datepicker === 'function') {
-                        $gmEffectiveDate.datepicker({
-                            format: 'yyyy-mm-dd',
-                            autoclose: true,
-                            todayHighlight: true,
-                            startDate: '0d'
-                        });
-                    }
+                    // Last increment: future days blocked. GM effective date: past days blocked.
+                    AppDate.single('#si_last_increment_date', { maxDate: 'today' });
+                    AppDate.single('#si_gm_effective_date', { minDate: 'today' });
                 },
                 preConfirm: () => {
                     const approvalComment = (document.getElementById('si_approval_comment') || {}).value || '';
