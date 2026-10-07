@@ -896,7 +896,7 @@ function ensure_d365_settings($conDB) {
         'd365_department_map' => ['Information Technology=IT, Finance=10, Human Resources=50, Purchase=40, Sales=30, Warehouse=20, Production=81', 'text', 'D365 Department per App Department (APP DEPARTMENT=D365 DEPARTMENT, comma separated) - fills a blank D365 department; departments not listed use the value most colleagues have in D365', null],
         'd365_company_map' => ['', 'text', 'D365 Company per App Company (APP COMPANY ID=D365 COMPANY, comma separated) - set in D365 Config > Companies; used when creating employees and registering workers', null],
         'd365_hidden_companies' => ['', 'text', 'D365 Companies removed from the app (closed companies, comma separated, e.g. MTL) - hidden from Account Templates and every company picker; set by Account Templates > Remove', null],
-        'd365_journal_names' => ['MHO=GRN_JRN, SANM=GRN_JRN, MSP=RY-GEN, MFF=RY_GEN, RLC=GEN, MTL=01-GV, MRF=01-GV, MMT=01-GV, MTL/02=02-GV, MRF/02=02-GV, MMT/02=02-GV', 'text', 'D365 Payroll Journal Name per Company (COMPANY=JOURNAL, or COMPANY/COMPANY-DIMENSION=JOURNAL e.g. MTL/02=02-GV; comma separated)', null],
+        'd365_journal_names' => ['MHO=GRN_JRN, SANM=GRN_JRN, MSP=RY-GEN, MFF=RY_GEN, RLC=GEN, MTL=01-GV, MRF=01-GV, MMT=01-GV, MTL/02=02-GV, MRF/02=02-GV, MMT/02=02-GV', 'text', 'D365 Payroll Journal Name per Company - fallback only: each employee goes to the general journal named after their Branch / Company value in D365 (MSP JD-GEN, MFF RY_GEN, MTL 02-GV). COMPANY=JOURNAL is used when no such journal fits; COMPANY/VALUE=JOURNAL forces one (comma separated)', null],
     ];
 
     $existing = [];

@@ -1,5 +1,7 @@
 <?php
-// App Settings > D365 Config > Account Templates / Employee Dimensions (system admins only).
+// App Settings > D365 Config > Account Templates / Employee Dimensions (system admins), and the standalone
+// Employee Dimensions page (d365_employee_dimensions.php) for the 'd365_employee_dimensions' special access -
+// those users only get the employee actions below; templates, departments and companies stay admin only.
 // Actions (POST, CSRF = $_SESSION['d365_csrf']):
 //   load            -> companies, templates, ledger format dimensions, dimensions per company structure
 //   save_template   -> company + dims (JSON [{dimension, default}]); empty list removes the template
@@ -20,7 +22,12 @@ require_once __DIR__ . '/../../includes/cost_centers.php';
 header('Content-Type: application/json; charset=utf-8');
 @set_time_limit(180);
 
-if (!($is_system_admin ?? false)) {
+// Actions of the Employee Dimensions screen (read setup + edit employees' payroll company and values)
+const D365DIM_EMPLOYEE_ACTIONS = ['load', 'employees', 'save_employee', 'save_employees', 'dim_values'];
+$d365DimAllowed = ($is_system_admin ?? false)
+    || (in_array((string)($_POST['action'] ?? ''), D365DIM_EMPLOYEE_ACTIONS, true)
+        && user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', false));
+if (!$d365DimAllowed) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'Forbidden']);
     exit;
@@ -396,6 +403,24 @@ try {
         $map = json_decode((string)($_POST['map'] ?? '{}'), true);
         if (!is_array($map)) {
             throw new InvalidArgumentException('Invalid mapping');
+        }
+        // One D365 department per app department
+        $owner = [];
+        $names = [];
+        $res = $conDB->query("SELECT id, dep_nme FROM department");
+        while ($res && ($r = $res->fetch_row())) {
+            $names[(int)$r[0]] = $r[1];
+        }
+        foreach ($map as $id => $value) {
+            $key = strtolower(trim((string)$value));
+            if ($key === '') {
+                continue;
+            }
+            if (isset($owner[$key])) {
+                throw new InvalidArgumentException('D365 department ' . trim((string)$value) . ' is mapped to both ' .
+                    ($names[$owner[$key]] ?? $owner[$key]) . ' and ' . ($names[(int)$id] ?? $id) . ' - each D365 department can be used once');
+            }
+            $owner[$key] = (int)$id;
         }
         d365dept_write_map($conDB, $map);
         echo json_encode(['ok' => true]);

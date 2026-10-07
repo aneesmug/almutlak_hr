@@ -288,7 +288,11 @@
 
     function isWorker(dim) { return String(dim).toLowerCase() === 'worker'; }
 
-    function renderEmployees(host) {
+    // opts.allEmployees (standalone d365_employee_dimensions.php): every active employee, company filter over all
+    // companies, without the Add employees / Fill blanks from D365 / Excel Import buttons. App Settings passes no opts.
+    function renderEmployees(host, opts) {
+        opts = opts || {};
+        state.allEmployees = !!opts.allEmployees;
         loading(host);
         loadMeta(true).then(function (meta) {
             // The list shows only employees whose payroll company has a template ("applied");
@@ -296,13 +300,22 @@
             var tplCodes = Object.keys(meta.templates || {}).sort();
             var saved = '*';
             try { saved = localStorage.getItem('d365_dim_company') || '*'; } catch (e) {}
-            if (saved !== '*' && tplCodes.indexOf(saved) === -1) saved = '*';
+            var allCodes = Object.keys(meta.counts || {}).filter(function (k) { return k !== '-'; }).sort();
+            if (state.allEmployees) {
+                if (saved !== '*' && saved !== '-' && allCodes.indexOf(saved) === -1) saved = '*';
+            } else if (saved !== '*' && tplCodes.indexOf(saved) === -1) saved = '*';
             var applied = 0, unapplied = 0;
             Object.keys(meta.counts || {}).forEach(function (k) {
                 if (tplCodes.indexOf(k) !== -1) applied += meta.counts[k]; else unapplied += meta.counts[k];
             });
             var opt = function (v, label) { return '<option value="' + esc(v) + '"' + (v === saved ? ' selected' : '') + '>' + esc(label) + '</option>'; };
-            var options = opt('*', t('d365_all_applied', 'All companies with a template') + ' (' + applied + ')') +
+            var options = state.allEmployees
+                ? opt('*', t('d365_all_employees', 'All employees') + ' (' + (applied + unapplied) + ')') +
+                  allCodes.map(function (code) {
+                      return opt(code, code + (companyName(code) ? ' - ' + companyName(code) : '') + (tplCodes.indexOf(code) === -1 ? ' - ' + t('d365_no_template_short', 'No template') : '') + ' (' + meta.counts[code] + ')');
+                  }).join('') +
+                  (meta.counts['-'] ? opt('-', t('d365_no_company_short', 'No company') + ' (' + meta.counts['-'] + ')') : '')
+                : opt('*', t('d365_all_applied', 'All companies with a template') + ' (' + applied + ')') +
                 tplCodes.map(function (code) {
                     return opt(code, code + (companyName(code) ? ' - ' + companyName(code) : '') + ' (' + (meta.counts[code] || 0) + ')');
                 }).join('');
@@ -321,10 +334,12 @@
                 '<select class="form-control form-control-sm" id="dimCompany" style="max-width:340px">' + options + '</select>' +
                 '<div class="sr-search" style="flex:1;min-width:180px"><i class="mdi mdi-magnify"></i><input type="search" id="dimSearch" placeholder="' + esc(t('search', 'Search')) + '..."></div>' +
                 '<label class="sr-check mb-0"><input type="checkbox" id="dimOnlyMissing"> ' + esc(t('d365_only_not_ready', 'Only not ready')) + '</label>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimAdd"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-account-plus"></i> ' +
+                '<span class="sr-pill tone-red" id="dimMissingCount" style="display:none;cursor:pointer" title="' + esc(t('d365_missing_count_hint', 'Employees with a Missing dimension - click to show only them')) + '"><span class="sr-dot"></span>' +
+                esc(t('d365_missing', 'Missing')) + ': <b class="js-n">0</b></span>' +
+                (state.allEmployees ? '' : '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimAdd"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-account-plus"></i> ' +
                 esc(t('d365_add_employees', 'Add employees')) + ' <span class="sr-chip" style="margin-left:4px" title="' + esc(t('d365_not_applied', 'Without an applied template')) + '">' + unapplied + '</span></button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="dimFill"><i class="mdi mdi-cloud-download-outline"></i> ' + esc(t('d365_fill_blanks', 'Fill blanks from D365')) + '</button>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimExcel"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-file-excel-outline"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + '</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimExcel"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-file-excel-outline"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + '</button>') +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="dimSaveAll" disabled><i class="mdi mdi-content-save"></i> ' + esc(t('d365_save_changed', 'Save changed')) + ' (<span id="dimDirtyCount">0</span>)</button>' +
                 '</div><div id="dimGrid"></div>';
             var go = host.querySelector('#dimGoTemplates');
@@ -344,16 +359,21 @@
             });
             host.querySelector('#dimSearch').addEventListener('input', function () { filterGrid(host); });
             host.querySelector('#dimOnlyMissing').addEventListener('change', function () { filterGrid(host); });
+            host.querySelector('#dimMissingCount').addEventListener('click', function () {
+                var cb = host.querySelector('#dimOnlyMissing');
+                cb.checked = true;
+                filterGrid(host);
+            });
             host.querySelector('#dimSaveAll').addEventListener('click', function () { saveAll(host); });
-            host.querySelector('#dimFill').addEventListener('click', function () { fillFromD365(host, grid, sel.value); });
-            host.querySelector('#dimExcel').addEventListener('click', function () {
+            if (!state.allEmployees) host.querySelector('#dimFill').addEventListener('click', function () { fillFromD365(host, grid, sel.value); });
+            if (!state.allEmployees) host.querySelector('#dimExcel').addEventListener('click', function () {
                 if (grid.querySelector('tr.is-dirty')) {
                     Swal.fire('', t('d365_save_first', 'Save or discard your changes first'), 'info');
                     return;
                 }
                 excelDialog(host);
             });
-            host.querySelector('#dimAdd').addEventListener('click', function () {
+            if (!state.allEmployees) host.querySelector('#dimAdd').addEventListener('click', function () {
                 if (grid.querySelector('tr.is-dirty')) {
                     Swal.fire('', t('d365_save_first', 'Save or discard your changes first'), 'info');
                     return;
@@ -553,8 +573,10 @@
 
     function loadGrid(host, grid, company) {
         grid.dataset.company = company;
+        var missingBadge = host.querySelector('#dimMissingCount');
+        if (missingBadge) missingBadge.style.display = 'none'; // recounted as the new rows are drawn
         loading(grid);
-        post('employees', { company: company, scope: 'applied' }).then(function (j) {
+        post('employees', { company: company, scope: state.allEmployees ? '' : 'applied' }).then(function (j) {
             state.templates = j.templates || {};
             var dims = {};
             Object.keys(state.templates).forEach(function (c) {
@@ -615,7 +637,25 @@
     function updateStatus(tr) {
         var s = rowState(tr);
         tr.dataset.ready = s.ready ? '1' : '0';
+        tr.dataset.missing = s.cls === 'tone-red' ? '1' : '0';
+        scheduleMissingCount(tr);
         tr.querySelector('.js-status').innerHTML = '<span class="sr-pill ' + s.cls + '"><span class="sr-dot"></span>' + esc(s.text) + '</span>';
+    }
+
+    // Count of employees whose status is "Missing" (template dimension without a value), shown in the toolbar.
+    // Recounted once per frame, so drawing the whole grid does not recount per row.
+    var missingCountTimer = null;
+    function scheduleMissingCount(tr) {
+        var grid = tr.closest('#dimGrid');
+        if (!grid || missingCountTimer) return;
+        missingCountTimer = setTimeout(function () {
+            missingCountTimer = null;
+            var badge = grid.parentNode ? grid.parentNode.querySelector('#dimMissingCount') : null;
+            if (!badge) return;
+            var n = grid.querySelectorAll('tbody tr[data-emp][data-missing="1"]').length;
+            badge.querySelector('.js-n').textContent = n;
+            badge.style.display = n ? '' : 'none';
+        }, 0);
     }
 
     function changedValues(tr) {
@@ -960,15 +1000,50 @@
                 if (v === NEW) st = ['tone-indigo', t('d365_will_create', 'Create in D365')];
                 else if (!v) st = ['tone-slate', t('d365_not_mapped_short', 'Not mapped')];
                 else if (known[v] && !known[v].active) st = ['tone-red', t('d365_suspended_pick_other', 'Suspended in D365 - pick another or "not mapped"')];
+                else if (usedBy(v, tr)) st = ['tone-red', t('d365_dept_also_used', 'Also mapped to') + ' ' + usedBy(v, tr) + ' - ' + t('d365_pick_other', 'pick another')];
                 else if (v !== tr.dataset.orig) st = ['tone-amber', t('d365_unsaved', 'Unsaved')];
                 else st = ['tone-green', t('d365_mapped', 'Mapped')];
                 tr.querySelector('.js-st').innerHTML = '<span class="sr-pill ' + st[0] + '"><span class="sr-dot"></span>' + esc(st[1]) + '</span>';
                 host.querySelector('#deptNewCount').textContent = host.querySelectorAll('.js-dept option[value="' + NEW + '"]:checked').length;
             };
-            host.querySelectorAll('tbody tr[data-id]').forEach(function (tr) {
-                tr.querySelector('.js-dept').addEventListener('change', function () { refreshRow(tr); });
-                refreshRow(tr);
-            });
+            // One D365 department per app department: a value picked in one row is disabled in every other row
+            var deptRows = Array.prototype.slice.call(host.querySelectorAll('tbody tr[data-id]'));
+            var rowName = function (tr) { return tr.querySelector('.sr-cell-title').textContent; };
+            var usedBy = function (v, self) {
+                var other = deptRows.find(function (tr) { return tr !== self && tr.querySelector('.js-dept').value === v; });
+                return other ? rowName(other) : '';
+            };
+            var lockTaken = function () {
+                var taken = {};
+                deptRows.forEach(function (tr) {
+                    var v = tr.querySelector('.js-dept').value;
+                    if (v && v !== NEW) taken[v] = taken[v] || rowName(tr);
+                });
+                deptRows.forEach(function (tr) {
+                    var sel = tr.querySelector('.js-dept');
+                    Array.prototype.forEach.call(sel.options, function (o) {
+                        if (!o.value || o.value === NEW) return;
+                        if (!o.dataset.label) o.dataset.label = o.textContent;
+                        var owner = taken[o.value] && o.value !== sel.value ? taken[o.value] : '';
+                        o.disabled = !!owner;
+                        o.style.color = owner ? '#dc3545' : ''; // native fallback (no select2)
+                        o.textContent = o.dataset.label + (owner ? '  (' + t('d365_used_by', 'used by') + ' ' + owner + ')' : '');
+                    });
+                });
+            };
+            var refreshAll = function () { lockTaken(); deptRows.forEach(refreshRow); };
+            if (window.jQuery && jQuery.fn.select2) {
+                // select2 re-reads the options on every open, so disabled/labels stay current
+                ensureTakenStyle();
+                deptRows.forEach(function (tr) {
+                    jQuery(tr.querySelector('.js-dept')).select2({ width: '100%' }).on('change', refreshAll);
+                });
+            } else {
+                deptRows.forEach(function (tr) {
+                    tr.querySelector('.js-dept').addEventListener('change', refreshAll);
+                });
+            }
+            refreshAll();
 
             var currentMap = function () {
                 var map = {};
@@ -989,6 +1064,18 @@
             host.querySelector('#deptCreate').addEventListener('click', function () { createDepartments(host, currentMap()); });
             host.querySelector('#deptAssign').addEventListener('click', function () { assignDepartments(host); });
         }).catch(function (e) { fail(host, e); });
+    }
+
+    /** Red + not-allowed cursor for D365 departments already used by another app department (select2 list) */
+    function ensureTakenStyle() {
+        if (document.getElementById('d365DeptTakenCss')) return;
+        var css = document.createElement('style');
+        css.id = 'd365DeptTakenCss';
+        css.textContent =
+            '.select2-results__option[aria-disabled="true"],.select2-results__option--disabled{color:#dc3545!important;background:#fff5f5!important;cursor:not-allowed!important;opacity:.85}' +
+            '.select2-results__option[aria-disabled="true"]:hover,.select2-results__option--disabled:hover{background:#ffe3e3!important}' +
+            'select.js-dept option:disabled{color:#dc3545;cursor:not-allowed}';
+        document.head.appendChild(css);
     }
 
     function createDepartments(host, map) {
@@ -1126,11 +1213,11 @@
     }
 
     window.D365DimensionsSettings = {
-        render: function (key, host) {
+        render: function (key, host, opts) {
             if (key === 'templates') renderTemplates(host);
             else if (key === 'departments') renderDepartments(host);
             else if (key === 'companies') renderCompanies(host);
-            else renderEmployees(host);
+            else renderEmployees(host, opts);
         }
     };
 })();

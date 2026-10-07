@@ -158,23 +158,121 @@ class D365Payroll
     }
 
     /**
-     * Journal key for a company: "MTL/02" when D365 Config has a journal name for that Company dimension
-     * value (MTL keeps 01-GV / 02-GV journals with journal control per division), else just the company.
+     * Journal key of an employee: "COMPANY/JOURNAL NAME" (e.g. "MSP/JD-GEN", "MTL/01-GV", "MHO/GRN_JRN").
+     *
+     * Companies keep one general journal per branch or division, named after that dimension value
+     * (MSP JD-GEN / DM-GEN = Branch, MFF RY_GEN = Branch, MTL / MRF / MMT 01-GV / 02-GV = Company dimension),
+     * private to that branch's user group. The employee's journal is the one whose prefix is the employee's
+     * own value, so each branch / division sees its own payroll. Order:
+     *   1. D365 Config "COMPANY/VALUE=JOURNAL" (manual override per dimension value)
+     *   2. general journal in D365 whose prefix is the employee's Company or Branch value
+     *   3. D365 Config "COMPANY=JOURNAL"
+     *   4. the company's general journal without a prefix (GRN_JRN / GEN)
+     * $dims = default-format string of the employment; $values = ['Company' => '01', ...] from an account template.
      */
-    public function journalKey($company, $dims, $companyDimension = null)
+    public function journalKey($company, $dims, $values = null)
     {
         $company = strtoupper((string)$company);
-        if ($companyDimension !== null) {
-            $value = trim((string)$companyDimension); // from the employee's D365 account template values
+        $mine = [];
+        if (is_array($values)) {
+            foreach ($values as $k => $v) {
+                $mine[strtolower($k)] = strtoupper(trim((string)$v));
+            }
+        } elseif (is_string($values)) { // legacy: just the Company dimension value
+            $mine['company'] = strtoupper(trim($values));
         } else {
             $formats = self::$dimFormats ?: ($this->client ? self::fetchDimensionFormats($this->client) : ['default' => []]);
-            $i = array_search('company', array_map('strtolower', $formats['default'] ?? []), true);
-            $value = $i === false ? '' : trim(explode('-', (string)$dims)[$i] ?? '');
+            $parts = explode('-', (string)$dims);
+            foreach ($formats['default'] ?? [] as $i => $name) {
+                $mine[strtolower($name)] = strtoupper(trim($parts[$i] ?? ''));
+            }
         }
-        if ($value !== '' && $this->client && $this->client->getJournalName($company . '/' . $value)) {
-            return $company . '/' . $value;
+        $mine = array_filter($mine, function ($v) { return $v !== ''; });
+
+        // 1. manual override per dimension value
+        foreach (['company', 'branch'] as $dim) {
+            if (isset($mine[$dim]) && $this->client && ($name = $this->client->getJournalName($company . '/' . $mine[$dim]))) {
+                return $company . '/' . $name;
+            }
         }
-        return $company;
+        $journals = $this->client ? self::generalJournals($this->client)[$company] ?? [] : [];
+        // 2. journal named after the employee's branch / division
+        foreach ($journals as $j) {
+            if ($j['prefix'] === '') {
+                continue;
+            }
+            $dims = $j['key_dimension'] !== '' ? [$j['key_dimension']] : ['company', 'branch'];
+            foreach ($dims as $dim) {
+                if (($mine[$dim] ?? '') === $j['prefix']) {
+                    return $company . '/' . $j['name'];
+                }
+            }
+        }
+        // 3. company default from D365 Config
+        if ($this->client && ($name = $this->client->getJournalName($company))) {
+            return $company . '/' . $name;
+        }
+        // 4. general journal without a branch prefix
+        foreach ($journals as $j) {
+            if ($j['prefix'] === '') {
+                return $company . '/' . $j['name'];
+            }
+        }
+        return $company; // ensureJournal reports the missing journal name
+    }
+
+    /**
+     * General (daily) journal names per company, read from D365 and cached 1 hour:
+     * ['MSP' => [['name' => 'JD-GEN', 'prefix' => 'JD', 'key_dimension' => 'branch', 'private' => 'JD'], ...]]
+     * A general journal is named GEN / GV / GRN_JRN, optionally after a dimension value ("JD-GEN", "01-GV").
+     * key_dimension = the dimension whose default value on the journal name equals that prefix ('' unknown).
+     */
+    public static function generalJournals(D365Client $client)
+    {
+        static $memo = [];
+        $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'd365_journal_names_' . md5($client->getResourceUrl()) . '.json';
+        if (isset($memo[$file])) {
+            return $memo[$file];
+        }
+        $data = (is_file($file) && time() - filemtime($file) < 3600) ? json_decode((string)file_get_contents($file), true) : null;
+        if (!is_array($data)) {
+            $r = $client->getAll('JournalNames', ['$select' => 'dataAreaId,Name,Type,PrivateForUserGroup,DefaultFinancialDimensionDisplayValue'], true);
+            if ($r['error']) {
+                error_log('D365 journal names: ' . $r['error']);
+                return $memo[$file] = []; // config journal names still work
+            }
+            $formats = self::fetchDimensionFormats($client);
+            $data = [];
+            foreach ($r['data']['value'] ?? [] as $j) {
+                if (($j['Type'] ?? '') !== 'Daily' || !preg_match('/^(?:([A-Za-z0-9]+)[-_])?(GEN|GV|GRN_JRN)$/i', (string)$j['Name'], $m)) {
+                    continue;
+                }
+                $prefix = strtoupper($m[1] ?? '');
+                $keyDim = '';
+                if ($prefix !== '') {
+                    $parts = explode('-', (string)($j['DefaultFinancialDimensionDisplayValue'] ?? ''));
+                    foreach ($formats['default'] ?? [] as $i => $name) {
+                        if (strtoupper(trim($parts[$i] ?? '')) === $prefix) {
+                            $keyDim = strtolower($name);
+                            break;
+                        }
+                    }
+                }
+                $data[strtoupper($j['dataAreaId'])][] = ['name' => (string)$j['Name'], 'prefix' => $prefix, 'key_dimension' => $keyDim,
+                    'private' => (string)($j['PrivateForUserGroup'] ?? '')];
+            }
+            @file_put_contents($file, json_encode($data), LOCK_EX);
+        }
+        return $memo[$file] = $data;
+    }
+
+    /** D365 journal name of a journal key ("MSP/JD-GEN" -> "JD-GEN"; legacy "MTL/02" -> D365 Config) */
+    private function journalNameOf($key)
+    {
+        if (strpos((string)$key, '/') === false) {
+            return $this->client->getJournalName($key);
+        }
+        return $this->client->getJournalName($key) ?: explode('/', $key, 2)[1];
     }
 
     /**
@@ -554,6 +652,18 @@ class D365Payroll
             // Items are often rounded per line (2244.16 vs 2244.00) - small gaps end up on the rounding line
             if ($items && abs($itemSum - $total) < 1.0) {
                 $rules = self::parseRules($settings[$rulesKey] ?? '');
+                // The payroll rounds the total (GOSI 633.75 -> deduction 634) and that rounded total is what the
+                // employee was charged - so the gap goes on the largest item instead of a separate Rounding line
+                $gap = round($total - $itemSum, 2);
+                if (abs($gap) >= 0.005) {
+                    $big = 0;
+                    foreach ($items as $i => $it) {
+                        if (abs((float)$it['amount']) > abs((float)$items[$big]['amount'])) {
+                            $big = $i;
+                        }
+                    }
+                    $items[$big]['amount'] = round((float)$items[$big]['amount'] + $gap, 2);
+                }
                 $grouped = [];
                 foreach ($items as $it) {
                     $acc = self::matchAccount($it['name'], $rules, $settings[$defaultKey] ?? '');
@@ -576,6 +686,21 @@ class D365Payroll
         $debit = round(array_sum(array_column($lines, 'debit')), 2);
         $credit = round(array_sum(array_column($lines, 'credit')), 2);
         $diff = round($debit - $credit, 2);
+        if (abs($diff) >= 0.005 && abs($diff) < 1 && !$errors) {
+            // The payroll rounds the net salary to whole riyals (3514.84 -> 3515): the few halalas go on the
+            // largest salary line (51010101) instead of a separate Rounding line
+            $big = null;
+            foreach ($lines as $i => $l) {
+                if ($l['debit'] > 0 && ($big === null || $l['debit'] > $lines[$big]['debit'])) {
+                    $big = $i;
+                }
+            }
+            if ($big !== null && $lines[$big]['debit'] - $diff > 0) {
+                $lines[$big]['debit'] = round($lines[$big]['debit'] - $diff, 2);
+                $diff = 0.0;
+                $debit = round(array_sum(array_column($lines, 'debit')), 2);
+            }
+        }
         if (abs($diff) >= 0.005 && !$errors) {
             if (abs($diff) > 1) {
                 $warnings[] = 'Difference of ' . number_format($diff, 2) . ' between debits and credits sent to rounding account';
@@ -911,7 +1036,7 @@ class D365Payroll
                 return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
             }
             $employment = ['entity' => $company, 'dims' => '', 'template' => $tpl['values']];
-            $key = $this->journalKey($company, '', $tpl['values']['Company'] ?? '');
+            $key = $this->journalKey($company, '', $tpl['values']);
         } else {
             if (!$employment) {
                 return $fail("Personnel number $empId has no employment in D365 - add the worker in D365 first");
@@ -981,10 +1106,10 @@ class D365Payroll
             return $row;
         }
 
-        // $entity is a journal key: company ("MSP") or company + Company dimension ("MTL/02")
-        $journalName = $this->client->getJournalName($entity) ?: $this->client->getJournalName(self::keyCompany($entity));
+        // $entity is a journal key: "COMPANY/JOURNAL NAME" (see journalKey), legacy "MTL/02" or just "MSP"
+        $journalName = $this->journalNameOf($entity);
         if (!$journalName) {
-            throw new RuntimeException("No payroll journal name for company $entity - add it in App Settings > D365 Config (e.g. $entity=GEN)");
+            throw new RuntimeException("No general journal found for company $entity in D365 - add one in App Settings > D365 Config > Journal names (e.g. $entity=GEN)");
         }
         $res = $this->client->create('LedgerJournalHeaders', [
             'dataAreaId'  => strtolower(self::keyCompany($entity)),
@@ -1144,7 +1269,7 @@ class D365Payroll
         foreach ($empIds as $id) {
             $p = $rows[$id] ?? null;
             // journal key: the employee's payroll company (Employee Master, default = D365 employment company),
-            // split by Company dimension where D365 Config has e.g. MTL/02=02-GV
+            // split per branch / division journal (journalKey: e.g. MSP/JD-GEN, MTL/02-GV)
             $emp = $employments[$id] ?? null;
             $payrollCompany = isset($pushed[$id]) ? '' : $this->payrollCompanyFor($id, $emp['entity'] ?? '');
             $tpl = $payrollCompany !== '' ? $this->templateFor($id, $payrollCompany) : null;
@@ -1154,7 +1279,7 @@ class D365Payroll
                 // company has a D365 account template: the employee's stored values only
                 $tplError = $tpl['error'] ?? null;
                 $company = ($tplError === null && !$emp && $tpl['worker']) ? ''
-                    : $this->journalKey($payrollCompany, '', $tpl['values']['Company'] ?? '');
+                    : $this->journalKey($payrollCompany, '', $tpl['values']);
             } elseif ($emp) {
                 $empDims = $this->dimsWithDepartment($id, $emp['dims'], $employments);
                 $company = $this->journalKey($payrollCompany, $empDims);

@@ -74,6 +74,7 @@ if (!function_exists('get_special_access_labels')) {
             'd365_register_employee' => 'D365: Register Missing Employees & Bulk Change Company (D365 Employee Check Page)',
             'view_employee_d365_tab' => 'D365: View Employee Profile\'s D365 Tab',
             'd365_sync_payroll' => 'D365: Sync Payroll to D365 (Generate Payroll Actions & D365 Payroll Sync Page)',
+            'd365_employee_dimensions' => 'D365: Employee Dimensions Page (Set Payroll Company & Dimension Values per Employee)',
         ] + get_special_access_page_labels();
     }
 }
@@ -245,6 +246,7 @@ if (!function_exists('get_special_access_categories')) {
                     'd365_register_employee',
                     'view_employee_d365_tab',
                     'd365_sync_payroll',
+                    'd365_employee_dimensions',
                 ],
             ],
             'Other Special Actions' => [
