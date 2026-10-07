@@ -26,6 +26,11 @@ $targetEmp = (string)($_POST['emp_id'] ?? '');
 if (!preg_match('/^[A-Za-z0-9\-]{1,20}$/', $targetEmp)) {
     exit('<div class="sr-notice tone-red">Invalid employee ID.</div>');
 }
+// Report mode (reports.php "D365 Employee Report"): read-only (no Sync / Add buttons) and the journal lines
+// are narrowed to date_from..date_to (yyyy-mm-dd, Riyadh dates, either side optional)
+$reportMode = !empty($_POST['report']);
+$dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['date_from'] ?? '')) ? $_POST['date_from'] : '';
+$dateTo = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['date_to'] ?? '')) ? $_POST['date_to'] : '';
 
 // D365 stores dates in UTC; placeholders 1900-01-01 / 2154-12-31 mean "empty" / "no end"
 function d365tab_date($value, $withTime = false)
@@ -110,6 +115,12 @@ if (!empty($_POST['refresh']) || !$cached || time() - $cached['t'] > 600) {
     }
 }
 $d = $cached['v'];
+if ($dateFrom !== '' || $dateTo !== '') {
+    $d['journal_lines'] = array_values(array_filter($d['journal_lines'], function ($jl) use ($dateFrom, $dateTo) {
+        $day = d365tab_date((string)$jl['TransDate']);
+        return ($dateFrom === '' || strcmp($day, $dateFrom) >= 0) && ($dateTo === '' || strcmp($day, $dateTo) <= 0);
+    }));
+}
 $loadedAt = date('Y-m-d H:i', $cached['t']);
 $worker = $d['worker'];
 $employments = $d['employments'];
@@ -203,6 +214,9 @@ $money = function ($v) { return number_format((float)$v, 2); };
             <?php else: ?>
                 <span class="sr-pill tone-red"><span class="sr-dot"></span>Not in D365</span>
             <?php endif; ?>
+            <?php if ($dateFrom !== '' || $dateTo !== ''): ?>
+                <span class="sr-chip"><i class="mdi mdi-calendar-range"></i> <?= $e(($dateFrom ?: 'Start') . ' → ' . ($dateTo ?: 'Today')) ?></span>
+            <?php endif; ?>
             <span class="d365tab-muted">Loaded <?= $e($loadedAt) ?> · dates in Riyadh time</span>
         </div>
         <button type="button" class="d365tab-btn" id="d365TabRefresh"><i class="mdi mdi-refresh"></i> Refresh from D365</button>
@@ -213,8 +227,8 @@ $money = function ($v) { return number_format((float)$v, 2); };
     <?php endforeach; ?>
 
     <?php if (!$worker && !$d['errors']): ?>
-        <div class="sr-notice tone-amber">Personnel number <b><?= $e($targetEmp) ?></b> is not in D365 <?= $e($env) ?> - register the worker (with contact details and bank account).
-            <button type="button" class="d365tab-btn" id="d365TabRegister" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings &gt; D365 Config)"' ?>><i class="mdi mdi-account-plus"></i> Add to D365</button></div>
+        <div class="sr-notice tone-amber">Personnel number <b><?= $e($targetEmp) ?></b> is not in D365 <?= $e($env) ?><?= $reportMode ? '.' : ' - register the worker (with contact details and bank account).' ?>
+            <?php if (!$reportMode): ?><button type="button" class="d365tab-btn" id="d365TabRegister" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings &gt; D365 Config)"' ?>><i class="mdi mdi-account-plus"></i> Add to D365</button><?php endif; ?></div>
     <?php endif; ?>
 
     <?php if ($worker):
@@ -249,8 +263,8 @@ $money = function ($v) { return number_format((float)$v, 2); };
             <div class="sr-card-head">
                 <div class="sr-card-title">HR app vs D365</div>
                 <div class="sr-card-sub">
-                    Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365
-                    <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"' ?>><i class="mdi mdi-sync"></i> Sync to D365</button>
+                    <?php if (!$reportMode): ?>Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365
+                    <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"' ?>><i class="mdi mdi-sync"></i> Sync to D365</button><?php else: ?>Employee record in the HR app compared with D365<?php endif; ?>
                 </div>
             </div>
             <div class="sr-table-wrap">

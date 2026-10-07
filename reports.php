@@ -60,10 +60,16 @@ $all_report_options = [
     'dept_comparison' => __('dept_comparison_report'),
     'country_company_comparison' => __('country_company_comparison_report'),
     'ctc' => __('ctc_report', 'CTC Report'),
+    'd365' => __('d365_employee_report', 'D365 Employee Report'),
     'custom' => __('custom_report')
 ];
 
 $current_emp_id_for_reports = (string)($_SESSION['empid'] ?? ($empid ?? ''));
+// D365 Employee Report: same gate as the D365 tab in view_employee.php
+$can_view_d365_report = user_has_special_access($conDB, $current_emp_id_for_reports, 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+if ($can_view_d365_report && empty($_SESSION['d365_csrf'])) {
+    $_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
+}
 $can_view_ctc_report = ($is_system_admin ?? false)
     || user_has_special_access($conDB, $current_emp_id_for_reports, 'access_ctc_report', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 $allowed_report_types = get_allowed_report_types_for_user(
@@ -151,7 +157,8 @@ if (mysqli_num_rows($query) == 1) {
             .rp-filters label .badge { font-size: 10px; padding: 2px 7px; border-radius: 999px; margin-inline-start: 6px; background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: none; }
             .rp-filters small.text-muted { font-size: 11px; color: var(--sr-muted) !important; }
             .rp-filters .rp-ico-input { position: relative; }
-            .rp-filters .rp-ico-input .form-control { padding-inline-end: 36px; cursor: pointer; }
+            /* Input must fill the wrapper, otherwise the absolutely placed calendar icon floats past its edge */
+            .rp-filters .rp-ico-input .form-control { width: 100% !important; max-width: none !important; padding-inline-end: 36px; cursor: pointer; }
             .rp-filters .rp-ico-input i { position: absolute; inset-inline-end: 12px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); pointer-events: none; font-size: 16px; }
             .rp-empty-hint { display: flex; align-items: center; gap: 10px; color: var(--sr-muted); font-size: 13px; padding: 4px 0; }
             .rp-empty-hint i { font-size: 20px; color: var(--sr-accent); }
@@ -257,6 +264,44 @@ if (mysqli_num_rows($query) == 1) {
         <script>
             window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
         </script>
+        <?php if ($can_view_d365_report): ?>
+        <style>
+            /* D365 Employee Report - same look as the D365 tab in view_employee.php */
+            #d365ReportBody .sr-card { margin-bottom: 16px; }
+            #d365ReportBody .sr-notice { margin-bottom: 12px; }
+            .d365tab-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+            .d365tab-bar > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+            .d365tab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+            .d365tab-muted { color: var(--sr-muted, #64748b); font-size: 12px; }
+            .d365tab-btn { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 0.875rem;
+                color: var(--sr-accent-strong); background: var(--sr-surface); border: 1px solid var(--sr-border); cursor: pointer;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, .06), inset 0 -2px 0 var(--sr-accent); transition: background-color .15s ease, box-shadow .15s ease; }
+            .d365tab-btn i { color: var(--sr-accent); font-size: 1rem; line-height: 1; }
+            .d365tab-btn:hover { background: var(--sr-surface-2); }
+            .d365tab-btn:disabled { opacity: .55; cursor: default; }
+            .d365fin-filter .d365tab-btn { padding: 4px 10px; font-size: .78rem; }
+            .d365tab-btn.is-active { background: var(--sr-accent); color: #fff; border-color: var(--sr-accent); }
+            .d365fin-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+            .d365fin-tile { border: 1px solid var(--sr-border, #e2e8f0); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+            .d365fin-tile span { font-size: 12px; color: var(--sr-muted, #64748b); }
+            .d365fin-tile b { font-size: 20px; }
+            .d365fin-tile small { font-size: 11px; color: var(--sr-muted, #64748b); }
+            .d365fin-tile.is-debit { border-left: 4px solid #dc2626; }
+            .d365fin-tile.is-credit { border-left: 4px solid #16a34a; }
+            .d365fin-companies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+            .d365fin-debit { color: #dc2626; }
+            .d365fin-credit { color: #16a34a; }
+            .d365rp-loading { padding: 40px 16px; text-align: center; color: var(--sr-muted, #64748b); }
+            .d365rp-loading i { font-size: 28px; display: block; margin-bottom: 8px; }
+            @media print {
+                body.d365rp-printing * { visibility: hidden; }
+                body.d365rp-printing #d365ReportContainer, body.d365rp-printing #d365ReportContainer * { visibility: visible; }
+                body.d365rp-printing #d365ReportContainer { position: absolute; top: 0; left: 0; right: 0; border: 0; box-shadow: none; }
+                body.d365rp-printing #d365ReportPrint, body.d365rp-printing .d365tab-btn, body.d365rp-printing .dataTables_length,
+                body.d365rp-printing .dataTables_filter, body.d365rp-printing .dataTables_paginate, body.d365rp-printing .dt-buttons { display: none !important; }
+            }
+        </style>
+        <?php endif; ?>
     </head>
 
     <body class="enlarged<?= $is_rtl ? ' rtl' : '' ?>" data-keep-enlarged="true">
@@ -322,6 +367,7 @@ if (mysqli_num_rows($query) == 1) {
                     'loan'                       => ['mdi-bank', 'pay', __('rpt_desc_loan', 'Loans, approvals and repayments')],
                     'eos'                        => ['mdi-calculator', 'pay', __('rpt_desc_eos', 'End-of-service calculation to a date')],
                     'ctc'                        => ['mdi-wallet', 'pay', __('rpt_desc_ctc', 'Full cost to company per employee')],
+                    'd365'                       => ['mdi-microsoft', 'pay', __('rpt_desc_d365', 'Everything D365 holds for one employee in a period')],
                     'assets'                     => ['mdi-package-variant', 'assets', __('rpt_desc_assets', 'Assets assigned to employees')],
                     'assets_list'                => ['mdi-laptop', 'assets', __('rpt_desc_assets_list', 'Asset items and their history')],
                     'dept_comparison'            => ['mdi-chart-bar', 'analysis', __('rpt_desc_dept', 'Compare departments side by side')],
@@ -339,6 +385,7 @@ if (mysqli_num_rows($query) == 1) {
                     if (!isset($allowed_report_types_map[$report_key])) continue;
                     if ($report_key === 'evaluation' && !can_acknowledge_evaluations($user_type, $user_role)) continue;
                     if ($report_key === 'ctc' && !$can_view_ctc_report) continue;
+                    if ($report_key === 'd365' && !$can_view_d365_report) continue;
                     $visible_reports[$report_key] = $report_label;
                 }
                 $grouped_reports = [];
@@ -625,6 +672,15 @@ if (mysqli_num_rows($query) == 1) {
                                 <button type="button" class="sr-btn sr-btn-success" id="exportExcelBtn" style="display:none;"><i class="mdi mdi-file-excel"></i> <?= __('export_to_excel') ?></button>
                                 <button type="button" class="sr-btn sr-btn-primary" id="generateReportBtn"><i class="mdi mdi-file-chart"></i> <?= __('generate_report') ?></button>
                             </div>
+                        </div>
+
+                        <!-- D365 Employee Report (rendered by includes/ajaxFile/d365_employee_tab.php in report mode) -->
+                        <div class="sr-card rp-results" id="d365ReportContainer" style="display:none;">
+                            <div class="sr-card-head">
+                                <h5 class="sr-card-title"><i class="mdi mdi-microsoft"></i> <span id="d365ReportTitle"><?= __('d365_employee_report', 'D365 Employee Report') ?></span></h5>
+                                <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="d365ReportPrint"><i class="mdi mdi-printer"></i> <?= __('print', 'Print') ?></button>
+                            </div>
+                            <div class="sr-card-body" id="d365ReportBody"></div>
                         </div>
 
                         <!-- Results -->
@@ -1072,6 +1128,7 @@ if (mysqli_num_rows($query) == 1) {
                     dept_comparison: { hide: true },
                     country_company_comparison: { hide: true },
                     ctc: { hide: true },
+                    d365: { hide: true },
                     custom: { hide: true }
                 };
 
@@ -1112,7 +1169,7 @@ if (mysqli_num_rows($query) == 1) {
 
                 // Toggle Employee Filter visibility based on report type
                 function toggleEmployeeFilter(reportType) {
-                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement', 'ctc'];
+                    const employeeRelatedReports = ['employee', 'vacation', 'salary', 'loan', 'salary_increment', 'payroll', 'document', 'evaluation', 'resignation', 'terminated_employees', 'eos', 'exit_settlement', 'ctc', 'd365'];
                     
                     if (employeeRelatedReports.includes(reportType)) {
                         $('#employeeFilterWrapper').show();
@@ -2562,6 +2619,7 @@ if (mysqli_num_rows($query) == 1) {
 
                     // Hide report table and export buttons when changing report type
                     $('#reportTableContainer').hide();
+                    $('#d365ReportContainer').hide();
                     $('#exportExcelBtn, #exportPdfBtn').hide();
 
                     // Clear table content AFTER destroying DataTable
@@ -2759,6 +2817,11 @@ if (mysqli_num_rows($query) == 1) {
 
                         // Final enforcement: payroll uses Month filter only.
                         togglePayrollMonthFilter(reportType);
+
+                        // D365 report: employee + date range only (no departments / company / columns)
+                        if (reportType === 'd365') {
+                            $('#singleDeptFilter, #multiDeptFilter, #companyFilterWrapper, #columnSelectionRow').hide();
+                        }
                     }
                 });
 
@@ -3133,6 +3196,10 @@ if (mysqli_num_rows($query) == 1) {
                 // Generate Report
                 $('#generateReportBtn').on('click', function() {
                     const reportType = $('#reportType').val();
+                    if (reportType === 'd365') {
+                        generateD365Report(false);
+                        return;
+                    }
                     if (!reportType) {
                         Swal.fire({
                             icon: 'warning',
@@ -4157,6 +4224,83 @@ if (mysqli_num_rows($query) == 1) {
                             Swal.fire((typeof __ === 'function') ? __('error') : 'Error', 'Failed to fetch asset activity: ' + (xhr.responseJSON?.message || error), 'error');
                         }
                     });
+                });
+
+                // ============================================================
+                // D365 EMPLOYEE REPORT
+                // One employee + date range -> everything D365 holds for the worker (HR app vs D365, worker,
+                // employments, positions, banks, financial summary, payroll, transactions). Rendered by
+                // includes/ajaxFile/d365_employee_tab.php in report mode; the dates narrow the journal lines.
+                // ============================================================
+                const D365_REPORT_CSRF = <?= json_encode($can_view_d365_report ? (string)$_SESSION['d365_csrf'] : '') ?>;
+
+                function generateD365Report(refresh) {
+                    const empId = $('#employeeFilter').val();
+                    const dateFrom = $('#dateFrom').val();
+                    const dateTo = $('#dateTo').val();
+                    if (!empId) {
+                        Swal.fire({ icon: 'warning', title: __('employee_required', 'Employee Required'), text: __('please_select_employee', 'Please select an employee') });
+                        return;
+                    }
+                    if (dateFrom && dateTo && dateFrom > dateTo) {
+                        Swal.fire({ icon: 'warning', title: __('invalid_date_range', 'Invalid Date Range'), text: __('date_from_after_date_to', 'Date From must be before Date To') });
+                        return;
+                    }
+                    const empText = $('#employeeFilter option:selected').text() || empId;
+                    const $body = $('#d365ReportBody');
+                    $('#reportTableContainer').hide();
+                    $('#d365ReportTitle').text(__('d365_employee_report', 'D365 Employee Report') + ' - ' + empText);
+                    $('#d365ReportContainer').show();
+                    $body.html('<div class="d365rp-loading"><i class="mdi mdi-loading mdi-spin"></i>' + __('loading_from_d365', 'Loading from D365, this can take up to a minute...') + '</div>');
+                    $('#generateReportBtn').prop('disabled', true);
+                    $('html, body').animate({ scrollTop: $('#d365ReportContainer').offset().top - 80 }, 300);
+
+                    $.post('includes/ajaxFile/d365_employee_tab.php', {
+                        csrf: D365_REPORT_CSRF,
+                        emp_id: empId,
+                        report: 1,
+                        date_from: dateFrom,
+                        date_to: dateTo,
+                        refresh: refresh ? 1 : 0
+                    }).done(function(html) {
+                        $body.html(html);
+                        $body.find('#d365TabRefresh').on('click', function() { generateD365Report(true); });
+                        if ($.fn.DataTable && $body.find('#d365FinTable tbody tr').length) {
+                            const finTable = $body.find('#d365FinTable').DataTable({
+                                order: [[0, 'desc']],
+                                pageLength: 25,
+                                autoWidth: false,
+                                dom: 'Bfrtip',
+                                buttons: [
+                                    { extend: 'excelHtml5', text: '<i class="mdi mdi-file-excel"></i> Excel', title: 'D365 ' + empText },
+                                    { extend: 'csvHtml5', text: '<i class="mdi mdi-file-delimited"></i> CSV', title: 'D365 ' + empText }
+                                ]
+                            });
+                            $body.find('[data-fin-type]').on('click', function() {
+                                $body.find('[data-fin-type]').removeClass('is-active');
+                                $(this).addClass('is-active');
+                                const type = $(this).attr('data-fin-type');
+                                finTable.column(1).search(type ? '^' + type + '$' : '', true, false).draw();
+                            });
+                        }
+                    }).fail(function(xhr) {
+                        $body.html(xhr.status === 403 && xhr.responseText
+                            ? xhr.responseText
+                            : '<div class="sr-notice tone-red">' + __('d365_report_failed', 'Could not load the D365 report.') + ' (' + xhr.status + ')</div>');
+                    }).always(function() {
+                        $('#generateReportBtn').prop('disabled', false);
+                    });
+                }
+
+                $('#d365ReportPrint').on('click', function() {
+                    $('body').addClass('d365rp-printing');
+                    window.print();
+                    setTimeout(function() { $('body').removeClass('d365rp-printing'); }, 500);
+                });
+
+                $('#resetBtn').on('click', function() {
+                    $('#d365ReportContainer').hide();
+                    $('#d365ReportBody').empty();
                 });
 
                 // Reset form

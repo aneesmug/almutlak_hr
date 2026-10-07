@@ -26,6 +26,7 @@ if (!function_exists('get_report_type_labels')) {
             'dept_comparison' => 'Department Comparison Report',
             'country_company_comparison' => 'Country & Company Comparison Report',
             'ctc' => 'CTC Report',
+            'd365' => 'D365 Employee Report',
             'custom' => 'Custom Report',
         ];
     }

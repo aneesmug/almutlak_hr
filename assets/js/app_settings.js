@@ -116,6 +116,7 @@ function __(key, def) {
                 { value: 'dept_comparison', label: '' + __('dept_comparison_report') + '' },
                 { value: 'rejoin', label: '' + __('employee_rejoin_report', 'Employee Rejoin Report') + '' },
                 { value: 'country_company_comparison', label: '' + __('country_company_comparison_report', 'Country & Company Comparison Report') + '' },
+                { value: 'd365', label: '' + __('d365_employee_report', 'D365 Employee Report') + '' },
                 { value: 'custom', label: '' + __('custom_report') + '' }
             ];
         }

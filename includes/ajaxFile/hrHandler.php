@@ -95,7 +95,8 @@ if($ajaxType == 'emp_search') {
     
     // Determine employee status filter based on report type
     $reportType = isset($_POST['reportType']) ? $_POST['reportType'] : '';
-    $statusFilter = ($reportType === 'exit_settlement') ? 'e.status = 0' : 'e.status = 1';
+    // D365 report covers former employees too (settlements, final payroll)
+    $statusFilter = ($reportType === 'exit_settlement') ? 'e.status = 0' : ($reportType === 'd365' ? '1=1' : 'e.status = 1');
     
     $stmt = mysqli_query($conDB, "SELECT 
         e.emp_id,
