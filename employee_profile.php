@@ -86,6 +86,17 @@
         || user_has_special_access($conDB, $empid ?? '', 'view_employee_additional_info', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
     );
 
+    // --- Print options: ?hide=salary,bank,... (comma list chosen in the view_employee.php print dialog) ---
+    // Hiding only narrows what the permissions above already allow; it can never reveal anything.
+    $printSections = ['photo', 'ids', 'personal', 'contact', 'bank', 'employment', 'salary', 'vacation_balance', 'additional', 'assets', 'loans', 'vacations', 'eos', 'notes'];
+    $hiddenSections = array_intersect($printSections, array_map('trim', explode(',', (string)($_GET['hide'] ?? ''))));
+    $show = function ($section) use ($hiddenSections) {
+        return !in_array($section, $hiddenSections, true);
+    };
+    $canViewSalary = $canViewSalary && $show('salary');
+    $canViewEosValue = $canViewEosValue && $show('eos');
+    $canViewAdditionalInfo = $canViewAdditionalInfo && $show('additional');
+
     // --- Output helpers ---
     $rtl = ($is_rtl ?? false);
     $na = __('not_available', 'N/A');
@@ -295,10 +306,12 @@
     $tiles = [];
     $tiles[] = [__('working_period', 'Working Period'), $e($serviceText), $joinValid ? $e(__('joining_date', 'Joining Date') . ': ' . $dt($emprow['joining_date'])) : ''];
     $tiles[] = [__('contract_expiry_label', 'Contract Expiry'), $contractExpiryIso ? $e($dt($contractExpiryIso)) : $e($na), $e(translateContractPeriod($emprow['period'] ?? ''))];
-    $tiles[] = [__('available_balance', 'Available Balance'), $e(number_format($vac_available, 2)) . ' <small>' . $e(__('days', 'Days')) . '</small>', $e(__('used_days', 'Used Days') . ': ' . number_format($vac_used, 1))];
+    if ($show('vacation_balance')) {
+        $tiles[] = [__('available_balance', 'Available Balance'), $e(number_format($vac_available, 2)) . ' <small>' . $e(__('days', 'Days')) . '</small>', $e(__('used_days', 'Used Days') . ': ' . number_format($vac_used, 1))];
+    }
     if ($canViewSalary) {
         $tiles[] = [__('total_salary', 'Total Salary'), $money($totalSalary), $e($paymentTypeText)];
-        if ($active_loan) {
+        if ($active_loan && $show('loans')) {
             $tiles[] = [__('active_loan_summary', 'Active Loan'), $money($active_loan['total_payable'] - $active_loan['total_paid']), $e($tr($active_loan['loan_type']) . ' · ' . __('remaining_balance', 'Remaining Balance'))];
         }
     }
@@ -478,7 +491,7 @@
 
                 <!-- Header -->
                 <div class="head">
-                    <img class="avatar" src="<?= $e(getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1)) ?>" alt="">
+                    <?php if ($show('photo')): ?><img class="avatar" src="<?= $e(getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1)) ?>" alt=""><?php endif; ?>
                     <div class="who">
                         <h1><?= $e($displayName) ?></h1>
                         <p class="role"><b><?= $val($jobTitle) ?></b> &middot; <?= $val($deptName) ?> &middot; <?= $val($companyName) ?></p>
@@ -495,6 +508,7 @@
                 </div>
 
                 <!-- Summary tiles -->
+                <?php if (!empty($tiles)): ?>
                 <div class="tiles">
                     <?php foreach ($tiles as $tile): ?>
                     <div class="tile">
@@ -504,20 +518,25 @@
                     </div>
                     <?php endforeach; ?>
                 </div>
+                <?php endif; ?>
 
                 <div class="cols">
                     <div class="col">
 
                         <!-- Personal Information -->
+                        <?php if ($show('ids') || $show('personal')): ?>
                         <div class="sec">
                             <h2><?= $e(__('personal_information', 'Personal Information')) ?></h2>
                             <?php
-                            $field(__('iqama_id', 'Iqama / ID'), $val($emprow['iqama']));
-                            $field(__('id_expiry', 'ID Expiry'), !empty($emprow['iqama_exp'])
-                                ? '<bdi>' . $e($iqamaExpiryGreg) . '</bdi> <span class="alt"><bdi>' . $e($emprow['iqama_exp']) . '</bdi> ' . $e(__('hijri', 'Hijri')) . '</span>'
-                                : $val(null));
-                            $field(__('passport_no', 'Passport No'), $val($emprow['passport_number']));
-                            $field(__('passport_expiry', 'Passport Expiry'), $gregWithHijri($emprow['passport_exp'] ?? null));
+                            if ($show('ids')) {
+                                $field(__('iqama_id', 'Iqama / ID'), $val($emprow['iqama']));
+                                $field(__('id_expiry', 'ID Expiry'), !empty($emprow['iqama_exp'])
+                                    ? '<bdi>' . $e($iqamaExpiryGreg) . '</bdi> <span class="alt"><bdi>' . $e($emprow['iqama_exp']) . '</bdi> ' . $e(__('hijri', 'Hijri')) . '</span>'
+                                    : $val(null));
+                                $field(__('passport_no', 'Passport No'), $val($emprow['passport_number']));
+                                $field(__('passport_expiry', 'Passport Expiry'), $gregWithHijri($emprow['passport_exp'] ?? null));
+                            }
+                            if ($show('personal')) {
                             $field(__('date_of_birth', 'Date of Birth'), is_valid_date_value($emprow['dob'] ?? null)
                                 ? '<bdi>' . $e($emprow['dob']) . '</bdi> <span class="alt">' . $e($years) . '</span>'
                                 : $val(null));
@@ -525,10 +544,13 @@
                             $field(__('gender_blood_group', 'Gender | Blood Group'), $val($tr($emprow['sex'])) . ' | ' . $val($emprow['blood_type']));
                             $field(__('marital_status', 'Marital Status'), $val($tr($emprow['mar_status'])));
                             $field(__('tshirt_size', 'T-Shirt Size'), $val(ucfirst((string)$emprow['t_shirt_size'])));
+                            }
                             ?>
                         </div>
+                        <?php endif; ?>
 
                         <!-- Contact -->
+                        <?php if ($show('contact')): ?>
                         <div class="sec">
                             <h2><?= $e(__('contact', 'Contact Information')) ?></h2>
                             <?php
@@ -539,8 +561,10 @@
                             $field(__('address', 'Address'), $val(getDisplayName(ucfirst((string)$emprow['address']))));
                             ?>
                         </div>
+                        <?php endif; ?>
 
                         <!-- Bank, GOSI & Insurance -->
+                        <?php if ($show('bank')): ?>
                         <div class="sec">
                             <h2><?= $e(__('bank_&_gosi_details', 'Bank & GOSI Details')) ?></h2>
                             <?php
@@ -553,11 +577,13 @@
                             $field(__('insurance_expiry', 'Insurance Expiry'), $gregWithHijri($current_medical_insurance['medical_expiry'] ?? null));
                             ?>
                         </div>
+                        <?php endif; ?>
 
                     </div>
                     <div class="col">
 
                         <!-- Employment -->
+                        <?php if ($show('employment')): ?>
                         <div class="sec">
                             <h2><?= $e(__('employment', 'Employment Information')) ?></h2>
                             <?php
@@ -575,8 +601,10 @@
                             $field(__('allow_emergency_vacation', 'Allow Emergency Vacation'), $e(((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? __('yes', 'Yes') : __('no', 'No')));
                             ?>
                         </div>
+                        <?php endif; ?>
 
-                        <!-- Salary -->
+                        <!-- Salary (left out entirely when unticked in the print dialog) -->
+                        <?php if ($show('salary')): ?>
                         <div class="sec">
                             <h2><?= $e(__('salary_breakdown_header', 'Salary Breakdown')) ?></h2>
                             <?php if ($canViewSalary): ?>
@@ -592,8 +620,10 @@
                                 <div class="f"><span class="v muted"><?= $e(__('salary_hidden_no_access', 'Salary details are hidden.')) ?></span></div>
                             <?php endif; ?>
                         </div>
+                        <?php endif; ?>
 
                         <!-- Vacation balance -->
+                        <?php if ($show('vacation_balance')): ?>
                         <div class="sec">
                             <h2><?= $e(__('vacation_balance_summary', 'Vacation Balance Summary')) ?></h2>
                             <?php if ($hasVacBalance): ?>
@@ -617,6 +647,7 @@
                             </div>
                             <?php endif; ?>
                         </div>
+                        <?php endif; ?>
 
                     </div>
                 </div>
@@ -648,7 +679,7 @@
                 <?php endif; ?>
 
                 <!-- Assigned Assets -->
-                <?php if ($car_info || !empty($assigned_assets)): ?>
+                <?php if ($show('assets') && ($car_info || !empty($assigned_assets))): ?>
                 <div class="sec">
                     <h2>
                         <?= $e(__('assigned_assets', 'Assigned Assets')) ?>
@@ -679,7 +710,7 @@
                 <?php endif; ?>
 
                 <!-- Loan History -->
-                <?php if (!empty($loan_history)): ?>
+                <?php if ($show('loans') && !empty($loan_history)): ?>
                 <div class="sec">
                     <h2>
                         <?= $e(__('loan_history', 'Loan History')) ?>
@@ -718,7 +749,7 @@
                 <?php endif; ?>
 
                 <!-- Vacation History -->
-                <?php if (!empty($vacation_history)): ?>
+                <?php if ($show('vacations') && !empty($vacation_history)): ?>
                 <div class="sec">
                     <h2>
                         <?= $e(__('vacation_history_header', 'Vacation History')) ?>
@@ -761,7 +792,7 @@
                 <?php endif; ?>
 
                 <!-- End of Service -->
-                <?php if ($end_of_service): ?>
+                <?php if ($show('eos') && $end_of_service): ?>
                 <div class="sec">
                     <h2><?= $e(__('end_of_service_header', 'End of Service')) ?></h2>
                     <div class="g3">
@@ -779,7 +810,7 @@
                 <?php endif; ?>
 
                 <!-- Notes -->
-                <?php if (!empty($employee_notes)): ?>
+                <?php if ($show('notes') && !empty($employee_notes)): ?>
                 <div class="sec">
                     <h2>
                         <?= $e(__('notes_notices_header', 'Notes & Notices')) ?>

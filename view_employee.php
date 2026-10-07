@@ -1982,11 +1982,13 @@ if (mysqli_num_rows($query) == 1) {
 												<?php endif; ?>
 											</div>
 
+											<?php if ($emprow['status'] != 1): // Active employees print from the "More" menu; it is hidden for inactive ones ?>
 											<div class="text-right mt-4">
 												<div class="btn-group" role="group" aria-label="Edit Button">
-													<a href="./employee_profile.php?emp_id=<?= $emprow['empid']; ?>" class="btn btn-sm waves-effect btn-primary" target="_blank"><i class="fi-printer "></i> <?= __('print_profile') ?></a>
+													<button type="button" class="btn btn-sm waves-effect btn-primary" onclick="openPrintProfileOptions()"><i class="fi-printer "></i> <?= __('print_profile') ?></button>
 												</div>
 											</div>
+											<?php endif; ?>
 										</div>
 										<!-- End Profile Tab -->
 
@@ -3361,6 +3363,99 @@ if (mysqli_num_rows($query) == 1) {
 		<script src="assets/js/resignationWizard.js?v=<?= @filemtime(__DIR__ . '/assets/js/resignationWizard.js') ?>"></script>
 
 		<script type="text/javascript">
+			// ============================================================================
+			// PRINT PROFILE OPTIONS
+			// ============================================================================
+			// Lets the user pick which blocks go on employee_profile.php. Unticked blocks are
+			// sent as ?hide=a,b,c; the profile page still applies its own permission checks.
+			// Sensitive blocks start unticked; the last choice is remembered per browser.
+			// ============================================================================
+			<?php
+			$printProfileOptions = [
+				['key' => 'photo', 'label' => __('photo', 'Photo'), 'sensitive' => false],
+				['key' => 'ids', 'label' => __('iqama_passport_details', 'Iqama / Passport Details'), 'sensitive' => true],
+				['key' => 'personal', 'label' => __('personal_information', 'Personal Information'), 'sensitive' => false],
+				['key' => 'contact', 'label' => __('contact', 'Contact Information'), 'sensitive' => false],
+				['key' => 'bank', 'label' => __('bank_&_gosi_details', 'Bank & GOSI Details'), 'sensitive' => true],
+				['key' => 'employment', 'label' => __('employment', 'Employment Information'), 'sensitive' => false],
+				['key' => 'vacation_balance', 'label' => __('vacation_balance_summary', 'Vacation Balance Summary'), 'sensitive' => false],
+				['key' => 'vacations', 'label' => __('vacation_history_header', 'Vacation History'), 'sensitive' => false],
+				['key' => 'assets', 'label' => __('assigned_assets', 'Assigned Assets'), 'sensitive' => false],
+				['key' => 'notes', 'label' => __('notes_notices_header', 'Notes & Notices'), 'sensitive' => false],
+				['key' => 'loans', 'label' => __('loan_history', 'Loan History'), 'sensitive' => true],
+			];
+			if ($canViewSalary) {
+				$printProfileOptions[] = ['key' => 'salary', 'label' => __('salary_breakdown_header', 'Salary Breakdown'), 'sensitive' => true];
+			}
+			if ($canViewAdditionalInfo && $canViewSalary) {
+				$printProfileOptions[] = ['key' => 'additional', 'label' => __('additional_information', 'Additional Information'), 'sensitive' => true];
+			}
+			if ($canViewEosValue) {
+				$printProfileOptions[] = ['key' => 'eos', 'label' => __('end_of_service_header', 'End of Service'), 'sensitive' => true];
+			}
+			?>
+			const PRINT_PROFILE_OPTIONS = <?= json_encode($printProfileOptions, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+			const PRINT_PROFILE_STORE = 'employeeProfilePrintHidden';
+
+			function openPrintProfileOptions() {
+				const empId = <?= json_encode((string)$emprow['empid']) ?>;
+				let hidden = null;
+				try {
+					hidden = JSON.parse(localStorage.getItem(PRINT_PROFILE_STORE) || 'null');
+				} catch (e) {}
+				if (!Array.isArray(hidden)) {
+					hidden = PRINT_PROFILE_OPTIONS.filter(o => o.sensitive).map(o => o.key);
+				}
+
+				const esc = s => $('<div>').text(s).html();
+				const items = PRINT_PROFILE_OPTIONS.map(o => `
+					<label class="pp-opt">
+						<input type="checkbox" class="pp-check" value="${esc(o.key)}" ${hidden.includes(o.key) ? '' : 'checked'}>
+						<span>${esc(o.label)}</span>
+						${o.sensitive ? `<i class="fa fa-lock pp-lock" title="${esc(__('sensitive', 'Sensitive'))}"></i>` : ''}
+					</label>`).join('');
+
+				Swal.fire({
+					title: __('print_profile', 'Print Profile'),
+					html: `
+						<style>
+							.pp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: #66717f; }
+							.pp-head a { cursor: pointer; margin-inline-start: 10px; }
+							.pp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; text-align: start; }
+							.pp-opt { display: flex; align-items: center; gap: 8px; margin: 0; padding: 7px 10px; border: 1px solid #dfe4ea; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+							.pp-opt:hover { background: #f3f6fa; }
+							.pp-opt span { flex: 1; }
+							.pp-lock { color: #b3261e; font-size: 12px; }
+							@media (max-width: 520px) { .pp-grid { grid-template-columns: 1fr; } }
+						</style>
+						<div class="pp-head">
+							<span>${esc(__('choose_sections_to_print', 'Choose the sections to include'))}</span>
+							<span>
+								<a id="ppAll">${esc(__('select_all', 'Select all'))}</a>
+								<a id="ppNone">${esc(__('clear_all', 'Clear all'))}</a>
+							</span>
+						</div>
+						<div class="pp-grid">${items}</div>`,
+					width: 600,
+					showCancelButton: true,
+					confirmButtonText: '<i class="fi-printer"></i> ' + esc(__('print', 'Print')),
+					cancelButtonText: __('cancel', 'Cancel'),
+					didOpen: (popup) => {
+						popup.querySelector('#ppAll').addEventListener('click', () => popup.querySelectorAll('.pp-check').forEach(c => c.checked = true));
+						popup.querySelector('#ppNone').addEventListener('click', () => popup.querySelectorAll('.pp-check').forEach(c => c.checked = false));
+					},
+					preConfirm: () => Array.from(Swal.getPopup().querySelectorAll('.pp-check:not(:checked)')).map(c => c.value)
+				}).then(result => {
+					if (!result.isConfirmed) return;
+					try {
+						localStorage.setItem(PRINT_PROFILE_STORE, JSON.stringify(result.value));
+					} catch (e) {}
+					const params = new URLSearchParams({ emp_id: empId });
+					if (result.value.length) params.set('hide', result.value.join(','));
+					window.open('./employee_profile.php?' + params.toString(), '_blank');
+				});
+			}
+
 			// ============================================================================
 			// REJOIN APPROVAL SYSTEM
 			// ============================================================================

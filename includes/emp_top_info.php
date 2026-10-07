@@ -233,6 +233,10 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 	if (!$isResignationBlocked) {
 		$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
 	}
+	// Print Profile (openPrintProfileOptions() lives in view_employee.php)
+	if (basename($_SERVER['PHP_SELF']) === 'view_employee.php') {
+		$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"Swal.close(); setTimeout(openPrintProfileOptions, 100);\" role=\"button\"><i class=\"fa fa-print\"></i><span>" . __('print_profile', 'Print Profile') . "</span></div>";
+	}
 } else {
 	$moreActionsHtml = '<div style="padding:24px; text-align:center; color: #6c757d;"><p>' . __('employee_is_inactive') . '</p></div>';
 }
