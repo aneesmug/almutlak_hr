@@ -70,6 +70,12 @@ if (mysqli_num_rows($query) == 1) {
         die("Business trip request not found.");
     }
 
+    // Employees may only open their own trip report.
+    if (strtolower((string)($user_type ?? '')) === 'employee' && (string)$request['emp_id'] !== (string)($empid ?? '')) {
+        header("Location: ./profile.php");
+        exit();
+    }
+
     $trip_allowance_days = 0;
     try {
         $trip_start = new DateTime((string)($request['trip_start_date'] ?? ''));

@@ -9,15 +9,10 @@ if (file_exists(__DIR__ . '/includes/functions.php')) {
 $current_lang = $_SESSION['lang'] ?? 'en';
 load_language($current_lang);
 
-// Restrict access: Employees cannot view this detailed report page,
+// Employees may only open their own trips (checked once the trip is loaded below),
 // unless explicitly granted via app_settings -> Special Access.
-if (
-    isset($isEmployee) && $isEmployee === true
-    && !user_has_special_access($conDB, $empid ?? '', 'access_business_trip_status_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-) {
-    header("Location: ./profile.php");
-    exit();
-}
+$employee_own_only = isset($isEmployee) && $isEmployee === true
+    && !user_has_special_access($conDB, $empid ?? '', 'access_business_trip_status_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
 // Input
 $request_inv_no = isset($_GET['request_inv_no']) ? trim($_GET['request_inv_no']) : '';
@@ -52,6 +47,11 @@ if ($res && $res->num_rows === 1) {
 $stmt->close();
 if (!$trip) {
     die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Business trip request not found.</div>');
+}
+
+if ($employee_own_only && (string)$trip['emp_id'] !== (string)($empid ?? '')) {
+    header("Location: ./profile.php");
+    exit();
 }
 
 // Enforce department scoping: Only HR and System Admin can view other departments,
