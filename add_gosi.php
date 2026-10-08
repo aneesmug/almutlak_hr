@@ -246,19 +246,7 @@ if(isset($_POST['submit'])){
 
         function initHijrDatePicker() {
 
-            $("#hijri-date-input").datetimepicker({
-                locale: "ar-sa",
-                format: "iDD/iMM/iYYYY",
-                dayViewHeaderFormat: "iMMMM iYYYY",
-                allowInputToggle: true,
-                showTodayButton: false,
-                useCurrent: false,
-                showClear: false,
-                isRTL: false,
-                keepOpen: false,
-                hijri: true,
-                debug: false
-            });
+            AppDate.hijri('#hijri-date-input', { format: 'd/m/Y' }); // iDD/iMM/iYYYY
 			
         }
 

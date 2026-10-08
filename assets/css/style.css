@@ -1821,56 +1821,6 @@ code {
   line-height: 32px;
   padding: 0;
 }
-/* Self-built Hijri month calendar (see newEmpHijriCalendarHtml) */
-.emp-hijri-cal {
-  width: 100%;
-}
-.emp-hijri-cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-weight: 600;
-  color: #1e293b;
-}
-.emp-hijri-nav {
-  border: none;
-  background: #eef2f7;
-  border-radius: 6px;
-  width: 32px;
-  height: 32px;
-  cursor: pointer;
-  font-size: 16px;
-  color: #3b82f6;
-}
-.emp-hijri-nav:hover {
-  background: #e2e8f0;
-}
-.emp-hijri-cal-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: center;
-}
-.emp-hijri-cal-table th {
-  padding: 6px 0;
-  color: #64748b;
-  font-weight: 600;
-  font-size: 13px;
-}
-.emp-hijri-cal-table td {
-  padding: 8px 0;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.emp-hijri-cal-table td.emp-hijri-day:hover {
-  background: #eef2f7;
-}
-.emp-hijri-cal-table td.emp-hijri-day-selected {
-  background: #3b82f6;
-  color: #ffffff;
-  font-weight: 600;
-}
 /* Self-built Gregorian range calendar (see newEmpRangeCalendarHtml) */
 .emp-range-cal {
   width: 100%;

@@ -106,6 +106,9 @@ html.app-dark .flatpickr-calendar.app-dp {
    range-joining shadows. */
 .app-dp .flatpickr-months .flatpickr-prev-month { left: 0; right: auto; }
 .app-dp .flatpickr-months .flatpickr-next-month { right: 0; left: auto; }
+/* flatpickr's own stylesheet forces direction:ltr on every calendar - undo it so the
+   week (Sunday at the right) and the day grid run right-to-left in Arabic */
+.flatpickr-calendar.app-dp-rtl { direction: rtl; }
 .app-dp-rtl .flatpickr-months .flatpickr-prev-month { right: 0; left: auto; }
 .app-dp-rtl .flatpickr-months .flatpickr-next-month { left: 0; right: auto; }
 .app-dp-rtl .flatpickr-months .flatpickr-prev-month svg,
@@ -150,3 +153,12 @@ html.app-dark .form-control.app-dp-input[readonly]:not(.app-dp-locked):not(:disa
 .app-dp .flatpickr-monthSelect-month.selected,
 .app-dp .flatpickr-monthSelect-month.selected:hover { background: var(--dp-accent); border-color: var(--dp-accent); color: #fff; }
 .app-dp .flatpickr-monthSelect-month.flatpickr-disabled { color: var(--dp-muted); background: var(--dp-block-bg); cursor: not-allowed; }
+
+/* Hijri calendar (AppDate.hijri) - reuses the flatpickr markup above */
+.app-dp-hijri .flatpickr-current-month { display: flex; align-items: center; justify-content: center; gap: 6px; padding-top: 4px; }
+.app-dp-hijri .flatpickr-current-month .flatpickr-monthDropdown-months { margin: 0; padding: 2px 4px; font-size: 14px; max-width: 58%; }
+.app-dp-hijri .flatpickr-current-month .app-dp-hijri-year { max-width: 36%; }
+.app-dp-hijri .flatpickr-day { cursor: pointer; }
+.app-dp-hijri-foot { padding: 6px 10px 8px; font-size: 12px; color: var(--dp-muted); text-align: center; border-top: 1px solid var(--dp-line); direction: ltr; }
+.app-dp-rtl .app-dp-hijri-foot { direction: rtl; }
+.flatpickr-calendar.app-dp-hijri.static.open { z-index: 1060; }

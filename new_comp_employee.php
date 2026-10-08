@@ -817,47 +817,15 @@ $(function() {
 
 	/***********Date of ID**********/
 	const initDateOfIDPickers = () => {
-		$('#iqama_exp_g').datepicker({
-			format: 'yyyy-mm-dd',
-			autoclose: true,
-			todayHighlight: true
-		}).on('changeDate', function(e) {
-			const hijriDate = moment(e.date).format('iYYYY-iMM-iDD');
-			$('#iqama_exp').val(hijriDate).hijriDatePicker('setDate', hijriDate);
-		});
-		$('#iqama_exp').hijriDatePicker({
-			format: 'iYYYY-iMM-iDD',
-			hijri: true,
-			showSwitcher: false
-		}).on('dp.change', function(e) {
-			if (e.date) {
-				const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-				$('#iqama_exp_g').val(gregorianDate).datepicker('update', gregorianDate);
-			}
-		});
+		// Gregorian and Hijri (Umm al-Qura) pickers keep each other in sync
+		AppDate.hijriPair('#iqama_exp_g', '#iqama_exp');
 	};
 	initDateOfIDPickers();
 	/***********Date of ID**********/
 	/***********Date of Birth**********/
 	const initDateOfBirthPickers = () => {
-		$('#dob').datepicker({
-			format: 'yyyy-mm-dd',
-			autoclose: true,
-			todayHighlight: true
-		}).on('changeDate', function(e) {
-			const hijriDate = moment(e.date).format('iYYYY-iMM-iDD');
-			$('#dateofbirthHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
-		});
-		$('#dateofbirthHijri').hijriDatePicker({
-			format: 'iYYYY-iMM-iDD',
-			hijri: true,
-			showSwitcher: false,
-		}).on('dp.change', function(e) {
-			if (e.date) {
-				const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-				$('#dob').val(gregorianDate).datepicker('update', gregorianDate);
-			}
-		});
+		// Future dates blocked in both; Gregorian and Hijri pickers keep each other in sync
+		AppDate.hijriPair('#dob', '#dateofbirthHijri', { maxDate: 'today' });
 	};
 	/***********Date of Birth**********/
 	initDateOfBirthPickers();

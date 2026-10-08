@@ -3,7 +3,7 @@
    - .editLocationAttr click    -> Edit Location           (ajaxType=edit_location, data-* on the button)
    - .addLocContractAttr click  -> Add Contract            (ajaxType=add_contract, data-id = location id)
    Moved here from assets/js/jquery.app.js. Styling: assets/css/smart_request.css (.sr-form*).
-   Needs jQuery, SweetAlert2, autoNumeric, AppDate (app_datepicker.js) and the hijri date picker. */
+   Needs jQuery, SweetAlert2, autoNumeric and AppDate (app_datepicker.js, incl. its Hijri picker). */
 (function (window, $) {
     'use strict';
 
@@ -151,11 +151,8 @@
             if (typeof window.errorHandling === 'function') window.errorHandling(j, e);
         });
 
-        if ($.fn.hijriDatePicker) {
-            $('#b_license_exp_hijri').hijriDatePicker({
-                locale: 'ar-sa', hijri: true, showSwitcher: false,
-                hijriFormat: 'iYYYY-iMM-iDD', hijriDayViewHeaderFormat: 'iMMMM iYYYY', showTodayButton: true
-            });
+        if (window.AppDate) {
+            AppDate.hijri('#b_license_exp_hijri'); // Balady license expiry (Hijri, iYYYY-iMM-iDD)
         }
 
         function refreshMapLink() {

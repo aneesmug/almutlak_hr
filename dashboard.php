@@ -1541,16 +1541,7 @@ if(isset($_POST['submit'])){
 					allowOutsideClick: false,
 					willOpen: function() {
 						$('input[name="emid"]').val(emid);
-						$("#iq_id_exp_hijri").hijriDatePicker({
-							locale: "<?= ($is_rtl ?? false) ? 'ar-sa' : 'en-us' ?>",
-							hijri:true,
-							showSwitcher:false,
-							hijriFormat:"iYYYY-iMM-iDD",
-							hijriDayViewHeaderFormat: "iMMMM iYYYY",
-							// showTodayButton: true,
-							inline: true,
-							ignoreReadonly: true,
-						});
+						AppDate.hijri('#iq_id_exp_hijri', { inline: true });
 						AppDate.inline('#iq_id_exp_greg');
 						$("input[name$='note']").click(function(){
 							var value = $(this).val();

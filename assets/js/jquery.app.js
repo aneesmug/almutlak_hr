@@ -146,76 +146,23 @@ function __(key, defaultText = '') {
 // SweetAlert2 wizard step (see assets/js/newEmployeeModal.js for a full example).
 // ---------------------------------------------------------------------------
 
-// Small self-built Hijri month calendar (moment-hijri only, no third-party widget).
-// The bundled hijri picker plugin's own "inline" mode turned out to always still render
-// itself as an absolutely-positioned dropdown internally (its place() function only skips
-// that positioning math for a bare <div> target with no linked <input>, and even then its
-// widget never actually appeared - not worth chasing further), so building the grid
-// directly here is both simpler and reliable.
-function newEmpHijriCalendarHtml(viewMoment, selectedHijri) {
-    const monthStart = viewMoment.clone().startOf('iMonth');
-    const daysInMonth = viewMoment.clone().endOf('iMonth').iDate();
-    const startWeekday = monthStart.day();
-    const dayNames = ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'];
-    const cells = [];
-    for (let i = 0; i < startWeekday; i++) cells.push('<td></td>');
-    for (let d = 1; d <= daysInMonth; d++) {
-        const cellHijri = monthStart.clone().add(d - 1, 'day').format('iYYYY-iMM-iDD');
-        const selectedClass = cellHijri === selectedHijri ? ' emp-hijri-day-selected' : '';
-        cells.push(`<td class="emp-hijri-day${selectedClass}" data-hijri="${cellHijri}">${d}</td>`);
-    }
-    let rowsHtml = '';
-    for (let i = 0; i < cells.length; i += 7) {
-        rowsHtml += `<tr>${cells.slice(i, i + 7).join('')}</tr>`;
-    }
-    return `<div class="emp-hijri-cal">
-        <div class="emp-hijri-cal-header">
-            <button type="button" class="emp-hijri-nav" data-dir="-1">&laquo;</button>
-            <span class="emp-hijri-cal-title">${viewMoment.format('iMMMM iYYYY')}</span>
-            <button type="button" class="emp-hijri-nav" data-dir="1">&raquo;</button>
-        </div>
-        <table class="emp-hijri-cal-table">
-            <thead><tr>${dayNames.map(n => `<th>${n}</th>`).join('')}</tr></thead>
-            <tbody>${rowsHtml}</tbody>
-        </table>
-    </div>`;
-}
-
-function newEmpWireHijriCalendar($container, initialHijri, onSelect) {
-    let viewMoment = initialHijri ? moment(initialHijri, 'iYYYY-iMM-iDD') : moment();
-    let selectedHijri = initialHijri || null;
-    const render = () => $container.html(newEmpHijriCalendarHtml(viewMoment, selectedHijri));
-    render();
-    $container.on('click', '.emp-hijri-nav', function() {
-        viewMoment = viewMoment.clone().add(parseInt($(this).data('dir'), 10), 'iMonth');
-        render();
-    });
-    $container.on('click', '.emp-hijri-day', function() {
-        selectedHijri = $(this).data('hijri');
-        viewMoment = moment(selectedHijri, 'iYYYY-iMM-iDD');
-        render();
-        onSelect(selectedHijri);
-    });
-}
-
 // Generic date picker opened as its own separate SweetAlert2 modal. SweetAlert2 only ever
 // shows one popup at a time, so opening this while another modal is showing replaces it -
 // the caller's `ctx` (below) re-fires that modal afterwards so it looks like the picker sat
-// on top. Gregorian fields get an inline AppDate (flatpickr, RTL-aware) calendar; Hijri
-// fields get the custom grid above - both keep the sibling representation in sync via
-// moment.js.
+// on top. Both calendars are inline AppDate pickers (RTL-aware): flatpickr for Gregorian,
+// AppDate.hijri (Umm al-Qura) for Hijri - each keeps the sibling representation in sync.
 function newEmpDatePickerModal(opts) {
     opts = opts || {};
     const isHijri = !!opts.isHijri;
     let selectedGregorian = null;
     let selectedHijri = null;
-    if (opts.value && typeof moment !== 'undefined') {
+    if (opts.value) {
         if (isHijri) {
             selectedHijri = opts.value;
-            selectedGregorian = moment(opts.value, 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
+            selectedGregorian = AppDate.fromHijri(opts.value) || null;
         } else {
             selectedGregorian = opts.value;
-            selectedHijri = moment(opts.value, 'YYYY-MM-DD').format('iYYYY-iMM-iDD');
+            selectedHijri = AppDate.toHijri(opts.value) || null;
         }
     }
     return Swal.fire({
@@ -227,9 +174,17 @@ function newEmpDatePickerModal(opts) {
         cancelButtonText: __('cancel', 'Cancel'),
         didOpen: () => {
             if (isHijri) {
-                newEmpWireHijriCalendar($('#empDpCal'), selectedHijri, function(hijriVal) {
-                    selectedHijri = hijriVal;
-                    selectedGregorian = moment(hijriVal, 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
+                $('#empDpCal').html('<input type="hidden" id="empDpCalInput">');
+                AppDate.hijri('#empDpCalInput', {
+                    inline: true,
+                    defaultDate: selectedHijri || null,
+                    minDate: opts.minDate || null,
+                    maxDate: opts.maxDate || null,
+                    onChange: function(dates, hijriText) {
+                        if (!dates.length) return;
+                        selectedHijri = hijriText;
+                        selectedGregorian = AppDate.format(dates[0]);
+                    }
                 });
             } else {
                 $('#empDpCal').html('<input type="hidden" id="empDpCalInput">');
@@ -239,8 +194,8 @@ function newEmpDatePickerModal(opts) {
                     maxDate: opts.maxDate || null,
                     onChange: function(dates) {
                         if (!dates.length) return;
-                        selectedGregorian = moment(dates[0]).format('YYYY-MM-DD');
-                        selectedHijri = moment(dates[0]).format('iYYYY-iMM-iDD');
+                        selectedGregorian = AppDate.format(dates[0]);
+                        selectedHijri = AppDate.toHijri(dates[0]);
                     }
                 });
             }
@@ -278,7 +233,7 @@ function newEmpWireDatepicker(id, key, ctx) {
 function newEmpWireHijriPair(gregorianId, hijriId, gKey, hKey, ctx) {
     const $g = $('#' + gregorianId);
     const $h = $('#' + hijriId);
-    if (!$g.length || !$h.length || !window.AppDate || typeof moment === 'undefined') {
+    if (!$g.length || !$h.length || !window.AppDate) {
         return;
     }
     const applyResult = function(result) {
@@ -303,8 +258,7 @@ function newEmpWireHijriPair(gregorianId, hijriId, gKey, hKey, ctx) {
     });
 }
 
-// Self-built Gregorian range calendar (same reasoning as newEmpHijriCalendarHtml above -
-// full control beats fighting a third-party widget's positioning/highlighting quirks inside
+// Self-built Gregorian range calendar (full control beats fighting a third-party widget's positioning/highlighting quirks inside
 // a SweetAlert2 popup). Click once for the start date, click again for the end date; a third
 // click starts a new range. Clicking a date before the current start swaps them.
 function newEmpRangeCalendarHtml(viewMoment, startDate, endDate) {

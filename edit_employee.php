@@ -300,6 +300,25 @@ if (mysqli_num_rows($query) == 1) {
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 		<style>
+			/* Edit employee form (new GUI) - .sr-form in smart_request.css styles labels, inputs and select2 */
+			.ee-form.card-box { padding: 20px 22px; border: 1px solid var(--sr-border); border-radius: 14px; background: var(--sr-surface); box-shadow: var(--sr-shadow); }
+			.ee-form-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 14px; margin-bottom: 4px; border-bottom: 1px solid var(--sr-border); }
+			.ee-form-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--sr-text); }
+			.ee-form-title i { color: var(--sr-accent); }
+			.ee-form-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--sr-muted); }
+			.ee-form .ee-sec { display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px dashed var(--sr-border);
+				font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--sr-muted); }
+			.ee-form .ee-sec.is-first { margin-top: 8px; }
+			.ee-form .ee-sec i { font-size: 15px; color: var(--sr-accent); }
+			.ee-form .form-group { margin-bottom: 14px; }
+			.ee-form .col-form-label { padding: 0; }
+			.ee-form .form-text, .ee-form small.text-muted { font-size: 11px; color: var(--sr-muted) !important; }
+			.ee-form .ee-seg-full { display: flex; width: 100%; }
+			.ee-form .ee-seg-full label { flex: 1 1 0; text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 7px 8px; }
+			.ee-form .ee-seg label, .ee-form .ee-chip { margin-bottom: 0; }
+			.ee-form .ee-seg label { font-size: 12.5px; }
+			.ee-form .ee-options .sr-card { box-shadow: none; }
+			.ee-form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--sr-border); }
 			/* Employee options / request restrictions (new GUI) */
 			.ee-options .sr-card { margin-bottom: 16px; }
 			.ee-options .sr-card-title i { color: var(--sr-accent); }
@@ -396,11 +415,17 @@ if (mysqli_num_rows($query) == 1) {
 
 						<div class="row">
 							<div class="col-md-12">
-								<div class="card-box editEmployeeAttr">
-									<h4 class="m-t-0 header-title"><?= __("edit_employee_title") ?></h4>
+								<div class="card-box editEmployeeAttr sr-page ee-form">
+									<div class="ee-form-head">
+										<div>
+											<h4 class="ee-form-title"><i class="mdi mdi-account-edit"></i> <?= __("edit_employee_title") ?></h4>
+											<p class="ee-form-sub"><?= htmlspecialchars(($emprow['name'] ?? '') . ' · #' . ($emprow['empid'] ?? $_GET['emp_id'] ?? '')) ?></p>
+										</div>
+									</div>
 									<!-- --- FIX 4: Ensure the form action retains the emp_id query string --- -->
-									<form action="<?= $_SERVER['PHP_SELF']; ?>?emp_id=<?= htmlspecialchars($emprow['empid'] ?? $_GET['emp_id']); ?>" method="post" enctype="multipart/form-data" id="registration" class="registration">
+									<form action="<?= $_SERVER['PHP_SELF']; ?>?emp_id=<?= htmlspecialchars($emprow['empid'] ?? $_GET['emp_id']); ?>" method="post" enctype="multipart/form-data" id="registration" class="registration sr-form">
 										<div class="form-row">
+											<div class="col-12 ee-sec is-first"><i class="mdi mdi-account-card-details"></i> <?= __('ee_sec_identity', 'Identity & Documents') ?></div>
 											<div class="form-group col-md-2">
 												<label for="name" class="col-form-label"><?= __("employee_name_label") ?><span class="text-danger">*</span></label>
 												<input type="text" name="name" value="<?= ucwords($emprow['name']); ?>" parsley-trigger="change" class="form-control" id="name" autofocus required />
@@ -429,6 +454,7 @@ if (mysqli_num_rows($query) == 1) {
 												<label for="passport_exp" class="col-form-label"><?= __("passport_expire_label") ?></label>
 												<input type="text" name="passport_exp" value="<?= $emprow['passport_exp'] ?>" parsley-trigger="change" class="form-control" id="passport_exp">
 											</div>
+											<div class="col-12 ee-sec"><i class="mdi mdi-phone"></i> <?= __('ee_sec_contact', 'Contact') ?></div>
 											<div class="form-group col-md-2">
 												<label for="mobile" class="col-form-label"><?= __("mobile_no_label") ?>
 													<?php if ($emprow['emp_sup_type'] !== "man_power"): ?>
@@ -466,6 +492,7 @@ if (mysqli_num_rows($query) == 1) {
 												<?php } ?>
 												</select>
 											</div>
+											<div class="col-12 ee-sec"><i class="mdi mdi-sitemap"></i> <?= __('ee_sec_organization', 'Organization') ?></div>
 											<div class="form-group col-md-2">
 												<label for="department" class="col-form-label"><?= __("department_label") ?><span class="text-danger">*</span></label>
 												<select class="form-control department" name="department" id="department" required />
@@ -555,6 +582,7 @@ if (mysqli_num_rows($query) == 1) {
 												</label>
 												<input type="text" name="joining_date" value="<?= $emprow['joining_date'] ?>" parsley-trigger="change" class="form-control" id="joining_date" required />
 											</div>
+											<div class="col-12 ee-sec"><i class="mdi mdi-account"></i> <?= __('ee_sec_personal', 'Personal Details') ?></div>
 											<div class="form-group col-md-2">
 												<label for="dob" class="col-form-label"><?= __("dob_gregorian_label") ?>
 													<?php if ($emprow['emp_sup_type'] !== "man_power"): ?>
@@ -577,25 +605,21 @@ if (mysqli_num_rows($query) == 1) {
 												<input type="text" name="t_shirt_size" value="<?= $emprow['t_shirt_size'] ?>" parsley-trigger="change" class="form-control" id="t_shirt_size">
 											</div>
 											<div class="form-group col-md-2">
-												<label class="font-14 mt-3 mb-2 radioalign"><?= __("gender_label") ?><span class="text-danger">*</span></label>
-												<div class="radio radio-info form-check-inline">
+												<label class="col-form-label"><?= __("gender_label") ?><span class="text-danger">*</span></label>
+												<div class="ee-seg ee-seg-full">
 													<input type="radio" id="inlineRadio3" value="1" name="sex" <?= ($emprow['sex'] == "male") ? 'checked' : ''; ?>>
-													<label for="inlineRadio3" class="atch"><i class="mdi mdi-human-male"></i> <?= __("male_option") ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
+													<label for="inlineRadio3"><i class="mdi mdi-human-male"></i> <?= __("male_option") ?></label>
 													<input type="radio" id="inlineRadio1" value="2" name="sex" <?= ($emprow['sex'] == "female") ? 'checked' : '' ?>>
-													<label for="inlineRadio1" class="atch"><i class="mdi mdi-human-female"></i> <?= __("female_option") ?> </label>
+													<label for="inlineRadio1"><i class="mdi mdi-human-female"></i> <?= __("female_option") ?></label>
 												</div>
 											</div>
 											<div class="form-group col-md-2">
-												<label class="font-14 mt-3 mb-2 radioalign"><?= __("marital_status_label") ?><span class="text-danger">*</span></label>
-												<div class="radio radio-info form-check-inline">
+												<label class="col-form-label"><?= __("marital_status_label") ?><span class="text-danger">*</span></label>
+												<div class="ee-seg ee-seg-full">
 													<input type="radio" id="married" value="married" name="mar_status" <?= ($emprow['mar_status'] == "married") ? 'checked' : '' ?>>
-													<label for="married" class="atch"><i class="mdi mdi-ring"></i> <?= __("married_option") ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
+													<label for="married"><i class="mdi mdi-ring"></i> <?= __("married_option") ?></label>
 													<input type="radio" id="single" value="single" name="mar_status" <?= ($emprow['mar_status'] == "single") ? 'checked' : '' ?>>
-													<label for="single" class="atch"><i class="mdi mdi-account-convert"></i> <?= __("single_option") ?></label>
+													<label for="single"><i class="mdi mdi-account-convert"></i> <?= __("single_option") ?></label>
 												</div>
 											</div>
 											<div class="form-group col-md-2">
@@ -620,6 +644,7 @@ if (mysqli_num_rows($query) == 1) {
 												<option value="AB-">AB-</option>
 												</select>
 											</div>
+											<div class="col-12 ee-sec"><i class="mdi mdi-file-document"></i> <?= __('ee_sec_contract', 'Contract & Salary') ?></div>
 											<div class="form-group col-md-2">
 												<label for="emp_sup_type" class="col-form-label"><?= __("sponsorship_label") ?><span class="text-danger">*</span></label>
 												<select class="form-control" name="emp_sup_type" id="emp_sup_type" required />
@@ -682,6 +707,7 @@ if (mysqli_num_rows($query) == 1) {
 												<label for="salary" class="col-form-label"><?= __("salary_label") ?><span class="text-danger">*</span></label>
 												<input type="text" name="salary" value="<?= $emprow['salary'] ?>" class="form-control autonumber" data-v-max="90000" data-v-min="0" id="salary" required />
 											</div>
+											<div class="col-12 ee-sec"><i class="mdi mdi-bank"></i> <?= __('ee_sec_banking', 'Banking & Other') ?></div>
 											<div class="form-group col-md-2">
 												<label for="bank_name" class="col-form-label"><?= __("bank_name_label") ?>
 													<?php if ($emprow['emp_sup_type'] !== "man_power"): ?>
@@ -859,9 +885,9 @@ if (mysqli_num_rows($query) == 1) {
 											</div>
 
 											<div class="form-group col-md-12">
-												<div class="btn-group" role="group" aria-label="Edit Button">
-													<a href="view_employee.php?emp_id=<?= $_GET['emp_id']; ?>" class="btn btn-dark"><i class="fa fa-angle-double-left"></i> <?= __("back_button") ?></a>
-													<button type="submit" name="submit" class="btn btn-primary"><i class="mdi mdi-account-plus"></i> <?= __("save_edit_button") ?></button>
+												<div class="ee-form-actions" role="group" aria-label="Edit Button">
+													<a href="view_employee.php?emp_id=<?= htmlspecialchars($_GET['emp_id'] ?? '') ?>" class="sr-btn sr-btn-ghost"><i class="fa fa-angle-double-left"></i> <?= __("back_button") ?></a>
+													<button type="submit" name="submit" class="sr-btn sr-btn-primary"><i class="mdi mdi-content-save"></i> <?= __("save_edit_button") ?></button>
 												</div>
 											</div>
 
@@ -1178,48 +1204,15 @@ if (mysqli_num_rows($query) == 1) {
 
 				/***********Date of ID**********/
 				const initDateOfIDPickers = () => {
-					// Gregorian (AppDate) and Hijri pickers keep each other in sync
-					AppDate.single('#iqama_exp', {
-						onChange: function(dates) {
-							if (!dates.length) return;
-							const hijriDate = moment(dates[0]).format('iYYYY-iMM-iDD');
-							$('#dateofidHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
-						}
-					});
-					$('#dateofidHijri').hijriDatePicker({
-						format: 'iYYYY-iMM-iDD',
-						hijri: true,
-						showSwitcher: false
-					}).on('dp.change', function(e) {
-						if (e.date) {
-							const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-							AppDate.get('#iqama_exp').setDate(gregorianDate, false);
-						}
-					});
+					// Gregorian and Hijri (Umm al-Qura) pickers keep each other in sync
+					AppDate.hijriPair('#iqama_exp', '#dateofidHijri');
 				};
 				initDateOfIDPickers();
 				/***********Date of ID**********/
 				/***********Date of Birth**********/
 				const initDateOfBirthPickers = () => {
-					// Future dates blocked; Gregorian and Hijri pickers keep each other in sync
-					AppDate.single('#dob', {
-						maxDate: 'today',
-						onChange: function(dates) {
-							if (!dates.length) return;
-							const hijriDate = moment(dates[0]).format('iYYYY-iMM-iDD');
-							$('#dateofbirthHijri').val(hijriDate).hijriDatePicker('setDate', hijriDate);
-						}
-					});
-					$('#dateofbirthHijri').hijriDatePicker({
-						format: 'iYYYY-iMM-iDD',
-						hijri: true,
-						showSwitcher: false,
-					}).on('dp.change', function(e) {
-						if (e.date) {
-							const gregorianDate = moment(e.date.format('iYYYY-iMM-iDD'), 'iYYYY-iMM-iDD').format('YYYY-MM-DD');
-							AppDate.get('#dob').setDate(gregorianDate, false);
-						}
-					});
+					// Future dates blocked in both; Gregorian and Hijri pickers keep each other in sync
+					AppDate.hijriPair('#dob', '#dateofbirthHijri', { maxDate: 'today' });
 				};
 				/***********Date of Birth**********/
 				initDateOfBirthPickers();

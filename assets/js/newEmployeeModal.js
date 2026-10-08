@@ -61,8 +61,7 @@ function newEmpPopulateSubDepts(departmentId, $target, selectedId) {
     if ($target.hasClass('select2-hidden-accessible')) $target.trigger('change');
 }
 
-// newEmpDatePickerModal / newEmpWireDatepicker / newEmpWireHijriPair / newEmpHijriCalendarHtml /
-// newEmpWireHijriCalendar now live in jquery.app.js (loaded on every admin page), so any page
+// newEmpDatePickerModal / newEmpWireDatepicker / newEmpWireHijriPair now live in jquery.app.js (loaded on every admin page), so any page
 // can wire a date field the same way this form does, not just this modal.
 
 function newEmpFieldset(labelKey, fallback, inputHtml, colClass, icon, required) {
