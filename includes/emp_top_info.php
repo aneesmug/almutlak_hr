@@ -377,11 +377,17 @@ if ($isEmployee !== true) {
 						<?php if ($emprow["status"] == 1) : ?>
 						<div class="more-actions-wrapper" style="text-align:center; position:relative;">
 							<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) {
+								// Edit Employee: D365 status only - no Sync / Add to D365 buttons
+								$d365WidgetStatusOnly = ($current_page_name === 'edit_employee.php');
+								// no More button there to sit beside - show the card in the normal flow, under the QR code
+								$d365WidgetClass = $d365WidgetStatusOnly ? 'is-inline' : '';
 								include __DIR__ . '/D365/d365_widget.php'; // Microsoft Dynamics 365 status + Sync
 							} ?>
+							<?php if ($current_page_name !== 'edit_employee.php'): // no More actions while editing ?>
 							<button type="button" id="moreActionsBtn" class="more-actions-btn">
 								<i class="fa fa-bars"></i> <?= __('more') ?>
 							</button>
+							<?php endif; ?>
 						</div>
 						<?php endif; ?>
 					<?php endif; ?>

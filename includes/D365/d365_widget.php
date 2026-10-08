@@ -43,7 +43,7 @@ if (empty($_SESSION['d365_csrf'])) {
 	.d365-widget .more-actions-btn { padding: 8px 14px; }
 	.d365-widget .more-actions-btn.is-warn { background: rgba(245,158,11,.9); border-color: rgba(255,255,255,.4); }
 	/* Inline variant (profile.php action row): flows with the other buttons */
-	.d365-widget.is-inline, [dir="rtl"] .d365-widget.is-inline { position: static; transform: none; margin: 0; }
+	.d365-widget.is-inline, [dir="rtl"] .d365-widget.is-inline { position: static; transform: none; margin: 0; justify-content: center; }
 	@media (max-width: 991px) { .d365-widget { position: static; transform: none; margin: 0 0 8px; justify-content: center; } }
 </style>
 <script>
