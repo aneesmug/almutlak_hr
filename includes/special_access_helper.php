@@ -504,6 +504,41 @@ if (!function_exists('get_global_blocked_request_types')) {
     }
 }
 
+if (!function_exists('ensure_allow_loan_with_active_loan_column')) {
+    /**
+     * Per-employee override (Edit Employee > "Allow New Loan While a Loan Is Active"): when 1, this
+     * employee can apply for another loan although one is still in progress / active. Added on first use.
+     */
+    function ensure_allow_loan_with_active_loan_column($conDB) {
+        static $done = false;
+        if ($done || !($conDB instanceof mysqli)) {
+            return;
+        }
+        $done = true;
+        $res = @$conDB->query("SHOW COLUMNS FROM `employees` LIKE 'allow_loan_with_active_loan'");
+        if ($res && $res->num_rows === 0) {
+            @$conDB->query("ALTER TABLE `employees` ADD COLUMN `allow_loan_with_active_loan` TINYINT(1) NOT NULL DEFAULT 0");
+        }
+    }
+}
+
+if (!function_exists('employee_allows_loan_with_active_loan')) {
+    /** True when this employee is set to be allowed a new loan while another loan is still active / pending */
+    function employee_allows_loan_with_active_loan($conDB, $empId) {
+        ensure_allow_loan_with_active_loan_column($conDB);
+        $stmt = $conDB->prepare("SELECT allow_loan_with_active_loan FROM employees WHERE emp_id = ? LIMIT 1");
+        if (!$stmt) {
+            return false;
+        }
+        $empId = (string)$empId;
+        $stmt->bind_param('s', $empId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return (string)($row['allow_loan_with_active_loan'] ?? '0') === '1';
+    }
+}
+
 if (!function_exists('is_employee_request_blocked')) {
     function is_employee_request_blocked($conDB, $empId, $typeKey) {
         $empId = trim((string)$empId);

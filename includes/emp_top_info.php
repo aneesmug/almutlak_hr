@@ -109,8 +109,8 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 		$hr_actions .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 	}
 	
-	// Apply Loan (HR/Admin only, if no active loan)
-	if (empty($emprow['has_active_regular_loan']) && !$isLoanBlocked /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
+	// Apply Loan (if no active loan, or the employee is set to "Allow New Loan While a Loan Is Active" in Edit Employee)
+	if ((empty($emprow['has_active_regular_loan']) || (string)($emprow['allow_loan_with_active_loan'] ?? '0') === '1') && !$isLoanBlocked /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
 		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
 	}
 	

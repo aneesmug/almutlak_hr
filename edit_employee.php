@@ -9,6 +9,10 @@ cost_center_ensure_column($conDB);
 $canManageRequestBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
 $canManageRequestTypeBlock = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_employee_request_type_block', $user_role ?? '', $user_type ?? '', $is_system_admin));
 $canForceShowUpdateSalary = ($is_system_admin || user_has_special_access($conDB, $empid, 'manage_update_salary_button_visibility', $user_role ?? '', $user_type ?? '', $is_system_admin));
+// "Allow New Loan While a Loan Is Active" (employees.allow_loan_with_active_loan): same people who may
+// themselves apply with an active loan (Special Access 'apply_loan_with_active_loan') and system admins
+ensure_allow_loan_with_active_loan_column($conDB);
+$canManageLoanOverride = ($is_system_admin || user_has_special_access($conDB, $empid, 'apply_loan_with_active_loan', $user_role ?? '', $user_type ?? '', $is_system_admin));
 $globallyBlockedRequestTypes = get_global_blocked_request_types($conDB);
 
 // ============================================================
@@ -70,7 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			'other_income_enabled',
 			'requests_blocked',
 			'blocked_request_types',
-			'force_show_update_salary_btn'
+			'force_show_update_salary_btn',
+			'allow_loan_with_active_loan'
 		];
 
 		if (!$canManageRequestBlock) {
@@ -78,6 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 		}
 		if (!$canForceShowUpdateSalary) {
 			unset($formData['force_show_update_salary_btn']);
+		}
+		if (!$canManageLoanOverride) {
+			unset($formData['allow_loan_with_active_loan']);
+		} elseif (isset($formData['allow_loan_with_active_loan'])) {
+			$formData['allow_loan_with_active_loan'] = $formData['allow_loan_with_active_loan'] === '1' ? '1' : '0';
 		}
 		if (!$canManageRequestTypeBlock) {
 			unset($formData['blocked_request_types']);
@@ -288,6 +298,35 @@ if (mysqli_num_rows($query) == 1) {
 		<link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+		<link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+		<style>
+			/* Employee options / request restrictions (new GUI) */
+			.ee-options .sr-card { margin-bottom: 16px; }
+			.ee-options .sr-card-title i { color: var(--sr-accent); }
+			.ee-opt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+			@media (max-width: 1199px) { .ee-opt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+			@media (max-width: 767px) { .ee-opt-grid { grid-template-columns: 1fr; } }
+			.ee-opt-grid.ee-opt-grid-1 { grid-template-columns: minmax(0, 420px); }
+			.ee-opt { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); }
+			.ee-opt-title { font-size: 13px; font-weight: 700; color: var(--sr-text); }
+			.ee-opt-hint { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--sr-muted); }
+			.ee-seg { display: inline-flex; flex: none; padding: 3px; border-radius: 10px; background: var(--sr-surface-3); border: 1px solid var(--sr-border); }
+			.ee-seg input { position: absolute; opacity: 0; pointer-events: none; }
+			.ee-seg label { margin: 0; padding: 5px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--sr-muted); cursor: pointer; transition: background .15s, color .15s; }
+			.ee-seg input:checked + label { background: var(--sr-surface); color: var(--sr-text); box-shadow: var(--sr-shadow); }
+			.ee-seg input:checked + label.is-yes.tone-green { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+			.ee-seg input:checked + label.is-yes.tone-amber { background: var(--tone-amber-bg); color: var(--tone-amber-fg); }
+			.ee-seg input:checked + label.is-yes.tone-red { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+			.ee-seg input:focus-visible + label { outline: 2px solid var(--sr-accent); }
+			.ee-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+			.ee-chip { position: relative; margin: 0; cursor: pointer; }
+			.ee-chip input { position: absolute; opacity: 0; pointer-events: none; }
+			.ee-chip span { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--sr-border-strong); background: var(--sr-surface); color: var(--sr-text-2); transition: background .15s, color .15s, border-color .15s; }
+			.ee-chip.is-global span { border-style: dashed; }
+			.ee-chip input:checked + span { background: var(--tone-red-bg); border-color: var(--tone-red-bd); color: var(--tone-red-fg); }
+			.ee-chip.is-global input:checked + span { background: var(--tone-green-bg); border-color: var(--tone-green-bd); color: var(--tone-green-fg); }
+			.ee-chip input:focus-visible + span { outline: 2px solid var(--sr-accent); }
+		</style>
 
 		<script src="assets/js/modernizr.min.js"></script>
 		<?php if ($is_rtl): ?>
@@ -719,129 +758,105 @@ if (mysqli_num_rows($query) == 1) {
 												</select>
 											</div>
 
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></label>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="overtimeEligibleYes" name="is_overtime_eligible" value="1" <?= ((string)($emprow['is_overtime_eligible'] ?? '0') === '1') ? 'checked' : '' ?> required>
-													<label for="overtimeEligibleYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="overtimeEligibleNo" name="is_overtime_eligible" value="0" <?= ((string)($emprow['is_overtime_eligible'] ?? '0') !== '1') ? 'checked' : '' ?>>
-													<label for="overtimeEligibleNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-											</div>
-
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></label>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="allowEmergencyVacationYes" name="allow_emergency_vacation" value="1" <?= ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 'checked' : '' ?>>
-													<label for="allowEmergencyVacationYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="allowEmergencyVacationNo" name="allow_emergency_vacation" value="0" <?= ((string)($emprow['allow_emergency_vacation'] ?? '0') !== '1') ? 'checked' : '' ?>>
-													<label for="allowEmergencyVacationNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-												<small class="form-text text-muted"><?= __('allow_emergency_vacation_hint', 'When Yes, this employee can apply for Emergency Vacation even with a healthy balance (>1 day)') ?></small>
-											</div>
-
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('allow_vacation_salary_below_min_days', 'Allow Vacation Salary Below Min Days') ?></label>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="allowVacSalaryBelowMinYes" name="allow_vacation_salary_below_min_days" value="1" <?= ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') === '1') ? 'checked' : '' ?>>
-													<label for="allowVacSalaryBelowMinYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="allowVacSalaryBelowMinNo" name="allow_vacation_salary_below_min_days" value="0" <?= ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') !== '1') ? 'checked' : '' ?>>
-													<label for="allowVacSalaryBelowMinNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-												<small class="form-text text-muted"><?php $vacSalaryMinDays = (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20); ?>
-												<?= str_replace('{days}', $vacSalaryMinDays, __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', $vacSalaryMinDays))) ?></small>
-											</div>
-
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('other_income_enabled', 'Show Other Income Block') ?></label>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="otherIncomeEnabledYes" name="other_income_enabled" value="1" <?= ((string)($emprow['other_income_enabled'] ?? '1') === '1') ? 'checked' : '' ?>>
-													<label for="otherIncomeEnabledYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="otherIncomeEnabledNo" name="other_income_enabled" value="0" <?= ((string)($emprow['other_income_enabled'] ?? '1') !== '1') ? 'checked' : '' ?>>
-													<label for="otherIncomeEnabledNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-												<small class="form-text text-muted"><?= __('other_income_enabled_hint', "When Yes, the Other Income section is available on this employee's profile. When No, it is hidden for everyone regardless of Special Access.") ?></small>
-											</div>
-
-											<?php if ($canForceShowUpdateSalary): ?>
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('force_show_update_salary_btn', 'Force Show Update Salary Button') ?></label>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="forceShowUpdateSalaryYes" name="force_show_update_salary_btn" value="1" <?= ((string)($emprow['force_show_update_salary_btn'] ?? '0') === '1') ? 'checked' : '' ?>>
-													<label for="forceShowUpdateSalaryYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="forceShowUpdateSalaryNo" name="force_show_update_salary_btn" value="0" <?= ((string)($emprow['force_show_update_salary_btn'] ?? '0') !== '1') ? 'checked' : '' ?>>
-													<label for="forceShowUpdateSalaryNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-												<small class="form-text text-muted"><?= __('force_show_update_salary_btn_hint', 'The Update Salary button is normally hidden until a Salary Increment request is finally approved for this employee. Set to Yes to force it visible for a special case.') ?></small>
-											</div>
-											<?php endif; ?>
-
-											<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>
+											<?php
+											// Yes / No option row (new GUI) - same radio names / ids as before, so saving is unchanged
+											$eeOpt = function ($name, $idYes, $idNo, $title, $hint, $isYes, $required = false, $yesTone = 'green') {
+												$e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+												return '<div class="ee-opt">'
+													. '<div class="ee-opt-text"><div class="ee-opt-title">' . $e($title) . '</div>'
+													. ($hint !== '' ? '<div class="ee-opt-hint">' . $hint . '</div>' : '') . '</div>'
+													. '<div class="ee-seg">'
+													. '<input type="radio" id="' . $e($idYes) . '" name="' . $e($name) . '" value="1"' . ($isYes ? ' checked' : '') . ($required ? ' required' : '') . '>'
+													. '<label for="' . $e($idYes) . '" class="is-yes tone-' . $e($yesTone) . '">' . $e(__('yes', 'Yes')) . '</label>'
+													. '<input type="radio" id="' . $e($idNo) . '" name="' . $e($name) . '" value="0"' . (!$isYes ? ' checked' : '') . '>'
+													. '<label for="' . $e($idNo) . '" class="is-no">' . $e(__('no', 'No')) . '</label>'
+													. '</div></div>';
+											};
+											$eeYes = function ($field, $default = '0') use ($emprow) {
+												return (string)($emprow[$field] ?? $default) === '1';
+											};
+											$vacSalaryMinDays = (int)(getLocalAnnualPayrollRemovalRuleConfig()['minimum_days_exclusive'] ?? 20);
+											?>
 											<div class="form-group col-md-12">
-												<hr>
-												<label class="col-form-label d-block"><strong><?= __('request_restrictions', 'Request Restrictions') ?></strong></label>
-											</div>
-
-											<?php if ($canManageRequestBlock): ?>
-											<div class="form-group col-md-4">
-												<label class="col-form-label d-block"><?= __('block_from_all_requests', 'Block From All Requests') ?></label>
-												<div class="radio radio-danger form-check-inline">
-													<input type="radio" id="requestsBlockedYes" name="requests_blocked" value="1" <?= ((string)($emprow['requests_blocked'] ?? '0') === '1') ? 'checked' : '' ?>>
-													<label for="requestsBlockedYes" class="atch"><?= __('yes', 'Yes') ?></label>
-												</div>
-												<div class="radio radio-info form-check-inline">
-													<input type="radio" id="requestsBlockedNo" name="requests_blocked" value="0" <?= ((string)($emprow['requests_blocked'] ?? '0') !== '1') ? 'checked' : '' ?>>
-													<label for="requestsBlockedNo" class="atch"><?= __('no', 'No') ?></label>
-												</div>
-											</div>
-											<?php endif; ?>
-
-											<?php if ($canManageRequestTypeBlock): ?>
-											<div class="form-group col-md-8">
-												<label class="col-form-label d-block"><?= __('block_specific_request_types', 'Block Specific Request Types') ?></label>
-												<small class="form-text text-muted mb-2"><?= __('block_specific_request_types_hint', 'Some request types may already be blocked for all employees (see Manage Request Type Blocks). Checking one of those here exempts this employee; checking a type that is not globally blocked blocks it for this employee only.') ?></small>
-												<div id="blockedRequestTypesContainer">
-													<?php
-													$blockedTypesRaw = (string)($emprow['blocked_request_types'] ?? '');
-													$blockedTypesSelected = decode_blocked_request_types($blockedTypesRaw);
-													foreach (get_blockable_request_type_labels() as $typeKey => $typeLabel):
-														$isGloballyBlocked = in_array($typeKey, $globallyBlockedRequestTypes, true);
-														$checkboxLabel = $isGloballyBlocked
-															? '🔒 ' . $typeLabel . ' — ' . __('globally_blocked_check_to_allow', 'globally blocked; check to allow this employee anyway')
-															: $typeLabel;
-													?>
-													<div class="checkbox checkbox-danger form-check-inline">
-														<input type="checkbox" id="blockType_<?= htmlspecialchars($typeKey) ?>" class="blocked-request-type-checkbox" value="<?= htmlspecialchars($typeKey) ?>" <?= in_array($typeKey, $blockedTypesSelected, true) ? 'checked' : '' ?>>
-														<label for="blockType_<?= htmlspecialchars($typeKey) ?>" class="atch"><?= htmlspecialchars($checkboxLabel) ?></label>
+												<div class="sr-page ee-options">
+													<div class="sr-card">
+														<div class="sr-card-head">
+															<div>
+																<div class="sr-card-title"><i class="mdi mdi-tune"></i> <?= __('employee_options', 'Employee Options') ?></div>
+																<div class="sr-card-sub"><?= __('employee_options_hint', 'Special rules that apply to this employee only') ?></div>
+															</div>
+														</div>
+														<div class="sr-card-body">
+															<div class="ee-opt-grid">
+																<?= $eeOpt('is_overtime_eligible', 'overtimeEligibleYes', 'overtimeEligibleNo', __('eligible_for_overtime', 'Eligible For Overtime'), '', $eeYes('is_overtime_eligible'), true) ?>
+																<?= $eeOpt('allow_emergency_vacation', 'allowEmergencyVacationYes', 'allowEmergencyVacationNo', __('allow_emergency_vacation', 'Allow Emergency Vacation'),
+																	htmlspecialchars(__('allow_emergency_vacation_hint', 'When Yes, this employee can apply for Emergency Vacation even with a healthy balance (>1 day)')), $eeYes('allow_emergency_vacation')) ?>
+																<?= $eeOpt('allow_vacation_salary_below_min_days', 'allowVacSalaryBelowMinYes', 'allowVacSalaryBelowMinNo', __('allow_vacation_salary_below_min_days', 'Allow Vacation Salary Below Min Days'),
+																	htmlspecialchars(str_replace('{days}', $vacSalaryMinDays, __('allow_vacation_salary_below_min_days_hint', sprintf('When Yes, this employee can receive the vacation salary payout for a Local Vacation even with fewer than %d approved days', $vacSalaryMinDays)))), $eeYes('allow_vacation_salary_below_min_days')) ?>
+																<?= $eeOpt('other_income_enabled', 'otherIncomeEnabledYes', 'otherIncomeEnabledNo', __('other_income_enabled', 'Show Other Income Block'),
+																	htmlspecialchars(__('other_income_enabled_hint', "When Yes, the Other Income section is available on this employee's profile. When No, it is hidden for everyone regardless of Special Access.")), $eeYes('other_income_enabled', '1')) ?>
+																<?php if ($canForceShowUpdateSalary): ?>
+																	<?= $eeOpt('force_show_update_salary_btn', 'forceShowUpdateSalaryYes', 'forceShowUpdateSalaryNo', __('force_show_update_salary_btn', 'Force Show Update Salary Button'),
+																		htmlspecialchars(__('force_show_update_salary_btn_hint', 'The Update Salary button is normally hidden until a Salary Increment request is finally approved for this employee. Set to Yes to force it visible for a special case.')), $eeYes('force_show_update_salary_btn')) ?>
+																<?php endif; ?>
+																<?php if ($canManageLoanOverride): ?>
+																	<?= $eeOpt('allow_loan_with_active_loan', 'allowLoanWithActiveYes', 'allowLoanWithActiveNo', __('allow_loan_with_active_loan', 'Allow New Loan While a Loan Is Active'),
+																		htmlspecialchars(__('allow_loan_with_active_loan_hint', 'When Yes, a new loan request can be submitted for this employee even while another loan is still pending approval or being repaid.')), $eeYes('allow_loan_with_active_loan'), false, 'amber') ?>
+																<?php endif; ?>
+															</div>
+														</div>
 													</div>
-													<?php endforeach; ?>
+
+													<?php if ($canManageRequestBlock || $canManageRequestTypeBlock): ?>
+													<div class="sr-card">
+														<div class="sr-card-head">
+															<div>
+																<div class="sr-card-title"><i class="mdi mdi-block-helper"></i> <?= __('request_restrictions', 'Request Restrictions') ?></div>
+																<div class="sr-card-sub"><?= __('block_specific_request_types_hint', 'Some request types may already be blocked for all employees (see Manage Request Type Blocks). Checking one of those here exempts this employee; checking a type that is not globally blocked blocks it for this employee only.') ?></div>
+															</div>
+														</div>
+														<div class="sr-card-body">
+															<?php if ($canManageRequestBlock): ?>
+																<div class="ee-opt-grid ee-opt-grid-1">
+																	<?= $eeOpt('requests_blocked', 'requestsBlockedYes', 'requestsBlockedNo', __('block_from_all_requests', 'Block From All Requests'), '', $eeYes('requests_blocked'), false, 'red') ?>
+																</div>
+															<?php endif; ?>
+
+															<?php if ($canManageRequestTypeBlock): ?>
+																<div class="ee-opt-title mt-3 mb-2"><?= __('block_specific_request_types', 'Block Specific Request Types') ?></div>
+																<div id="blockedRequestTypesContainer" class="ee-chips">
+																	<?php
+																	$blockedTypesRaw = (string)($emprow['blocked_request_types'] ?? '');
+																	$blockedTypesSelected = decode_blocked_request_types($blockedTypesRaw);
+																	foreach (get_blockable_request_type_labels() as $typeKey => $typeLabel):
+																		$isGloballyBlocked = in_array($typeKey, $globallyBlockedRequestTypes, true);
+																	?>
+																	<label class="ee-chip<?= $isGloballyBlocked ? ' is-global' : '' ?>" for="blockType_<?= htmlspecialchars($typeKey) ?>"
+																		<?= $isGloballyBlocked ? 'title="' . htmlspecialchars(__('globally_blocked_check_to_allow', 'globally blocked; check to allow this employee anyway')) . '"' : '' ?>>
+																		<input type="checkbox" id="blockType_<?= htmlspecialchars($typeKey) ?>" class="blocked-request-type-checkbox" value="<?= htmlspecialchars($typeKey) ?>" <?= in_array($typeKey, $blockedTypesSelected, true) ? 'checked' : '' ?>>
+																		<span><?php if ($isGloballyBlocked): ?><i class="mdi mdi-lock"></i> <?php endif; ?><?= htmlspecialchars($typeLabel) ?></span>
+																	</label>
+																	<?php endforeach; ?>
+																</div>
+																<input type="hidden" name="blocked_request_types" id="blockedRequestTypesHidden" value="<?= htmlspecialchars(json_encode($blockedTypesSelected)) ?>">
+																<script>
+																	document.addEventListener('DOMContentLoaded', function() {
+																		var hidden = document.getElementById('blockedRequestTypesHidden');
+																		var boxes = document.querySelectorAll('.blocked-request-type-checkbox');
+																		function syncHidden() {
+																			var values = Array.prototype.filter.call(boxes, function(b) { return b.checked; })
+																				.map(function(b) { return b.value; });
+																			hidden.value = JSON.stringify(values);
+																		}
+																		boxes.forEach(function(b) { b.addEventListener('change', syncHidden); });
+																	});
+																</script>
+															<?php endif; ?>
+														</div>
+													</div>
+													<?php endif; ?>
 												</div>
-												<input type="hidden" name="blocked_request_types" id="blockedRequestTypesHidden" value="<?= htmlspecialchars(json_encode($blockedTypesSelected)) ?>">
 											</div>
-											<script>
-												document.addEventListener('DOMContentLoaded', function() {
-													var hidden = document.getElementById('blockedRequestTypesHidden');
-													var boxes = document.querySelectorAll('.blocked-request-type-checkbox');
-													function syncHidden() {
-														var values = Array.prototype.filter.call(boxes, function(b) { return b.checked; })
-															.map(function(b) { return b.value; });
-														hidden.value = JSON.stringify(values);
-													}
-													boxes.forEach(function(b) { b.addEventListener('change', syncHidden); });
-												});
-											</script>
-											<?php endif; ?>
-											<?php endif; ?>
 
 											<div class="form-group col-md-12">
 												<div class="btn-group" role="group" aria-label="Edit Button">

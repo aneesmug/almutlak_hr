@@ -1125,6 +1125,34 @@ if (mysqli_num_rows($query) == 1) {
 			/* tables */
 			.tab-content.sr-page table.sr-table tbody tr { cursor: default; }
 			.tab-content.sr-page table.sr-table tbody td { white-space: nowrap; }
+			/* Loans tab - active loan summary */
+			.tab-content.sr-page .ve-loan { margin-bottom: 20px; }
+			.tab-content.sr-page .ve-loan .sr-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+			.tab-content.sr-page .ve-loan .sr-card-title i { color: var(--sr-accent); }
+			.tab-content.sr-page .ve-loan .sr-card-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+			.ve-loan-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+			@media (max-width: 767px) { .ve-loan-stats { grid-template-columns: 1fr; } }
+			.ve-loan-stat { padding: 14px 16px; border-radius: 12px; background: var(--sr-surface-2); border: 1px solid var(--sr-border); }
+			.ve-loan-stat-label { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+			.ve-loan-stat-label .sr-dot { width: 8px; height: 8px; border-radius: 50%; }
+			.ve-loan-stat-value { display: block; margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--sr-text); font-variant-numeric: tabular-nums; line-height: 1.15; }
+			.ve-loan-stat.is-paid { background: var(--tone-green-bg); border-color: var(--tone-green-bd); }
+			.ve-loan-stat.is-paid .sr-dot { background: var(--tone-green-fg); }
+			.ve-loan-stat.is-paid .ve-loan-stat-value { color: var(--tone-green-fg); }
+			.ve-loan-stat.is-remaining { background: var(--tone-red-bg); border-color: var(--tone-red-bd); }
+			.ve-loan-stat.is-remaining .sr-dot { background: var(--tone-red-fg); }
+			.ve-loan-stat.is-remaining .ve-loan-stat-value { color: var(--tone-red-fg); }
+			.ve-loan-progress { height: 8px; border-radius: 4px; background: var(--sr-surface-3); overflow: hidden; margin: 12px 0 18px; }
+			.ve-loan-progress > div { height: 100%; background: var(--tone-green-fg); border-radius: 4px; }
+			.ve-loan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+			@media (max-width: 991px) { .ve-loan-grid { grid-template-columns: 1fr; } }
+			.ve-loan-box { border: 1px solid var(--sr-border); border-radius: 12px; padding: 12px 16px; }
+			.ve-loan-box-title { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--sr-muted); margin-bottom: 4px; }
+			.ve-loan-box-title i { color: var(--sr-accent); }
+			.ve-loan-box .sr-kv dd { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+			.ve-loan-amber { color: var(--tone-amber-fg) !important; }
+			.ve-loan-select { width: auto; min-width: 170px; }
+			.ve-loan-pay { width: 100%; justify-content: center; margin-top: 12px; }
 			.tab-content.sr-page table.sr-table td .btn-sm,
 			.tab-content.sr-page table.sr-table td .btn-xs {
 				display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -2278,131 +2306,101 @@ if (mysqli_num_rows($query) == 1) {
 										</div>
 
 										<div class="tab-pane" id="loan1">
-											<?php if ($loan_summary): ?>
-												<div class="card border-primary border mb-4">
-													<div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-														<h5 class="mb-0"><i class="fa fa-info-circle"></i> <?= __('active_loan_summary') ?></h5>
-													</div>
-													<div class="card-body">
-														<div class="row">
-															<!-- Loan Details Column -->
-															<div class="col-md-6">
-																<div class="info-block mb-3">
-																	<h6 class="text-muted text-uppercase mb-3"><i class="fa fa-file-text"></i> <?= __('loan_details') ?></h6>
-																	<table class="table table-sm table-borderless">
-																		<tr>
-																			<td class="font-weight-bold" width="50%"><?= __('invoice_number') ?>:</td>
-																			<td><?= htmlspecialchars($loan_summary['inv_no']) ?></td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('loan_type') ?>:</td>
-																			<td><span class="badge badge-info"><?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?></span></td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('approved_amount') ?>:</td>
-																			<td class="text-primary font-weight-bold"><?= number_format($loan_summary['final_approved_amount'], 2) ?> <i class="icon-saudi_riyal"></i></td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('installments') ?>:</td>
-																			<td><span id="installmentCount"><?= $loan_summary['installments'] ?></span> <?= __('months') ?></td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('monthly_deduction') ?>:</td>
-																			<td class="text-warning font-weight-bold"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> <i class="icon-saudi_riyal"></i></td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('deduction_mode') ?>:</td>
-																			<td>
-																				<select id="deductionModeSelect" class="form-control form-control-sm w-auto" data-loan-id="<?= $loan_summary['loan_id'] ?>">
-																					<option value="automatic" <?= ($loan_summary['deduction_mode'] ?? 'automatic') === 'automatic' ? 'selected' : '' ?>>
-																						<?= __('automatic_monthly') ?>
-																					</option>
-																					<option value="manual" <?= ($loan_summary['deduction_mode'] ?? 'automatic') === 'manual' ? 'selected' : '' ?>>
-																						<?= __('manual_addition') ?>
-																					</option>
-																				</select>
-																			</td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('installments_plan') ?>:</td>
-																			<td>
-																				<button type="button" class="btn btn-sm btn-light editLoanInstallments"
-																					data-loan-id="<?= $loan_summary['loan_id'] ?>"
-																					data-installments="<?= $loan_summary['installments'] ?>"
-																					data-monthly-deduction="<?= $loan_summary['monthly_deduction'] ?>"
-																					data-remaining="<?= $loan_summary['remaining_balance'] ?>">
-																					<i class="fa fa-edit"></i> <?= __('edit_plan') ?>
-																				</button>
-																			</td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('start_date') ?>:</td>
-																			<td>
-																				<?php
-																				$loanStartDate = $loan_summary['start_date'] ?? '';
-																				echo (!empty($loanStartDate) && $loanStartDate !== '0000-00-00')
-																					? format_safe_date($loanStartDate, 'd M, Y')
-																					: '-';
-																				?>
-																			</td>
-																		</tr>
-																		<tr>
-																			<td class="font-weight-bold"><?= __('end_date') ?>:</td>
-																			<td>
-																				<?php
-																				$loanEndDate = $loan_summary['end_date'] ?? '';
-																				echo (!empty($loanEndDate) && $loanEndDate !== '0000-00-00')
-																					? format_safe_date($loanEndDate, 'd M, Y')
-																					: '-';
-																				?>
-																			</td>
-																		</tr>
-																	</table>
-																</div>
-															</div>
-
-															<!-- Payment Summary Column -->
-															<div class="col-md-6">
-																<div class="info-block mb-3">
-																	<h6 class="text-muted text-uppercase mb-3"><i class="fa fa-money"></i> <?= __('payment_summary') ?></h6>
-																	<div class="payment-stat mb-3 p-3 bg-light rounded">
-																		<small class="text-muted d-block"><?= __('total_loan_amount') ?></small>
-																		<h4 class="mb-0 text-primary"><?= number_format($loan_summary['total_payable'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
-																	</div>
-																	<div class="payment-stat mb-3 p-3 bg-light rounded">
-																		<small class="text-muted d-block"><?= __('total_paid') ?></small>
-																		<h4 class="mb-0 text-success"><?= number_format($loan_summary['total_paid'], 2) ?> <i class="icon-saudi_riyal"></i></h4>
-																	</div>
-																	<div class="payment-stat mb-3 p-3 bg-light rounded">
-																		<small class="text-muted d-block"><?= __('remaining_balance') ?></small>
-																		<h4 class="mb-0 text-danger font-weight-bold"><span id="remainingDisplay"><?= number_format($loan_summary['remaining_balance'], 2) ?></span> <i class="icon-saudi_riyal"></i></h4>
-																	</div>
-																	<?php if ($loan_summary['remaining_balance'] > 0): ?>
-																		<div class="mt-3">
-																			<button type="button" class="btn btn-success btn-block waves-effect waves-light addManualPayment"
-																				data-loan-id="<?= $loan_summary['loan_id'] ?>"
-																				data-emp-id="<?= $emprow['empid'] ?>"
-																				data-remaining="<?= $loan_summary['remaining_balance'] ?>">
-																				<i class="mdi mdi-cash-multiple"></i> <?= __('add_manual_payment') ?>
-																			</button>
-																		</div>
-																	<?php endif; ?>
-																</div>
+											<?php if ($loan_summary):
+												$loanTotal = (float)$loan_summary['total_payable'];
+												$loanPaid = (float)$loan_summary['total_paid'];
+												$loanPaidPct = $loanTotal > 0 ? max(0, min(100, round($loanPaid / $loanTotal * 100))) : 0;
+												$loanFmtDate = function ($d) {
+													return (!empty($d) && $d !== '0000-00-00') ? format_safe_date($d, 'd M, Y') : '-';
+												};
+											?>
+												<!-- Active loan summary (new GUI) - IDs / classes are used by the edit-plan, deduction-mode and manual-payment scripts -->
+												<div class="sr-card ve-loan">
+													<div class="sr-card-head">
+														<div>
+															<div class="sr-card-title"><i class="mdi mdi-cash-multiple"></i> <?= __('active_loan_summary') ?></div>
+															<div class="sr-card-sub">
+																<span class="sr-mono"><?= htmlspecialchars($loan_summary['inv_no']) ?></span>
+																<span class="sr-pill tone-sky"><span class="sr-dot"></span><?= htmlspecialchars(ucfirst(str_replace('_', ' ', __($loan_summary['loan_type'])))) ?></span>
 															</div>
 														</div>
-														<?php if ($loan_summary['disbursement_receipt']): ?>
-															<hr>
-															<div class="row">
-																<div class="col-md-6">
-																	<strong><?= __('disbursement_receipt_id') ?>:</strong>
-																	<p><?= htmlspecialchars($loan_summary['disbursement_receipt']); ?></p>
-																</div>
-																<div class="col-md-6">
-																	<strong><?= __('disbursement_proof') ?>:</strong>
-																	<p><a href="./assets/loan_receipts/<?= htmlspecialchars($loan_summary['disbursement_attachment']); ?>" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-eye"></i> <?= __('view_attachments', 'View Attachment') ?></a></p>
-																</div>
+														<span class="sr-pill <?= $loanPaidPct >= 100 ? 'tone-green' : 'tone-indigo' ?>"><span class="sr-dot"></span><?= $loanPaidPct ?>% <?= __('paid', 'paid') ?></span>
+													</div>
+													<div class="sr-card-body">
+														<!-- Payment summary -->
+														<div class="ve-loan-stats">
+															<div class="ve-loan-stat">
+																<span class="ve-loan-stat-label"><span class="sr-dot" style="background:var(--sr-accent)"></span><?= __('total_loan_amount') ?></span>
+																<span class="ve-loan-stat-value"><?= number_format($loanTotal, 2) ?> <i class="icon-saudi_riyal"></i></span>
 															</div>
-														<?php endif; ?>
+															<div class="ve-loan-stat is-paid">
+																<span class="ve-loan-stat-label"><span class="sr-dot"></span><?= __('total_paid') ?></span>
+																<span class="ve-loan-stat-value"><?= number_format($loanPaid, 2) ?> <i class="icon-saudi_riyal"></i></span>
+															</div>
+															<div class="ve-loan-stat is-remaining">
+																<span class="ve-loan-stat-label"><span class="sr-dot"></span><?= __('remaining_balance') ?></span>
+																<span class="ve-loan-stat-value"><span id="remainingDisplay"><?= number_format($loan_summary['remaining_balance'], 2) ?></span> <i class="icon-saudi_riyal"></i></span>
+															</div>
+														</div>
+														<div class="ve-loan-progress" title="<?= $loanPaidPct ?>%"><div style="width:<?= $loanPaidPct ?>%"></div></div>
+
+														<div class="ve-loan-grid">
+															<!-- Loan details -->
+															<div class="ve-loan-box">
+																<div class="ve-loan-box-title"><i class="mdi mdi-file-document"></i> <?= __('loan_details') ?></div>
+																<dl class="sr-kv">
+																	<div class="row-kv"><dt><?= __('invoice_number') ?></dt><dd class="sr-mono"><?= htmlspecialchars($loan_summary['inv_no']) ?></dd></div>
+																	<div class="row-kv"><dt><?= __('approved_amount') ?></dt><dd><?= number_format($loan_summary['final_approved_amount'], 2) ?> <i class="icon-saudi_riyal"></i></dd></div>
+																	<div class="row-kv"><dt><?= __('installments') ?></dt><dd><span id="installmentCount"><?= $loan_summary['installments'] ?></span> <?= __('months') ?></dd></div>
+																	<div class="row-kv"><dt><?= __('monthly_deduction') ?></dt><dd class="ve-loan-amber"><span id="monthlyDeductionDisplay"><?= number_format($loan_summary['monthly_deduction'], 2) ?></span> <i class="icon-saudi_riyal"></i></dd></div>
+																	<div class="row-kv"><dt><?= __('start_date') ?></dt><dd><?= $loanFmtDate($loan_summary['start_date'] ?? '') ?></dd></div>
+																	<div class="row-kv"><dt><?= __('end_date') ?></dt><dd><?= $loanFmtDate($loan_summary['end_date'] ?? '') ?></dd></div>
+																</dl>
+															</div>
+
+															<!-- Repayment settings + actions -->
+															<div class="ve-loan-box">
+																<div class="ve-loan-box-title"><i class="mdi mdi-tune"></i> <?= __('payment_summary') ?></div>
+																<dl class="sr-kv">
+																	<div class="row-kv">
+																		<dt><?= __('deduction_mode') ?></dt>
+																		<dd>
+																			<select id="deductionModeSelect" class="form-control form-control-sm ve-loan-select" data-loan-id="<?= $loan_summary['loan_id'] ?>">
+																				<option value="automatic" <?= ($loan_summary['deduction_mode'] ?? 'automatic') === 'automatic' ? 'selected' : '' ?>><?= __('automatic_monthly') ?></option>
+																				<option value="manual" <?= ($loan_summary['deduction_mode'] ?? 'automatic') === 'manual' ? 'selected' : '' ?>><?= __('manual_addition') ?></option>
+																			</select>
+																		</dd>
+																	</div>
+																	<div class="row-kv">
+																		<dt><?= __('installments_plan') ?></dt>
+																		<dd>
+																			<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm editLoanInstallments"
+																				data-loan-id="<?= $loan_summary['loan_id'] ?>"
+																				data-installments="<?= $loan_summary['installments'] ?>"
+																				data-monthly-deduction="<?= $loan_summary['monthly_deduction'] ?>"
+																				data-remaining="<?= $loan_summary['remaining_balance'] ?>">
+																				<i class="mdi mdi-pencil"></i> <?= __('edit_plan') ?>
+																			</button>
+																		</dd>
+																	</div>
+																	<?php if ($loan_summary['disbursement_receipt']): ?>
+																		<div class="row-kv"><dt><?= __('disbursement_receipt_id') ?></dt><dd class="sr-mono"><?= htmlspecialchars($loan_summary['disbursement_receipt']); ?></dd></div>
+																		<div class="row-kv">
+																			<dt><?= __('disbursement_proof') ?></dt>
+																			<dd><a href="./assets/loan_receipts/<?= htmlspecialchars($loan_summary['disbursement_attachment']); ?>" target="_blank" class="sr-btn sr-btn-ghost sr-btn-sm"><i class="mdi mdi-eye-outline"></i> <?= __('view_attachments', 'View Attachment') ?></a></dd>
+																		</div>
+																	<?php endif; ?>
+																</dl>
+																<?php if ($loan_summary['remaining_balance'] > 0): ?>
+																	<button type="button" class="sr-btn sr-btn-success ve-loan-pay addManualPayment"
+																		data-loan-id="<?= $loan_summary['loan_id'] ?>"
+																		data-emp-id="<?= $emprow['empid'] ?>"
+																		data-remaining="<?= $loan_summary['remaining_balance'] ?>">
+																		<i class="mdi mdi-cash"></i> <?= __('add_manual_payment') ?>
+																	</button>
+																<?php endif; ?>
+															</div>
+														</div>
 													</div>
 												</div>
 											<?php endif; ?>

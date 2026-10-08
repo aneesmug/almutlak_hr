@@ -1183,7 +1183,9 @@ function apply_for_loan() {
 
     // Special Access "apply_loan_with_active_loan" lets a granted user (e.g. HR) submit
     // a new loan for this employee even while one is still pending/awaiting approval.
-    $can_force_apply_with_active_loan = user_has_special_access($conDB, $current_user_id ?? '', 'apply_loan_with_active_loan', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $can_force_apply_with_active_loan = user_has_special_access($conDB, $current_user_id ?? '', 'apply_loan_with_active_loan', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        // Edit Employee > "Allow New Loan While a Loan Is Active" set for this employee
+        || employee_allows_loan_with_active_loan($conDB, $emp_id);
 
     // CHECK IF EMPLOYEE HAS PENDING OR AWAITING LOAN REQUESTS
     $pending_check = $conDB->prepare("SELECT id, inv_no, loan_type, loan_amount, status, created_at FROM emp_loan WHERE emp_id = ? AND status IN ('pending', 'awaiting')");
