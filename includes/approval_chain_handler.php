@@ -305,7 +305,14 @@ function getAllRequestTypes($conDB) {
     $query = mysqli_query($conDB, "SELECT type_name, description, main_table_name FROM approval_request_types WHERE is_active = 1 ORDER BY id ASC");
     
     if ($query && mysqli_num_rows($query) > 0) {
+        $seen = [];
         while ($row = mysqli_fetch_assoc($query)) {
+            // type_name has no UNIQUE index, so a setup script run twice leaves duplicate
+            // rows - list each type once (the rest of the app reads the lowest id via LIMIT 1).
+            if (isset($seen[$row['type_name']])) {
+                continue;
+            }
+            $seen[$row['type_name']] = true;
             $requestTypes[] = [
                 'id' => $row['type_name'],
                 'name' => ucwords(str_replace('_', ' ', $row['type_name'])),
