@@ -8212,28 +8212,36 @@ if (!function_exists('getEmployeeFilterSQL')) {
 =============================================*/
 
 /**
- * Generates Bootstrap alert HTML for documents that are expiring soon or already expired.
+ * Renders the document expiry alert stack (sr-* design, view_employee.php) for documents
+ * that are expiring soon or already expired.
  *
- * Alert thresholds (counting from today to expiry_date):
- *  - 21–30 days remaining  → info  (blue)
- *  - 11–20 days remaining  → warning (yellow)
- *  - ≤ 10 days remaining   → danger (red)
- *  - Already expired       → danger (red) with "Expired" label
- *  - > 30 days             → no alert shown
+ * Alert tone (counting from today to expiry_date):
+ *  - Already expired / today / ≤ 10 days → red
+ *  - 11–20 days                          → amber
+ *  - 21–30 days                          → sky
+ *  - > 30 days                           → no alert shown
  *
  * @param array $documents  Array of items, each:
- *                          ['label' => string, 'expiry_date' => string|null (Y-m-d Gregorian)]
+ *                          ['label' => string, 'expiry_date' => string|null (Y-m-d Gregorian),
+ *                           'key' => string (optional, e.g. 'iqama'),
+ *                           'editable' => bool (optional, shows the "Update" button),
+ *                           'data' => array (optional, extra data-* attributes for the button),
+ *                           'note' => string (optional, small hint shown instead of the button)]
+ *                          The button carries class js-doc-expiry-update + data-doc/data-label/
+ *                          data-expiry; the page binds the click (see view_employee.php).
  * @return string           HTML string (empty string when nothing to show)
  */
 if (!function_exists('get_document_expiry_alerts')) {
     function get_document_expiry_alerts(array $documents): string
     {
+        $esc    = static function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
         $alerts = [];
         $today  = new DateTime('today');
+        $worst  = 'sky';
 
         foreach ($documents as $doc) {
-            $label       = htmlspecialchars($doc['label'] ?? '', ENT_QUOTES, 'UTF-8');
-            $expiry_raw  = $doc['expiry_date'] ?? null;
+            $label      = $esc($doc['label'] ?? '');
+            $expiry_raw = $doc['expiry_date'] ?? null;
 
             // Skip if no date or clearly invalid
             if (empty($expiry_raw) || $expiry_raw === '0000-00-00') {
@@ -8253,52 +8261,64 @@ if (!function_exists('get_document_expiry_alerts')) {
             }
 
             if ($diff_days > 30) {
-                // Nothing to show yet
                 continue;
             }
 
-            $expiry_display = $expiry_date->format('d M Y');
+            $expiry_display = $esc($expiry_date->format('d M Y'));
 
             if ($diff_days < 0) {
-                // Already expired
-                $type    = 'danger';
-                $icon    = 'mdi mdi-alert-circle';
-                $badge   = '<span class="badge badge-danger ml-1">' . getDisplayName('Expired') . '</span>';
-                $message = getDisplayName('has expired') . " (" . getDisplayName('on') . " <strong>{$expiry_display}</strong>).";
+                $tone    = 'red';
+                $icon    = 'mdi-alert-octagon';
+                $pill    = __('expired', 'Expired');
+                $message = sprintf(__('doc_expired_days_ago', 'Expired %d day(s) ago'), abs($diff_days));
             } elseif ($diff_days === 0) {
-                $type    = 'danger';
-                $icon    = 'mdi mdi-alert-circle';
-                $badge   = '<span class="badge badge-danger ml-1">' . getDisplayName('Expires Today') . '</span>';
-                $message = getDisplayName('expires today') . " (" . getDisplayName('on') . " <strong>{$expiry_display}</strong>).";
+                $tone    = 'red';
+                $icon    = 'mdi-alert-octagon';
+                $pill    = __('expires_today', 'Expires Today');
+                $message = __('doc_expires_today', 'Expires today');
             } elseif ($diff_days <= 10) {
-                $type    = 'danger';
-                $icon    = 'mdi mdi-alert-circle';
-                $badge   = '<span class="badge badge-danger ml-1">' . $diff_days . ' ' . getDisplayName('day') . ($diff_days !== 1 ? 's' : '') . ' ' . getDisplayName('left') . '</span>';
-                $message = getDisplayName('expires in') . " <strong>{$diff_days} " . getDisplayName('day') . ($diff_days !== 1 ? 's' : '') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+                $tone    = 'red';
+                $icon    = 'mdi-alert-circle';
+                $pill    = sprintf(__('n_days_left', '%d days left'), $diff_days);
+                $message = sprintf(__('doc_expires_in_days', 'Expires in %d day(s)'), $diff_days);
             } elseif ($diff_days <= 20) {
-                $type    = 'warning';
-                $icon    = 'mdi mdi-alert';
-                $badge   = '<span class="badge badge-warning ml-1">' . $diff_days . ' ' . getDisplayName('days left') . '</span>';
-                $message = getDisplayName('expires in') . " <strong>{$diff_days} " . getDisplayName('days') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+                $tone    = 'amber';
+                $icon    = 'mdi-alert';
+                $pill    = sprintf(__('n_days_left', '%d days left'), $diff_days);
+                $message = sprintf(__('doc_expires_in_days', 'Expires in %d day(s)'), $diff_days);
             } else {
-                // 21–30 days
-                $type    = 'info';
-                $icon    = 'mdi mdi-information';
-                $badge   = '<span class="badge badge-info ml-1">' . $diff_days . ' ' . getDisplayName('days left') . '</span>';
-                $message = getDisplayName('is due for renewal in') . " <strong>{$diff_days} " . getDisplayName('days') . "</strong> " . getDisplayName('on') . " <strong>{$expiry_display}</strong>.";
+                $tone    = 'sky';
+                $icon    = 'mdi-information';
+                $pill    = sprintf(__('n_days_left', '%d days left'), $diff_days);
+                $message = sprintf(__('doc_due_for_renewal_in', 'Due for renewal in %d day(s)'), $diff_days);
+            }
+            if ($tone === 'red' || ($tone === 'amber' && $worst === 'sky')) {
+                $worst = $tone;
             }
 
-            $bg_class = ($type === 'warning') ? 'bg-warning text-dark' : "bg-{$type} text-white";
+            $action = '';
+            if (!empty($doc['editable']) && !empty($doc['key'])) {
+                $attrs = ' data-doc="' . $esc($doc['key']) . '" data-label="' . $label . '" data-expiry="' . $esc($expiry_raw) . '"';
+                foreach (($doc['data'] ?? []) as $k => $v) {
+                    $attrs .= ' data-' . $esc($k) . '="' . $esc($v) . '"';
+                }
+                $action = '<button type="button" class="sr-btn sr-btn-sm sr-doc-alert-btn js-doc-expiry-update"' . $attrs . '>'
+                    . '<i class="mdi mdi-calendar-clock"></i> ' . $esc(__('update_expiry', 'Update Expiry')) . '</button>';
+            } elseif (!empty($doc['note'])) {
+                $action = '<span class="sr-doc-alert-note"><i class="mdi mdi-information-outline"></i> ' . $esc($doc['note']) . '</span>';
+            }
 
             $alerts[] = <<<HTML
-<div class="alert {$bg_class} border-0 mb-2 d-flex align-items-center" role="alert" style="border-radius:6px;">
-    <i class="{$icon} mr-2" style="font-size:1.3rem;flex-shrink:0;"></i>
-    <div class="flex-grow-1">
-        <strong>{$label}</strong> {$badge} — {$message}
+<div class="sr-doc-alert tone-{$tone}" role="alert">
+    <span class="sr-doc-alert-icon"><i class="mdi {$icon}"></i></span>
+    <div class="sr-doc-alert-body">
+        <div class="sr-doc-alert-title">{$label} <span class="sr-pill sr-pill-xs tone-{$tone}"><span class="sr-dot"></span>{$esc($pill)}</span></div>
+        <div class="sr-doc-alert-text">{$esc($message)} &middot; <i class="mdi mdi-calendar-blank"></i> <strong>{$expiry_display}</strong></div>
     </div>
-    <button type="button" class="close ml-3" data-dismiss="alert" aria-label="Close">
-        <span aria-hidden="true" style="font-size:1.2rem;">&times;</span>
-    </button>
+    <div class="sr-doc-alert-actions">
+        {$action}
+        <button type="button" class="sr-doc-alert-close" aria-label="Close" title="Close"><i class="mdi mdi-close"></i></button>
+    </div>
 </div>
 HTML;
         }
@@ -8307,12 +8327,13 @@ HTML;
             return '';
         }
 
+        $count = count($alerts);
+        $title = $esc(__('document_alerts', 'Document Alerts'));
         $inner = implode("\n", $alerts);
         return <<<HTML
-<div class="row mb-2">
-    <div class="col-12">
-        {$inner}
-    </div>
+<div class="sr-page sr-doc-alerts is-{$worst}">
+    <div class="sr-doc-alerts-head"><i class="mdi mdi-file-document"></i> {$title} <span class="sr-count">{$count}</span></div>
+    {$inner}
 </div>
 HTML;
     }

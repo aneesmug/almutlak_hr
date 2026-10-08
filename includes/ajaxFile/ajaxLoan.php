@@ -57,6 +57,16 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $current_user_id = $_SESSION['empid'] ?? 0;
 
 /**
+ * Return a safe lowercase extension for an uploaded file name, or null if not allowed.
+ */
+function loanSafeUploadExt($original_name)
+{
+    $ext = strtolower(pathinfo((string)$original_name, PATHINFO_EXTENSION));
+    $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
+    return in_array($ext, $allowed, true) ? $ext : null;
+}
+
+/**
  * Generate unique loan invoice number
  * Format: LN-YYYYMMDD-####-XXXX
  * Example: LN-20251111-5127-22fa
@@ -205,9 +215,13 @@ function finalize_loan() {
     // Handle file upload
     $upload_dir = __DIR__ . '/../../assets/loan_receipts/';
     if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0777, true);
+        mkdir($upload_dir, 0755, true);
     }
-    $file_extension = pathinfo($_FILES['attachment']['name'], PATHINFO_EXTENSION);
+    $file_extension = loanSafeUploadExt($_FILES['attachment']['name']);
+    if ($file_extension === null) {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'Attachment must be PDF, JPG, PNG, or DOC file.', 'type' => 'error']);
+        return;
+    }
     $attachment_filename = 'disbursement_' . $loan_id . '_' . time() . '.' . $file_extension;
     $upload_file = $upload_dir . $attachment_filename;
     if (!move_uploaded_file($_FILES['attachment']['tmp_name'], $upload_file)) {
@@ -531,13 +545,12 @@ function approve_loan() {
             // Handle payment proof file upload
             $upload_dir = __DIR__ . '/../../assets/loan_payment_proofs/';
             if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
+                mkdir($upload_dir, 0755, true);
             }
-            
-            $file_extension = pathinfo($_FILES['payment_proof']['name'], PATHINFO_EXTENSION);
-            $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
-            
-            if (!in_array(strtolower($file_extension), $allowed_extensions)) {
+
+            $file_extension = loanSafeUploadExt($_FILES['payment_proof']['name']);
+
+            if ($file_extension === null) {
                 echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'Payment proof must be PDF, JPG, PNG, or DOC file.', 'type' => 'error']);
                 return;
             }
@@ -2136,11 +2149,20 @@ function add_manual_payment() {
         // Create directory if not exists
         $upload_dir = __DIR__ . '/../../assets/loan_manual_payments/';
         if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0777, true);
+            mkdir($upload_dir, 0755, true);
         }
-        
+
         // Generate unique filename
-        $file_extension = pathinfo($_FILES[$file_field]['name'], PATHINFO_EXTENSION);
+        $file_extension = loanSafeUploadExt($_FILES[$file_field]['name']);
+        if ($file_extension === null) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => 'Invalid File Type',
+                'message' => 'Only PDF, JPG, PNG, and DOC files are allowed.',
+                'type' => 'error'
+            ]);
+            return;
+        }
         $attachment_filename = 'manual_payment_' . $loan_id . '_' . time() . '.' . $file_extension;
         $upload_file = $upload_dir . $attachment_filename;
         
@@ -2737,7 +2759,7 @@ function add_manual_loan_history() {
     $uploaded_files = [];
     $upload_dir = __DIR__ . '/../../assets/loan_receipts/';
     if (!is_dir($upload_dir)) {
-        if (!mkdir($upload_dir, 0777, true)) {
+        if (!mkdir($upload_dir, 0755, true)) {
             echo json_encode(['status' => 'error', 'title' => 'Server Error', 'message' => 'Failed to create upload directory.', 'type' => 'error']);
             return;
         }
@@ -2748,7 +2770,10 @@ function add_manual_loan_history() {
     try {
         $disbursement_attachment_filename = null;
         if (isset($_FILES['disbursement_attachment']) && $_FILES['disbursement_attachment']['error'] == UPLOAD_ERR_OK) {
-            $file_ext = pathinfo($_FILES['disbursement_attachment']['name'], PATHINFO_EXTENSION);
+            $file_ext = loanSafeUploadExt($_FILES['disbursement_attachment']['name']);
+            if ($file_ext === null) {
+                throw new Exception('Disbursement attachment must be PDF, JPG, PNG, or DOC file.');
+            }
             $disbursement_attachment_filename = 'disbursement_manual_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
             $upload_file = $upload_dir . $disbursement_attachment_filename;
             if (move_uploaded_file($_FILES['disbursement_attachment']['tmp_name'], $upload_file)) {
@@ -2798,7 +2823,10 @@ function add_manual_loan_history() {
 
                 $payment_attachment_filename = null;
                 if (isset($_FILES['payment_attachment']['name'][$i]) && $_FILES['payment_attachment']['error'][$i] == UPLOAD_ERR_OK) {
-                     $file_ext = pathinfo($_FILES['payment_attachment']['name'][$i], PATHINFO_EXTENSION);
+                     $file_ext = loanSafeUploadExt($_FILES['payment_attachment']['name'][$i]);
+                     if ($file_ext === null) {
+                         throw new Exception('Payment attachment must be PDF, JPG, PNG, or DOC file.');
+                     }
                      $payment_attachment_filename = 'payment_manual_' . $loan_id . '_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
                      $upload_file = $upload_dir . $payment_attachment_filename;
                      if (move_uploaded_file($_FILES['payment_attachment']['tmp_name'][$i], $upload_file)) {
@@ -2882,12 +2910,15 @@ function add_simplified_manual_loan() {
         if (isset($_FILES['payment_attachment']) && $_FILES['payment_attachment']['error'] == UPLOAD_ERR_OK) {
             $upload_dir = __DIR__ . '/../../assets/loan_receipts/';
             if (!is_dir($upload_dir)) { 
-                if(!mkdir($upload_dir, 0777, true)) {
+                if(!mkdir($upload_dir, 0755, true)) {
                     throw new Exception('Failed to create upload directory.');
                 }
             }
 
-            $file_ext = pathinfo($_FILES['payment_attachment']['name'], PATHINFO_EXTENSION);
+            $file_ext = loanSafeUploadExt($_FILES['payment_attachment']['name']);
+            if ($file_ext === null) {
+                throw new Exception('Payment attachment must be PDF, JPG, PNG, or DOC file.');
+            }
             $payment_attachment_filename = 'pmt_hist_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
             $uploaded_file_path = $upload_dir . $payment_attachment_filename;
 

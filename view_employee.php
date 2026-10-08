@@ -1386,17 +1386,39 @@ if (mysqli_num_rows($query) == 1) {
 						?>
 						<?php
 						// --- Document Expiry Alerts ---
-						$_doc_iqama_gregorian = $DateConv->HijriToGregorian($emprow['iqama_exp'] ?? '', $format);
+						// Prefer the stored Gregorian date (saved alongside the Hijri one); the server
+						// Hijri conversion is arithmetic and can be 1-2 days off Umm al-Qura.
+						$_doc_iqama_gregorian = (!empty($emprow['iqama_exp_g']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $emprow['iqama_exp_g']) && $emprow['iqama_exp_g'] !== '0000-00-00')
+							? $emprow['iqama_exp_g']
+							: $DateConv->HijriToGregorian($emprow['iqama_exp'] ?? '', $format);
 						$_doc_contract_expiry = computeContractExpiry(
 							$emprow['joining_date'] ?? null,
 							isset($emprow['vac_period']) ? (int)$emprow['vac_period'] : null,
 							'Y-m-d'
 						);
-						echo get_document_expiry_alerts([
-							['label' => getDisplayName('ID / Iqama'),          'expiry_date' => $_doc_iqama_gregorian],
-							['label' => getDisplayName('Passport'),            'expiry_date' => $emprow['passport_exp'] ?? null],
-							['label' => getDisplayName('Contract Renewal'),    'expiry_date' => $_doc_contract_expiry],
-						]);
+						// "Update Expiry" button on each alert - same HR rule as the backends
+						// (employeeDocExpiryHandler.php / employeeMedicalInsuranceHandler.php).
+						$_doc_can_update = ($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false);
+						$_doc_alerts = [
+							['key' => 'iqama', 'label' => getDisplayName('ID / Iqama'), 'expiry_date' => $_doc_iqama_gregorian,
+								'editable' => $_doc_can_update, 'data' => ['hijri' => $emprow['iqama_exp'] ?? '']],
+							['key' => 'passport', 'label' => getDisplayName('Passport'), 'expiry_date' => $emprow['passport_exp'] ?? null,
+								'editable' => $_doc_can_update],
+						];
+						if ($current_medical_insurance) {
+							$_doc_alerts[] = ['key' => 'insurance', 'label' => __('medical_insurance', 'Medical Insurance'),
+								'expiry_date' => $current_medical_insurance['medical_expiry'] ?? null, 'editable' => $_doc_can_update,
+								'data' => [
+									'insurance-no' => $current_medical_insurance['insurance_no'] ?? '',
+									'amount'       => $current_medical_insurance['med_insurance'] ?? '',
+									'class'        => $current_medical_insurance['medical_class'] ?? '',
+								]];
+						}
+						// Contract expiry is derived from joining date + contract term and rolls
+						// forward on its own, so there is no stored date to edit.
+						$_doc_alerts[] = ['key' => 'contract', 'label' => getDisplayName('Contract Renewal'), 'expiry_date' => $_doc_contract_expiry,
+							'note' => __('contract_auto_renews', 'Renews automatically')];
+						echo get_document_expiry_alerts($_doc_alerts);
 						?>
 						<?php include("./includes/emp_top_info.php"); ?>
 						<div class="row">
@@ -5977,6 +5999,122 @@ if (mysqli_num_rows($query) == 1) {
 				e.preventDefault();
 				const empId = $(this).data('emp-id');
 				openAdditionalInfoModal(empId, null);
+			});
+
+			// Document expiry alerts (get_document_expiry_alerts) - dismiss one row; the card
+			// disappears with its last row.
+			$(document).on('click', '.sr-doc-alert-close', function() {
+				const $row = $(this).closest('.sr-doc-alert');
+				const $box = $row.closest('.sr-doc-alerts');
+				$row.css('opacity', 0);
+				setTimeout(function() {
+					$row.remove();
+					const left = $box.find('.sr-doc-alert').length;
+					if (!left) $box.remove();
+					else $box.find('.sr-doc-alerts-head .sr-count').text(left);
+				}, 200);
+			});
+
+			// "Update Expiry" on a document alert: pick the new date and save it right away.
+			// Iqama/Passport -> employeeDocExpiryHandler.php; Medical Insurance -> adds the new
+			// year through employeeMedicalInsuranceHandler.php, carrying over the current
+			// insurance no / amount / class so only the expiry changes.
+			$(document).on('click', '.js-doc-expiry-update', function() {
+				const $btn = $(this);
+				const doc = String($btn.data('doc'));
+				const isIqama = doc === 'iqama';
+				const empId = <?= json_encode((string)$emprow['empid']) ?>;
+				const esc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
+				const current = String($btn.data('expiry') || '');
+				const currentHijri = String($btn.data('hijri') || '');
+				const quick = [1, 2, 5].map(y => `<button type="button" class="sr-btn sr-btn-sm js-doc-quick" data-years="${y}">+${y} ${y > 1 ? '<?= __('years', 'Years') ?>' : '<?= __('year', 'Year') ?>'}</button>`).join(' ');
+
+				Swal.fire({
+					title: '<?= __('update_expiry', 'Update Expiry') ?> - ' + esc($btn.data('label')),
+					width: '520px',
+					html: `
+					<form class="sr-form" onsubmit="return false;">
+						<div class="sr-notice tone-slate is-compact">
+							<i class="mdi mdi-calendar-blank"></i>
+							<div><?= __('current_expiry', 'Current expiry') ?>: <strong>${esc(current)}</strong>${isIqama && currentHijri ? ` <span class="text-muted">(${esc(currentHijri)} <?= __('hijri', 'Hijri') ?>)</span>` : ''}</div>
+						</div>
+						<div class="sr-fsec">
+							<div class="sr-fsec-head"><span><i class="mdi mdi-calendar-clock"></i> <?= __('new_expiry_date', 'New Expiry Date') ?></span></div>
+							<div class="sr-fgrid">
+								<div class="sr-fcol c-${isIqama ? 6 : 12}">
+									<label for="docExpG"><?= __('gregorian', 'Gregorian') ?> <span class="text-danger">*</span></label>
+									<input type="text" id="docExpG" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+								</div>
+								${isIqama ? `
+								<div class="sr-fcol c-6">
+									<label for="docExpH"><?= __('hijri', 'Hijri') ?></label>
+									<input type="text" id="docExpH" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+								</div>` : ''}
+								<div class="sr-fcol c-12">${quick}</div>
+							</div>
+						</div>
+					</form>`,
+					showCancelButton: true,
+					confirmButtonText: '<i class="mdi mdi-content-save"></i> <?= __('save', 'Save') ?>',
+					cancelButtonText: '<?= __('cancel', 'Cancel') ?>',
+					confirmButtonColor: window.APP_COLORS && APP_COLORS.primary,
+					cancelButtonColor: window.APP_COLORS && APP_COLORS.danger_dark,
+					showLoaderOnConfirm: true,
+					allowOutsideClick: false,
+					customClass: { popup: 'sr-addline-popup sr-page' },
+					didOpen: () => {
+						const pickers = isIqama
+							? AppDate.hijriPair('#docExpG', '#docExpH', { minDate: 'today' })
+							: { gregorian: AppDate.single('#docExpG', { minDate: 'today' }) };
+						// +N years from the current expiry (or from today when it is already past)
+						$(Swal.getPopup()).on('click', '.js-doc-quick', function() {
+							const base = current ? new Date(current + 'T00:00:00') : new Date();
+							const today = new Date(); today.setHours(0, 0, 0, 0);
+							const d = (isNaN(base) || base < today) ? today : base;
+							d.setFullYear(d.getFullYear() + Number($(this).data('years')));
+							pickers.gregorian.setDate(d, true);
+						});
+					},
+					preConfirm: () => {
+						const g = $('#docExpG').val();
+						if (!/^\d{4}-\d{2}-\d{2}$/.test(g)) {
+							$('#docExpG').addClass('is-invalid');
+							Swal.showValidationMessage('<?= __('select_date', 'Please select a date') ?>');
+							return false;
+						}
+						const req = doc === 'insurance'
+							? {
+								url: './includes/ajaxFile/employeeMedicalInsuranceHandler.php',
+								data: {
+									ajaxType: 'add_employee_medical_insurance', emp_id: empId,
+									insurance_no: String($btn.data('insurance-no') || ''),
+									med_insurance: String($btn.data('amount') || ''),
+									medical_class: String($btn.data('class') || ''),
+									medical_expiry: g
+								}
+							}
+							: {
+								url: './includes/ajaxFile/employeeDocExpiryHandler.php',
+								data: { ajaxType: 'update_doc_expiry', emp_id: empId, doc: doc, expiry_g: g, expiry_h: isIqama ? $('#docExpH').val() : '' }
+							};
+						return $.ajax({ url: req.url, type: 'POST', dataType: 'json', data: req.data })
+							.then(function(resp) {
+								if (resp && (resp.type === 'success' || resp.status === 200)) return resp;
+								throw new Error((resp && resp.message) || '<?= __('update_failed', 'Update failed') ?>');
+							})
+							.catch(function(err) {
+								Swal.showValidationMessage((err && err.message) || '<?= __('an_error_occurred', 'An error occurred') ?>');
+							});
+					}
+				}).then((result) => {
+					if (!result.isConfirmed || !result.value) return;
+					Swal.fire({
+						icon: 'success',
+						title: '<?= __('success', 'Success') ?>',
+						text: result.value.message || '<?= __('update_successful', 'Updated successfully') ?>',
+						allowOutsideClick: false
+					}).then(() => location.reload());
+				});
 			});
 
 			// Handle Add Medical Insurance (yearly renewal - always adds a new row,
