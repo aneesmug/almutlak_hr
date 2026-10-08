@@ -25,6 +25,8 @@ if (!$canCompareD365) {
 // Registering missing workers / bulk company change write to D365: system admins + 'd365_sync_employee' or 'd365_register_employee' special access
 $canRegisterD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
     || user_has_special_access($conDB, $empid ?? '', 'd365_register_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+// Bulk "Sync to D365" (app person details -> existing D365 workers): system admins + 'd365_sync_employee', same as the employee page Sync button
+$canSyncD365 = user_has_special_access($conDB, $empid ?? '', 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 // "Payroll sync" link: system admins + 'd365_sync_payroll' special access only
 $canOpenPayrollSync = user_has_special_access($conDB, $empid ?? '', 'd365_sync_payroll', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
@@ -77,6 +79,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         // New workers must show up in this page and in the payroll sync right away
         @unlink(d365cmp_cache_file($client, 'compare'));
         @unlink(d365cmp_cache_file($client, 'employments'));
+    }
+    echo json_encode($result, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Sync one employee's person details to their existing D365 worker (AJAX, called once per employee by the bulk sync popup)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sync') {
+    header('Content-Type: application/json; charset=utf-8');
+    $syncEmp = (string)($_POST['emp_id'] ?? '');
+    if (!$canSyncD365) {
+        echo json_encode(['ok' => false, 'error' => 'You do not have permission to sync employees to D365']);
+        exit;
+    }
+    if (!hash_equals($csrf, (string)($_POST['csrf'] ?? ''))) {
+        echo json_encode(['ok' => false, 'error' => 'Session expired - reload the page']);
+        exit;
+    }
+    if (!$client || !preg_match('/^[A-Za-z0-9\-]{1,20}$/', $syncEmp)) {
+        echo json_encode(['ok' => false, 'error' => $client ? 'Invalid employee ID' : $error]);
+        exit;
+    }
+    // Only active employees are synced
+    $chk = $conDB->prepare("SELECT 1 FROM employees WHERE emp_id = ? AND status = 1 LIMIT 1");
+    $chk->bind_param('s', $syncEmp);
+    $chk->execute();
+    $isActive = (bool)$chk->get_result()->fetch_row();
+    $chk->close();
+    if (!$isActive) {
+        echo json_encode(['ok' => false, 'error' => 'Employee is not active in the app - skipped']);
+        exit;
+    }
+    // Nothing below writes the session - release its lock so the next request is not held up
+    session_write_close();
+    try {
+        $result = (new D365Workers($conDB, $client))->syncWorker($syncEmp);
+    } catch (Throwable $ex) {
+        $result = ['ok' => false, 'error' => $ex->getMessage()];
     }
     echo json_encode($result, JSON_UNESCAPED_UNICODE);
     exit;
@@ -171,6 +210,12 @@ $states = [
     'inactive'      => ['slate', 'Inactive', 'Inactive in the app and not employed in D365'],
 ];
 $counts = array_count_values(array_column($rows, 'state'));
+// Employees that can be synced: active in the app (employees.status = 1) AND already a worker in D365
+$syncStates = ['ok', 'no_employment'];
+$syncableCount = 0;
+foreach ($syncStates as $st) {
+    $syncableCount += (int)($counts[$st] ?? 0);
+}
 
 // Register popup: suggested D365 company per app company + the D365 companies to choose from
 $companySuggest = [];
@@ -270,6 +315,10 @@ $filterSelect = function ($id, $all, array $values, $blankLabel) use ($e) {
                     title="<?= $canWrite ? '' : 'Writes are off (App Settings > D365 Config)' ?>">Register missing in D365 (<?= (int)($counts['missing'] ?? 0) ?>)</button>
                 <button type="button" class="sr-btn sr-btn-success" id="btnBulkTransfer" <?= $canWrite ? '' : 'disabled' ?>
                     title="<?= $canWrite ? 'Move many employees to other D365 companies from an Excel file' : 'Writes are off (App Settings > D365 Config)' ?>"><i class="mdi mdi-swap-horizontal"></i> Bulk change company (Excel)</button>
+            <?php endif; ?>
+            <?php if (!$error && $canSyncD365): ?>
+                <button type="button" class="sr-btn sr-btn-primary" id="btnSyncAll" <?= $canWrite && $syncableCount ? '' : 'disabled' ?>
+                    title="<?= $canWrite ? 'Send name, birth date, gender, email, mobile, marital status and IBAN from the HR app to the D365 workers' : 'Writes are off (App Settings > D365 Config)' ?>"><i class="mdi mdi-cloud-sync"></i> Sync employees to D365</button>
             <?php endif; ?>
             <a class="sr-btn sr-btn-ghost" href="d365_employee_compare.php?refresh=1">Reload D365 data</a>
             <?php if ($canOpenPayrollSync): ?><a class="sr-btn sr-btn-ghost" href="d365_payroll_push.php">Payroll sync</a><?php endif; ?>
@@ -771,6 +820,153 @@ $filterSelect = function ($id, $all, array $values, $blankLabel) use ($e) {
             }).then(function () { location.href = 'd365_employee_compare.php?refresh=1'; });
         }
     }
+
+    // ------------------------------------------------------------ sync employee details to D365 (1 click, one by one)
+    // Same as "Sync to D365" on the employee page, for every employee that is active in the app AND already a D365 worker.
+    var SYNC_STATES = <?= json_encode($syncStates) ?>;
+
+    function syncableRows(onlyShown) {
+        return rows.filter(function (tr) {
+            return SYNC_STATES.indexOf(tr.getAttribute('data-state')) !== -1 && (!onlyShown || tr.style.display !== 'none');
+        }).map(function (tr) {
+            var name = tr.cells[1].textContent.trim();
+            return { id: tr.getAttribute('data-emp'), name: name !== '-' ? name : tr.cells[2].textContent.trim(), company: tr.getAttribute('data-d365') };
+        });
+    }
+
+    function openSync() {
+        var all = syncableRows(false), shown = syncableRows(true);
+        if (!all.length) return;
+        var scopeOpt = function (val, label, n, checked) {
+            return '<label class="sr-check" style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:13px">'
+                + '<input type="radio" name="syncScope" value="' + val + '"' + (checked ? ' checked' : '') + (n ? '' : ' disabled') + '> '
+                + label + ' <b>(' + n + ')</b></label>';
+        };
+        Swal.fire({
+            title: '<i class="mdi mdi-cloud-sync"></i> Sync employees to D365',
+            width: '600px',
+            customClass: popupClass,
+            allowOutsideClick: false,
+            showCancelButton: true,
+            confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Start sync',
+            html: '<div class="sr-form" style="text-align:start">'
+                + '<div class="sr-notice tone-sky" style="margin-bottom:12px"><i class="mdi mdi-information-outline"></i><div>'
+                + 'Sends <b>name, birth date, gender, email, mobile, marital status and salary IBAN</b> from the HR app to each employee\'s existing worker in D365 <b>'
+                + esc(env.toUpperCase()) + '</b>. These values overwrite D365. Only <b>active</b> employees are synced; inactive employees and employees not yet in D365 are skipped (use Register). Company and employment are not changed.</div></div>'
+                + '<div class="sr-fsec mb-0"><div class="sr-fsec-head"><span><i class="mdi mdi-account-multiple"></i> Employees to sync</span></div><div class="sr-fsec-body">'
+                + scopeOpt('shown', 'Employees shown by the current filters', shown.length, shown.length > 0 && shown.length < all.length)
+                + scopeOpt('all', 'All active employees registered in D365', all.length, !(shown.length > 0 && shown.length < all.length))
+                + '</div></div></div>',
+            preConfirm: function () {
+                var r = document.querySelector('input[name="syncScope"]:checked');
+                if (!r) { Swal.showValidationMessage('Choose which employees to sync'); return false; }
+                return r.value === 'shown' ? shown : all;
+            }
+        }).then(function (r) { if (r.isConfirmed && r.value && r.value.length) runSync(r.value); });
+    }
+
+    function runSync(list) {
+        var done = 0, okCount = 0, failures = [], warnings = [], stop = false, started = Date.now();
+        Swal.fire({
+            title: 'Syncing to D365...',
+            width: '620px',
+            customClass: popupClass,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            html: '<div style="text-align:start">'
+                + '<div style="font-size:12px;color:var(--sr-muted)">Now updating</div>'
+                + '<div id="syNow" style="font-size:15px;font-weight:700;color:var(--sr-text);min-height:22px">Starting...</div>'
+                + '<div id="syNext" style="font-size:12px;color:var(--sr-muted);min-height:18px"></div>'
+                + '<div class="rg-bar"><div id="syBar"></div></div>'
+                + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px">'
+                + '<span><span class="sr-pill tone-green"><span class="sr-dot"></span>Updated <b id="syOk">0</b></span></span>'
+                + '<span><span class="sr-pill tone-red"><span class="sr-dot"></span>Failed <b id="syFail">0</b></span></span>'
+                + '<span><span class="sr-pill tone-slate"><span class="sr-dot"></span>Remaining <b id="syLeft">' + list.length + '</b></span></span>'
+                + '</div>'
+                + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px;color:var(--sr-muted)"><span id="syCount">0 / ' + list.length + '</span><span id="syEta"></span></div>'
+                + '<div class="rg-log" id="syLog"></div>'
+                + '<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="syStop" style="margin-top:10px">Stop after current</button></div>',
+            didOpen: function () {
+                document.getElementById('syStop').addEventListener('click', function () { stop = true; this.disabled = true; this.textContent = 'Stopping...'; });
+                next();
+            }
+        });
+
+        function next() {
+            if (stop || done >= list.length) { finish(); return; }
+            var it = list[done];
+            document.getElementById('syNow').textContent = it.id + ' · ' + it.name + (it.company ? ' (' + it.company + ')' : '');
+            var nx = list[done + 1];
+            document.getElementById('syNext').textContent = nx ? 'Next: ' + nx.id + ' · ' + nx.name : '';
+            var fd = new FormData();
+            fd.append('action', 'sync');
+            fd.append('csrf', csrf);
+            fd.append('emp_id', it.id);
+            fetch('d365_employee_compare.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (resp) {
+                    if (resp.redirected) throw new Error('Signed out - log in again and re-run the sync');
+                    return resp.json().catch(function () { throw new Error('Server error (HTTP ' + resp.status + ')'); });
+                })
+                .then(function (res) {
+                    if (res.ok) {
+                        okCount++;
+                        if (res.warning) { warnings.push(it.id + ' ' + it.name + ': ' + res.warning); addLog(it.id + ' ' + it.name + ' (warning): ' + res.warning, true); }
+                    } else {
+                        failures.push(it.id + ' ' + it.name + ': ' + (res.error || 'Failed'));
+                        addLog(it.id + ' ' + it.name + ': ' + (res.error || 'Failed'));
+                    }
+                })
+                .catch(function (err) {
+                    failures.push(it.id + ' ' + it.name + ': ' + err.message);
+                    addLog(it.id + ' ' + it.name + ': ' + err.message);
+                    if (/Signed out|Session expired/.test(err.message)) stop = true;
+                })
+                .then(function () {
+                    done++;
+                    document.getElementById('syBar').style.width = Math.round(done / list.length * 100) + '%';
+                    document.getElementById('syCount').textContent = done + ' / ' + list.length;
+                    document.getElementById('syOk').textContent = okCount;
+                    document.getElementById('syFail').textContent = failures.length;
+                    document.getElementById('syLeft').textContent = list.length - done;
+                    var left = Math.round((Date.now() - started) / done * (list.length - done) / 1000);
+                    document.getElementById('syEta').textContent = left > 0 ? '~' + (left >= 60 ? Math.floor(left / 60) + 'm ' : '') + (left % 60) + 's left' : '';
+                    next();
+                });
+        }
+
+        function addLog(text, isWarning) {
+            var log = document.getElementById('syLog');
+            if (!log) return;
+            var div = document.createElement('div');
+            div.textContent = text;
+            if (isWarning) div.style.color = 'var(--tone-amber-fg, #b45309)';
+            log.insertBefore(div, log.firstChild);
+        }
+
+        function finish() {
+            var lines = failures.concat(warnings);
+            var notSent = list.length - done;
+            Swal.fire({
+                icon: failures.length ? 'warning' : 'success',
+                title: okCount + ' of ' + list.length + ' updated in D365' + (notSent ? ' (stopped)' : ''),
+                width: '620px',
+                customClass: popupClass,
+                allowOutsideClick: false,
+                html: '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:6px">'
+                    + '<span class="sr-pill tone-green"><span class="sr-dot"></span>Updated ' + okCount + '</span>'
+                    + (failures.length ? '<span class="sr-pill tone-red"><span class="sr-dot"></span>Failed ' + failures.length + '</span>' : '')
+                    + (warnings.length ? '<span class="sr-pill tone-amber"><span class="sr-dot"></span>Warnings ' + warnings.length + '</span>' : '')
+                    + (notSent ? '<span class="sr-pill tone-slate"><span class="sr-dot"></span>Not sent ' + notSent + '</span>' : '')
+                    + '</div>'
+                    + (lines.length ? '<div class="rg-log" style="text-align:start">' + lines.map(function (f) { return '<div>' + esc(f) + '</div>'; }).join('') + '</div>' : ''),
+                confirmButtonText: 'Close'
+            });
+        }
+    }
+
+    var btnSync = document.getElementById('btnSyncAll');
+    if (btnSync) btnSync.addEventListener('click', openSync);
 
     if (btnBulk) btnBulk.addEventListener('click', openBulkTransfer);
 
