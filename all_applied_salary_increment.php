@@ -159,7 +159,12 @@ if ($total_items > 0) {
         ra_pending.approver_id as current_approver_id,
         ra_pending.approval_level as current_approval_level,
         approver_emp.name as current_approver_name,
-        ra_rejected.note as rejection_note
+        ra_rejected.note as rejection_note,
+        (SELECT ge.name FROM request_approvers rg
+            JOIN admin_login gl ON gl.emp_id = rg.approver_id AND gl.user_type = 'gm'
+            JOIN employees ge ON ge.emp_id = rg.approver_id
+            WHERE rg.request_inv_no = si.request_inv_no AND rg.request_type_id = " . (int)$request_type_id . " AND rg.status = 'approved'
+            ORDER BY rg.action_date DESC LIMIT 1) as gm_approver_name
     FROM emp_salary_increment si
     JOIN employees e ON si.emp_id = e.emp_id
     LEFT JOIN employees sup ON si.submitted_by = sup.emp_id
@@ -249,6 +254,25 @@ if ($can_see_all_depts) {
         .si-approve-col .sr-fsec:last-child { margin-bottom: 0; }
         .si-approve-grid .sr-table th, .si-approve-grid .sr-table td { padding: 7px 10px; }
         @media (max-width: 991px) { .si-approve-grid { grid-template-columns: minmax(0, 1fr); } }
+        /* Request Summary block */
+        .si-sum-head { display: flex; align-items: center; gap: 12px; }
+        .si-sum-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .si-sum-who .sr-cell-title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .si-sum-eval { flex: 0 0 auto; text-align: center; padding: 6px 12px; border-radius: 10px; background: var(--sr-accent-soft); }
+        .si-sum-eval span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+        .si-sum-eval b { font-size: 16px; color: var(--sr-accent-strong); font-variant-numeric: tabular-nums; }
+        .si-sum-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--sr-border); border-radius: 12px; overflow: hidden; background: var(--sr-surface-2); }
+        .si-sum-tiles.is-single { grid-template-columns: minmax(0, 1fr); }
+        .si-sum-tiles > div { padding: 10px 14px; min-width: 0; }
+        .si-sum-tiles > div + div { border-inline-start: 1px solid var(--sr-border); }
+        .si-sum-tiles > div > span { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+        .si-sum-tiles > div > b { display: block; margin-top: 2px; font-size: 18px; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+        .si-sum-tiles small { display: block; margin-top: 2px; font-size: 12px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .si-sum-tiles .is-approved { background: var(--tone-green-bg); }
+        .si-sum-tiles .is-approved > span, .si-sum-tiles .is-approved > b { color: var(--tone-green-fg); }
+        .si-sum-tiles .is-date { background: var(--tone-indigo-bg); }
+        .si-sum-tiles .is-date > span, .si-sum-tiles .is-date > b { color: var(--tone-indigo-fg); }
+        .si-gm-badge { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 700; line-height: 16px; background: var(--tone-green-fg); color: #fff; vertical-align: 1px; }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -335,6 +359,8 @@ if ($can_see_all_depts) {
                                             $meta_js = htmlspecialchars(json_encode([
                                                 'emp_id' => (string)$req['emp_id'],
                                                 'evaluation_score' => $req['evaluation_score'] !== null ? (float)$req['evaluation_score'] : null,
+                                                'approved_amount' => $req['approved_amount'] !== null ? (float)$req['approved_amount'] : null,
+                                                'approved_by' => (string)($req['gm_approver_name'] ?? ''),
                                                 'reason' => (string)($req['reason'] ?? ''),
                                                 'submitted_by' => (string)($req['submitted_by_name'] ?? $req['submitted_by'] ?? ''),
                                             ], JSON_UNESCAPED_UNICODE), ENT_QUOTES);
@@ -344,7 +370,7 @@ if ($can_see_all_depts) {
                                                 <td class="sr-nowrap">
                                                     <span class="sr-money"><i class="icon-saudi_riyal"></i> <?= number_format((float)$req['increment_amount'], 2) ?></span>
                                                     <?php if ($req['approved_amount'] !== null): ?>
-                                                        <span class="sr-cell-sub" style="color: var(--tone-green-fg);"><i class="mdi mdi-check-circle"></i> <?= __('approved_amount', 'Approved Amount') ?>: <?= number_format((float)$req['approved_amount'], 2) ?></span>
+                                                        <span class="sr-cell-sub" style="color: var(--tone-green-fg);"><i class="mdi mdi-check-circle"></i> <?= __('approved_amount', 'Approved Amount') ?>: <?= number_format((float)$req['approved_amount'], 2) ?><?php if (!empty($req['gm_approver_name'])): ?> · <?= __('gm', 'GM') ?>: <?= sr_h($req['gm_approver_name']) ?><?php endif; ?></span>
                                                     <?php endif; ?>
                                                     <span class="sr-cell-sub sr-mono"><?= sr_h($req['request_inv_no']) ?></span>
                                                 </td>
@@ -475,15 +501,38 @@ if ($can_see_all_depts) {
             const kv = (label, value) => `<div class="row-kv"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
             const evalScore = (meta.evaluation_score !== null && meta.evaluation_score !== undefined) ? Number(meta.evaluation_score).toFixed(2) : '-';
 
+            const hasApproved = meta.approved_amount !== null && meta.approved_amount !== undefined;
+            const initials = String(employeeName || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
             const summaryHtml = `
-                <div class="sr-fcol c-6"><dl class="sr-kv">
-                    ${kv(__('employee', 'Employee'), esc(employeeName))}
-                    ${kv(__('employee_id', 'Emp ID'), esc(meta.emp_id || '-'))}
+                <div class="sr-fcol c-12">
+                    <div class="si-sum-head">
+                        <span class="sr-avatar">${esc(initials)}</span>
+                        <div class="si-sum-who">
+                            <span class="sr-cell-title">${esc(employeeName)}</span>
+                            <span class="sr-cell-sub">${esc(__('employee_id', 'Emp ID'))}: <b>${esc(meta.emp_id || '-')}</b></span>
+                        </div>
+                        <div class="si-sum-eval">
+                            <span>${esc(__('evaluation_score', 'Evaluation Score'))}</span>
+                            <b>${esc(evalScore)}</b>
+                        </div>
+                    </div>
+                </div>
+                <div class="sr-fcol c-12">
+                    <div class="si-sum-tiles${hasApproved ? '' : ' is-single'}">
+                        <div>
+                            <span>${esc(__('increment_amount', 'Increment Amount'))}</span>
+                            <b>${money(rawAmount)}</b>
+                            <small>${esc(__('requested_by_supervisor', 'Requested by supervisor'))}</small>
+                        </div>
+                        ${hasApproved ? `<div class="is-approved">
+                            <span><i class="mdi mdi-check-circle"></i> ${esc(__('approved_amount', 'Approved Amount'))}</span>
+                            <b>${money(meta.approved_amount)}</b>
+                            ${meta.approved_by ? `<small><span class="si-gm-badge">${esc(__('gm', 'GM'))}</span> ${esc(meta.approved_by)}</small>` : ''}
+                        </div>` : ''}
+                    </div>
+                </div>
+                <div class="sr-fcol c-12"><dl class="sr-kv">
                     ${kv(__('request_no', 'Request No'), '<span class="sr-mono">' + esc(requestInvNo) + '</span>')}
-                </dl></div>
-                <div class="sr-fcol c-6"><dl class="sr-kv">
-                    ${kv(__('increment_amount', 'Increment Amount'), money(rawAmount))}
-                    ${kv(__('evaluation_score', 'Evaluation Score'), '<span class="sr-chip">' + esc(evalScore) + '</span>')}
                     ${kv(__('submitted_by', 'Submitted By'), esc(meta.submitted_by || '-'))}
                 </dl></div>
                 ${meta.reason ? `<div class="sr-fcol c-12"><label>${esc(__('reason', 'Reason'))}</label><div class="sr-notice tone-slate" style="white-space: pre-line;">${esc(meta.reason)}</div></div>` : ''}`;
@@ -512,19 +561,41 @@ if ($can_see_all_depts) {
             if (finalCtx) {
                 const breakdownTotal = SALARY_COMPONENTS.reduce((t, c) => t + Number(finalCtx.components[c.v] || 0), 0);
                 const masterMismatch = finalCtx.master_salary !== null && Math.abs(Number(finalCtx.master_salary) - breakdownTotal) > 0.01;
+                // Effective date as "30 Oct 2026" + "in 22 days" / "today" / "8 days ago".
+                const effDate = (() => {
+                    const raw = finalCtx.effective_date || '';
+                    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+                    if (!m) return { text: raw || __('not_set', 'Not set'), hint: '' };
+                    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+                    const t = new Date(); t.setHours(0, 0, 0, 0);
+                    const days = Math.round((d - t) / 86400000);
+                    const text = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const hint = days === 0 ? __('today', 'Today')
+                        : days > 0 ? (__('in_n_days', 'In {n} days')).replace('{n}', days)
+                        : (__('n_days_ago', '{n} days ago')).replace('{n}', -days);
+                    return { text, hint };
+                })();
                 salaryHtml = SRForm.section('mdi-cash-multiple', __('salary_update', 'Salary Update'),
                     (!finalCtx.has_salary_row
                         ? `<div class="sr-fcol c-12"><div class="sr-notice tone-amber"><i class="mdi mdi-alert-outline"></i><div>${esc(__('no_salary_breakdown_hint', 'This employee has no active salary breakdown. Please set it from the employee profile before approving.'))}</div></div></div>`
                         : '') +
-                    SRForm.field({ name: 'salary_component', id: 'si_salary_component', col: 6, req: true,
+                    `<div class="sr-fcol c-12"><div class="si-sum-tiles">
+                        <div class="is-approved">
+                            <span><i class="mdi mdi-check-circle"></i> ${esc(__('approved_amount', 'Approved Amount'))}</span>
+                            <b id="si_final_amount">${money(finalCtx.amount)}</b>
+                        </div>
+                        <div class="is-date">
+                            <span><i class="mdi mdi-calendar-check"></i> ${esc(__('increment_effective_date', 'Increment Effective Date'))}</span>
+                            <b>${esc(effDate.text)}</b>
+                            ${effDate.hint ? `<small>${esc(effDate.hint)}</small>` : ''}
+                        </div>
+                    </div></div>` +
+                    SRForm.field({ name: 'salary_component', id: 'si_salary_component', col: 12, req: true,
                         label: __('add_increment_to_component', 'Add Increment To'),
                         html: SRForm.select({ name: 'salary_component', id: 'si_salary_component', req: true,
                             msg: __('select_salary_component', 'Please select the salary component for this increment.'),
                             placeholder: __('select_salary_component_ph', 'Select salary component'), options: SALARY_COMPONENTS }) }) +
-                    `<div class="sr-fcol c-6"><dl class="sr-kv">
-                        ${kv(__('increment_amount', 'Increment Amount'), '<span id="si_final_amount">' + money(finalCtx.amount) + '</span>')}
-                        ${kv(__('increment_effective_date', 'Increment Effective Date'), esc(finalCtx.effective_date || '-'))}
-                    </dl></div>
+                    `
                     <div class="sr-fcol c-12"><div class="sr-table-wrap"><table class="sr-table" style="margin: 0;">
                         <thead><tr>
                             <th>${esc(__('salary_component', 'Salary Component'))}</th>
