@@ -185,11 +185,12 @@ if (isset($_POST['reject_request'])) {
 // UPLOAD
 if (isset($_FILES['upload_file'])) {
     $file = $_FILES['upload_file'];
-    $filename = $file['name'];
-    $filesize = $file['size'];
-    $target_path = "uploads/" . $filename;
+    // Always store uploads through includes/FileUploader.php
+    $up = FileUploader::save($file, __DIR__ . '/../uploads/', ['types' => 'document']);
+    $filename = $up['filename'];
+    $filesize = $up['size'];
     
-    if (move_uploaded_file($file['tmp_name'], $target_path)) {
+    if ($up['ok']) {
         // LOG UPLOAD
         ActivityLogger::logUpload(
             'Document',                    // Module name

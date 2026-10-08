@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/FileUploader.php';
 require_once __DIR__ . '/includes/session_check.php'; // Needed for user details & includes helper_functions.php now
 
 // Handle AJAX Payment Processing Separately
@@ -16,11 +17,11 @@ if (isset($_POST['process_payment'])) {
     $target_dir = "assets/smt_payment_invoices/";
     $attachment_name = "";
     if (isset($_FILES["payment_invoice"]) && $_FILES["payment_invoice"]["error"] == 0) {
-        $file_ext = strtolower(pathinfo($_FILES["payment_invoice"]["name"], PATHINFO_EXxTENSION));
+        $file_ext = (string)FileUploader::safeExt($_FILES["payment_invoice"]["name"], 'document');
         $attachment_name = $inv_no_pay . "_payment_" . time() . "." . $file_ext;
         $target_file = $target_dir . $attachment_name;
 
-        if (move_uploaded_file($_FILES["payment_invoice"]["tmp_name"], $target_file)) {
+        if (FileUploader::moveTo($_FILES["payment_invoice"]["tmp_name"], $target_file, 'document')) {
             // Update smart_request status to 'paid'
             $update_sql = "UPDATE `smart_request` SET
                             `current_status`='paid'
@@ -135,7 +136,7 @@ if (isset($_POST['process_payment'])) {
                  mysqli_query($conDB, "UPDATE `smart_request` SET `current_status`='approved' WHERE `inv_no`='$inv_no_pay'"); // Revert status
             }
         } else {
-            $response = ['status' => 'error', 'message' => __('error_uploading_file')];
+            $response = ['status' => 'error', 'message' => __('error_uploading_file') . ' ' . FileUploader::lastError()];
         }
     } else {
         $response = ['status' => 'error', 'message' => __('select_payment_invoice_to_upload')];

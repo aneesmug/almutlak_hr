@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 /**
  * Business Trip Request AJAX Handler
  * Handles submission, approval, and rejection of business trip requests
@@ -1105,7 +1106,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
                     $uploadedPassportName = $emp_id . 'PASSPORT' . time() . rand(1000, 9999) . '.' . $fileExt;
                     $uploadPath = $uploadDir . $uploadedPassportName;
 
-                    if (!move_uploaded_file($tmpName, $uploadPath)) {
+                    if (!FileUploader::moveTo($tmpName, $uploadPath, $allowedExt)) {
                         throw new Exception('Failed to upload passport file.');
                     }
 
@@ -1752,8 +1753,8 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'sendTravelEmailBusiness
             }
             
             $destination_path = $destination_dir . $new_filename;
-            if (!move_uploaded_file($_FILES['passport_file']['tmp_name'], $destination_path)) {
-                throw new Exception('Failed to store passport document');
+            if (!FileUploader::moveTo($_FILES['passport_file']['tmp_name'], $destination_path, ['pdf', 'jpg', 'jpeg', 'png'])) {
+                throw new Exception('Failed to store passport document. ' . FileUploader::lastError());
             }
             
             // Upsert into emp_docu

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/includes/FileUploader.php';
 require_once(__DIR__ . "/includes/init.php");
 require_once(__DIR__ . "/includes/session_check.php");
 
@@ -58,11 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && (isset($_FILES['screenshot_en']) || 
             } elseif ($file_en['size'] > 5 * 1024 * 1024) {
                 $errors[] = 'English: File size must be less than 5MB';
             } else {
-                $ext = pathinfo($file_en['name'], PATHINFO_EXTENSION);
+                $ext = FileUploader::safeExt($file_en['name'], 'image');
                 $filename_en = $section . '_' . $step_number . '_en_' . time() . '.' . $ext;
                 $file_path_en = $section_dir . $filename_en;
                 
-                if (move_uploaded_file($file_en['tmp_name'], $file_path_en)) {
+                if (FileUploader::moveTo($file_en['tmp_name'], $file_path_en, 'image')) {
                     try {
                         $order_stmt = $pdo->prepare("
                             SELECT COALESCE(MAX(display_order), 0) + 1 as next_order 
@@ -120,11 +121,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && (isset($_FILES['screenshot_en']) || 
             } elseif ($file_ar['size'] > 5 * 1024 * 1024) {
                 $errors[] = 'Arabic: File size must be less than 5MB';
             } else {
-                $ext = pathinfo($file_ar['name'], PATHINFO_EXTENSION);
+                $ext = FileUploader::safeExt($file_ar['name'], 'image');
                 $filename_ar = $section . '_' . $step_number . '_ar_' . time() . '.' . $ext;
                 $file_path_ar = $section_dir . $filename_ar;
                 
-                if (move_uploaded_file($file_ar['tmp_name'], $file_path_ar)) {
+                if (FileUploader::moveTo($file_ar['tmp_name'], $file_path_ar, 'image')) {
                     try {
                         $order_stmt = $pdo->prepare("
                             SELECT COALESCE(MAX(display_order), 0) + 1 as next_order 
@@ -333,12 +334,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_id'])) {
                         mkdir($section_dir, 0755, true);
                     }
                     
-                    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+                    $ext = FileUploader::safeExt($file['name'], 'image');
                     $lang = $old_data['language'] ?? 'en';
                     $filename = $section . '_' . $step_number . '_' . $lang . '_' . time() . '.' . $ext;
                     $file_path = $section_dir . $filename;
                     
-                    if (move_uploaded_file($file['tmp_name'], $file_path)) {
+                    if (FileUploader::moveTo($file['tmp_name'], $file_path, 'image')) {
                         $update_file_stmt = $pdo->prepare("
                             UPDATE guide_screenshots 
                             SET filename = :filename, file_path = :file_path

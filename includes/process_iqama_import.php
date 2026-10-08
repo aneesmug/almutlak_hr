@@ -14,6 +14,7 @@
 // Example: require_once 'db.php';
 // Example: require_once 'vendor/autoload.php';
 require_once(__DIR__ . "/db.php");
+require_once(__DIR__ . "/FileUploader.php");
 require_once(__DIR__ . "/vendor/autoload.php");
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -23,16 +24,17 @@ use PhpOffice\PhpSpreadsheet\Shared\Date;
 if (isset($_POST["import"])) {
     // Check if file was uploaded without errors
     if (isset($_FILES["employee_file"]) && $_FILES["employee_file"]["error"] == 0) {
-        $allowedFileType = ['application/vnd.ms-excel', 'text/xls', 'text/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+        $importExt = FileUploader::validate($_FILES["employee_file"], ['xlsx', 'xls'], 0);
 
-        if (in_array($_FILES["employee_file"]["type"], $allowedFileType)) {
+        if ($importExt !== null) {
             
-            // It's recommended to use a more secure temporary path
-            $targetPath = 'uploads/' . basename($_FILES['employee_file']['name']);
-            if (!file_exists('uploads')) {
-                mkdir('uploads', 0777, true);
+            // Keep the workbook outside the web folder and remove it when the request ends
+            $targetPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . FileUploader::uniqueName('iqama_import', $importExt);
+            if (!FileUploader::moveTo($_FILES['employee_file']['tmp_name'], $targetPath, ['xlsx', 'xls'])) {
+                showSweetAlert('Upload Error!', htmlspecialchars(FileUploader::lastError()), 'error', '../import_iqama_exp.php');
+                exit();
             }
-            move_uploaded_file($_FILES['employee_file']['tmp_name'], $targetPath);
+            register_shutdown_function(function () use ($targetPath) { @unlink($targetPath); });
 
             try {
                 // Database connection - replace with your actual connection logic

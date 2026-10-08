@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 /**
  * Document Upload Handlers for Employee Documents
  * These functions handle:
@@ -120,13 +121,17 @@ function handle_upload_employee_document($pdo, $username) {
         }
         
         // Generate Unique Filename
-        $fileExtension = pathinfo($document_file['name'], PATHINFO_EXTENSION);
+        $fileExtension = FileUploader::safeExt($document_file['name'], 'document');
+        if ($fileExtension === null) {
+            send_json_response("Error", "File type not allowed. Allowed: " . FileUploader::allowedLabel('document'), "error");
+            return;
+        }
         $fileName = 'emp_' . $emp_id . '_' . $document_type . '_' . time() . '.' . $fileExtension;
         $filePath = $uploadDir . $fileName;
         
         // Move Uploaded File
-        if (!move_uploaded_file($document_file['tmp_name'], $filePath)) {
-            send_json_response("Error", "Failed to save uploaded file.", "error");
+        if (!FileUploader::moveTo($document_file['tmp_name'], $filePath, 'document')) {
+            send_json_response("Error", "Failed to save uploaded file. " . FileUploader::lastError(), "error");
             return;
         }
         

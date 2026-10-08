@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+	require_once __DIR__ . '/../FileUploader.php';
 
     $acc_no = $_POST['acc_no'];
     $amount = $_POST['amount'];
@@ -18,16 +19,14 @@
 
     if (file_exists($_FILES['file']['tmp_name']) || is_uploaded_file($_FILES['file']['tmp_name'])) {
         $uploadDir = "./../../assets/voucher_documents/";
-        $fileName = basename($_FILES['file']['name']);
         $tmp_name = $_FILES['file']['tmp_name'];
-        $rand = rand(0000,9999).time();
-        $file_ext = explode('.',$fileName);
-        $file_ext_count=count($file_ext);
-        $cnt=$file_ext_count-1;
-        $file_extension= $file_ext[$cnt];
-        $filename_po = $id.strtoupper($doc_type_up).$rand.".".$file_extension;
-        $uploadFilePath = $uploadDir.$filename_po; 
-        move_uploaded_file($tmp_name, $uploadFilePath);
+        $rand = rand(1000, 9999) . time();
+        $file_extension = FileUploader::safeExt($_FILES['file']['name'], 'document');
+        $filename_po = $id . strtoupper(preg_replace('/[^A-Za-z0-9_-]/', '', (string)$doc_type_up)) . $rand . "." . $file_extension;
+        if ($file_extension === null || !FileUploader::moveTo($tmp_name, $uploadDir . $filename_po, 'document')) {
+            echo json_encode(['title' => "Error!", 'message' => FileUploader::lastError() ?: 'File type not allowed. Allowed: ' . FileUploader::allowedLabel('document'), 'type' => 'error']);
+            exit;
+        }
     }
 
     $sql="INSERT INTO `vouchers`(`emp_id`, `to_emp`,`voucher_no`, `voucher_type`, `voucher_amount`, `details`, `acc_no`, `chq_no`, `dept`, `file`) VALUES ('$empid','$emp_v_user','$voucher_no','$voucher_type','$amount','$details','$acc_no','$chq_no','$dept','$filename_po')";

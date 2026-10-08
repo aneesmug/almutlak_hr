@@ -18,6 +18,7 @@ error_log("FILES keys: " . json_encode(array_keys($_FILES)));
 
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
+require_once __DIR__ . '/../FileUploader.php';
 
 header('Content-Type: application/json');
 
@@ -80,7 +81,7 @@ function uploadChunk($currentUserId) {
     
     // Save chunk
     $chunkPath = $tempDir . '/chunk_' . $chunkNumber;
-    if (!move_uploaded_file($chunkTmpPath, $chunkPath)) {
+    if (!FileUploader::moveTemp($chunkTmpPath, $chunkPath)) {
         error_log("ERROR: Failed to save chunk $chunkNumber");
         http_response_code(500);
         echo json_encode(['success' => false, 'message' => 'Failed to save chunk']);
@@ -113,6 +114,13 @@ function finalizeChunkUpload($currentUserId) {
     if ($totalChunks <= 0 || empty($originalFilename)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Invalid finalize request']);
+        return;
+    }
+
+    $fileExtension = FileUploader::safeExt($originalFilename, 'document');
+    if ($fileExtension === null) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'File type not allowed. Allowed: ' . FileUploader::allowedLabel('document')]);
         return;
     }
     
@@ -170,6 +178,12 @@ function finalizeChunkUpload($currentUserId) {
     
     // Cleanup temp directory
     @rmdir($tempDir);
+
+    if (!FileUploader::verifyStored($filePath, 'document')) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => FileUploader::lastError()]);
+        return;
+    }
     
     error_log("Chunks assembled successfully - Final file: $filePath");
     

@@ -4,6 +4,7 @@ header('Content-Type: application/json');
 // --- Database Connection ---
 // Ensure you have a db.php file or similar connection logic.
 require_once(__DIR__ . "/db.php");
+require_once(__DIR__ . "/FileUploader.php");
 require_once(__DIR__ . "/session_check.php");
 require_once(__DIR__ . "/helper_functions.php");
 require_once(__DIR__ . "/special_access_helper.php");
@@ -193,18 +194,22 @@ function update_all_settings($conDB) {
         // --- Process File Uploads ---
         foreach ($_FILES as $setting_name => $file) {
             if ($file['error'] === UPLOAD_ERR_OK) {
-                // Sanitize filename to prevent directory traversal attacks
-                $file_name = basename($file['name']);
+                // Clean name + image-only whitelist (logos / favicon)
+                $logo_types = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'ico'];
+                $file_name = FileUploader::cleanName($file['name'], $logo_types);
+                if ($file_name === null) {
+                    throw new Exception('Invalid file type for ' . $setting_name . '. Allowed: ' . FileUploader::allowedLabel($logo_types));
+                }
                 $destination = $upload_dir . $file_name;
                 $db_path = $relative_path . $file_name;
 
-                if (move_uploaded_file($file['tmp_name'], $destination)) {
+                if (FileUploader::moveTo($file['tmp_name'], $destination, $logo_types)) {
                     $stmt->bind_param("ss", $db_path, $setting_name);
                     if (!$stmt->execute()) {
                         throw new Exception('DB update failed for file: ' . $setting_name);
                     }
                 } else {
-                    throw new Exception('Failed to move uploaded file: ' . $setting_name);
+                    throw new Exception('Failed to move uploaded file: ' . $setting_name . '. ' . FileUploader::lastError());
                 }
             } elseif ($file['error'] !== UPLOAD_ERR_NO_FILE) {
                 throw new Exception('File upload error code ' . $file['error'] . ' for ' . $setting_name);

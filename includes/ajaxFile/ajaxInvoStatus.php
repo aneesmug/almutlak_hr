@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+    require_once __DIR__ . '/../FileUploader.php';
     $ajaxType = $_POST['ajaxType'];
     if ($_POST['status'] == 'approve') {
         $query = "UPDATE `emp_inv_attachment` SET `status`='$_POST[status]',`note`=NULL, `updated_at`='".date('Y-m-d H:i:s')."' WHERE `srno`='$_POST[srno]' AND `deleted` = '0' ";
@@ -94,11 +95,14 @@
         $file_ext = explode('.',$fileName);
         $file_ext_count=count($file_ext);
         $cnt=$file_ext_count-1;
-        $file_extension= $file_ext[$cnt];
+        $file_extension = (string)FileUploader::safeExt($fileName, 'document');
         $filename_po = $getinv_no."_".$rand."_".date('ymdis').".".$file_extension;
         $uploadFilePath = $uploadDir.$filename_po;
-        if(move_uploaded_file($tmp_name, $uploadFilePath)){ 
+        if(FileUploader::moveTo($tmp_name, $uploadFilePath, 'document')){ 
             $sql = "INSERT INTO `emp_inv_attachment` (`emp_id`, `srno`, `attachment`, `docu_ext`, `inv_count`) VALUES ('".$empid."', '".$getinv_no."', '".$filename_po."', '".$file_extension."', '".$count."')"; 
+        } else {
+            echo json_encode(['title' => "Error!", 'message' => FileUploader::lastError(), 'type' => 'error']);
+            exit;
         }
 
     }

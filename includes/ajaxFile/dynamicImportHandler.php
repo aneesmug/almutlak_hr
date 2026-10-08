@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 /**
  * Dynamic Excel/CSV import: pick any table, map spreadsheet columns to table columns, import.
  * Actions (POST ajaxType, or GET ?ajaxType=downloadTemplate):
@@ -177,7 +178,7 @@ switch ($ajaxType) {
         }
         $token = bin2hex(random_bytes(16));
         $dest = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'dynimp_' . $token . '.' . $ext;
-        if (!move_uploaded_file($_FILES['file']['tmp_name'], $dest)) {
+        if (!FileUploader::moveTo($_FILES['file']['tmp_name'], $dest, 'spreadsheet')) {
             dynimp_json(['status' => 'error', 'message' => 'Could not store the uploaded file.'], 500);
         }
         try {

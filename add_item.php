@@ -1,6 +1,7 @@
 <?php
 	require_once __DIR__ . '/includes/db.php';
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/FileUploader.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 	if(mysqli_num_rows($query) == 1){
 	include("./includes/avatar_select.php");
@@ -18,14 +19,15 @@
 
 
         $uploadDir = "./QR_MENU/images/item_img/";
-        $temp = explode(".", $_FILES["file"]["name"]);
         $tmp_name = $_FILES['file']['tmp_name'];
-        $newfilename = round(microtime(true)) . '.' . end($temp);
+        $newfilename = round(microtime(true)) . '.' . FileUploader::safeExt($_FILES['file']['name'], 'image');
         // $fileName = basename($_FILES['file']['name']);
         $uploadFilePath = $uploadDir.$newfilename;
 
 	if($category_id_up){
-        move_uploaded_file($tmp_name, $uploadFilePath);
+        if (!FileUploader::moveTo($tmp_name, $uploadFilePath, 'image')) {
+            $newfilename = '';
+        }
 		$query="INSERT INTO `menu_item` (`category_id`,`price_level`,`name_eng`, `name_ar`,`big_price`,`small_price`,`big_cal`,`small_cal`,`image`) VALUES ('".$category_id_up."','".$price_level_up."','".$name_eng_up."','".$name_ar_up."','".$big_price_up."','".$small_price_up."','".$big_cal_up."','".$small_cal_up."','".$newfilename."')";
 		mysqli_query($conDB, $query);
 

@@ -2,6 +2,7 @@
 
 if(!empty($_FILES)){ 
 require_once __DIR__ . '/../../includes/db.php';
+    require_once __DIR__ . '/../FileUploader.php';
     // Include the database configuration file 
 
     require_once __DIR__ . '/../../includes/db.php';
@@ -37,7 +38,7 @@ require_once __DIR__ . '/../../includes/db.php';
 
 	// the variable will have a value pdf as per the sample file name mentioned above.
 
-	$file_extension= $file_ext[$cnt];
+	$file_extension = (string)FileUploader::safeExt($fileName, 'document');
 
 
 
@@ -53,7 +54,7 @@ require_once __DIR__ . '/../../includes/db.php';
 
     // Upload file to server 
 
-    if(move_uploaded_file($tmp_name, $uploadFilePath)){ 
+    if(FileUploader::moveTo($tmp_name, $uploadFilePath, 'document')){ 
 
         // Insert file information in the database 
 
@@ -70,7 +71,10 @@ require_once __DIR__ . '/../../includes/db.php';
             'smt_attachment', 
             $file_extension);
 
-    } 
+    } else {
+        http_response_code(422);
+        echo FileUploader::lastError();
+    }
 
 } 
 

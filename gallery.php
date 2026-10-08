@@ -1,6 +1,7 @@
 <?php
  require_once __DIR__ . '/includes/db.php';
  require_once __DIR__ . '/includes/session_check.php';
+ require_once __DIR__ . '/includes/FileUploader.php';
  $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
  if(mysqli_num_rows($query) == 1){
  include("./includes/avatar_select.php");
@@ -77,11 +78,12 @@ if(isset($_POST['submit_item_edit'])){
 
         if($_FILES['file']['name'] != "") {
             $uploadDir = "./QR_MENU/images/item_img/";
-            $temp = explode(".", $_FILES["file"]["name"]);
             $tmp_name = $_FILES['file']['tmp_name'];
-            $newfilename = round(microtime(true)) . '.' . end($temp);
+            $newfilename = round(microtime(true)) . '.' . FileUploader::safeExt($_FILES['file']['name'], 'image');
             $uploadFilePath = $uploadDir.$newfilename;
-            move_uploaded_file($tmp_name, $uploadFilePath);
+            if (!FileUploader::moveTo($tmp_name, $uploadFilePath, 'image')) {
+                $newfilename = $image_up; // keep the current image when the new one is rejected
+            }
         } else {
             $newfilename = $image_up;
         }

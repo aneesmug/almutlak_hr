@@ -1,6 +1,7 @@
 <?php
 	require_once __DIR__ . '/includes/db.php';
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/FileUploader.php';
 	require_once __DIR__ . '/includes/cost_centers.php';
 	cost_center_ensure_column($conDB);
 
@@ -40,16 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     // --- File Upload Handling ---
     if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
         $file = $_FILES['avatar'];
-        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-        $file_type = mime_content_type($file['tmp_name']);
+        $extension = FileUploader::validate($file, ['jpg', 'jpeg', 'png', 'gif']);
         
-        if (in_array($file_type, $allowed_types)) {
-            $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+        if ($extension !== null) {
             // Sanitize iqama to be used as a filename component
             $safe_iqama = preg_replace('/[^a-zA-Z0-9_-]/', '', $iqama);
             $image_path = "./assets/emp_pics/" . $safe_iqama . "_" . time() . "." . $extension;
             
-            if (!move_uploaded_file($file['tmp_name'], $image_path)) {
+            if (!FileUploader::moveTo($file['tmp_name'], $image_path, 'image')) {
                 $image_path = ''; // Reset path if move fails
             }
         }

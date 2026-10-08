@@ -16,11 +16,14 @@ if($_SERVER['REQUEST_METHOD']=='OPTIONS') die();
 if(!empty($_FILES)){ 
     // Include the database configuration file 
     require_once __DIR__ . '/includes/db.php';
+    if (!defined('SKIP_PAGE_ACCESS_CONTROL')) { define('SKIP_PAGE_ACCESS_CONTROL', true); }
+    require_once __DIR__ . '/includes/session_check.php';
+    require_once __DIR__ . '/includes/FileUploader.php';
      
     // File path configuration 
     // $getlocationid = $_GET['location_id'];
     $uploadDir = "./file_manager/"; 
-    $fileName = basename($_FILES['file']['name']);
+    $fileName = (string)FileUploader::cleanName($_FILES['file']['name'], 'any');
     $tmp_name = $_FILES['file']['tmp_name'];
 
     $file_ext = explode('.',$fileName);
@@ -29,13 +32,13 @@ if(!empty($_FILES)){
 	//minus 1 to make the offset correct
 	$cnt=$file_ext_count-1;
 	// the variable will have a value pdf as per the sample file name mentioned above.
-	$file_extension= $file_ext[$cnt];
+	$file_extension = (string)FileUploader::safeExt($fileName, 'any');
 
 
     $uploadFilePath = $uploadDir.$fileName; 
      
     // Upload file to server 
-    if(move_uploaded_file($tmp_name, $uploadFilePath)){ 
+    if(FileUploader::moveTo($tmp_name, $uploadFilePath, 'any')){ 
         // Insert file information in the database 
         // $sql = "INSERT INTO `location_docu` (`location_id`, `file_name`, `docu_ext`, `date_reg`) VALUES ('".$getlocationid."', '".$fileName."', '".$file_extension."', '".date('c')."')"; 
         // mysql_query($sql);

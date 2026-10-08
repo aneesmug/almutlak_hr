@@ -2165,23 +2165,12 @@ if (!function_exists('store_uploaded_file_securely')) {
             return false;
         }
 
-        $destDir = dirname($destPath);
-        if (!is_dir($destDir)) {
-            @mkdir($destDir, 0755, true);
+        require_once __DIR__ . '/FileUploader.php';
+        $stored = FileUploader::moveTo($tmpPath, $destPath, 'any', ['max_size' => 0, 'compress' => $compress]);
+        if (!$stored) {
+            error_log('store_uploaded_file_securely rejected ' . basename($destPath) . ': ' . FileUploader::lastError());
         }
-
-        if (!is_uploaded_file($tmpPath)) {
-            return false;
-        }
-
-        if (!@move_uploaded_file($tmpPath, $destPath)) {
-            return false;
-        }
-
-        if ($compress) {
-            compress_stored_file($destPath);
-        }
-        return true;
+        return $stored;
     }
 }
 

@@ -2,6 +2,7 @@
 	require_once __DIR__ . '/includes/db.php';
 
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/FileUploader.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 		if(mysqli_num_rows($query) == 1){
 		include("./includes/avatar_select.php");
@@ -32,13 +33,13 @@ if(isset($_POST['submit'])){
 	if(!empty($_FILES['avatar']['name'])){
 		$nameava = $_FILES['avatar']['name'];
 		$tmp_name = $_FILES['avatar']['tmp_name'];
-		$image = "./assets/emp_pics/".$iqama.".".$nameava." ";
+		$image = "./assets/emp_pics/".$iqama.".".FileUploader::cleanName($nameava, 'image');
+		if (!FileUploader::moveTo($tmp_name, $image, 'image')) {
+			$image = "./assets/emp_pics/defult.png";
+		}
 	} else {
 		$image = "./assets/emp_pics/defult.png";
 	}
-	
-//	$image_move = "./assets/emp_pics/".$iqama.".".$nameava." ";
-	move_uploaded_file($tmp_name, $image);
 	
 //	header( "Refresh:5; url= profile", true, 303);
 	

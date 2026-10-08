@@ -2,6 +2,7 @@
 	require_once __DIR__ . '/includes/db.php';
 
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/FileUploader.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 		if(mysqli_num_rows($query) == 1){
 		include("./includes/avatar_select.php");
@@ -120,9 +121,12 @@ $u = "UPDATE `section` SET `section_name`='".$section_name_po."', `dept`='".$dep
 		$nameava = $_FILES['avatar']['name'];
 		$tmp_name = $_FILES['avatar']['tmp_name'];
 		if($nameava){
-			$image = "./assets/emp_pics/".$iqama_up.".".$nameava." ";
-			move_uploaded_file($tmp_name, $image);
-			$query = mysqli_query($conDB, "UPDATE `employees` SET `avatar`='".$image."' WHERE `id`='".$_GET['id']."' ");
+			$image = "./assets/emp_pics/".$iqama_up.".".FileUploader::cleanName($nameava, 'image');
+			if (!FileUploader::moveTo($tmp_name, $image, 'image')) {
+				$image = '';
+				$error_1 = "<div class='alert alert-danger'>".htmlspecialchars(FileUploader::lastError())."</div>";
+			}
+			if ($image) $query = mysqli_query($conDB, "UPDATE `employees` SET `avatar`='".$image."' WHERE `id`='".$_GET['id']."' ");
 				if($image){
 					$error_1 = "<div class='alert alert-success'>Images has been changed Please wait 2 seconds</div>";
 					mysqli_query($conDB, $query);

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 /**
  * Settlement API Endpoint
  * Handles all settlement operations using ApprovalChainManager
@@ -388,14 +389,14 @@ function approveSettlement($settlementManager, $currentUserId) {
                     mkdir($uploadDir, 0755, true);
                 }
                 
-                $fileExtension = pathinfo($_FILES['payment_proof']['name'], PATHINFO_EXTENSION);
+                $fileExtension = (string)FileUploader::safeExt($_FILES['payment_proof']['name'], 'document');
                 $fileName = 'settlement_' . $settlementInvNo . '_proof_' . time() . '.' . $fileExtension;
                 $targetPath = $uploadDir . $fileName;
                 
-                if (move_uploaded_file($_FILES['payment_proof']['tmp_name'], $targetPath)) {
+                if (FileUploader::moveTo($_FILES['payment_proof']['tmp_name'], $targetPath, 'document')) {
                     $paymentProofPath = 'uploads/settlement_proofs/' . $fileName;
                 } else {
-                    echo json_encode(['success' => false, 'message' => 'Failed to upload payment proof']);
+                    echo json_encode(['success' => false, 'message' => 'Failed to upload payment proof. ' . FileUploader::lastError()]);
                     return;
                 }
             } else {
@@ -1063,8 +1064,8 @@ function uploadSettlementAttachment($currentUserId) {
         $filePath = $uploadDir . '/' . $uniqueFileName;
         
         // Move file
-        if (!move_uploaded_file($fileTmpPath, $filePath)) {
-            throw new Exception("Failed to save file to disk");
+        if (!FileUploader::moveTo($fileTmpPath, $filePath, 'document')) {
+            throw new Exception("Failed to save file to disk. " . FileUploader::lastError());
         }
         
         error_log("File saved: $filePath");
@@ -1488,7 +1489,7 @@ function approveSettlementWithAttachments($settlementManager, $currentUserId) {
                     $filePath = $uploadDir . '/' . $uniqueFileName;
                     
                     // Move file
-                    if (move_uploaded_file($fileTmpPath, $filePath)) {
+                    if (FileUploader::moveTo($fileTmpPath, $filePath, $allowedExtensions)) {
                         // Determine attachment category
                         $category = ($isHRPayroll && strpos(strtolower($originalFileName), 'wps') !== false) ? 'wps_file' : 'supporting_document';
                         

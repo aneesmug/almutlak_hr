@@ -1,5 +1,15 @@
 <?php
 /*******************************************************************************************************************
+ * MODIFICATION SUMMARY (009-ajaxLoan.php):
+ * 1. SECURITY HARDENING: All loan document uploads now validate the real uploaded file using PHP Fileinfo and upload integrity checks instead of trusting the client-provided MIME type or filename extension alone.
+ * 2. EXECUTABLE-FILE PROTECTION: Upload validation only maps approved MIME types to safe extensions; PHP/script extensions are never accepted.
+ * 3. SAFER FILENAMES: Upload filenames now use cryptographically secure random tokens to prevent predictable filename collisions.
+ * 4. UPLOAD LIMITS: Loan document uploads are limited to 10 MB and must be genuine HTTP uploads.
+ * 5. IMAGE VALIDATION: JPEG/PNG uploads are additionally verified as real images.
+ * 6. DIAGNOSTIC LOGGING: Removed direct application log-file writes and stopped returning internal diagnostic details to the browser.
+ * 7. IMPORT HARDENING: Loan opening-balance imports now validate the extension and uploaded-file integrity before parsing.
+ *******************************************************************************************************************
+/*******************************************************************************************************************
  * MODIFICATION SUMMARY (008-ajaxLoan.php):
  * 1. ENHANCED `add_simplified_manual_loan`: This function has been updated to process payment documentation. It now handles the file upload for the "Payment Attachment" and saves the "Receipt ID" provided in the form.
  * 2. ROBUST FILE HANDLING: The function now includes logic to securely upload the payment attachment and will automatically delete the uploaded file if the database transaction fails, preventing orphaned files on the server.
@@ -56,15 +66,7 @@ try {
 if (session_status() === PHP_SESSION_NONE) { session_start(); }
 $current_user_id = $_SESSION['empid'] ?? 0;
 
-/**
- * Return a safe lowercase extension for an uploaded file name, or null if not allowed.
- */
-function loanSafeUploadExt($original_name)
-{
-    $ext = strtolower(pathinfo((string)$original_name, PATHINFO_EXTENSION));
-    $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
-    return in_array($ext, $allowed, true) ? $ext : null;
-}
+require_once __DIR__ . '/../FileUploader.php';
 
 /**
  * Generate unique loan invoice number
@@ -217,14 +219,14 @@ function finalize_loan() {
     if (!is_dir($upload_dir)) {
         mkdir($upload_dir, 0755, true);
     }
-    $file_extension = loanSafeUploadExt($_FILES['attachment']['name']);
+    $file_extension = loanValidateUploadedFile($_FILES['attachment']);
     if ($file_extension === null) {
         echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'Attachment must be PDF, JPG, PNG, or DOC file.', 'type' => 'error']);
         return;
     }
-    $attachment_filename = 'disbursement_' . $loan_id . '_' . time() . '.' . $file_extension;
+    $attachment_filename = loanGenerateUploadFilename('disbursement_' . $loan_id, $file_extension);
     $upload_file = $upload_dir . $attachment_filename;
-    if (!move_uploaded_file($_FILES['attachment']['tmp_name'], $upload_file)) {
+    if (!FileUploader::moveTo($_FILES['attachment']['tmp_name'], $upload_file, 'document')) {
         echo json_encode(['status' => 'error', 'title' => 'Upload Error', 'message' => 'Failed to save attachment.', 'type' => 'error']);
         return;
     }
@@ -461,17 +463,14 @@ function approve_loan() {
                 $diagnostic[] = "Pending approver name: $emp_name";
             }
             
-            // Write diagnostics to file for debugging
-            file_put_contents(__DIR__ . '/../../logs/loan_approval_diagnostic.log', 
-                date('Y-m-d H:i:s') . " - " . implode(" | ", $diagnostic) . "\n", 
-                FILE_APPEND);
+            // Keep diagnostics on the server only; do not expose internal workflow details to the browser.
+            error_log('Loan approval verification failed: ' . implode(' | ', $diagnostic));
             
             echo json_encode([
                 'status' => 'error', 
                 'title' => 'Not Allowed', 
                 'message' => $verifyResult['message'], 
-                'type' => 'error',
-                'diagnostic' => $diagnostic // Include diagnostic info for debugging
+                'type' => 'error'
             ]);
             return;
         }
@@ -548,17 +547,17 @@ function approve_loan() {
                 mkdir($upload_dir, 0755, true);
             }
 
-            $file_extension = loanSafeUploadExt($_FILES['payment_proof']['name']);
+            $file_extension = loanValidateUploadedFile($_FILES['payment_proof']);
 
             if ($file_extension === null) {
                 echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'Payment proof must be PDF, JPG, PNG, or DOC file.', 'type' => 'error']);
                 return;
             }
             
-            $payment_proof_filename = 'payment_proof_' . $inv_no . '_' . time() . '.' . $file_extension;
+            $payment_proof_filename = loanGenerateUploadFilename('payment_proof_' . $inv_no, $file_extension);
             $upload_file = $upload_dir . $payment_proof_filename;
             
-            if (!move_uploaded_file($_FILES['payment_proof']['tmp_name'], $upload_file)) {
+            if (!FileUploader::moveTo($_FILES['payment_proof']['tmp_name'], $upload_file, 'document')) {
                 echo json_encode(['status' => 'error', 'title' => 'Upload Error', 'message' => 'Failed to save payment proof file.', 'type' => 'error']);
                 return;
             }
@@ -2153,7 +2152,7 @@ function add_manual_payment() {
         }
 
         // Generate unique filename
-        $file_extension = loanSafeUploadExt($_FILES[$file_field]['name']);
+        $file_extension = loanValidateUploadedFile($_FILES[$file_field]);
         if ($file_extension === null) {
             echo json_encode([
                 'status' => 'error',
@@ -2163,10 +2162,10 @@ function add_manual_payment() {
             ]);
             return;
         }
-        $attachment_filename = 'manual_payment_' . $loan_id . '_' . time() . '.' . $file_extension;
+        $attachment_filename = loanGenerateUploadFilename('manual_payment_' . $loan_id, $file_extension);
         $upload_file = $upload_dir . $attachment_filename;
         
-        if (!move_uploaded_file($_FILES[$file_field]['tmp_name'], $upload_file)) {
+        if (!FileUploader::moveTo($_FILES[$file_field]['tmp_name'], $upload_file, 'document')) {
             echo json_encode([
                 'status' => 'error', 
                 'title' => 'Upload Error', 
@@ -2770,13 +2769,13 @@ function add_manual_loan_history() {
     try {
         $disbursement_attachment_filename = null;
         if (isset($_FILES['disbursement_attachment']) && $_FILES['disbursement_attachment']['error'] == UPLOAD_ERR_OK) {
-            $file_ext = loanSafeUploadExt($_FILES['disbursement_attachment']['name']);
+            $file_ext = loanValidateUploadedFile($_FILES['disbursement_attachment']);
             if ($file_ext === null) {
                 throw new Exception('Disbursement attachment must be PDF, JPG, PNG, or DOC file.');
             }
-            $disbursement_attachment_filename = 'disbursement_manual_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+            $disbursement_attachment_filename = loanGenerateUploadFilename('disbursement_manual', $file_ext);
             $upload_file = $upload_dir . $disbursement_attachment_filename;
-            if (move_uploaded_file($_FILES['disbursement_attachment']['tmp_name'], $upload_file)) {
+            if (FileUploader::moveTo($_FILES['disbursement_attachment']['tmp_name'], $upload_file, 'document')) {
                 $uploaded_files[] = $upload_file;
             } else {
                 throw new Exception('Failed to upload disbursement attachment.');
@@ -2823,13 +2822,19 @@ function add_manual_loan_history() {
 
                 $payment_attachment_filename = null;
                 if (isset($_FILES['payment_attachment']['name'][$i]) && $_FILES['payment_attachment']['error'][$i] == UPLOAD_ERR_OK) {
-                     $file_ext = loanSafeUploadExt($_FILES['payment_attachment']['name'][$i]);
+                     $file_ext = loanValidateUploadedFile([
+                        'name' => $_FILES['payment_attachment']['name'][$i],
+                        'type' => $_FILES['payment_attachment']['type'][$i] ?? '',
+                        'tmp_name' => $_FILES['payment_attachment']['tmp_name'][$i],
+                        'error' => $_FILES['payment_attachment']['error'][$i],
+                        'size' => $_FILES['payment_attachment']['size'][$i] ?? 0
+                    ]);
                      if ($file_ext === null) {
                          throw new Exception('Payment attachment must be PDF, JPG, PNG, or DOC file.');
                      }
-                     $payment_attachment_filename = 'payment_manual_' . $loan_id . '_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+                     $payment_attachment_filename = loanGenerateUploadFilename('payment_manual_' . $loan_id, $file_ext);
                      $upload_file = $upload_dir . $payment_attachment_filename;
-                     if (move_uploaded_file($_FILES['payment_attachment']['tmp_name'][$i], $upload_file)) {
+                     if (FileUploader::moveTo($_FILES['payment_attachment']['tmp_name'][$i], $upload_file, 'document')) {
                          $uploaded_files[] = $upload_file;
                      } else {
                          throw new Exception("Failed to upload payment attachment for payment #".($i+1));
@@ -2915,14 +2920,14 @@ function add_simplified_manual_loan() {
                 }
             }
 
-            $file_ext = loanSafeUploadExt($_FILES['payment_attachment']['name']);
+            $file_ext = loanValidateUploadedFile($_FILES['payment_attachment']);
             if ($file_ext === null) {
                 throw new Exception('Payment attachment must be PDF, JPG, PNG, or DOC file.');
             }
-            $payment_attachment_filename = 'pmt_hist_' . time() . '_' . rand(1000, 9999) . '.' . $file_ext;
+            $payment_attachment_filename = loanGenerateUploadFilename('pmt_hist', $file_ext);
             $uploaded_file_path = $upload_dir . $payment_attachment_filename;
 
-            if (!move_uploaded_file($_FILES['payment_attachment']['tmp_name'], $uploaded_file_path)) {
+            if (!FileUploader::moveTo($_FILES['payment_attachment']['tmp_name'], $uploaded_file_path, 'document')) {
                 throw new Exception('Failed to upload payment attachment.');
             }
         }
@@ -3006,8 +3011,17 @@ function import_loan_opening_balance() {
     require_once $autoloadPath;
 
     $tmpPath = $_FILES['balance_file']['tmp_name'];
-    $fileName = strtolower($_FILES['balance_file']['name']);
-    $isCsv = (substr($fileName, -4) === '.csv');
+    $fileName = strtolower((string)$_FILES['balance_file']['name']);
+    $importExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    if (!in_array($importExt, ['csv', 'xlsx', 'xls'], true)) {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'Only CSV, XLSX, or XLS files are allowed.', 'type' => 'error']);
+        return;
+    }
+    if (!loanValidateImportFile($_FILES['balance_file'])) {
+        echo json_encode(['status' => 'error', 'title' => 'Invalid File', 'message' => 'The uploaded import file is invalid or exceeds the 10MB limit.', 'type' => 'error']);
+        return;
+    }
+    $isCsv = ($importExt === 'csv');
 
     try {
         if ($isCsv) {
@@ -4175,6 +4189,34 @@ function purgeAndRegenerateLoanDeductions() {
             'message' => 'Error: ' . $e->getMessage()
         ]);
     }
+}
+
+
+
+/**
+ * Validate a normal loan document upload using the server-side MIME detector.
+ * Returns the safe extension mapped from the detected MIME type, or null on failure.
+ */
+function loanValidateUploadedFile($file, $maxBytes = 10485760)
+{
+    return FileUploader::validate($file, ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'], $maxBytes);
+}
+
+/**
+ * Generate a non-predictable server-side filename for an uploaded document.
+ */
+function loanGenerateUploadFilename($prefix, $extension)
+{
+    return FileUploader::uniqueName($prefix, $extension);
+}
+
+/**
+ * Basic integrity/size validation for loan balance import files.
+ * The importer itself remains responsible for parsing CSV/XLS/XLSX content.
+ */
+function loanValidateImportFile($file, $maxBytes = 10485760)
+{
+    return FileUploader::validate($file, 'spreadsheet', $maxBytes) !== null;
 }
 
 ?>

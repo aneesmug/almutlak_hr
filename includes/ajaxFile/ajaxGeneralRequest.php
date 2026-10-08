@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 
 header('Content-Type: application/json');
 require_once __DIR__ . '/../../includes/db.php';
@@ -132,7 +133,7 @@ try {
                 
                 // Create directory if it doesn't exist
                 if (!file_exists($upload_dir)) {
-                    mkdir($upload_dir, 0777, true);
+                    mkdir($upload_dir, 0755, true);
                 }
                 
                 $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
@@ -152,7 +153,7 @@ try {
                         $target_file = $upload_dir . $new_filename;
                         
                         // Move uploaded file
-                        if (move_uploaded_file($tmp_name, $target_file)) {
+                        if (FileUploader::moveTo($tmp_name, $target_file, $allowed_extensions)) {
                             // Insert attachment record
                             $insert_attachment = "INSERT INTO `general_request_attachments` 
                                 (`request_inv_no`, `attachment`, `docu_ext`)
@@ -445,7 +446,7 @@ try {
         
         // Create directory if not exists
         if (!is_dir($upload_dir)) {
-            if (!mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
+            if (!mkdir($upload_dir, 0755, true) && !is_dir($upload_dir)) {
                 error_log('DELIVERY DEBUG: failed to create upload dir ' . $upload_dir . ' - perms?');
                 $response['message'] = __('upload_failed', 'Failed to create delivery attachments folder');
                 echo json_encode($response);
@@ -519,7 +520,7 @@ try {
                     file_put_contents($debugLog, "Attempting to move to: {$upload_path}\n", FILE_APPEND);
                     
                     // Move uploaded file
-                    if (!move_uploaded_file($file['tmp_name'], $upload_path)) {
+                    if (!FileUploader::moveTo($file['tmp_name'], $upload_path, $allowed_types)) {
                         $isUploaded = is_uploaded_file($file['tmp_name']) ? 'yes' : 'no';
                         file_put_contents($debugLog, "FAILED to move file. tmp_path={$file['tmp_name']}, is_uploaded_file={$isUploaded}\n", FILE_APPEND);
                         $response['message'] = __('upload_failed', 'Failed to upload file for item ' . $item_id);

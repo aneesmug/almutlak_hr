@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/FileUploader.php';
 /**
  * Approval Chain Manager Class
  * 
@@ -958,13 +959,13 @@ class ApprovalChainManager {
             mkdir($uploadDir, 0755, true);
         }
         
-        $fileExtension = pathinfo($paymentProofFile['name'], PATHINFO_EXTENSION);
+        $fileExtension = (string)FileUploader::safeExt($paymentProofFile['name'], 'document');
         $safe_filename = preg_replace('/[^A-Za-z0-9\._-]/', '', basename($paymentProofFile['name']));
         $fileName = "payment_proof_" . $requestInvNo . "_" . time() . '.' . $fileExtension;
         $targetPath = $uploadDir . $fileName;
         
-        if (!move_uploaded_file($paymentProofFile['tmp_name'], $targetPath)) {
-            throw new Exception("Failed to upload payment proof document");
+        if (!FileUploader::moveTo($paymentProofFile['tmp_name'], $targetPath, 'document')) {
+            throw new Exception("Failed to upload payment proof document. " . FileUploader::lastError());
         }
         
         // Update request_approvers with payment details

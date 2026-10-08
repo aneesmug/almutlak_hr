@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 
 header('Content-Type: application/json');
 
@@ -2697,7 +2698,7 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
             $storedName = $safeKey . '__' . date('Ymd_His') . '__' . bin2hex(random_bytes(4)) . '.' . $extension;
             $storedPath = $storageDir . DIRECTORY_SEPARATOR . $storedName;
 
-            if (!@move_uploaded_file($tmpPath, $storedPath)) {
+            if (!FileUploader::moveTo($tmpPath, $storedPath, ['xlsx', 'xls'])) {
                 throw new Exception('Failed to save uploaded file on server.');
             }
 

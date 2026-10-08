@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 header('Content-Type: application/json');
 // Treat as JSON endpoint to avoid page chrome
 if (!defined('SKIP_PAGE_ACCESS_CONTROL')) {
@@ -795,7 +796,7 @@ try {
                 $fileName = 'return_' . $itemId . '_' . time() . '.' . $fileExt;
                 $filePath = $uploadDir . $fileName;
                 
-                if (!move_uploaded_file($_FILES['proof_file']['tmp_name'], $filePath)) {
+                if (!FileUploader::moveTo($_FILES['proof_file']['tmp_name'], $filePath, $allowedExt)) {
                     json_fail('Failed to upload proof file');
                 }
                 
@@ -1080,7 +1081,7 @@ try {
 
             $uploadDir = __DIR__ . '/../../uploads/asset_returns/';
             if (!is_dir($uploadDir)) {
-                @mkdir($uploadDir, 0777, true);
+                @mkdir($uploadDir, 0755, true);
             }
 
             $savedSignatureFile = '';

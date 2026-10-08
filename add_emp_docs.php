@@ -2,6 +2,7 @@
 	require_once __DIR__ . '/includes/db.php';
 
 	require_once __DIR__ . '/includes/session_check.php';
+	require_once __DIR__ . '/includes/FileUploader.php';
 	$query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
 		if(mysqli_num_rows($query) == 1){
 		include("./includes/avatar_select.php");
@@ -119,7 +120,7 @@ if(isset($_POST['submit'])){
 		//minus 1 to make the offset correct
 		$cnt=$file_ext_count-1;
 		// the variable will have a value pdf as per the sample file name mentioned above.
-		$file_extension= $file_ext[$cnt];
+		$file_extension = (string)FileUploader::safeExt($nameava, ['jpg', 'jpeg', 'pdf']);
 		$attachment_po = "./assets/emp_documents/".$emp_id_po."_".$iqama_get."_".$docu_typ_po."_".$timestamp.".".$file_extension."";
 	
 //	$image_move = "./assets/emp_pics/".$iqama.".".$nameava." ";
@@ -129,8 +130,7 @@ if(isset($_POST['submit'])){
 	/*****************/
 
 	if($docu_typ_po){
-		if($file_extension == "jpg" OR $file_extension == "pdf" OR $file_extension == "jpeg"){
-		move_uploaded_file($tmp_name, $attachment_po);
+		if($file_extension !== '' && FileUploader::moveTo($tmp_name, $attachment_po, ['jpg', 'jpeg', 'pdf'])){
 			
 		$query = "INSERT INTO `emp_docu` (`emp_id`, `docu_typ`, `attachment`, `date_reg`, `docu_ext`, `pgid`) VALUES ('".$emp_id_po."', '".$docu_typ_po."', '".$attachment_po."', '".date("c")."','".$file_extension."','".$docu_id_po."')";
 		mysqli_query($conDB, $query);

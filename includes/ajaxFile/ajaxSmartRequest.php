@@ -1,5 +1,6 @@
 <?php
 	require_once __DIR__ . '/../../includes/db.php';
+    require_once __DIR__ . '/../FileUploader.php';
 	require_once __DIR__ . '/../../includes/session_check.php';
 	include("./../../includes/helper_functions.php");
 
@@ -320,11 +321,11 @@ if($ajaxType == 'sub_type') {
     $file_ext = explode('.',$fileName);
     $file_ext_count=count($file_ext);
     $cnt=$file_ext_count-1;
-    $file_extension= $file_ext[$cnt];
+    $file_extension = (string)FileUploader::safeExt($fileName, 'document');
     $filename_po = $getinv_no."_".$rand.".".$file_extension;
     $uploadFilePath = $uploadDir.$filename_po;    
     // Upload file to server 
-    if(move_uploaded_file($tmp_name, $uploadFilePath)){ 
+    if(FileUploader::moveTo($tmp_name, $uploadFilePath, 'document')){ 
         // Insert file information in the database 
         $sql = "INSERT INTO `smt_attachment` (`inv_no`, `attachment`, `docu_ext`) VALUES ('".$getinv_no."', '".$filename_po."', '".$file_extension."')"; 
         mysqli_query($conDB, $sql);
@@ -336,6 +337,9 @@ if($ajaxType == 'sub_type') {
             'attachment' => $filename_po,
             'file_ext' => $file_extension
         ], "Uploaded attachment for request: {$getinv_no}", 'smt_attachment');
+    } else {
+        http_response_code(422);
+        echo FileUploader::lastError();
     }
 
 }

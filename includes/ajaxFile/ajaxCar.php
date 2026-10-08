@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../FileUploader.php';
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session_check.php';
 require_once __DIR__ . '/../../includes/special_access_helper.php';
@@ -223,7 +224,7 @@ if ($ajaxType == 'add_car') {
         }
         $uploadDir = "./../../assets/cars_documents/";
         $filename_po = $id . strtoupper($doc_type_up) . rand(1000, 9999) . time() . "." . $file_extension;
-        if (!move_uploaded_file($_FILES['file']['tmp_name'], $uploadDir . $filename_po)) {
+        if (!FileUploader::moveTo($_FILES['file']['tmp_name'], $uploadDir . $filename_po, ['pdf', 'jpg', 'jpeg', 'png'])) {
             send_json_response(__('error_title'), __('error_record_submitted'), "error", 500);
         }
     }
