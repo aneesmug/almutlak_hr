@@ -1108,3 +1108,5 @@ html.app-dark body.sr-standalone { background: #0f1420; }
     .sr-doc-alert { flex-wrap: wrap; }
     .sr-doc-alert-actions { width: 100%; justify-content: flex-end; }
 }
+.sr-doc-alert-hijri { font-weight: 600; opacity: .85; }
+.sr-doc-cal-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--sr-muted); }

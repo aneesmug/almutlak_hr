@@ -1401,6 +1401,7 @@ if (mysqli_num_rows($query) == 1) {
 						$_doc_can_update = ($is_system_admin ?? false) || ($isHR ?? false) || ($isDeptHr ?? false);
 						$_doc_alerts = [
 							['key' => 'iqama', 'label' => getDisplayName('ID / Iqama'), 'expiry_date' => $_doc_iqama_gregorian,
+								'hijri_date' => $emprow['iqama_exp'] ?? '',
 								'editable' => $_doc_can_update, 'data' => ['hijri' => $emprow['iqama_exp'] ?? '']],
 							['key' => 'passport', 'label' => getDisplayName('Passport'), 'expiry_date' => $emprow['passport_exp'] ?? null,
 								'editable' => $_doc_can_update],
@@ -6019,10 +6020,12 @@ if (mysqli_num_rows($query) == 1) {
 			// Iqama/Passport -> employeeDocExpiryHandler.php; Medical Insurance -> adds the new
 			// year through employeeMedicalInsuranceHandler.php, carrying over the current
 			// insurance no / amount / class so only the expiry changes.
+			// Hijri-based documents (button carries data-hijri, e.g. ID/Iqama) are picked on the
+			// Hijri (Umm al-Qura) calendar first; the Gregorian date is converted automatically.
 			$(document).on('click', '.js-doc-expiry-update', function() {
 				const $btn = $(this);
 				const doc = String($btn.data('doc'));
-				const isIqama = doc === 'iqama';
+				const hasHijri = $btn.is('[data-hijri]');
 				const empId = <?= json_encode((string)$emprow['empid']) ?>;
 				const esc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
 				const current = String($btn.data('expiry') || '');
@@ -6036,20 +6039,22 @@ if (mysqli_num_rows($query) == 1) {
 					<form class="sr-form" onsubmit="return false;">
 						<div class="sr-notice tone-slate is-compact">
 							<i class="mdi mdi-calendar-blank"></i>
-							<div><?= __('current_expiry', 'Current expiry') ?>: <strong>${esc(current)}</strong>${isIqama && currentHijri ? ` <span class="text-muted">(${esc(currentHijri)} <?= __('hijri', 'Hijri') ?>)</span>` : ''}</div>
+							<div><?= __('current_expiry', 'Current expiry') ?>: <strong>${esc(current)}</strong>${hasHijri && currentHijri ? ` <span class="text-muted">(${esc(currentHijri)} <?= __('hijri', 'Hijri') ?>)</span>` : ''}</div>
 						</div>
 						<div class="sr-fsec">
 							<div class="sr-fsec-head"><span><i class="mdi mdi-calendar-clock"></i> <?= __('new_expiry_date', 'New Expiry Date') ?></span></div>
 							<div class="sr-fgrid">
-								<div class="sr-fcol c-${isIqama ? 6 : 12}">
-									<label for="docExpG"><?= __('gregorian', 'Gregorian') ?> <span class="text-danger">*</span></label>
-									<input type="text" id="docExpG" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
-								</div>
-								${isIqama ? `
+								${hasHijri ? `
 								<div class="sr-fcol c-6">
-									<label for="docExpH"><?= __('hijri', 'Hijri') ?></label>
+									<label for="docExpH"><?= __('hijri', 'Hijri') ?> <span class="text-danger">*</span></label>
 									<input type="text" id="docExpH" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+									<small class="sr-doc-cal-hint"><?= __('select_hijri_date', 'Select the Hijri date from the document') ?></small>
 								</div>` : ''}
+								<div class="sr-fcol c-${hasHijri ? 6 : 12}">
+									<label for="docExpG"><?= __('gregorian', 'Gregorian') ?>${hasHijri ? '' : ' <span class="text-danger">*</span>'}</label>
+									<input type="text" id="docExpG" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+									${hasHijri ? `<small class="sr-doc-cal-hint"><?= __('converted_from_hijri', 'Converted automatically from Hijri') ?></small>` : ''}
+								</div>
 								<div class="sr-fcol c-12">${quick}</div>
 							</div>
 						</div>
@@ -6063,22 +6068,38 @@ if (mysqli_num_rows($query) == 1) {
 					allowOutsideClick: false,
 					customClass: { popup: 'sr-addline-popup sr-page' },
 					didOpen: () => {
-						const pickers = isIqama
+						const pickers = hasHijri
 							? AppDate.hijriPair('#docExpG', '#docExpH', { minDate: 'today' })
 							: { gregorian: AppDate.single('#docExpG', { minDate: 'today' }) };
-						// +N years from the current expiry (or from today when it is already past)
+						// +N years from the current expiry (or from today when it is already past).
+						// Hijri documents add Hijri years, so the renewal lands on the same Hijri day.
 						$(Swal.getPopup()).on('click', '.js-doc-quick', function() {
-							const base = current ? new Date(current + 'T00:00:00') : new Date();
+							const years = Number($(this).data('years'));
 							const today = new Date(); today.setHours(0, 0, 0, 0);
-							const d = (isNaN(base) || base < today) ? today : base;
-							d.setFullYear(d.getFullYear() + Number($(this).data('years')));
+							const base = current ? new Date(current + 'T00:00:00') : new Date(NaN);
+							const fromToday = isNaN(base) || base < today;
+							if (hasHijri) {
+								const h = (!fromToday && /^\d{4}-\d{2}-\d{2}$/.test(currentHijri)) ? currentHijri : AppDate.toHijri(today);
+								const p = h.split('-').map(Number);
+								const mm = String(p[1]).padStart(2, '0');
+								// day 30 may not exist in the target Hijri month -> fall back to 29
+								let g = AppDate.fromHijri((p[0] + years) + '-' + mm + '-' + String(p[2]).padStart(2, '0'));
+								if (!g && p[2] > 29) g = AppDate.fromHijri((p[0] + years) + '-' + mm + '-29');
+								if (g) pickers.gregorian.setDate(g, true);
+								return;
+							}
+							const d = fromToday ? today : base;
+							d.setFullYear(d.getFullYear() + years);
 							pickers.gregorian.setDate(d, true);
 						});
 					},
 					preConfirm: () => {
-						const g = $('#docExpG').val();
+						const h = hasHijri ? ($('#docExpH').val() || '') : '';
+						let g = $('#docExpG').val();
+						// Hijri picked but Gregorian not filled yet -> convert it here
+						if (hasHijri && h && !/^\d{4}-\d{2}-\d{2}$/.test(g)) g = AppDate.fromHijri(h);
 						if (!/^\d{4}-\d{2}-\d{2}$/.test(g)) {
-							$('#docExpG').addClass('is-invalid');
+							$(hasHijri ? '#docExpH' : '#docExpG').addClass('is-invalid');
 							Swal.showValidationMessage('<?= __('select_date', 'Please select a date') ?>');
 							return false;
 						}
@@ -6095,7 +6116,7 @@ if (mysqli_num_rows($query) == 1) {
 							}
 							: {
 								url: './includes/ajaxFile/employeeDocExpiryHandler.php',
-								data: { ajaxType: 'update_doc_expiry', emp_id: empId, doc: doc, expiry_g: g, expiry_h: isIqama ? $('#docExpH').val() : '' }
+								data: { ajaxType: 'update_doc_expiry', emp_id: empId, doc: doc, expiry_g: g, expiry_h: h }
 							};
 						return $.ajax({ url: req.url, type: 'POST', dataType: 'json', data: req.data })
 							.then(function(resp) {

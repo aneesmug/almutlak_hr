@@ -8217,7 +8217,9 @@ if (!function_exists('getEmployeeFilterSQL')) {
  *                           'key' => string (optional, e.g. 'iqama'),
  *                           'editable' => bool (optional, shows the "Update" button),
  *                           'data' => array (optional, extra data-* attributes for the button),
- *                           'note' => string (optional, small hint shown instead of the button)]
+ *                           'note' => string (optional, small hint shown instead of the button),
+ *                           'hijri_date' => string (optional, Hijri Y-m-d shown next to the
+ *                           Gregorian date for Hijri-based documents such as ID/Iqama)]
  *                          The button carries class js-doc-expiry-update + data-doc/data-label/
  *                          data-expiry; the page binds the click (see view_employee.php).
  * @return string           HTML string (empty string when nothing to show)
@@ -8256,6 +8258,10 @@ if (!function_exists('get_document_expiry_alerts')) {
             }
 
             $expiry_display = $esc($expiry_date->format('d M Y'));
+            $hijri_raw      = trim((string)($doc['hijri_date'] ?? ''));
+            if ($hijri_raw !== '' && $hijri_raw !== '0000-00-00') {
+                $expiry_display .= ' <span class="sr-doc-alert-hijri">(' . $esc($hijri_raw) . ' ' . $esc(__('hijri', 'Hijri')) . ')</span>';
+            }
 
             if ($diff_days < 0) {
                 $tone    = 'red';
