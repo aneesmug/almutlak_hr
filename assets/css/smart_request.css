@@ -767,7 +767,29 @@ html.app-dark .swal2-popup.sr-addline-popup { background: var(--ad-surface, #161
 .sr-chip-btn:hover { color: var(--sr-accent-strong); }
 .sr-page .sr-actions .dropdown-menu { z-index: 2000; }
 .sr-page .sr-actions .dropdown-item i { width: 18px; text-align: center; margin-inline-end: 6px; }
-@media (max-width: 1199px) { .sr-page .sr-list-wrap { overflow-x: auto; } }
+/* Wide tables scroll inside their card instead of spilling past it. Not a media query:
+   the per-user Screen Settings scale is CSS zoom on <html>, which media queries ignore,
+   so a zoomed-in page never matched "max-width: 1199px" and the Actions column ended up
+   off-screen. The ⋮ menus escape the scroll box via assets/js/sr_table_scroll.js. */
+.sr-page .sr-table-wrap, .sr-page .sr-list-wrap { overflow-x: auto; }
+/* Actions column stays pinned to the right edge while the rest scrolls */
+.sr-page table.sr-list > thead > tr > th:last-child,
+.sr-page table.sr-list > tbody > tr > td:last-child,
+.sr-page table.sr-table:has(> tbody > tr > td:last-child .sr-actions) > thead > tr > th:last-child,
+.sr-page table.sr-table > tbody > tr > td:last-child:has(.sr-actions) {
+    position: sticky; inset-inline-end: 0; z-index: 1;
+    background: var(--sr-surface);
+    box-shadow: -10px 0 12px -10px rgba(15, 23, 42, .18);
+}
+[dir="rtl"] .sr-page table.sr-list > thead > tr > th:last-child,
+[dir="rtl"] .sr-page table.sr-list > tbody > tr > td:last-child,
+[dir="rtl"] .sr-page table.sr-table:has(> tbody > tr > td:last-child .sr-actions) > thead > tr > th:last-child,
+[dir="rtl"] .sr-page table.sr-table > tbody > tr > td:last-child:has(.sr-actions) { box-shadow: 10px 0 12px -10px rgba(15, 23, 42, .18); }
+html.app-dark .sr-page table.sr-list > tbody > tr > td:last-child,
+html.app-dark .sr-page table.sr-table > tbody > tr > td:last-child:has(.sr-actions) { box-shadow: -10px 0 12px -10px rgba(0, 0, 0, .55); }
+/* ⋮ menu moved to <body> while open (sr_table_scroll.js) */
+.sr-dd-floating { z-index: 2000 !important; }
+.sr-dd-floating .dropdown-item i { width: 18px; text-align: center; margin-inline-end: 6px; }
 
 /* generate_pagination_controls() output inside a card */
 .sr-pager { padding: 0 18px 16px; }

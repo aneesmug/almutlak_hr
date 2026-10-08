@@ -29,6 +29,20 @@ if (!function_exists('app_datepicker_head_tags')) {
     }
 }
 
+if (!function_exists('app_sr_table_scroll_tag')) {
+    function app_sr_table_scroll_tag() {
+        $base = __DIR__ . '/..';
+        $root = realpath($base);
+        $scriptDir = realpath(dirname($_SERVER['SCRIPT_FILENAME'] ?? ''));
+        $prefix = '';
+        if ($root && $scriptDir && stripos($scriptDir, $root) === 0) {
+            $rel = trim(substr($scriptDir, strlen($root)), '\\/');
+            $prefix = $rel === '' ? '' : str_repeat('../', count(preg_split('~[\\\\/]+~', $rel)));
+        }
+        return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>';
+    }
+}
+
 if (PHP_SAPI !== 'cli' && !defined('APP_DATEPICKER_BUFFERED')) {
     define('APP_DATEPICKER_BUFFERED', true);
     ob_start(function ($buffer) {
@@ -42,9 +56,12 @@ if (PHP_SAPI !== 'cli' && !defined('APP_DATEPICKER_BUFFERED')) {
             }
         }
         $done = true;
-        if (stripos($buffer, 'flatpickr.min.js') !== false) {
-            return $buffer;
+        // sr-* table scroll helper (assets/js/sr_table_scroll.js) goes on every page; the
+        // date picker only where the page does not already link flatpickr itself.
+        $tags = app_sr_table_scroll_tag();
+        if (stripos($buffer, 'flatpickr.min.js') === false) {
+            $tags = app_datepicker_head_tags() . $tags;
         }
-        return preg_replace('~</head>~i', app_datepicker_head_tags() . '</head>', $buffer, 1);
+        return preg_replace('~</head>~i', $tags . '</head>', $buffer, 1);
     });
 }

@@ -99,12 +99,113 @@ function __(key, def) {
         }
 
         function escapeHtml(value) {
-            return String(value || '')
+            return String(value == null ? '' : value)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        /* ---------- sr-* design helpers shared by every tab ---------- */
+
+        // Every SweetAlert on this page gets the sr popup look unless it brings its own
+        // customClass (toasts excluded). Also turns the short Swal.fire(title, html, icon)
+        // form into the object form so it picks up the same class.
+        (function patchSwalLook() {
+            if (!window.Swal || Swal.__srPatched) return;
+            const origFire = Swal.fire.bind(Swal);
+            Swal.fire = function(...args) {
+                if (typeof args[0] === 'string') {
+                    args = [{ title: args[0], html: args[1], icon: args[2] }];
+                }
+                const opts = args[0];
+                if (opts && typeof opts === 'object' && !opts.toast && !opts.customClass) {
+                    args[0] = Object.assign({}, opts, { customClass: { popup: 'sr-addline-popup sr-page' } });
+                }
+                return origFire(...args);
+            };
+            Swal.__srPatched = true;
+        })();
+
+        // Icon + one-line description per top-level settings group (outer nav + tab header)
+        const SETTINGS_GROUP_META = {
+            general: { icon: 'mdi-settings', sub: __('settings_general_sub', 'Application name, language, time zone, sessions and VAT.') },
+            developer: { icon: 'mdi-code-tags', sub: __('settings_developer_sub', 'Error reporting, developer mode and API keys.') },
+            email: { icon: 'mdi-email-outline', sub: __('settings_email_sub', 'SMTP server used for system emails and announcements.') },
+            announcement_config: { icon: 'mdi-send', sub: __('settings_announcement_config_sub', 'Separate SMTP account used only to send announcements.') },
+            D365_Config: { icon: 'mdi-cloud', sub: __('settings_d365_sub', 'Microsoft Dynamics 365 connection, templates and dimension mapping.') },
+            approval: { icon: 'mdi-sitemap' },
+            asset_clearance: { icon: 'mdi-package-variant-closed' },
+            attendance_config: { icon: 'mdi-fingerprint', sub: __('settings_attendance_sub', 'Timetables and biometric device monitoring.') },
+            integrations: { icon: 'mdi-puzzle' },
+            license: { icon: 'mdi-key-variant' },
+            org_structure: { icon: 'mdi-file-tree' },
+            payroll_settings: { icon: 'mdi-cash-multiple', sub: __('settings_payroll_sub', 'Loan, vacation payroll, overtime, deduction, increment and resignation rules.') },
+            'request type blocks': { icon: 'mdi-block-helper' },
+            request_type_blocks: { icon: 'mdi-block-helper' },
+            special_access: { icon: 'mdi-account-key' },
+            temp_role_transfer: { icon: 'mdi-account-switch' },
+            theme_config: { icon: 'mdi-theme-light-dark', sub: __('settings_theme_sub', 'Menu theme, logos and per-user screen settings.') },
+            vacation_blackout_dates: { icon: 'mdi-calendar-remove' }
+        };
+        function groupMeta(group) {
+            return SETTINGS_GROUP_META[group] || SETTINGS_GROUP_META[String(group).replace(/ /g, '_')] || { icon: 'mdi-tune' };
+        }
+
+        // Tab header: icon + title + subtitle, optional actions on the right
+        function srTabHead(icon, title, sub, actionsHtml = '') {
+            return `<div class="ac-head">
+                        <div>
+                            <h5 class="ac-title"><i class="mdi ${icon}"></i> ${escapeHtml(title)}</h5>
+                            ${sub ? `<p class="ac-sub">${escapeHtml(sub)}</p>` : ''}
+                        </div>
+                        ${actionsHtml ? `<div class="ac-head-actions">${actionsHtml}</div>` : ''}
+                    </div>`;
+        }
+
+        // Assigned-user card head (Special Access / Screen Settings): avatar + name + id + role
+        function srUserCardHead(name, empId, role, extraHtml, actionsHtml) {
+            const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+            return `<div class="as-user-head">
+                        <div class="org-name">
+                            <span class="sr-avatar sr-avatar-sm">${escapeHtml(initials)}</span>
+                            <div class="org-name-text">
+                                <span class="sr-cell-title">${escapeHtml(name)} ${extraHtml || ''}</span>
+                                <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtml(empId)}</span>${role ? ` · ${escapeHtml(formatRoleLabel(role))}` : ''}</span>
+                            </div>
+                        </div>
+                        <div class="as-user-actions">${actionsHtml}</div>
+                    </div>`;
+        }
+
+        // Search box filtering the assigned-user cards in a list container
+        function bindUserCardSearch(inputId, containerId) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+            input.addEventListener('input', () => {
+                const q = input.value.trim().toLowerCase();
+                document.querySelectorAll(`#${containerId} .as-user-card`).forEach(card => {
+                    card.style.display = (!q || card.textContent.toLowerCase().includes(q)) ? '' : 'none';
+                });
+            });
+        }
+
+        function setAssignedCountPill(id, n) {
+            const pill = document.getElementById(id);
+            if (!pill) return;
+            pill.className = `sr-pill tone-${n ? 'indigo' : 'slate'}`;
+            pill.innerHTML = `<span class="sr-dot"></span>${n} ${__('assigned', 'assigned')}`;
+        }
+
+        // Sub-tab pills used by every hub (tabs: [{key, label, icon}])
+        function srSubNav(id, tabs, activeKey) {
+            return `<ul class="nav nav-pills mb-3 as-subnav" id="${id}">
+                ${tabs.map((tab, idx) => `<li class="nav-item">
+                    <a class="nav-link ${(activeKey ? tab.key === activeKey : idx === 0) ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.icon ? `<i class="mdi ${tab.icon}"></i> ` : ''}${tab.label}</a>
+                </li>`).join('')}
+            </ul>`;
         }
 
         function getReportTypeCatalog() {
@@ -289,10 +390,10 @@ function __(key, def) {
             }
             html += `<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap">`;
             html += `<small class="text-muted">${__('check_reports_user_can_view')}</small>`;
-            html += `<div class="btn-group">`;
-            html += `<button type="button" class="btn btn-sm btn-outline-primary report-access-select-all" data-target="${idPrefix}">${__('select_all')}</button>`;
-            html += `<button type="button" class="btn btn-sm btn-outline-secondary report-access-clear-all" data-target="${idPrefix}">${__('clear_all')}</button>`;
-            html += `<button type="button" class="btn btn-sm btn-outline-warning report-access-reset-default" data-target="${idPrefix}">${__('reset_default')}</button>`;
+            html += `<div class="as-btn-row">`;
+            html += `<button type="button" class="sr-btn sr-btn-sm report-access-select-all" data-target="${idPrefix}">${__('select_all')}</button>`;
+            html += `<button type="button" class="sr-btn sr-btn-sm report-access-clear-all" data-target="${idPrefix}">${__('clear_all')}</button>`;
+            html += `<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost report-access-reset-default" data-target="${idPrefix}">${__('reset_default')}</button>`;
             html += `</div></div>`;
             html += `<div class="special-access-checkbox-grid">`;
             catalog.forEach(item => {
@@ -663,17 +764,16 @@ function __(key, def) {
             // Guarded to the outer nav call - the Connection sub-tab re-enters with the same group name.
             if (normalizedGroupName === 'D365_Config' && hostEl === settingsContainer && window.D365DimensionsSettings) {
                 const tabs = [
-                    { key: 'connection', label: __('d365_connection', 'Connection') },
-                    { key: 'templates', label: __('d365_account_templates', 'Account Templates') },
-                    { key: 'employees', label: __('d365_employee_dimensions', 'Employee Dimensions') },
-                    { key: 'departments', label: __('d365_departments', 'Departments') },
-                    { key: 'companies', label: __('d365_companies', 'Companies') },
+                    { key: 'connection', icon: 'mdi-lan-connect', label: __('d365_connection', 'Connection') },
+                    { key: 'templates', icon: 'mdi-content-copy', label: __('d365_account_templates', 'Account Templates') },
+                    { key: 'employees', icon: 'mdi-account-multiple-outline', label: __('d365_employee_dimensions', 'Employee Dimensions') },
+                    { key: 'departments', icon: 'mdi-domain', label: __('d365_departments', 'Departments') },
+                    { key: 'companies', icon: 'mdi-office', label: __('d365_companies', 'Companies') },
                 ];
                 settingsContainer.innerHTML = `
                     <div class="tab-pane active" id="group-D365_Config" role="tabpanel">
-                        <ul class="nav nav-pills mb-3" id="d365-config-sub-nav">
-                            ${tabs.map(t => `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="${t.key}">${t.label}</a></li>`).join('')}
-                        </ul>
+                        ${srTabHead(groupMeta('D365_Config').icon, __('D365_Config', 'D365 Config'), groupMeta('D365_Config').sub || '')}
+                        ${srSubNav('d365-config-sub-nav', tabs, 'none')}
                         <div id="d365-config-sub-content"></div>
                     </div>
                 `;
@@ -730,6 +830,12 @@ function __(key, def) {
             }
 
             formHtml += `<div class="tab-pane active" id="group-${groupName}" role="tabpanel">`;
+            // Hub sub-tabs (Email, Menu Theme, D365 Connection...) already sit under the hub's own nav
+            if (hostEl === settingsContainer) {
+                const meta = groupMeta(groupName);
+                formHtml += srTabHead(meta.icon, translateText(displayGroupName), meta.sub || '');
+            }
+            formHtml += `<div class="as-fields">`;
             settings.forEach(setting => {
                 const id = `setting-${setting.setting_name}`;
                 const label = translateText(setting.description);
@@ -737,16 +843,16 @@ function __(key, def) {
                 const isEmailList = setting.setting_name === 'traveling_company_email';
                 const isSessionTimeout = setting.setting_name === 'session_timeout';
 
-                formHtml += `<div class="form-group row">`;
-                formHtml += `<label for="${id}" class="col-sm-3 col-form-label">${label}</label>`;
-                formHtml += `<div class="col-sm-9">`;
+                formHtml += `<div class="as-field">`;
+                formHtml += `<label for="${id}" class="as-field-label">${label}</label>`;
+                formHtml += `<div class="as-field-control">`;
                 
                 if (isImagePath) {
-                    formHtml += `<div class="d-flex align-items-center">`;
-                    formHtml += `<img id="preview-${setting.setting_name}" src="${setting.setting_value || 'assets/images/placeholder.png'}" alt="Preview" class="preview-image mr-3">`;
+                    formHtml += `<div class="as-image-field">`;
+                    formHtml += `<span class="as-image-box"><img id="preview-${setting.setting_name}" src="${escapeHtml(setting.setting_value || 'assets/images/placeholder.png')}" alt="Preview" class="preview-image"></span>`;
                     formHtml += `<div class="flex-grow-1">`;
                     formHtml += `<input type="file" id="${id}" name="${setting.setting_name}" accept="image/*" class="form-control-file">`;
-                    formHtml += `<small class="form-text text-muted">${__('current')} ${setting.setting_value || '' + __('not_set') + ''}</small>`;
+                    formHtml += `<small class="form-text text-muted">${__('current')} <span class="sr-mono">${escapeHtml(setting.setting_value || __('not_set'))}</span></small>`;
                     formHtml += `</div></div>`;
                 } else if (isEmailList) {
                     // Special handling for email list
@@ -772,7 +878,7 @@ function __(key, def) {
                         emails.forEach((email, idx) => {
                             formHtml += `<div class="email-item mb-2">
                                 <div class="input-group">
-                                    <input type="email" class="form-control email-input" placeholder="email@example.com" value="${email}">
+                                    <input type="email" class="form-control email-input" placeholder="email@example.com" value="${escapeHtml(email)}">
                                     <div class="input-group-append">
                                         <button type="button" class="btn btn-outline-danger remove-email-btn"><i class="mdi mdi-delete"></i></button>
                                     </div>
@@ -781,14 +887,14 @@ function __(key, def) {
                         });
                     }
                     formHtml += `</div>`;
-                    formHtml += `<button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-email-btn"><i class="mdi mdi-plus"></i> ${__('add_email')}</button>`;
+                    formHtml += `<button type="button" class="sr-btn sr-btn-sm mt-1" id="add-email-btn"><i class="mdi mdi-plus"></i> ${__('add_email')}</button>`;
                     formHtml += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
                 } else if (isSessionTimeout) {
                     formHtml += `<div>`;
-                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input" value="${setting.setting_value || ''}" placeholder="${__('e.g., 3600 or 60*60*2')}">`;
+                    formHtml += `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control session-timeout-input sr-mono" value="${escapeHtml(setting.setting_value || '')}" placeholder="${__('e.g., 3600 or 60*60*2')}">`;
                     formHtml += `<small class="form-text text-muted">${__('session_note')}</small>`;
                     formHtml += `<div id="timeout-result-${setting.setting_name}" class="mt-2" style="display:none;">`;
-                    formHtml += `<small class="text-success"><strong>${__('evaluated_as')}:</strong> <span class="timeout-seconds"></span> ${__('seconds')}</small>`;
+                    formHtml += `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('evaluated_as')}: <span class="timeout-seconds"></span> ${__('seconds')}</span>`;
                     formHtml += `</div>`;
                     formHtml += `</div>`;
                 } else if (setting.setting_name === 'announcement_recipients') {
@@ -812,19 +918,19 @@ function __(key, def) {
                             // Note: We still use form-control for layout, but our custom CSS will target .select2-container for styling.
                             inputHtml = `<select id="${id}" name="${setting.setting_name}" class="form-control select2">`;
                             for (const [value, text] of Object.entries(options)) {
-                                inputHtml += `<option value="${value}" ${setting.setting_value == value ? 'selected' : ''}>${text}</option>`;
+                                inputHtml += `<option value="${escapeHtml(value)}" ${setting.setting_value == value ? 'selected' : ''}>${escapeHtml(text)}</option>`;
                             }
                             inputHtml += `</select>`;
                             break;
                         case 'password':
                             // Secrets (e.g. D365 client secret): masked, with a show/hide toggle
                             inputHtml = `<div class="input-group">
-                                <input type="password" id="${id}" name="${setting.setting_name}" class="form-control" autocomplete="new-password" value="${String(setting.setting_value || '').replace(/"/g, '&quot;')}">
-                                <div class="input-group-append"><button type="button" class="btn btn-outline-secondary" onclick="const i=document.getElementById('${id}'); i.type = i.type === 'password' ? 'text' : 'password';"><i class="mdi mdi-eye"></i></button></div>
+                                <input type="password" id="${id}" name="${setting.setting_name}" class="form-control" autocomplete="new-password" value="${escapeHtml(setting.setting_value || '')}">
+                                <div class="input-group-append"><button type="button" class="btn btn-outline-secondary" title="${__('show_hide', 'Show / hide')}" onclick="const i=document.getElementById('${id}'); i.type = i.type === 'password' ? 'text' : 'password'; this.querySelector('i').className = 'mdi ' + (i.type === 'password' ? 'mdi-eye' : 'mdi-eye-off');"><i class="mdi mdi-eye"></i></button></div>
                             </div>`;
                             break;
                         default:
-                            inputHtml = `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control" value="${setting.setting_value || ''}">`;
+                            inputHtml = `<input type="text" id="${id}" name="${setting.setting_name}" class="form-control" value="${escapeHtml(setting.setting_value || '')}">`;
                             break;
                     }
                     formHtml += inputHtml;
@@ -835,12 +941,11 @@ function __(key, def) {
 
             if (normalizedGroupName === 'email' || normalizedGroupName === 'announcement_config') {
                 formHtml += `
-                    <hr>
-                    <div class="form-group row">
-                        <div class="col-sm-3"></div>
-                        <div class="col-sm-9">
-                            <button type="button" id="testEmailConfigBtn" class="btn btn-outline-info">
-                                <i class="mdi mdi-email-send"></i> ${__('send_test_email', 'Send Test Email')}
+                    <div class="as-field as-field-action">
+                        <div class="as-field-label">${__('send_test_email', 'Send Test Email')}</div>
+                        <div class="as-field-control">
+                            <button type="button" id="testEmailConfigBtn" class="sr-btn sr-btn-sm">
+                                <i class="mdi mdi-send"></i> ${__('send_test_email', 'Send Test Email')}
                             </button>
                             <small class="form-text text-muted">${__('send_test_email_hint', 'Sends a test email to the Default From Email Address above, using the SMTP settings currently entered in this form (works even if not saved yet).')}</small>
                             <div id="testEmailResult" class="mt-2"></div>
@@ -849,7 +954,7 @@ function __(key, def) {
                 `;
             }
 
-            formHtml += `</div>`;
+            formHtml += `</div></div>`;
             hostEl.innerHTML = formHtml;
 
             // Initialize Select2 with a width setting for better Bootstrap integration.
@@ -882,29 +987,22 @@ function __(key, def) {
         const PAYROLL_BOOLEAN_SETTING_NAMES = ['overtime_auto_attendance_enabled', 'deduction_auto_attendance_enabled'];
 
         const PAYROLL_SETTINGS_SUB_TABS = [
-            { key: 'loan_settings', label: '' + __('loan_settings', 'Loan Settings') + '', canAccess: () => canAccessLoanSettingsTab },
-            { key: 'vacation_payroll', label: '' + __('vacation_payroll_settings', 'Vacation Payroll Settings') + '', canAccess: () => canAccessVacationPayrollTab },
-            { key: 'overtime_settings', label: '' + __('overtime_settings', 'Overtime Settings') + '', canAccess: () => canAccessOvertimeSettingsTab },
-            { key: 'deduction_settings', label: '' + __('deduction_settings', 'Deduction Settings') + '', canAccess: () => canAccessDeductionSettingsTab },
-            { key: 'salary_increment_settings', label: '' + __('salary_increment_settings', 'Salary Increment Settings') + '', canAccess: () => canAccessSalaryIncrementSettingsTab },
-            { key: 'resignation_settings', label: '' + __('resignation_settings', 'Resignation Settings') + '', canAccess: () => canAccessResignationSettingsTab },
+            { key: 'loan_settings', icon: 'mdi-cash', label: '' + __('loan_settings', 'Loan Settings') + '', canAccess: () => canAccessLoanSettingsTab },
+            { key: 'vacation_payroll', icon: 'mdi-beach', label: '' + __('vacation_payroll_settings', 'Vacation Payroll Settings') + '', canAccess: () => canAccessVacationPayrollTab },
+            { key: 'overtime_settings', icon: 'mdi-timer', label: '' + __('overtime_settings', 'Overtime Settings') + '', canAccess: () => canAccessOvertimeSettingsTab },
+            { key: 'deduction_settings', icon: 'mdi-minus-circle-outline', label: '' + __('deduction_settings', 'Deduction Settings') + '', canAccess: () => canAccessDeductionSettingsTab },
+            { key: 'salary_increment_settings', icon: 'mdi-trending-up', label: '' + __('salary_increment_settings', 'Salary Increment Settings') + '', canAccess: () => canAccessSalaryIncrementSettingsTab },
+            { key: 'resignation_settings', icon: 'mdi-exit-to-app', label: '' + __('resignation_settings', 'Resignation Settings') + '', canAccess: () => canAccessResignationSettingsTab },
         ];
 
         function renderPayrollSettingsHub() {
             const visibleTabs = PAYROLL_SETTINGS_SUB_TABS.filter(tab => tab.canAccess());
 
-            let navHtml = '<ul class="nav nav-pills mb-3" id="payroll-settings-sub-nav">';
-            visibleTabs.forEach((tab, idx) => {
-                navHtml += `
-                    <li class="nav-item">
-                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
-                    </li>
-                `;
-            });
-            navHtml += '</ul>';
+            const navHtml = srSubNav('payroll-settings-sub-nav', visibleTabs);
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-payroll_settings" role="tabpanel">
+                    ${srTabHead(groupMeta('payroll_settings').icon, __('payroll_settings', 'Payroll Settings'), groupMeta('payroll_settings').sub || '')}
                     ${navHtml}
                     <div id="payroll-settings-sub-content"></div>
                 </div>
@@ -943,12 +1041,12 @@ function __(key, def) {
         // per group (admin OR the matching Special Access key), so a restricted grantee
         // only ever sees and edits the one group they were given.
         async function renderPayrollParamGroup(group, title, hostEl) {
+            const tabIcon = (PAYROLL_SETTINGS_SUB_TABS.find(t => t.key === group) || {}).icon || 'mdi-tune';
             hostEl.innerHTML = `
-                <h5 class="mb-3">${title}</h5>
-                <div id="payroll-param-fields-${group}">
-                    <div class="text-center text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span class="ml-2">${__('loading')}</span>
+                <div class="sr-card as-section">
+                    <div class="sr-card-head"><div class="sr-card-title"><i class="mdi ${tabIcon}"></i> ${escapeHtml(title)}</div></div>
+                    <div id="payroll-param-fields-${group}">
+                        <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                     </div>
                 </div>
             `;
@@ -963,11 +1061,11 @@ function __(key, def) {
                 const container = document.getElementById(`payroll-param-fields-${group}`);
 
                 if (!data.success) {
-                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    container.innerHTML = `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(data.message || __('access_denied', 'Access denied'))}</div></div></div>`;
                     return;
                 }
 
-                let formHtml = '';
+                let formHtml = '<div class="as-fields">';
                 data.settings.forEach(setting => {
                     const id = `payroll-param-${setting.setting_name}`;
                     if (!ATTENDANCE_ON && setting.setting_name.includes('_auto_attendance_')) {
@@ -975,12 +1073,12 @@ function __(key, def) {
                     }
                     if (PAYROLL_BOOLEAN_SETTING_NAMES.includes(setting.setting_name)) {
                         formHtml += `
-                            <div class="form-group row">
-                                <div class="col-sm-4"></div>
-                                <div class="col-sm-8">
+                            <div class="as-field">
+                                <label class="as-field-label" for="${id}">${translateText(setting.description)}</label>
+                                <div class="as-field-control">
                                     <div class="custom-control custom-switch">
                                         <input type="checkbox" class="custom-control-input payroll-param-input" id="${id}" data-setting-name="${setting.setting_name}" ${setting.setting_value === '1' ? 'checked' : ''}>
-                                        <label class="custom-control-label" for="${id}">${translateText(setting.description)}</label>
+                                        <label class="custom-control-label" for="${id}">${__('enabled', 'Enabled')}</label>
                                     </div>
                                 </div>
                             </div>
@@ -988,23 +1086,28 @@ function __(key, def) {
                         return;
                     }
                     formHtml += `
-                        <div class="form-group row">
-                            <label for="${id}" class="col-sm-4 col-form-label">${translateText(setting.description)}</label>
-                            <div class="col-sm-8">
-                                <input type="text" inputmode="decimal" id="${id}" data-setting-name="${setting.setting_name}" class="form-control payroll-param-input" value="${setting.setting_value ?? ''}">
+                        <div class="as-field">
+                            <label for="${id}" class="as-field-label">${translateText(setting.description)}</label>
+                            <div class="as-field-control">
+                                <input type="text" inputmode="decimal" id="${id}" data-setting-name="${setting.setting_name}" class="form-control payroll-param-input as-num-input" value="${escapeHtml(setting.setting_value ?? '')}">
                             </div>
                         </div>
                     `;
                 });
-                formHtml += `<button type="button" class="btn btn-primary mt-2" id="btn-save-${group}">${__('save', 'Save')}</button>`;
+                formHtml += `</div>
+                    <div class="as-section-foot">
+                        <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="btn-save-${group}"><i class="mdi mdi-content-save"></i> ${__('save', 'Save')}</button>
+                    </div>`;
                 container.innerHTML = formHtml;
 
                 document.getElementById(`btn-save-${group}`).addEventListener('click', async function() {
+                    const btn = this;
                     const payload = new URLSearchParams({ action: 'update_payroll_settings', group });
                     container.querySelectorAll('.payroll-param-input').forEach(input => {
                         payload.append(input.dataset.settingName, input.type === 'checkbox' ? (input.checked ? '1' : '0') : input.value.trim());
                     });
 
+                    btn.disabled = true;
                     try {
                         const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
                             method: 'POST',
@@ -1013,16 +1116,18 @@ function __(key, def) {
                         });
                         const saveResult = await saveResponse.json();
                         if (saveResult.success) {
-                            Swal.fire('' + __('saved', 'Saved') + '', '' + __('your_settings_have_been_updated_successfully') + '', 'success');
+                            acToast('success', __('your_settings_have_been_updated_successfully'));
                         } else {
                             Swal.fire('' + __('error') + '', saveResult.message || '' + __('could_not_save_settings') + '', 'error');
                         }
                     } catch (error) {
                         Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                    } finally {
+                        btn.disabled = false;
                     }
                 });
             } catch (error) {
-                document.getElementById(`payroll-param-fields-${group}`).innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+                document.getElementById(`payroll-param-fields-${group}`).innerHTML = `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div></div>`;
             }
         }
 
@@ -1033,25 +1138,17 @@ function __(key, def) {
         // a restricted grantee may only have one or two of them - same canAccess()-gated
         // sub-tab pattern as PAYROLL_SETTINGS_SUB_TABS above.
         const ORG_STRUCTURE_SUB_TABS = [
-            { key: 'departments', label: '' + __('departments', 'Departments') + '', canAccess: () => canAccessDepartmentsTab },
-            { key: 'sub_departments', label: '' + __('sub_departments', 'Sub Departments') + '', canAccess: () => canAccessSubDepartmentsTab },
-            { key: 'job_titles', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
-            { key: 'locations', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
-            { key: 'companies', label: '' + __('companies', 'Companies') + '', canAccess: () => canAccessCompaniesTab },
+            { key: 'departments', icon: 'mdi-domain', label: '' + __('departments', 'Departments') + '', canAccess: () => canAccessDepartmentsTab },
+            { key: 'sub_departments', icon: 'mdi-source-fork', label: '' + __('sub_departments', 'Sub Departments') + '', canAccess: () => canAccessSubDepartmentsTab },
+            { key: 'job_titles', icon: 'mdi-briefcase', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
+            { key: 'locations', icon: 'mdi-map-marker', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
+            { key: 'companies', icon: 'mdi-office', label: '' + __('companies', 'Companies') + '', canAccess: () => canAccessCompaniesTab },
         ];
 
         function renderOrgStructureHub() {
             const visibleTabs = ORG_STRUCTURE_SUB_TABS.filter(tab => tab.canAccess());
 
-            let navHtml = '<ul class="nav nav-pills mb-3" id="org-structure-sub-nav">';
-            visibleTabs.forEach((tab, idx) => {
-                navHtml += `
-                    <li class="nav-item">
-                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
-                    </li>
-                `;
-            });
-            navHtml += '</ul>';
+            const navHtml = srSubNav('org-structure-sub-nav', visibleTabs);
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-org_structure" role="tabpanel">
@@ -1096,24 +1193,17 @@ function __(key, def) {
         // switching sub-tabs before saving discards unsaved edits in the one left, same
         // as switching any other top-level tab today.
         const EMAIL_SETTINGS_SUB_TABS = [
-            { key: 'email', label: '' + __('email', 'Email') + '' },
-            { key: 'announcement_config', label: '' + __('announcement_config', 'Announcement Config') + '' },
-            { key: 'announcement_recipients', label: '' + __('announcement_recipients', 'Announcement Recipients') + '' },
+            { key: 'email', icon: 'mdi-email-outline', label: '' + __('email', 'Email') + '' },
+            { key: 'announcement_config', icon: 'mdi-send', label: '' + __('announcement_config', 'Announcement Config') + '' },
+            { key: 'announcement_recipients', icon: 'mdi-email-open', label: '' + __('announcement_recipients', 'Announcement Recipients') + '' },
         ];
 
         function renderEmailSettingsHub() {
-            let navHtml = '<ul class="nav nav-pills mb-3" id="email-settings-sub-nav">';
-            EMAIL_SETTINGS_SUB_TABS.forEach((tab, idx) => {
-                navHtml += `
-                    <li class="nav-item">
-                        <a class="nav-link ${idx === 0 ? 'active' : ''}" href="#" data-sub-tab="${tab.key}">${tab.label}</a>
-                    </li>
-                `;
-            });
-            navHtml += '</ul>';
+            const navHtml = srSubNav('email-settings-sub-nav', EMAIL_SETTINGS_SUB_TABS);
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-email" role="tabpanel">
+                    ${srTabHead(groupMeta('email').icon, __('email', 'Email'), groupMeta('email').sub || '')}
                     ${navHtml}
                     <div id="email-settings-sub-content"></div>
                 </div>
@@ -1145,17 +1235,19 @@ function __(key, def) {
         // shared secret key, not per-grantee attendance config.
         function renderAttendanceConfigHub() {
             const showDeviceMonitor = isFullSettingsAdmin;
-            let navHtml = '<ul class="nav nav-pills mb-3" id="attendance-config-sub-nav">';
-            navHtml += `<li class="nav-item"><a class="nav-link active" href="#" data-sub-tab="timetables">${__('timetables', 'Timetables')}</a></li>`;
+            const attTabs = [{ key: 'timetables', icon: 'mdi-calendar-clock', label: __('timetables', 'Timetables') }];
             if (showDeviceMonitor) {
-                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="device_monitor">${__('device_monitor', 'Device Monitor')}</a></li>`;
-                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="attendance_retention">${__('data_retention', 'Data Retention')}</a></li>`;
-                navHtml += `<li class="nav-item"><a class="nav-link" href="#" data-sub-tab="sync_settings">${__('sync_settings', 'Sync Settings')}</a></li>`;
+                attTabs.push(
+                    { key: 'device_monitor', icon: 'mdi-monitor', label: __('device_monitor', 'Device Monitor') },
+                    { key: 'attendance_retention', icon: 'mdi-database', label: __('data_retention', 'Data Retention') },
+                    { key: 'sync_settings', icon: 'mdi-cloud-sync', label: __('sync_settings', 'Sync Settings') }
+                );
             }
-            navHtml += '</ul>';
+            const navHtml = srSubNav('attendance-config-sub-nav', attTabs);
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-attendance_config" role="tabpanel">
+                    ${srTabHead(groupMeta('attendance_config').icon, __('attendance_config', 'Attendance Config'), groupMeta('attendance_config').sub || '')}
                     ${navHtml}
                     <div id="attendance-config-sub-content"></div>
                 </div>
@@ -1177,9 +1269,10 @@ function __(key, def) {
                 const current = input ? input.value.split(/[\s,;]+/).filter(Boolean) : [];
                 if (!input || current.length === 0 || current.includes(info.ip)) return;
 
-                hostEl.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-2 mb-0 font-13 d-flex align-items-center justify-content-between flex-wrap">
-                    <span><i class="mdi mdi-alert-outline"></i> ${__('sync_last_rejected_ip', 'Last blocked sync request came from')} <strong>${escapeHtml(info.ip)}</strong> (${escapeHtml(info.at || '')})</span>
-                    <button type="button" class="btn btn-sm btn-warning mt-1 mt-sm-0" id="addRejectedSyncIpBtn"><i class="mdi mdi-plus"></i> ${__('sync_add_ip', 'Add to allowed IPs')}</button>
+                hostEl.insertAdjacentHTML('beforeend', `<div class="sr-notice tone-amber as-notice as-notice-row">
+                    <i class="mdi mdi-alert-outline"></i>
+                    <div>${__('sync_last_rejected_ip', 'Last blocked sync request came from')} <strong>${escapeHtml(info.ip)}</strong> (${escapeHtml(info.at || '')})</div>
+                    <button type="button" class="sr-btn sr-btn-sm" id="addRejectedSyncIpBtn"><i class="mdi mdi-plus"></i> ${__('sync_add_ip', 'Add to allowed IPs')}</button>
                 </div>`);
                 document.getElementById('addRejectedSyncIpBtn').addEventListener('click', function() {
                     input.value = current.concat(info.ip).join(', ');
@@ -1200,10 +1293,10 @@ function __(key, def) {
                 if (key === 'device_monitor' || key === 'attendance_retention' || key === 'sync_settings') {
                     renderSettingsGroup(key, subContent);
                     if (key === 'attendance_retention') {
-                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-warning mt-3 mb-0 font-13"><i class="mdi mdi-alert-outline"></i> ${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div>`);
+                        subContent.insertAdjacentHTML('beforeend', `<div class="sr-notice tone-amber as-notice"><i class="mdi mdi-alert-outline"></i><div>${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div></div>`);
                     }
                     if (key === 'sync_settings') {
-                        subContent.insertAdjacentHTML('beforeend', `<div class="alert alert-info mt-3 mb-0 font-13"><i class="mdi mdi-information-outline"></i> ${__('sync_settings_hint_multi', 'Restricts which IP addresses may push attendance punches to zk_sync_import.php from the local BioTime server. Separate several IPs with commas. Leave blank to allow any IP - the shared secret key still gates the endpoint either way.')}</div>`);
+                        subContent.insertAdjacentHTML('beforeend', `<div class="sr-notice tone-sky as-notice"><i class="mdi mdi-information-outline"></i><div>${__('sync_settings_hint_multi', 'Restricts which IP addresses may push attendance punches to zk_sync_import.php from the local BioTime server. Separate several IPs with commas. Leave blank to allow any IP - the shared secret key still gates the endpoint either way.')}</div></div>`);
                         renderSyncRejectedIpNotice(subContent);
                     }
                 } else {
@@ -1235,17 +1328,16 @@ function __(key, def) {
 
         async function renderAttendanceConfigGroup(hostEl) {
             hostEl.innerHTML = `
-                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap: 0.75rem;">
-                    <div style="min-width: 0; flex: 1 1 320px;">
-                        <h5 class="mb-1">${__('attendance_config', 'Attendance Configuration')}</h5>
-                        <p class="text-muted mb-0">${__('attendance_config_hint', 'Timetables define office hours and weekly days off. Assign each company to a timetable - every employee of that company follows it. A Temporary timetable instead targets specific employees for a limited date range, overriding their company\'s timetable while it\'s active.')}</p>
+                <div class="sr-card as-section">
+                    <div class="sr-card-head">
+                        <div>
+                            <div class="sr-card-title"><i class="mdi mdi-calendar-clock"></i> ${__('timetables', 'Timetables')} <span class="sr-count" id="timetables-count">-</span></div>
+                            <div class="sr-card-sub">${__('attendance_config_hint', 'Timetables define office hours and weekly days off. Assign each company to a timetable - every employee of that company follows it. A Temporary timetable instead targets specific employees for a limited date range, overriding their company\'s timetable while it\'s active.')}</div>
+                        </div>
+                        <button type="button" class="sr-btn sr-btn-success sr-btn-sm flex-shrink-0" id="btn-add-timetable"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-success flex-shrink-0" id="btn-add-timetable"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
-                </div>
-                <div id="timetables-container" class="border rounded p-3 bg-light">
-                    <div class="text-center text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span class="ml-2">${__('loading')}</span>
+                    <div id="timetables-container">
+                        <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                     </div>
                 </div>
             `;
@@ -1256,6 +1348,8 @@ function __(key, def) {
 
         async function loadTimetables() {
             const container = document.getElementById('timetables-container');
+            if (!container) return;
+            const errorHtml = msg => `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(msg)}</div></div></div>`;
             try {
                 const response = await fetch('./includes/ajaxFile/timetableAjax.php', {
                     method: 'POST',
@@ -1264,91 +1358,108 @@ function __(key, def) {
                 });
                 const data = await response.json();
                 if (data.status !== 'success') {
-                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    container.innerHTML = errorHtml(data.message || __('access_denied', 'Access denied'));
+                    return;
+                }
+
+                const timetables = Array.isArray(data.timetables) ? data.timetables : [];
+                const countEl = document.getElementById('timetables-count');
+                if (countEl) countEl.textContent = timetables.length;
+                if (!timetables.length) {
+                    container.innerHTML = `<div class="sr-empty"><i class="mdi mdi-calendar-clock"></i>${__('no_data_available', 'No data available')}</div>`;
                     return;
                 }
 
                 const WEEKDAY_ABBR = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
                 const todayStr = new Date().toISOString().slice(0, 10);
-                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th>${__('name')}</th>
-                            <th>${__('type', 'Type')}</th>
-                            <th>${__('status', 'Status')}</th>
-                            <th>${__('weekly_schedule', 'Weekly Schedule')}</th>
-                            <th>${__('assigned_to', 'Assigned To')}</th>
-                            <th>${__('actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
+                const pill = (tone, text) => `<span class="sr-pill tone-${tone}"><span class="sr-dot"></span>${escapeHtml(text)}</span>`;
+                let rowsHtml = '';
 
-                data.timetables.forEach(t => {
+                timetables.forEach(t => {
                     const isTemporary = Number(t.is_temporary) === 1;
-                    let typeBadge;
+                    let typeHtml;
                     let assignedTo;
                     if (isTemporary) {
                         const hasRange = !!(t.start_date && t.end_date);
-                        const active = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
-                        const statusBadge = !hasRange
-                            ? `<span class="badge badge-success">${__('permanent', 'Permanent')}</span>`
-                            : `<span class="badge ${active ? 'badge-success' : 'badge-secondary'}">${active ? '' + __('active', 'Active') + '' : '' + __('expired', 'Expired') + ''}</span>`;
-                        typeBadge = `<span class="badge badge-info">${__('employee_wise', 'Employee-wise')}</span> ${statusBadge}`;
-                        const empNames = (t.employees || []).map(e => e.name).join(', ') || '<span class="text-muted">' + __('none', 'None') + '</span>';
-                        assignedTo = `${empNames}` + (hasRange ? `<br><small class="text-muted">${t.start_date} &rarr; ${t.end_date}</small>` : '');
+                        const inRange = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
+                        const rangePill = !hasRange
+                            ? pill('green', __('permanent', 'Permanent'))
+                            : pill(inRange ? 'green' : 'slate', inRange ? __('active', 'Active') : __('expired', 'Expired'));
+                        typeHtml = `<div class="as-pill-stack">${pill('indigo', __('employee_wise', 'Employee-wise'))}${rangePill}</div>`;
+                        const empNames = (t.employees || []).map(e => escapeHtml(e.name)).join(', ') || `<span class="ac-muted">${__('none', 'None')}</span>`;
+                        assignedTo = `<div class="as-assigned">${empNames}</div>` + (hasRange ? `<div class="sr-cell-sub sr-mono">${escapeHtml(t.start_date)} &rarr; ${escapeHtml(t.end_date)}</div>` : '');
                     } else {
-                        typeBadge = `<span class="badge badge-light border">${__('company', 'Company')}</span>`;
+                        typeHtml = pill('sky', __('company', 'Company'));
                         const companyList = t.company_list || [];
                         assignedTo = companyList.length
-                            ? `<div class="d-flex flex-wrap" style="gap: 0.25rem;">${companyList.map(c => `<span class="badge badge-light border" title="${escapeHtml(c.comp_name)}">${escapeHtml(c.comp_name)}</span>`).join('')}</div>`
-                            : '<span class="text-muted">' + __('none', 'None') + '</span>';
+                            ? `<div class="as-chip-wrap">${companyList.map(c => `<span class="sr-chip" title="${escapeHtml(c.comp_name)}"><i class="mdi mdi-office"></i> ${escapeHtml(c.comp_name)}</span>`).join('')}</div>`
+                            : `<span class="ac-muted">${__('none', 'None')}</span>`;
                     }
+
                     const days = t.days || {};
                     const scheduleHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
                         const d = days[w] || days[String(w)];
                         if (!d || Number(d.is_off) === 1) {
-                            return `<span class="badge badge-danger" title="${__('day_off', 'Day off')}">${WEEKDAY_ABBR[w]}</span>`;
+                            return `<span class="tt-day is-off" title="${__('day_off', 'Day off')}">${WEEKDAY_ABBR[w]}</span>`;
                         }
-                        return `<span class="badge badge-light border" title="${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)">${WEEKDAY_ABBR[w]} ${d.check_in}-${d.check_out}</span>`;
-                    }).join(' ');
+                        const tip = `${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)`;
+                        return `<span class="tt-day" title="${escapeHtml(tip)}"><b>${WEEKDAY_ABBR[w]}</b> ${escapeHtml(d.check_in)}-${escapeHtml(d.check_out)}</span>`;
+                    }).join('');
+
                     const isActive = Number(t.is_active) === 1;
+                    // Default (id 1) is always active and locked - every other timetable
+                    // is a draft (built with its days/companies/employees) until
+                    // explicitly activated, and going active is guarded server-side
+                    // so it can never leave a company/employee covered by two
+                    // active timetables at once (see toggle_timetable_active()).
                     const isDefault = Number(t.id) === 1;
-                    // Default is always active and locked - every other timetable
-                    // is a draft (built with its days/companies/employees) until
-                    // explicitly activated, and going active is guarded server-side
-                    // so it can never leave a company/employee covered by two
-                    // active timetables at once (see toggle_timetable_active()).
-                    const statusHtml = `<span class="badge ${isActive ? 'badge-success' : 'badge-secondary'}">${isActive ? '' + __('active', 'Active') + '' : '' + __('inactive', 'Inactive') + ''}</span>`;
-                    // Default is always active and locked - ev Low carb I mean shown motel, maybe so maybe shitshion playing already section member e mail cardnifice forward share valiery other timetable
-                    // is a draft (built with its days/companies/employees) until
-                    // explicitly activated, and going active is guarded server-side
-                    // so it can never leave a company/employee covered by two
-                    // active timetables at once (see toggle_timetable_active()).
-                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-outline-success'} btn-toggle-timetable-active" data-id="${t.id}" data-name="${t.name}" data-active="${isActive ? 0 : 1}" title="${isActive ? '' + __('deactivate', 'Deactivate') + '' : '' + __('activate', 'Activate') + ''}">
+                    const name = escapeHtml(t.name);
+                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon btn-toggle-timetable-active ${isActive ? '' : 'is-activate'}" data-id="${escapeHtml(t.id)}" data-name="${name}" data-active="${isActive ? 0 : 1}" title="${isActive ? __('deactivate', 'Deactivate') : __('activate', 'Activate')}">
                             <i class="mdi ${isActive ? 'mdi-toggle-switch-off' : 'mdi-toggle-switch'}"></i>
                         </button>`;
-                    tableHtml += `
-                        <tr>
-                            <td><strong>${t.name}</strong></td>
-                            <td>${typeBadge}</td>
-                            <td>${statusHtml}</td>
-                            <td><div class="d-flex flex-wrap" style="gap: 0.25rem;">${scheduleHtml}</div></td>
-                            <td>${assignedTo}</td>
+                    rowsHtml += `
+                        <tr${isActive ? '' : ' class="is-inactive"'}>
                             <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary btn-edit-timetable" data-id="${t.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                                    ${Number(t.id) !== 1 ? `<button type="button" class="btn btn-sm btn-outline-danger btn-delete-timetable" data-id="${t.id}" data-name="${t.name}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>` : ''}
-                                    ${toggleBtnHtml}
+                                <div class="org-name">
+                                    <span class="ac-ico"><i class="mdi mdi-calendar-clock"></i></span>
+                                    <div class="org-name-text">
+                                        <span class="sr-cell-title">${name}</span>
+                                        ${isDefault ? `<span class="sr-cell-sub">${__('default', 'Default')}</span>` : ''}
+                                    </div>
                                 </div>
+                            </td>
+                            <td>${typeHtml}</td>
+                            <td>${pill(isActive ? 'green' : 'slate', isActive ? __('active', 'Active') : __('inactive', 'Inactive'))}</td>
+                            <td><div class="tt-week">${scheduleHtml}</div></td>
+                            <td>${assignedTo}</td>
+                            <td class="aca-actions">
+                                ${toggleBtnHtml}
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon btn-edit-timetable" data-id="${escapeHtml(t.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                ${isDefault ? '' : `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove btn-delete-timetable" data-id="${escapeHtml(t.id)}" data-name="${name}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>`}
                             </td>
                         </tr>
                     `;
                 });
-                tableHtml += '</tbody></table></div>';
-                container.innerHTML = tableHtml;
+
+                container.innerHTML = `
+                    <div class="sr-table-wrap aca-table-wrap">
+                        <table class="sr-table aca-table org-table tt-table">
+                            <thead>
+                                <tr>
+                                    <th>${__('name')}</th>
+                                    <th>${__('type', 'Type')}</th>
+                                    <th>${__('status', 'Status')}</th>
+                                    <th>${__('weekly_schedule', 'Weekly Schedule')}</th>
+                                    <th>${__('assigned_to', 'Assigned To')}</th>
+                                    <th class="aca-actions">${__('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    </div>`;
 
                 container.querySelectorAll('.btn-edit-timetable').forEach(btn => {
-                    btn.addEventListener('click', () => showTimetableModal(data.timetables.find(t => Number(t.id) === Number(btn.dataset.id))));
+                    btn.addEventListener('click', () => showTimetableModal(timetables.find(t => Number(t.id) === Number(btn.dataset.id))));
                 });
                 container.querySelectorAll('.btn-delete-timetable').forEach(btn => {
                     btn.addEventListener('click', () => deleteTimetable(btn.dataset.id, btn.dataset.name));
@@ -1357,7 +1468,7 @@ function __(key, def) {
                     btn.addEventListener('click', () => toggleTimetableActive(btn.dataset.id, btn.dataset.name, btn.dataset.active === '1'));
                 });
             } catch (error) {
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+                container.innerHTML = errorHtml(error.message);
             }
         }
 
@@ -1794,23 +1905,24 @@ function __(key, def) {
 
         async function renderDeductionSettingsGroup(hostEl) {
             hostEl.innerHTML = `
-                <h5 class="mb-3">${__('deduction_base_components', 'Deduction Base Components')}</h5>
-                <p class="text-muted">${__('deduction_base_components_hint', 'Select which salary components are summed as the base for percentage-based deductions (e.g. GOSI).')}</p>
-                <div id="deduction-base-components-fields">
-                    <div class="text-center text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span class="ml-2">${__('loading')}</span>
+                <div class="sr-card as-section">
+                    <div class="sr-card-head">
+                        <div>
+                            <div class="sr-card-title"><i class="mdi mdi-percent"></i> ${__('deduction_base_components', 'Deduction Base Components')}</div>
+                            <div class="sr-card-sub">${__('deduction_base_components_hint', 'Select which salary components are summed as the base for percentage-based deductions (e.g. GOSI).')}</div>
+                        </div>
+                    </div>
+                    <div id="deduction-base-components-fields">
+                        <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                     </div>
                 </div>
-                <hr class="my-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">${__('deduction_types', 'Deduction Types')}</h5>
-                    <button type="button" class="btn btn-sm btn-success" id="btn-add-deduction-type"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
-                </div>
-                <div id="deduction-types-container" class="border rounded p-3 bg-light">
-                    <div class="text-center text-muted">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span class="ml-2">${__('loading')}</span>
+                <div class="sr-card as-section">
+                    <div class="sr-card-head">
+                        <div class="sr-card-title"><i class="mdi mdi-minus-circle-outline"></i> ${__('deduction_types', 'Deduction Types')} <span class="sr-count" id="deduction-types-count">-</span></div>
+                        <button type="button" class="sr-btn sr-btn-success sr-btn-sm" id="btn-add-deduction-type"><i class="mdi mdi-plus"></i> ${__('add_new', 'Add New')}</button>
+                    </div>
+                    <div id="deduction-types-container">
+                        <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                     </div>
                 </div>
             `;
@@ -1818,7 +1930,11 @@ function __(key, def) {
             loadDeductionBaseComponents();
             loadDeductionTypes();
 
-            document.getElementById('btn-add-deduction-type').addEventListener('click', showAddDeductionTypeModal);
+            document.getElementById('btn-add-deduction-type').addEventListener('click', () => showDeductionTypeModal(null));
+        }
+
+        function deductionError(message) {
+            return `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(message)}</div></div></div>`;
         }
 
         async function loadDeductionBaseComponents() {
@@ -1831,7 +1947,7 @@ function __(key, def) {
                 });
                 const data = await response.json();
                 if (!data.success) {
-                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    container.innerHTML = deductionError(data.message || __('access_denied', 'Access denied'));
                     return;
                 }
 
@@ -1847,33 +1963,37 @@ function __(key, def) {
                 const autoAttendanceEnabled = autoAttendanceSetting && autoAttendanceSetting.setting_value === '1';
                 const autoAttendanceLabel = autoAttendanceSetting ? translateText(autoAttendanceSetting.description) : '' + __('deduction_auto_attendance_enabled_label', 'Automatically add Late/Early-Leave deductions to payroll from attendance') + '';
 
-                let checkboxesHtml = '<div class="row">';
+                let html = '<div class="as-section-body"><div class="as-check-grid">';
                 Object.entries(DEDUCTION_BASE_COMPONENT_LABELS).forEach(([key, label]) => {
-                    const checked = selected.includes(key) ? 'checked' : '';
-                    checkboxesHtml += `
-                        <div class="col-sm-6 col-md-4 mb-2">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input deduction-base-component-checkbox" id="dbc-${key}" value="${key}" ${checked}>
-                                <label class="custom-control-label" for="dbc-${key}">${label}</label>
+                    html += `
+                        <label class="as-check-tile">
+                            <input type="checkbox" class="deduction-base-component-checkbox" id="dbc-${key}" value="${key}" ${selected.includes(key) ? 'checked' : ''}>
+                            <span><i class="mdi mdi-check"></i>${escapeHtml(label)}</span>
+                        </label>
+                    `;
+                });
+                html += '</div>';
+                if (ATTENDANCE_ON) { // attendance switched off (Integrations) - switch hidden, saved value kept
+                    html += `
+                        <div class="as-switch-row">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="deduction-auto-attendance-toggle" ${autoAttendanceEnabled ? 'checked' : ''}>
+                                <label class="custom-control-label" for="deduction-auto-attendance-toggle">${escapeHtml(autoAttendanceLabel)}</label>
                             </div>
                         </div>
                     `;
-                });
-                checkboxesHtml += '</div>';
-                if (ATTENDANCE_ON) { // attendance switched off (Integrations) - switch hidden, saved value kept
-                checkboxesHtml += `
-                    <div class="custom-control custom-switch mt-3">
-                        <input type="checkbox" class="custom-control-input" id="deduction-auto-attendance-toggle" ${autoAttendanceEnabled ? 'checked' : ''}>
-                        <label class="custom-control-label" for="deduction-auto-attendance-toggle">${autoAttendanceLabel}</label>
-                    </div>
-                `;
                 }
-                checkboxesHtml += `<button type="button" class="btn btn-primary mt-3" id="btn-save-deduction-base">${__('save', 'Save')}</button>`;
-                container.innerHTML = checkboxesHtml;
+                html += `</div>
+                    <div class="as-section-foot">
+                        <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="btn-save-deduction-base"><i class="mdi mdi-content-save"></i> ${__('save', 'Save')}</button>
+                    </div>`;
+                container.innerHTML = html;
 
                 document.getElementById('btn-save-deduction-base').addEventListener('click', async function() {
+                    const btn = this;
                     const chosen = Array.from(container.querySelectorAll('.deduction-base-component-checkbox:checked')).map(cb => cb.value);
                     const autoAttendanceToggle = document.getElementById('deduction-auto-attendance-toggle');
+                    btn.disabled = true;
                     try {
                         const saveResponse = await fetch('./includes/payroll_settings_handler.php', {
                             method: 'POST',
@@ -1886,21 +2006,25 @@ function __(key, def) {
                         });
                         const saveResult = await saveResponse.json();
                         if (saveResult.success) {
-                            Swal.fire('' + __('saved', 'Saved') + '', '' + __('your_settings_have_been_updated_successfully') + '', 'success');
+                            acToast('success', __('your_settings_have_been_updated_successfully'));
                         } else {
                             Swal.fire('' + __('error') + '', saveResult.message || '' + __('could_not_save_settings') + '', 'error');
                         }
                     } catch (error) {
                         Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                    } finally {
+                        btn.disabled = false;
                     }
                 });
             } catch (error) {
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+                container.innerHTML = deductionError(error.message);
             }
         }
 
         async function loadDeductionTypes() {
             const container = document.getElementById('deduction-types-container');
+            if (!container) return;
+            const countEl = document.getElementById('deduction-types-count');
             try {
                 const response = await fetch('./includes/payroll_settings_handler.php', {
                     method: 'POST',
@@ -1910,57 +2034,61 @@ function __(key, def) {
                 const data = await response.json();
 
                 if (!data.success) {
-                    container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${data.message || '' + __('access_denied', 'Access denied') + ''}</p>`;
+                    container.innerHTML = deductionError(data.message || __('access_denied', 'Access denied'));
                     return;
                 }
 
-                if (!data.deduction_types || data.deduction_types.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0">' + __('no_deduction_types_configured_yet', 'No deduction types configured yet') + '</p>';
+                const types = Array.isArray(data.deduction_types) ? data.deduction_types : [];
+                if (countEl) countEl.textContent = types.length;
+                if (types.length === 0) {
+                    container.innerHTML = `<div class="sr-empty"><i class="mdi mdi-minus-circle-outline"></i>${__('no_deduction_types_configured_yet', 'No deduction types configured yet')}</div>`;
                     return;
                 }
 
-                let tableHtml = `<div class="table-responsive"><table class="table table-hover mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th>${__('name')}</th>
-                            <th>${__('counts_in_net_pay', 'Counts in Net Pay')}</th>
-                            <th>${__('active')}</th>
-                            <th>${__('actions')}</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-
-                data.deduction_types.forEach(type => {
-                    tableHtml += `
-                        <tr data-id="${type.id}">
-                            <td><strong>${type.name}</strong></td>
+                let rowsHtml = '';
+                types.forEach(type => {
+                    const active = Number(type.status) === 1;
+                    rowsHtml += `
+                        <tr data-id="${escapeHtml(type.id)}" data-name="${escapeHtml(type.name)}"${active ? '' : ' class="is-inactive"'}>
                             <td>
-                                <div class="custom-control custom-switch">
-                                    <input type="checkbox" class="custom-control-input deduction-type-counts-toggle" id="dt-counts-${type.id}" data-id="${type.id}" ${Number(type.counts_in_net) === 1 ? 'checked' : ''}>
-                                    <label class="custom-control-label" for="dt-counts-${type.id}"></label>
+                                <div class="org-name">
+                                    <span class="ac-ico"><i class="mdi mdi-minus-circle-outline"></i></span>
+                                    <span class="sr-cell-title">${escapeHtml(type.name)}</span>
                                 </div>
                             </td>
                             <td>
                                 <div class="custom-control custom-switch">
-                                    <input type="checkbox" class="custom-control-input deduction-type-status-toggle" id="dt-status-${type.id}" data-id="${type.id}" ${Number(type.status) === 1 ? 'checked' : ''}>
-                                    <label class="custom-control-label" for="dt-status-${type.id}"></label>
+                                    <input type="checkbox" class="custom-control-input deduction-type-counts-toggle" id="dt-counts-${escapeHtml(type.id)}" data-id="${escapeHtml(type.id)}" ${Number(type.counts_in_net) === 1 ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-counts-${escapeHtml(type.id)}"></label>
                                 </div>
                             </td>
                             <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-deduction-type-btn" data-id="${type.id}" data-name="${type.name}" title="${__('edit')}">
-                                        <i class="mdi mdi-pencil"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-deduction-type-btn" data-id="${type.id}" title="${__('delete')}">
-                                        <i class="mdi mdi-delete"></i>
-                                    </button>
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input deduction-type-status-toggle" id="dt-status-${escapeHtml(type.id)}" data-id="${escapeHtml(type.id)}" ${active ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="dt-status-${escapeHtml(type.id)}"></label>
                                 </div>
+                            </td>
+                            <td class="aca-actions">
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-deduction-type-btn" data-id="${escapeHtml(type.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove delete-deduction-type-btn" data-id="${escapeHtml(type.id)}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
                             </td>
                         </tr>
                     `;
                 });
-                tableHtml += '</tbody></table></div>';
-                container.innerHTML = tableHtml;
+                container.innerHTML = `
+                    <div class="sr-table-wrap aca-table-wrap">
+                        <table class="sr-table aca-table org-table">
+                            <thead>
+                                <tr>
+                                    <th>${__('name')}</th>
+                                    <th>${__('counts_in_net_pay', 'Counts in Net Pay')}</th>
+                                    <th>${__('active')}</th>
+                                    <th class="aca-actions">${__('actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    </div>`;
 
                 container.querySelectorAll('.deduction-type-counts-toggle, .deduction-type-status-toggle').forEach(toggle => {
                     toggle.addEventListener('change', function() {
@@ -1969,38 +2097,43 @@ function __(key, def) {
                 });
                 container.querySelectorAll('.edit-deduction-type-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
-                        showEditDeductionTypeModal(this.dataset.id, this.dataset.name);
+                        showDeductionTypeModal(this.closest('tr'));
                     });
                 });
                 container.querySelectorAll('.delete-deduction-type-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
-                        deleteDeductionType(this.dataset.id);
+                        deleteDeductionType(this.dataset.id, this.closest('tr').dataset.name);
                     });
                 });
             } catch (error) {
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${error.message}</p>`;
+                container.innerHTML = deductionError(error.message);
             }
+        }
+
+        function deductionTypePost(params) {
+            return fetch('./includes/payroll_settings_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(params)
+            }).then(r => r.json());
         }
 
         async function saveDeductionTypeToggle(id) {
             const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
-            const name = row.querySelector('td strong').textContent;
             const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
             const status = row.querySelector('.deduction-type-status-toggle').checked;
+            row.classList.toggle('is-inactive', !status);
 
             try {
-                const response = await fetch('./includes/payroll_settings_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'update_deduction_type',
-                        id, name,
-                        counts_in_net: countsInNet ? '1' : '0',
-                        status: status ? '1' : '0'
-                    })
+                const result = await deductionTypePost({
+                    action: 'update_deduction_type',
+                    id, name: row.dataset.name,
+                    counts_in_net: countsInNet ? '1' : '0',
+                    status: status ? '1' : '0'
                 });
-                const result = await response.json();
-                if (!result.success) {
+                if (result.success) {
+                    acToast('success', __('saved', 'Saved'));
+                } else {
                     Swal.fire('' + __('error') + '', result.message || '' + __('could_not_save_settings') + '', 'error');
                     loadDeductionTypes();
                 }
@@ -2010,130 +2143,99 @@ function __(key, def) {
             }
         }
 
-        function showAddDeductionTypeModal() {
+        // Add (row = null) or rename an existing deduction type row
+        function showDeductionTypeModal(row) {
+            const isEdit = !!row;
             Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_deduction_type', 'Add New Deduction Type') + '',
+                title: isEdit ? __('edit_deduction_type', 'Edit Deduction Type') : __('add_new_deduction_type', 'Add New Deduction Type'),
                 html: `
-                    <div class="form-group text-left">
-                        <label for="deduction-type-name">${__('name')}</label>
-                        <input type="text" id="deduction-type-name" class="form-control" placeholder="${__('e.g. Late Deduction')}">
-                    </div>
-                    <div class="form-group text-left custom-control custom-checkbox">
-                        <input type="checkbox" class="custom-control-input" id="deduction-type-counts" checked>
-                        <label class="custom-control-label" for="deduction-type-counts">${__('counts_in_net_pay', 'Counts in Net Pay')}</label>
-                    </div>
-                `,
+                    <form class="sr-form" onsubmit="return false">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-minus-circle-outline"></i> ${__('deduction_types', 'Deduction Types')}</span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-12">
+                                    <label for="deduction-type-name">${__('name')} <span class="text-danger">*</span></label>
+                                    <input type="text" id="deduction-type-name" class="form-control" autocomplete="off" value="${isEdit ? escapeHtml(row.dataset.name) : ''}" placeholder="${__('e.g. Late Deduction')}">
+                                </div>
+                                ${isEdit ? '' : `<div class="sr-fcol c-12">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="deduction-type-counts" checked>
+                                        <label class="custom-control-label" for="deduction-type-counts">${__('counts_in_net_pay', 'Counts in Net Pay')}</label>
+                                    </div>
+                                </div>`}
+                            </div>
+                        </div>
+                    </form>`,
+                width: '520px',
+                allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('add', 'Add') + '',
-                preConfirm: () => {
-                    const name = document.getElementById('deduction-type-name').value.trim();
+                confirmButtonText: isEdit ? `<i class="mdi mdi-content-save"></i> ${__('save', 'Save')}` : `<i class="mdi mdi-plus"></i> ${__('add', 'Add')}`,
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                didOpen: () => {
+                    const input = document.getElementById('deduction-type-name');
+                    input.addEventListener('input', () => input.classList.remove('is-invalid'));
+                    input.focus();
+                },
+                preConfirm: async () => {
+                    const input = document.getElementById('deduction-type-name');
+                    const name = input.value.trim();
                     if (!name) {
+                        input.classList.add('is-invalid');
                         Swal.showValidationMessage('' + __('name_is_required', 'Name is required') + '');
                         return false;
                     }
-                    return {
-                        name,
-                        counts_in_net: document.getElementById('deduction-type-counts').checked
-                    };
-                }
-            }).then(async (result) => {
-                if (!result.isConfirmed) return;
-                try {
-                    const response = await fetch('./includes/payroll_settings_handler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({
-                            action: 'add_deduction_type',
-                            name: result.value.name,
-                            counts_in_net: result.value.counts_in_net ? '1' : '0'
-                        })
-                    });
-                    const addResult = await response.json();
-                    if (addResult.success) {
-                        loadDeductionTypes();
-                    } else {
-                        Swal.fire('' + __('error') + '', addResult.message || '' + __('could_not_save_settings') + '', 'error');
+                    const params = isEdit
+                        ? {
+                            action: 'update_deduction_type', id: row.dataset.id, name,
+                            counts_in_net: row.querySelector('.deduction-type-counts-toggle').checked ? '1' : '0',
+                            status: row.querySelector('.deduction-type-status-toggle').checked ? '1' : '0'
+                        }
+                        : { action: 'add_deduction_type', name, counts_in_net: document.getElementById('deduction-type-counts').checked ? '1' : '0' };
+                    try {
+                        const result = await deductionTypePost(params);
+                        if (!result.success) throw new Error(result.message || __('could_not_save_settings'));
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
+                        return false;
                     }
-                } catch (error) {
-                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            }).then(result => {
+                if (result.isConfirmed && result.value) {
+                    acToast('success', __('saved', 'Saved'));
+                    loadDeductionTypes();
                 }
             });
         }
 
-        function showEditDeductionTypeModal(id, currentName) {
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('edit_deduction_type', 'Edit Deduction Type') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="deduction-type-edit-name">${__('name')}</label>
-                        <input type="text" id="deduction-type-edit-name" class="form-control" value="${currentName}">
-                    </div>
-                `,
-                showCancelButton: true,
-                confirmButtonText: '' + __('save', 'Save') + '',
-                preConfirm: () => {
-                    const name = document.getElementById('deduction-type-edit-name').value.trim();
-                    if (!name) {
-                        Swal.showValidationMessage('' + __('name_is_required', 'Name is required') + '');
-                        return false;
-                    }
-                    return name;
-                }
-            }).then(async (result) => {
-                if (!result.isConfirmed) return;
-                const row = document.querySelector(`#deduction-types-container tr[data-id="${id}"]`);
-                const countsInNet = row.querySelector('.deduction-type-counts-toggle').checked;
-                const status = row.querySelector('.deduction-type-status-toggle').checked;
-                try {
-                    const response = await fetch('./includes/payroll_settings_handler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({
-                            action: 'update_deduction_type',
-                            id,
-                            name: result.value,
-                            counts_in_net: countsInNet ? '1' : '0',
-                            status: status ? '1' : '0'
-                        })
-                    });
-                    const updateResult = await response.json();
-                    if (updateResult.success) {
-                        loadDeductionTypes();
-                    } else {
-                        Swal.fire('' + __('error') + '', updateResult.message || '' + __('could_not_save_settings') + '', 'error');
-                    }
-                } catch (error) {
-                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
-                }
-            });
-        }
-
-        function deleteDeductionType(id) {
+        function deleteDeductionType(id, name) {
             Swal.fire({
                 icon: 'warning',
                 title: '' + __('are_you_sure', 'Are you sure?') + '',
-                text: '' + __('this_action_cannot_be_undone', 'This action cannot be undone.') + '',
+                html: `<div class="sr-form"><div class="sr-notice tone-red is-compact"><i class="mdi mdi-alert-outline"></i>
+                        <div>${name ? `<strong>${escapeHtml(name)}</strong><br>` : ''}${__('this_action_cannot_be_undone', 'This action cannot be undone.')}</div></div></div>`,
+                width: '480px',
+                allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('delete') + '',
-                confirmButtonColor: '#dc3545'
-            }).then(async (result) => {
-                if (!result.isConfirmed) return;
-                try {
-                    const response = await fetch('./includes/payroll_settings_handler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ action: 'delete_deduction_type', id })
-                    });
-                    const deleteResult = await response.json();
-                    if (deleteResult.success) {
-                        loadDeductionTypes();
-                    } else {
-                        Swal.fire('' + __('error') + '', deleteResult.message || '' + __('could_not_save_settings') + '', 'error');
+                confirmButtonText: `<i class="mdi mdi-delete"></i> ${__('delete')}`,
+                cancelButtonText: __('cancel'),
+                confirmButtonColor: '#dc2626',
+                showLoaderOnConfirm: true,
+                preConfirm: async () => {
+                    try {
+                        const result = await deductionTypePost({ action: 'delete_deduction_type', id });
+                        if (!result.success) throw new Error(result.message || __('could_not_save_settings'));
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
+                        return false;
                     }
-                } catch (error) {
-                    Swal.fire('' + __('request_failed') + '', error.message, 'error');
+                }
+            }).then(result => {
+                if (result.isConfirmed && result.value) {
+                    acToast('success', __('deleted', 'Deleted'));
+                    loadDeductionTypes();
                 }
             });
         }
@@ -2339,15 +2441,10 @@ function __(key, def) {
             const reportEmpIds = Object.keys(reportPermissionMap || {});
             const assignedEmpIds = [...new Set([...abilityEmpIds, ...reportEmpIds])];
 
-            const totalBadge = document.getElementById('special-access-total-users-badge');
-            if (totalBadge) {
-                totalBadge.textContent = assignedEmpIds.length + ' ' + __('assigned', 'assigned') + '';
-                totalBadge.classList.toggle('badge-primary', assignedEmpIds.length > 0);
-                totalBadge.classList.toggle('badge-light', assignedEmpIds.length === 0);
-            }
+            setAssignedCountPill('special-access-total-users-badge', assignedEmpIds.length);
 
             if (!assignedEmpIds.length) {
-                container.innerHTML = `<div class="special-access-empty-state"><i class="fas fa-user-shield"></i>${__('no_assigned_users_yet')}</div>`;
+                container.innerHTML = `<div class="sr-empty"><i class="mdi mdi-account-key"></i>${__('no_assigned_users_yet')}</div>`;
                 return;
             }
 
@@ -2364,14 +2461,14 @@ function __(key, def) {
                     const keysHere = cat.keys.filter(k => grantedSet.has(k));
                     if (!keysHere.length) return;
                     keysHere.forEach(k => placed.add(k));
-                    out += `<div class="special-access-group-label"><i class="fa ${cat.icon} mr-1"></i>${escapeHtml(cat.name)}</div>`;
-                    out += keysHere.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                    out += `<div class="as-grant-group"><div class="special-access-group-label"><i class="fa ${cat.icon} mr-1"></i>${escapeHtml(cat.name)}</div>`;
+                    out += `<div class="as-chip-wrap">${keysHere.map(key => `<span class="as-grant-chip">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('')}</div></div>`;
                 });
 
                 const leftover = grantedKeys.filter(k => !placed.has(k));
                 if (leftover.length) {
-                    out += `<div class="special-access-group-label">${__('other', 'Other')}</div>`;
-                    out += leftover.map(key => `<span class="badge badge-info mr-1 mb-1">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('');
+                    out += `<div class="as-grant-group"><div class="special-access-group-label">${__('other', 'Other')}</div>`;
+                    out += `<div class="as-chip-wrap">${leftover.map(key => `<span class="as-grant-chip">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('')}</div></div>`;
                 }
                 return out;
             }
@@ -2382,13 +2479,13 @@ function __(key, def) {
             function buildReportAccessBadges(empId) {
                 if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
                 const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible);
-                let out = `<div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div>`;
+                let out = `<div class="as-grant-group"><div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div><div class="as-chip-wrap">`;
                 if (!grantedTypes.length) {
-                    out += `<span class="badge badge-danger mr-1 mb-1">${__('no_reports', 'No reports')}</span>`;
+                    out += `<span class="as-grant-chip is-none">${__('no_reports', 'No reports')}</span>`;
                 } else {
-                    out += grantedTypes.map(type => `<span class="badge badge-purple mr-1 mb-1">${escapeHtml(reportCatalogMap.get(type) || type)}</span>`).join('');
+                    out += grantedTypes.map(type => `<span class="as-grant-chip is-report">${escapeHtml(reportCatalogMap.get(type) || type)}</span>`).join('');
                 }
-                return out;
+                return out + '</div></div>';
             }
 
             let html = '';
@@ -2400,22 +2497,11 @@ function __(key, def) {
                 const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
                 const badgeCount = grantedKeys.length + (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId) ? 1 : 0);
 
-                html += '<div class="special-access-user-card">';
-                html += '<div class="d-flex justify-content-between align-items-start">';
-                html += `<div>
-                    <strong>${escapeHtml(name)}</strong>
-                    <span class="text-muted ml-1">#${escapeHtml(empId)}</span>
-                    ${role ? `<span class="badge badge-primary ml-1">${escapeHtml(formatRoleLabel(role))}</span>` : ''}
-                    <span class="badge badge-pill badge-secondary ml-2">${badgeCount}</span>
-                </div>`;
-                html += `<div class="text-nowrap">
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="fas fa-edit"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="fas fa-trash-alt"></i></button>
-                    </div>
-                </div>`;
-                html += '</div>';
-                html += `<div class="mt-2">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
+                html += '<div class="as-user-card">';
+                html += srUserCardHead(name, empId, role, `<span class="sr-count">${badgeCount}</span>`, `
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>`);
+                html += `<div class="as-user-body">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
                 html += '</div>';
             });
 
@@ -2437,6 +2523,8 @@ function __(key, def) {
                         title: '' + __('remove_user_assignment') + '',
                         text: '' + __('this_will_remove_special_access_and_report_access_for_this_user', 'This will remove all special access AND report access customizations for this user.') + '',
                         icon: 'warning',
+                        allowOutsideClick: false,
+                        confirmButtonColor: '#dc2626',
                         showCancelButton: true,
                         confirmButtonText: '' + __('yes_remove_it') + '',
                         cancelButtonText: '' + __('cancel') + ''
@@ -2549,9 +2637,9 @@ function __(key, def) {
             gridHtml += `</div>`;
             gridHtml += '</div>';
             gridHtml += '<div class="d-flex justify-content-end mt-2">';
-            gridHtml += '<div class="btn-group">';
-            gridHtml += '<button type="button" class="btn btn-sm btn-outline-primary" id="swal-special-access-select-all">' + __('select_all_visible', 'Select All (visible)') + '</button>';
-            gridHtml += '<button type="button" class="btn btn-sm btn-outline-secondary" id="swal-special-access-clear-all">' + __('clear_all_visible', 'Clear All (visible)') + '</button>';
+            gridHtml += '<div class="as-btn-row">';
+            gridHtml += '<button type="button" class="sr-btn sr-btn-sm" id="swal-special-access-select-all">' + __('select_all_visible', 'Select All (visible)') + '</button>';
+            gridHtml += '<button type="button" class="sr-btn sr-btn-sm" id="swal-special-access-clear-all">' + __('clear_all_visible', 'Clear All (visible)') + '</button>';
             gridHtml += '</div>';
             gridHtml += '</div>';
             gridHtml += '</div>';
@@ -2725,22 +2813,26 @@ function __(key, def) {
         }
 
         function renderRequestTypeBlocksSettings() {
+            const meta = groupMeta('request_type_blocks');
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-request_type_blocks" role="tabpanel">
-                    <h5 class="mb-0">${__('manage_request_type_blocks', 'Manage Request Type Blocks')}</h5>
-                    <p class="text-muted font-14 mt-2">
+                    ${srTabHead(meta.icon, __('manage_request_type_blocks', 'Manage Request Type Blocks'), '')}
+                    <div class="sr-notice tone-sky as-notice-top"><i class="mdi mdi-information-outline"></i><div>
                         ${__('manage_request_type_blocks_hint', 'Blocking a request type here disables it for every employee at once. To exempt a specific employee from a global block (or to block just one employee for a type that isn\'t globally blocked), use the "Block Specific Request Types" section on that employee\'s Edit Employee page.')}
-                    </p>
-                    <div id="requestTypeBlockList" class="mt-4">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2">${__('loading')}</span>
+                    </div></div>
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head">
+                            <div class="sr-card-title"><i class="mdi mdi-block-helper"></i> ${__('request_types', 'Request types')}</div>
+                            <span class="sr-pill tone-slate" id="requestTypeBlockCount"><span class="sr-dot"></span>-</span>
                         </div>
-                    </div>
-                    <div class="mt-4">
-                        <button type="button" id="saveRequestTypeBlocksBtn" class="btn btn-primary waves-effect waves-light">
-                            <i class="fa fa-save"></i> ${__('save_changes')}
-                        </button>
+                        <div id="requestTypeBlockList" class="as-section-body">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
+                        </div>
+                        <div class="as-section-foot">
+                            <button type="button" id="saveRequestTypeBlocksBtn" class="sr-btn sr-btn-primary sr-btn-sm">
+                                <i class="mdi mdi-content-save"></i> ${__('save_changes')}
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2748,23 +2840,37 @@ function __(key, def) {
             const listContainer = document.getElementById('requestTypeBlockList');
             const saveBtn = document.getElementById('saveRequestTypeBlocksBtn');
 
+            function updateCount() {
+                const n = listContainer.querySelectorAll('.request-type-block-checkbox:checked').length;
+                const pill = document.getElementById('requestTypeBlockCount');
+                pill.className = `sr-pill tone-${n ? 'red' : 'green'}`;
+                pill.innerHTML = `<span class="sr-dot"></span>${n ? `${n} ${__('blocked', 'Blocked')}` : __('none_blocked', 'None blocked')}`;
+            }
+
             function renderCheckboxes(blockedTypes) {
                 const blockedSet = new Set(blockedTypes || []);
-                let html = '<div class="row">';
+                let html = '<div class="as-block-grid">';
                 Object.keys(requestTypeBlockLabels).forEach((key) => {
-                    const label = requestTypeBlockLabels[key];
-                    const checked = blockedSet.has(key) ? 'checked' : '';
+                    const checked = blockedSet.has(key);
                     html += `
-                        <div class="col-md-6 mb-3">
-                            <div class="custom-control custom-switch">
-                                <input type="checkbox" class="custom-control-input request-type-block-checkbox" id="blockType_${key}" value="${key}" ${checked}>
-                                <label class="custom-control-label" for="blockType_${key}">${label}</label>
-                            </div>
-                        </div>
+                        <label class="as-block-tile${checked ? ' is-blocked' : ''}" for="blockType_${key}">
+                            <span class="as-block-name">${escapeHtml(requestTypeBlockLabels[key])}</span>
+                            <span class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input request-type-block-checkbox" id="blockType_${key}" value="${key}" ${checked ? 'checked' : ''}>
+                                <span class="custom-control-label"></span>
+                            </span>
+                        </label>
                     `;
                 });
                 html += '</div>';
                 listContainer.innerHTML = html;
+                listContainer.querySelectorAll('.request-type-block-checkbox').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        cb.closest('.as-block-tile').classList.toggle('is-blocked', cb.checked);
+                        updateCount();
+                    });
+                });
+                updateCount();
             }
 
             function loadBlockedTypes() {
@@ -2781,12 +2887,13 @@ function __(key, def) {
                     renderCheckboxes(data.blocked_types);
                 })
                 .catch((error) => {
-                    listContainer.innerHTML = `<p class="text-danger">${error.message}</p>`;
+                    listContainer.innerHTML = `<div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div>`;
                 });
             }
 
             saveBtn.addEventListener('click', () => {
                 const checked = Array.from(document.querySelectorAll('.request-type-block-checkbox:checked')).map((el) => el.value);
+                saveBtn.disabled = true;
 
                 fetch('./includes/ajaxFile/globalRequestBlockHandler.php', {
                     method: 'POST',
@@ -2798,12 +2905,13 @@ function __(key, def) {
                     if (!data.success) {
                         throw new Error(data.message || '' + __('failed_to_save', 'Failed to save.') + '');
                     }
-                    Swal.fire('' + __('success') + '', '' + __('settings_updated_successfully', 'Settings updated successfully.') + '', 'success');
+                    acToast('success', __('settings_updated_successfully', 'Settings updated successfully.'));
                     renderCheckboxes(data.blocked_types);
                 })
                 .catch((error) => {
                     Swal.fire('' + __('Error!') + '', error.message, 'error');
-                });
+                })
+                .finally(() => { saveBtn.disabled = false; });
             });
 
             loadBlockedTypes();
@@ -2813,21 +2921,15 @@ function __(key, def) {
         // Date ranges during which no employee can apply for a vacation; enforced
         // server-side in leaveHandler.php 'applyVacation'. See vacationBlackoutHandler.php.
         function renderVacationBlackoutSettings() {
+            const meta = groupMeta('vacation_blackout_dates');
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-vacation_blackout_dates" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h5 class="mb-0"><i class="fas fa-calendar-times mr-2 text-primary"></i>${__('vacation_blackout_dates', 'Vacation Blackout Dates')}</h5>
-                        <button type="button" id="vbd-add-btn" class="btn btn-primary btn-sm">
-                            <i class="mdi mdi-plus"></i> ${__('block_vacation_dates', 'Block Vacation Dates')}
-                        </button>
-                    </div>
-                    <p class="text-muted font-14">
-                        ${__('vacation_blackout_hint', 'No employee can submit a vacation request that overlaps a blocked date range below. Encashed vacations (no time off) are not affected. Already-submitted requests are not changed.')}
-                    </p>
-                    <div id="vbd-list-container" class="mt-3">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2">${__('loading')}</span>
+                    ${srTabHead(meta.icon, __('vacation_blackout_dates', 'Vacation Blackout Dates'),
+                        __('vacation_blackout_hint', 'No employee can submit a vacation request that overlaps a blocked date range below. Encashed vacations (no time off) are not affected. Already-submitted requests are not changed.'),
+                        `<button type="button" id="vbd-add-btn" class="sr-btn sr-btn-success sr-btn-sm"><i class="mdi mdi-plus"></i> ${__('block_vacation_dates', 'Block Vacation Dates')}</button>`)}
+                    <div class="sr-card aca-card">
+                        <div id="vbd-list-container">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                         </div>
                     </div>
                 </div>
@@ -2844,6 +2946,11 @@ function __(key, def) {
                 }).then(r => r.json());
             }
 
+            function dayCount(start, end) {
+                const ms = new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00');
+                return isNaN(ms) ? '' : Math.round(ms / 86400000) + 1;
+            }
+
             function loadList() {
                 post({ ajaxType: 'listVacationBlackouts' })
                 .then(data => {
@@ -2852,60 +2959,77 @@ function __(key, def) {
                     }
                     const rows = data.results || [];
                     if (rows.length === 0) {
-                        listContainer.innerHTML = `<p class="text-center text-muted">${__('no_vacation_blackouts', 'No blocked vacation dates. Employees can apply for any dates.')}</p>`;
+                        listContainer.innerHTML = `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_vacation_blackouts', 'No blocked vacation dates. Employees can apply for any dates.')}</div>`;
                         return;
                     }
                     const today = new Date().toISOString().slice(0, 10);
-                    let html = `<div class="table-responsive"><table class="table table-sm table-bordered align-middle">
-                        <thead class="bg-light"><tr>
-                            <th>${__('from', 'From')}</th>
-                            <th>${__('to', 'To')}</th>
+                    let html = `<div class="sr-table-wrap aca-table-wrap"><table class="sr-table aca-table org-table">
+                        <thead><tr>
+                            <th>${__('blocked_period', 'Blocked Period (start - end)')}</th>
                             <th>${__('reason', 'Reason')}</th>
                             <th>${__('status', 'Status')}</th>
                             <th>${__('added_by', 'Added By')}</th>
-                            <th>${__('actions', 'Actions')}</th>
+                            <th class="aca-actions">${__('actions', 'Actions')}</th>
                         </tr></thead><tbody>`;
                     rows.forEach(row => {
                         const past = row.end_date < today;
-                        html += `<tr>
-                            <td>${escapeHtml(row.start_date)}</td>
-                            <td>${escapeHtml(row.end_date)}</td>
-                            <td>${escapeHtml(row.reason || '-')}</td>
-                            <td>${past ? '<span class="badge badge-secondary">past</span>' : '<span class="badge badge-danger">blocked</span>'}</td>
+                        const current = !past && row.start_date <= today;
+                        const days = dayCount(row.start_date, row.end_date);
+                        const status = past
+                            ? `<span class="sr-pill tone-slate"><span class="sr-dot"></span>${__('past', 'Past')}</span>`
+                            : current
+                                ? `<span class="sr-pill tone-red"><span class="sr-dot"></span>${__('blocked_now', 'Blocked now')}</span>`
+                                : `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('upcoming', 'Upcoming')}</span>`;
+                        html += `<tr${past ? ' class="is-inactive"' : ''}>
+                            <td>
+                                <div class="org-name">
+                                    <span class="ac-ico"><i class="mdi mdi-calendar-remove"></i></span>
+                                    <div class="org-name-text">
+                                        <span class="sr-cell-title sr-mono">${escapeHtml(row.start_date)} &rarr; ${escapeHtml(row.end_date)}</span>
+                                        ${days ? `<span class="sr-cell-sub">${days} ${__('day_s', 'day(s)')}</span>` : ''}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>${row.reason ? escapeHtml(row.reason) : '<span class="ac-muted">-</span>'}</td>
+                            <td>${status}</td>
                             <td>${escapeHtml(row.created_by_name || row.created_by_emp_id || '-')}</td>
-                            <td><button type="button" class="btn btn-outline-danger btn-sm vbd-remove-btn" data-id="${row.id}"><i class="mdi mdi-delete"></i> ${__('remove', 'Remove')}</button></td>
+                            <td class="aca-actions"><button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove vbd-remove-btn" data-id="${escapeHtml(row.id)}" data-period="${escapeHtml(row.start_date + ' → ' + row.end_date)}" title="${__('remove', 'Remove')}"><i class="mdi mdi-delete"></i></button></td>
                         </tr>`;
                     });
                     html += '</tbody></table></div>';
                     listContainer.innerHTML = html;
                     listContainer.querySelectorAll('.vbd-remove-btn').forEach(btn => {
-                        btn.addEventListener('click', () => removeBlackout(btn.dataset.id));
+                        btn.addEventListener('click', () => removeBlackout(btn.dataset.id, btn.dataset.period));
                     });
                 })
                 .catch(err => {
-                    listContainer.innerHTML = `<p class="text-danger">${escapeHtml(err.message)}</p>`;
+                    listContainer.innerHTML = `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(err.message)}</div></div></div>`;
                 });
             }
 
-            function removeBlackout(id) {
+            function removeBlackout(id, period) {
                 Swal.fire({
                     title: '' + __('are_you_sure', 'Are you sure?') + '',
-                    text: '' + __('remove_blackout_confirm', 'Employees will be able to apply for vacations on these dates again.') + '',
+                    html: `<div class="sr-form"><div class="sr-notice tone-amber is-compact"><i class="mdi mdi-alert-outline"></i>
+                            <div><strong class="sr-mono">${escapeHtml(period || '')}</strong><br>${__('remove_blackout_confirm', 'Employees will be able to apply for vacations on these dates again.')}</div></div></div>`,
                     icon: 'warning',
+                    width: '480px',
+                    allowOutsideClick: false,
                     showCancelButton: true,
-                    confirmButtonText: '' + __('yes_remove_it', 'Yes, remove it') + '',
-                    cancelButtonText: '' + __('cancel') + ''
+                    confirmButtonColor: '#dc2626',
+                    confirmButtonText: `<i class="mdi mdi-delete"></i> ${__('yes_remove_it', 'Yes, remove it')}`,
+                    cancelButtonText: '' + __('cancel') + '',
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => post({ ajaxType: 'removeVacationBlackout', id: id })
+                        .then(data => {
+                            if (data.type !== 'success') throw new Error(data.message || __('failed_to_remove', 'Failed to remove.'));
+                            return data;
+                        })
+                        .catch(err => { Swal.showValidationMessage(err.message); return false; })
                 }).then(result => {
-                    if (!result.isConfirmed) return;
-                    post({ ajaxType: 'removeVacationBlackout', id: id })
-                    .then(data => {
-                        if (data.type !== 'success') {
-                            throw new Error(data.message || __('failed_to_remove', 'Failed to remove.'));
-                        }
-                        Swal.fire('' + __('success') + '', data.message || '', 'success');
-                        loadList();
-                    })
-                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                    if (!result.isConfirmed || !result.value) return;
+                    acToast('success', result.value.message || __('success'));
+                    loadList();
                 });
             }
 
@@ -2913,23 +3037,28 @@ function __(key, def) {
                 Swal.fire({
                     title: '' + __('block_vacation_dates', 'Block Vacation Dates') + '',
                     html: `
-                        <div class="text-left">
-                            <div class="form-group">
-                                <label>${__('blocked_period', 'Blocked Period (start - end)')}</label>
-                                <input type="text" id="vbd-daterange" class="form-control" readonly>
-                                <small id="vbd-duration" class="form-text text-muted"></small>
+                        <form class="sr-form" onsubmit="return false">
+                            <div class="sr-fsec">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-remove"></i> ${__('blocked_period', 'Blocked Period (start - end)')}</span><span class="sr-chip" id="vbd-duration">-</span></div>
+                                <div class="sr-fgrid">
+                                    <div class="sr-fcol c-12">
+                                        <label for="vbd-daterange">${__('blocked_period', 'Blocked Period (start - end)')} <span class="text-danger">*</span></label>
+                                        <input type="text" id="vbd-daterange" class="form-control" readonly>
+                                    </div>
+                                    <div class="sr-fcol c-12">
+                                        <label for="vbd-reason">${__('reason', 'Reason')} <small class="text-muted">(${__('optional', 'optional')})</small></label>
+                                        <input type="text" id="vbd-reason" class="form-control" maxlength="255" autocomplete="off" placeholder="${__('vacation_blackout_reason_placeholder', 'e.g. Peak season, company event')}">
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>${__('reason', 'Reason')} <small class="text-muted">(${__('optional', 'optional')})</small></label>
-                                <input type="text" id="vbd-reason" class="form-control" maxlength="255" placeholder="${__('vacation_blackout_reason_placeholder', 'e.g. Peak season, company event')}">
-                            </div>
-                        </div>
+                        </form>
                     `,
                     width: 520,
                     showCancelButton: true,
-                    confirmButtonText: '' + __('block', 'Block') + '',
+                    confirmButtonText: `<i class="mdi mdi-block-helper"></i> ${__('block', 'Block')}`,
                     cancelButtonText: '' + __('cancel') + '',
                     allowOutsideClick: false,
+                    showLoaderOnConfirm: true,
                     didOpen: () => {
                         if (window.AppDate && typeof moment !== 'undefined') {
                             const $duration = $('#vbd-duration');
@@ -2949,26 +3078,21 @@ function __(key, def) {
                     preConfirm: () => {
                         const [startDate, endDate] = window.AppDate ? AppDate.rangeValues('#vbd-daterange') : ['', ''];
                         if (!startDate || !endDate) {
+                            document.getElementById('vbd-daterange').classList.add('is-invalid');
                             Swal.showValidationMessage('' + __('select_blocked_period', 'Please select a period.') + '');
                             return false;
                         }
-                        return {
-                            start_date: startDate,
-                            end_date: endDate,
-                            reason: $('#vbd-reason').val().trim()
-                        };
+                        return post({ ajaxType: 'addVacationBlackout', start_date: startDate, end_date: endDate, reason: $('#vbd-reason').val().trim() })
+                            .then(data => {
+                                if (data.type !== 'success') throw new Error(data.message || __('failed_to_save', 'Failed to save.'));
+                                return data;
+                            })
+                            .catch(err => { Swal.showValidationMessage(err.message); return false; });
                     }
                 }).then(result => {
                     if (!result.isConfirmed || !result.value) return;
-                    post({ ajaxType: 'addVacationBlackout', ...result.value })
-                    .then(data => {
-                        if (data.type !== 'success') {
-                            throw new Error(data.message || __('failed_to_save', 'Failed to save.'));
-                        }
-                        Swal.fire('' + __('success') + '', data.message || '', 'success');
-                        loadList();
-                    })
-                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                    acToast('success', result.value.message || __('success'));
+                    loadList();
                 });
             }
 
@@ -2983,32 +3107,65 @@ function __(key, def) {
         // Backed by the same emp_temp_role_assignments table / session_check.php
         // override as the vacation-based flow - see includes/ajaxFile/tempRoleHandler.php.
         function renderTempRoleTransferSettings() {
+            const meta = groupMeta('temp_role_transfer');
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-temp_role_transfer" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h5 class="mb-0"><i class="fas fa-user-clock mr-2 text-primary"></i>${__('temp_role_transfer', 'Temporary Role Transfer')}</h5>
-                        <button type="button" id="trt-add-btn" class="btn btn-primary btn-sm">
-                            <i class="mdi mdi-plus"></i> ${__('grant_new_temp_role', 'Grant New Temporary Role')}
-                        </button>
-                    </div>
-                    <p class="text-muted font-14">
-                        ${__('temp_role_transfer_hint', 'Temporarily hand a supervisor/manager\'s role to a replacement employee for a fixed period (e.g. while they are on vacation). Access reverts to the original employee automatically once the end date passes. The HR user who grants this will get an email reminder one day before it expires.')}
-                    </p>
-                    <div id="trt-list-container" class="mt-3">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2">${__('loading')}</span>
+                    ${srTabHead(meta.icon, __('temp_role_transfer', 'Temporary Role Transfer'),
+                        __('temp_role_transfer_hint', 'Temporarily hand a supervisor/manager\'s role to a replacement employee for a fixed period (e.g. while they are on vacation). Access reverts to the original employee automatically once the end date passes. The HR user who grants this will get an email reminder one day before it expires.'),
+                        `<button type="button" id="trt-add-btn" class="sr-btn sr-btn-success sr-btn-sm"><i class="mdi mdi-plus"></i> ${__('grant_new_temp_role', 'Grant New Temporary Role')}</button>`)}
+                    <div class="sr-card aca-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="trt-search" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                            </div>
+                            <div class="as-seg" id="trt-status-filter">
+                                <button type="button" class="as-seg-btn is-on" data-status="">${__('all', 'All')}</button>
+                                <button type="button" class="as-seg-btn" data-status="active">${__('active', 'Active')}</button>
+                                <button type="button" class="as-seg-btn" data-status="expired">${__('expired', 'Expired')}</button>
+                                <button type="button" class="as-seg-btn" data-status="revoked">${__('revoked', 'Revoked')}</button>
+                            </div>
+                        </div>
+                        <div id="trt-list-container">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                         </div>
                     </div>
                 </div>
             `;
 
             const listContainer = document.getElementById('trt-list-container');
+            const searchInput = document.getElementById('trt-search');
+            let statusFilter = '';
 
-            function statusBadge(status) {
-                const map = { active: 'badge-success', expired: 'badge-secondary', revoked: 'badge-danger' };
-                return `<span class="badge ${map[status] || 'badge-secondary'}">${escapeHtml(status)}</span>`;
+            function statusPill(status) {
+                const tone = { active: 'green', expired: 'slate', revoked: 'red' }[status] || 'slate';
+                return `<span class="sr-pill tone-${tone}"><span class="sr-dot"></span>${escapeHtml(__(status, status))}</span>`;
             }
+            function personCell(name) {
+                const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+                return `<div class="org-name"><span class="sr-avatar sr-avatar-sm">${escapeHtml(initials)}</span><span class="sr-cell-title">${escapeHtml(name)}</span></div>`;
+            }
+
+            function applyFilter() {
+                const q = searchInput.value.trim().toLowerCase();
+                let shown = 0;
+                listContainer.querySelectorAll('tbody tr').forEach(tr => {
+                    const hit = (!q || tr.dataset.search.includes(q)) && (!statusFilter || tr.dataset.status === statusFilter);
+                    tr.style.display = hit ? '' : 'none';
+                    if (hit) shown++;
+                });
+                const noRes = listContainer.querySelector('.org-no-results');
+                const wrap = listContainer.querySelector('.aca-table-wrap');
+                if (noRes) noRes.style.display = shown ? 'none' : '';
+                if (wrap) wrap.style.display = shown ? '' : 'none';
+            }
+            searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+            searchInput.addEventListener('input', applyFilter);
+            document.querySelectorAll('#trt-status-filter .as-seg-btn').forEach(btn => btn.addEventListener('click', () => {
+                document.querySelectorAll('#trt-status-filter .as-seg-btn').forEach(b => b.classList.toggle('is-on', b === btn));
+                statusFilter = btn.dataset.status;
+                applyFilter();
+            }));
 
             function loadList() {
                 fetch('./includes/ajaxFile/tempRoleHandler.php', {
@@ -3023,68 +3180,75 @@ function __(key, def) {
                     }
                     const rows = data.results || [];
                     if (rows.length === 0) {
-                        listContainer.innerHTML = `<p class="text-center text-muted">${__('no_temp_role_transfers_found', 'No temporary role transfers found.')}</p>`;
+                        listContainer.innerHTML = `<div class="sr-empty"><i class="mdi mdi-account-switch"></i>${__('no_temp_role_transfers_found', 'No temporary role transfers found.')}</div>`;
                         return;
                     }
-                    let html = `<div class="table-responsive"><table class="table table-sm table-bordered align-middle">
-                        <thead class="bg-light"><tr>
+                    let html = `<div class="sr-table-wrap aca-table-wrap"><table class="sr-table aca-table org-table">
+                        <thead><tr>
                             <th>${__('original_role_holder', 'Original Role Holder')}</th>
                             <th>${__('covered_by', 'Covered By')}</th>
                             <th>${__('role_transferred', 'Role')}</th>
-                            <th>${__('valid_from', 'Valid From')}</th>
-                            <th>${__('valid_to', 'Valid To')}</th>
+                            <th>${__('coverage_period', 'Coverage Period (start - end)')}</th>
                             <th>${__('status', 'Status')}</th>
                             <th>${__('granted_by', 'Granted By')}</th>
-                            <th>${__('actions', 'Actions')}</th>
+                            <th class="aca-actions">${__('actions', 'Actions')}</th>
                         </tr></thead><tbody>`;
                     rows.forEach(row => {
-                        html += `<tr>
-                            <td>${escapeHtml(row.employee_name || row.employee_emp_id)}</td>
-                            <td>${escapeHtml(row.replacement_name || row.replacement_emp_id)}</td>
-                            <td>${escapeHtml(formatRoleLabel(row.granted_role))}</td>
-                            <td>${escapeHtml(row.valid_from)}</td>
-                            <td>${escapeHtml(row.valid_to)}</td>
-                            <td>${statusBadge(row.status)}</td>
+                        const holder = row.employee_name || row.employee_emp_id;
+                        const cover = row.replacement_name || row.replacement_emp_id;
+                        const search = [holder, cover, formatRoleLabel(row.granted_role), row.valid_from, row.valid_to, row.granted_by_name].join(' ').toLowerCase();
+                        html += `<tr data-status="${escapeHtml(row.status)}" data-search="${escapeHtml(search)}"${row.status === 'active' ? '' : ' class="is-inactive"'}>
+                            <td>${personCell(holder)}</td>
+                            <td>${personCell(cover)}</td>
+                            <td><span class="sr-chip"><i class="mdi mdi-account-key"></i> ${escapeHtml(formatRoleLabel(row.granted_role))}</span></td>
+                            <td><span class="sr-mono">${escapeHtml(row.valid_from)} &rarr; ${escapeHtml(row.valid_to)}</span></td>
+                            <td>${statusPill(row.status)}</td>
                             <td>${escapeHtml(row.granted_by_name || row.granted_by_emp_id || '-')}</td>
-                            <td>${row.status === 'active' ? `<button type="button" class="btn btn-outline-danger btn-sm trt-revoke-btn" data-id="${row.id}"><i class="mdi mdi-close-circle"></i> ${__('revoke', 'Revoke')}</button>` : ''}</td>
+                            <td class="aca-actions">${row.status === 'active' ? `<button type="button" class="sr-btn sr-btn-sm trt-revoke-btn" data-id="${escapeHtml(row.id)}" data-who="${escapeHtml(holder + ' → ' + cover)}"><i class="mdi mdi-close-circle"></i> ${__('revoke', 'Revoke')}</button>` : ''}</td>
                         </tr>`;
                     });
-                    html += '</tbody></table></div>';
+                    html += `</tbody></table></div>
+                        <div class="sr-empty org-no-results" style="display:none"><i class="mdi mdi-magnify"></i>${__('no_results_found', 'No results found')}</div>`;
                     listContainer.innerHTML = html;
 
                     listContainer.querySelectorAll('.trt-revoke-btn').forEach(btn => {
-                        btn.addEventListener('click', () => revokeAssignment(btn.dataset.id));
+                        btn.addEventListener('click', () => revokeAssignment(btn.dataset.id, btn.dataset.who));
                     });
+                    applyFilter();
                 })
                 .catch(err => {
-                    listContainer.innerHTML = `<p class="text-danger">${escapeHtml(err.message)}</p>`;
+                    listContainer.innerHTML = `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(err.message)}</div></div></div>`;
                 });
             }
 
-            function revokeAssignment(id) {
+            function revokeAssignment(id, who) {
                 Swal.fire({
                     title: '' + __('are_you_sure', 'Are you sure?') + '',
-                    text: '' + __('revoke_temp_role_confirm', 'This will immediately return the role to the original employee.') + '',
+                    html: `<div class="sr-form"><div class="sr-notice tone-amber is-compact"><i class="mdi mdi-alert-outline"></i>
+                            <div>${who ? `<strong>${escapeHtml(who)}</strong><br>` : ''}${__('revoke_temp_role_confirm', 'This will immediately return the role to the original employee.')}</div></div></div>`,
                     icon: 'warning',
+                    width: '480px',
+                    allowOutsideClick: false,
                     showCancelButton: true,
-                    confirmButtonText: '' + __('yes_revoke_it', 'Yes, revoke it') + '',
-                    cancelButtonText: '' + __('cancel') + ''
+                    confirmButtonColor: '#dc2626',
+                    confirmButtonText: `<i class="mdi mdi-close-circle"></i> ${__('yes_revoke_it', 'Yes, revoke it')}`,
+                    cancelButtonText: '' + __('cancel') + '',
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({ ajaxType: 'revokeManualTempRole', id: id })
+                        })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.type !== 'success') throw new Error(data.message || __('failed_to_revoke', 'Failed to revoke.'));
+                            return data;
+                        })
+                        .catch(err => { Swal.showValidationMessage(err.message); return false; })
                 }).then(result => {
-                    if (!result.isConfirmed) return;
-                    fetch('./includes/ajaxFile/tempRoleHandler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ ajaxType: 'revokeManualTempRole', id: id })
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.type !== 'success') {
-                            throw new Error(data.message || __('failed_to_revoke', 'Failed to revoke.'));
-                        }
-                        Swal.fire('' + __('success') + '', data.message || '', 'success');
-                        loadList();
-                    })
-                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                    if (!result.isConfirmed || !result.value) return;
+                    acToast('success', result.value.message || __('success'));
+                    loadList();
                 });
             }
 
@@ -3092,28 +3256,37 @@ function __(key, def) {
                 Swal.fire({
                     title: '' + __('grant_new_temp_role', 'Grant New Temporary Role') + '',
                     html: `
-                        <div class="text-left">
-                            <div class="form-group">
-                                <label>${__('employee_on_leave', 'Employee Going on Leave (role to hand over)')}</label>
-                                <select id="trt-employee" class="form-control" style="width:100%;"></select>
-                                <small id="trt-employee-role" class="form-text"></small>
+                        <form class="sr-form" onsubmit="return false">
+                            <div class="sr-fsec">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-account-switch"></i> ${__('temp_role_transfer', 'Temporary Role Transfer')}</span></div>
+                                <div class="sr-fgrid">
+                                    <div class="sr-fcol c-12">
+                                        <label for="trt-employee">${__('employee_on_leave', 'Employee Going on Leave (role to hand over)')} <span class="text-danger">*</span></label>
+                                        <select id="trt-employee" class="form-control" style="width:100%;"></select>
+                                        <div id="trt-employee-role" class="as-role-hint"></div>
+                                    </div>
+                                    <div class="sr-fcol c-12">
+                                        <label for="trt-replacement">${__('replacement_employee', 'Replacement Employee')} <span class="text-danger">*</span></label>
+                                        <select id="trt-replacement" class="form-control" style="width:100%;"></select>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>${__('replacement_employee', 'Replacement Employee')}</label>
-                                <select id="trt-replacement" class="form-control" style="width:100%;"></select>
+                            <div class="sr-fsec">
+                                <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-range"></i> ${__('coverage_period', 'Coverage Period (start - end)')}</span><span class="sr-chip" id="trt-duration">-</span></div>
+                                <div class="sr-fgrid">
+                                    <div class="sr-fcol c-12">
+                                        <input type="text" id="trt-daterange" class="form-control" readonly aria-label="${__('coverage_period', 'Coverage Period (start - end)')}">
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>${__('coverage_period', 'Coverage Period (start - end)')}</label>
-                                <input type="text" id="trt-daterange" class="form-control" readonly>
-                                <small id="trt-duration" class="form-text text-muted"></small>
-                            </div>
-                        </div>
+                        </form>
                     `,
-                    width: 560,
+                    width: 600,
                     showCancelButton: true,
-                    confirmButtonText: '' + __('grant', 'Grant') + '',
+                    confirmButtonText: `<i class="mdi mdi-check"></i> ${__('grant', 'Grant')}`,
                     cancelButtonText: '' + __('cancel') + '',
                     allowOutsideClick: false,
+                    showLoaderOnConfirm: true,
                     didOpen: () => {
                         const $popup = $(Swal.getPopup());
                         const empSelectOpts = {
@@ -3133,9 +3306,12 @@ function __(key, def) {
                         $('#trt-replacement').select2(empSelectOpts);
 
                         const $roleHint = $('#trt-employee-role');
+                        const setHint = (tone, text) => {
+                            $roleHint.html(text ? `<span class="sr-pill tone-${tone}"><span class="sr-dot"></span>${escapeHtml(text)}</span>` : '');
+                        };
                         $('#trt-employee').on('select2:select', function() {
                             const empId = $(this).val();
-                            $roleHint.removeClass('text-danger text-success').addClass('text-muted').text(__('loading') + '...');
+                            setHint('slate', __('loading') + '...');
                             fetch('./includes/ajaxFile/tempRoleHandler.php', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -3144,21 +3320,15 @@ function __(key, def) {
                             .then(r => r.json())
                             .then(data => {
                                 if (data.status !== 'success') {
-                                    $roleHint.removeClass('text-muted text-success').addClass('text-danger').text(data.message || __('failed_to_load', 'Failed to load.'));
+                                    setHint('red', data.message || __('failed_to_load', 'Failed to load.'));
                                     return;
                                 }
                                 const noRole = !data.role || data.role.toLowerCase() === 'employee';
-                                $roleHint.removeClass('text-muted text-danger text-success')
-                                    .addClass(noRole ? 'text-danger' : 'text-success')
-                                    .text(`${__('current_role', 'Current Role')}: ${data.role_label}` + (noRole ? ` (${__('no_role_to_hand_over', 'no elevated role to hand over')})` : ''));
+                                setHint(noRole ? 'red' : 'green', `${__('current_role', 'Current Role')}: ${data.role_label}` + (noRole ? ` (${__('no_role_to_hand_over', 'no elevated role to hand over')})` : ''));
                             })
-                            .catch(() => {
-                                $roleHint.removeClass('text-muted text-success').addClass('text-danger').text(__('failed_to_load', 'Failed to load.'));
-                            });
+                            .catch(() => setHint('red', __('failed_to_load', 'Failed to load.')));
                         });
-                        $('#trt-employee').on('select2:clear', function() {
-                            $roleHint.removeClass('text-danger text-success').text('');
-                        });
+                        $('#trt-employee').on('select2:clear', () => setHint('', ''));
 
                         if (window.AppDate && typeof moment !== 'undefined') {
                             const start = moment();
@@ -3201,29 +3371,22 @@ function __(key, def) {
                             Swal.showValidationMessage('' + __('select_coverage_period', 'Please select a coverage period.') + '');
                             return false;
                         }
-                        return {
-                            employee_emp_id,
-                            replacement_emp_id,
-                            valid_from: validFrom,
-                            valid_to: validTo
-                        };
+                        return fetch('./includes/ajaxFile/tempRoleHandler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({ ajaxType: 'grantManualTempRole', employee_emp_id, replacement_emp_id, valid_from: validFrom, valid_to: validTo })
+                        })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.type !== 'success') throw new Error(data.message || __('failed_to_grant', 'Failed to grant.'));
+                            return data;
+                        })
+                        .catch(err => { Swal.showValidationMessage(err.message); return false; });
                     }
                 }).then(result => {
                     if (!result.isConfirmed || !result.value) return;
-                    fetch('./includes/ajaxFile/tempRoleHandler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ ajaxType: 'grantManualTempRole', ...result.value })
-                    })
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.type !== 'success') {
-                            throw new Error(data.message || __('failed_to_grant', 'Failed to grant.'));
-                        }
-                        Swal.fire('' + __('success') + '', data.message || '', 'success');
-                        loadList();
-                    })
-                    .catch(err => Swal.fire('' + __('Error!') + '', err.message, 'error'));
+                    acToast('success', result.value.message || __('success'));
+                    loadList();
                 });
             }
 
@@ -3235,10 +3398,7 @@ function __(key, def) {
         // One switch per module / external system; saves straight away and reloads, because menus,
         // tabs and permissions across the app follow the switch.
         function renderIntegrationsSettings() {
-            const msLogo = `<span style="display:grid;grid-template-columns:11px 11px;gap:2px;flex:none" aria-hidden="true">
-                    <i style="width:11px;height:11px;background:#f25022"></i><i style="width:11px;height:11px;background:#7fba00"></i>
-                    <i style="width:11px;height:11px;background:#00a4ef"></i><i style="width:11px;height:11px;background:#ffb900"></i>
-                </span>`;
+            const msLogo = `<span class="as-ms-logo" aria-hidden="true"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>`;
             const integrations = [
                 {
                     setting: 'd365_enabled', on: D365_ON, icon: msLogo,
@@ -3251,7 +3411,7 @@ function __(key, def) {
                 },
                 {
                     setting: 'attendance_enabled', on: ATTENDANCE_ON,
-                    icon: '<i class="fa-duotone fa-fingerprint" style="font-size:24px;color:#2563eb;flex:none" aria-hidden="true"></i>',
+                    icon: '<span class="ac-ico as-int-ico"><i class="mdi mdi-fingerprint"></i></span>',
                     name: __('attendance', 'Attendance'),
                     label: __('attendance_enable_label', 'Enable Attendance'),
                     onHint: __('attendance_enabled_hint', 'On - attendance records, biometric devices, timetables, the employee Attendance tab and the attendance report are shown to the people allowed to see them.'),
@@ -3260,27 +3420,29 @@ function __(key, def) {
                     confirmOff: __('attendance_disable_confirm_text', 'Attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden for everyone. Devices stop being accepted (they keep their punches), and payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
                 },
             ];
+            const meta = groupMeta('integrations');
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-integrations" role="tabpanel">
-                    <h5 class="mb-0">${__('integrations', 'Integrations')}</h5>
-                    <p class="text-muted font-14 mt-2">${__('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.')}</p>
+                    ${srTabHead(meta.icon, __('integrations', 'Integrations'), __('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.'))}
+                    <div class="as-int-grid">
                     ${integrations.map(it => `
-                    <div class="card mt-3">
-                        <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-                            <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                        <div class="sr-card as-int-card${it.on ? ' is-on' : ''}">
+                            <div class="as-int-top">
                                 ${it.icon}
-                                <div style="min-width:0">
-                                    <b>${it.name}</b>
-                                    <span class="badge ${it.on ? 'badge-success' : 'badge-secondary'} ml-1">${it.on ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span><br>
-                                    <small class="text-muted">${it.on ? it.onHint : it.offHint}</small>
+                                <div class="as-int-title">
+                                    <b>${escapeHtml(it.name)}</b>
+                                    <span class="sr-pill tone-${it.on ? 'green' : 'slate'}"><span class="sr-dot"></span>${it.on ? __('enabled', 'Enabled') : __('disabled', 'Disabled')}</span>
                                 </div>
                             </div>
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input integration-toggle" id="integration-${it.setting}" data-setting="${it.setting}" ${it.on ? 'checked' : ''}>
-                                <label class="custom-control-label" for="integration-${it.setting}">${it.label}</label>
+                            <p class="as-int-hint">${escapeHtml(it.on ? it.onHint : it.offHint)}</p>
+                            <div class="as-int-foot">
+                                <div class="custom-control custom-switch">
+                                    <input type="checkbox" class="custom-control-input integration-toggle" id="integration-${it.setting}" data-setting="${it.setting}" ${it.on ? 'checked' : ''}>
+                                    <label class="custom-control-label" for="integration-${it.setting}">${escapeHtml(it.label)}</label>
+                                </div>
                             </div>
-                        </div>
-                    </div>`).join('')}
+                        </div>`).join('')}
+                    </div>
                 </div>
             `;
             settingsContainer.querySelectorAll('.integration-toggle').forEach(toggle => toggle.addEventListener('change', async function () {
@@ -3290,7 +3452,9 @@ function __(key, def) {
                     icon: on ? 'question' : 'warning',
                     title: (on ? __('turn_on_q', 'Turn on') : __('turn_off_q', 'Turn off')) + ' ' + it.name + '?',
                     text: on ? it.confirmOn : it.confirmOff,
+                    allowOutsideClick: false,
                     showCancelButton: true,
+                    confirmButtonColor: on ? undefined : '#dc2626',
                     confirmButtonText: on ? __('turn_on', 'Turn on') : __('turn_off', 'Turn off'),
                     cancelButtonText: __('cancel', 'Cancel')
                 });
@@ -3325,51 +3489,54 @@ function __(key, def) {
             const maskedToken = token.length > 8 ? (token.slice(0, 4) + '...' + token.slice(-4)) : token;
             const cacheValid = getVal('license_cache_valid') === '1';
             const cacheStatus = getVal('license_cache_status') || 'not_configured';
-            const cacheMessage = getVal('license_cache_message') || 'No license key configured yet.';
+            const cacheMessage = getVal('license_cache_message') || __('license_not_configured', 'No license key configured yet.');
             const cacheExpiresAt = getVal('license_cache_expires_at');
             const lastVerifiedAt = getVal('license_last_verified_at');
+            const meta = groupMeta('license');
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-license" role="tabpanel">
-                    <h5 class="mb-3"><i class="fas fa-key mr-2 text-primary"></i>License</h5>
+                    ${srTabHead(meta.icon, __('license', 'License'), __('license_sub', 'Product license key and verification status.'))}
 
-                    <div class="alert ${cacheValid ? 'alert-success' : 'alert-danger'} py-2" id="license-status-banner">
-                        <strong>${cacheValid ? 'Active' : 'Inactive'}</strong> (${cacheStatus}) - ${cacheMessage}
-                        ${cacheExpiresAt ? `<div class="small font-weight-bold">Expires: ${cacheExpiresAt}</div>` : ''}
-                        ${lastVerifiedAt ? `<div class="small text-muted">Last verified: ${lastVerifiedAt}</div>` : ''}
-                    </div>
-
-                    <div class="form-group row">
-                        <label class="col-sm-3 col-form-label">Current Key</label>
-                        <div class="col-sm-9">
-                            <input type="text" class="form-control" value="${maskedKey}" readonly disabled>
+                    <div class="as-license-status ${cacheValid ? 'is-valid' : 'is-invalid'}" id="license-status-banner">
+                        <span class="as-license-ico"><i class="mdi ${cacheValid ? 'mdi-check-circle' : 'mdi-close-circle'}"></i></span>
+                        <div class="as-license-text">
+                            <div class="as-license-title">${cacheValid ? __('license_active', 'License Active') : __('license_not_active', 'License Not Active')} <span class="sr-chip sr-mono">${escapeHtml(cacheStatus)}</span></div>
+                            <div class="as-license-msg">${escapeHtml(cacheMessage)}</div>
                         </div>
-                    </div>
-                    <div class="form-group row">
-                        <label class="col-sm-3 col-form-label">Current Token</label>
-                        <div class="col-sm-9">
-                            <input type="text" class="form-control" value="${maskedToken}" readonly disabled>
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label class="col-sm-3 col-form-label">New Serial Key</label>
-                        <div class="col-sm-9">
-                            <input type="text" id="license-serial-key-input" class="form-control" value="" placeholder="Leave blank to keep the current key - only fill in to replace it">
-                        </div>
-                    </div>
-                    <div class="form-group row">
-                        <label class="col-sm-3 col-form-label">New Verify URL</label>
-                        <div class="col-sm-9">
-                            <input type="text" id="license-verify-url-input" class="form-control" value="" placeholder="Leave blank to keep current - paste the full Verify URL from the license admin panel to replace it">
+                        <div class="as-license-dates">
+                            ${cacheExpiresAt ? `<div><span>${__('expires', 'Expires')}</span><b class="sr-mono">${escapeHtml(cacheExpiresAt)}</b></div>` : ''}
+                            ${lastVerifiedAt ? `<div><span>${__('last_verified', 'Last verified')}</span><b class="sr-mono">${escapeHtml(lastVerifiedAt)}</b></div>` : ''}
                         </div>
                     </div>
 
-                    <button type="button" class="btn btn-primary" id="license-save-verify-btn">
-                        <i class="fas fa-check-circle"></i> Save & Verify
-                    </button>
-                    <span id="license-verify-spinner" class="ml-2" style="display:none;">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                    </span>
+                    <div class="sr-card as-section">
+                        <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-key"></i> ${__('license_key', 'License Key')}</div></div>
+                        <div class="as-fields">
+                            <div class="as-field">
+                                <div class="as-field-label">${__('current_key', 'Current Key')}</div>
+                                <div class="as-field-control"><input type="text" class="form-control sr-mono" value="${escapeHtml(maskedKey)}" readonly disabled></div>
+                            </div>
+                            <div class="as-field">
+                                <div class="as-field-label">${__('current_token', 'Current Token')}</div>
+                                <div class="as-field-control"><input type="text" class="form-control sr-mono" value="${escapeHtml(maskedToken)}" readonly disabled></div>
+                            </div>
+                            <div class="as-field">
+                                <label class="as-field-label" for="license-serial-key-input">${__('new_serial_key', 'New Serial Key')}</label>
+                                <div class="as-field-control"><input type="text" id="license-serial-key-input" class="form-control sr-mono" value="" autocomplete="off" placeholder="${__('license_key_keep_hint', 'Leave blank to keep the current key - only fill in to replace it')}"></div>
+                            </div>
+                            <div class="as-field">
+                                <label class="as-field-label" for="license-verify-url-input">${__('new_verify_url', 'New Verify URL')}</label>
+                                <div class="as-field-control"><input type="text" id="license-verify-url-input" class="form-control sr-mono" value="" autocomplete="off" placeholder="${__('license_url_keep_hint', 'Leave blank to keep current - paste the full Verify URL from the license admin panel to replace it')}"></div>
+                            </div>
+                        </div>
+                        <div class="as-section-foot">
+                            <span id="license-verify-spinner" style="display:none;"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                            <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="license-save-verify-btn">
+                                <i class="mdi mdi-check-circle"></i> ${__('save_and_verify', 'Save & Verify')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             `;
 
@@ -3385,16 +3552,16 @@ function __(key, def) {
                         tok = parsed.searchParams.get('token');
                         url = parsed.origin + parsed.pathname;
                     } catch (e) {
-                        Swal.fire('Invalid URL', 'Verify URL is not a valid URL.', 'warning');
+                        Swal.fire(__('invalid_url', 'Invalid URL'), __('verify_url_invalid', 'Verify URL is not a valid URL.'), 'warning');
                         return;
                     }
                     if (!tok) {
-                        Swal.fire('Invalid URL', 'Verify URL must contain a ?token=... parameter - paste the full URL from the license admin panel.', 'warning');
+                        Swal.fire(__('invalid_url', 'Invalid URL'), __('verify_url_needs_token', 'Verify URL must contain a ?token=... parameter - paste the full URL from the license admin panel.'), 'warning');
                         return;
                     }
                 }
                 if (!url || !key || !tok) {
-                    Swal.fire('Missing info', 'Enter a serial key and Verify URL (server has no license configured yet).', 'warning');
+                    Swal.fire(__('missing_info', 'Missing info'), __('license_missing_info', 'Enter a serial key and Verify URL (server has no license configured yet).'), 'warning');
                     return;
                 }
                 const $btn = this;
@@ -3409,18 +3576,18 @@ function __(key, def) {
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        Swal.fire('Error', data.message || 'Could not save the key.', 'error');
+                        Swal.fire(__('error', 'Error'), escapeHtml(data.message || __('license_save_failed', 'Could not save the key.')), 'error');
                         return;
                     }
                     if (data.valid) {
-                        await Swal.fire('License Active', data.message || 'License verified successfully.', 'success');
+                        await Swal.fire(__('license_active', 'License Active'), escapeHtml(data.message || __('license_verified', 'License verified successfully.')), 'success');
                     } else {
-                        Swal.fire('License Not Active', data.message || 'This key is not valid.', 'error');
+                        Swal.fire(__('license_not_active', 'License Not Active'), escapeHtml(data.message || __('license_key_invalid', 'This key is not valid.')), 'error');
                     }
                     await loadSettings();
                     renderSettingsGroup('license');
                 } catch (err) {
-                    Swal.fire('Error', 'Request failed: ' + err.message, 'error');
+                    Swal.fire(__('error', 'Error'), __('request_failed', 'Request failed') + ': ' + escapeHtml(err.message), 'error');
                 } finally {
                     $btn.disabled = false;
                     document.getElementById('license-verify-spinner').style.display = 'none';
@@ -3438,23 +3605,16 @@ function __(key, def) {
             const showMenuTheme = isFullSettingsAdmin;
             const showCompanyLogo = isFullSettingsAdmin;
             let firstTab = null;
-            let navHtml = '<ul class="nav nav-pills mb-3" id="theme-config-sub-nav">';
-            if (showMenuTheme) {
-                firstTab = firstTab || 'menu_theme';
-                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'menu_theme' ? 'active' : ''}" href="#" data-sub-tab="menu_theme">${__('menu_theme', 'Menu Theme')}</a></li>`;
-            }
-            if (showCompanyLogo) {
-                firstTab = firstTab || 'company_logo';
-                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'company_logo' ? 'active' : ''}" href="#" data-sub-tab="company_logo">${__('company_logo', 'Company Logo')}</a></li>`;
-            }
-            if (canAccessScreenSettingsTab) {
-                firstTab = firstTab || 'screen_settings';
-                navHtml += `<li class="nav-item"><a class="nav-link ${firstTab === 'screen_settings' ? 'active' : ''}" href="#" data-sub-tab="screen_settings">${__('screen_settings', 'Screen Settings')}</a></li>`;
-            }
-            navHtml += '</ul>';
+            const themeTabs = [];
+            if (showMenuTheme) themeTabs.push({ key: 'menu_theme', icon: 'mdi-menu', label: __('menu_theme', 'Menu Theme') });
+            if (showCompanyLogo) themeTabs.push({ key: 'company_logo', icon: 'mdi-image', label: __('company_logo', 'Company Logo') });
+            if (canAccessScreenSettingsTab) themeTabs.push({ key: 'screen_settings', icon: 'mdi-monitor-multiple', label: __('screen_settings', 'Screen Settings') });
+            firstTab = themeTabs.length ? themeTabs[0].key : null;
+            const navHtml = srSubNav('theme-config-sub-nav', themeTabs);
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-theme_config" role="tabpanel">
+                    ${srTabHead(groupMeta('theme_config').icon, __('theme_config', 'Theme Config'), groupMeta('theme_config').sub || '')}
                     ${navHtml}
                     <div id="theme-config-sub-content"></div>
                 </div>
@@ -3521,26 +3681,36 @@ function __(key, def) {
                 const own = window.APP_SETTINGS_OWN_SCREEN_SETTINGS || screenSettingsDefaults;
                 hostEl.innerHTML = `
                     <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
-                        <h5 class="mb-3"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
-                        <p class="text-muted">${__('own_screen_settings_desc_scale', 'Adjust the display scale, fullscreen behavior and color theme for your own account.')}</p>
-                        <div class="row">
-                            <div class="col-md-3 form-group">
-                                <label>${__('screen_scale', 'Scale %')}</label>
-                                <input type="number" min="25" max="300" step="5" class="form-control" id="own-screen-scale" value="${own.scale}">
-                            </div>
-                            <div class="col-md-3 form-group">
-                                <label class="d-block">&nbsp;</label>
-                                <div class="custom-control custom-checkbox">
-                                    <input type="checkbox" class="custom-control-input" id="own-screen-fullscreen" ${own.fullscreen ? 'checked' : ''}>
-                                    <label class="custom-control-label" for="own-screen-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                        <div class="sr-card as-section">
+                            <div class="sr-card-head">
+                                <div>
+                                    <div class="sr-card-title"><i class="mdi mdi-monitor-multiple"></i> ${__('screen_settings', 'Screen Settings')}</div>
+                                    <div class="sr-card-sub">${__('own_screen_settings_desc_scale', 'Adjust the display scale, fullscreen behavior and color theme for your own account.')}</div>
                                 </div>
                             </div>
-                            <div class="col-md-3 form-group">
-                                <label for="own-screen-theme">${__('theme_color', 'Theme')}</label>
-                                <select class="form-control" id="own-screen-theme">${screenThemeOptions(own.theme)}</select>
+                            <div class="as-fields">
+                                <div class="as-field">
+                                    <label class="as-field-label" for="own-screen-scale">${__('screen_scale', 'Scale %')}</label>
+                                    <div class="as-field-control"><input type="number" min="25" max="300" step="5" class="form-control as-num-input" id="own-screen-scale" value="${escapeHtml(own.scale)}"></div>
+                                </div>
+                                <div class="as-field">
+                                    <label class="as-field-label" for="own-screen-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                                    <div class="as-field-control">
+                                        <div class="custom-control custom-switch">
+                                            <input type="checkbox" class="custom-control-input" id="own-screen-fullscreen" ${own.fullscreen ? 'checked' : ''}>
+                                            <label class="custom-control-label" for="own-screen-fullscreen">${__('enabled', 'Enabled')}</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="as-field">
+                                    <label class="as-field-label" for="own-screen-theme">${__('theme_color', 'Theme')}</label>
+                                    <div class="as-field-control"><select class="form-control" id="own-screen-theme">${screenThemeOptions(own.theme)}</select></div>
+                                </div>
+                            </div>
+                            <div class="as-section-foot">
+                                <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="saveOwnScreenSettingsBtn"><i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}</button>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-primary waves-effect waves-light" id="saveOwnScreenSettingsBtn">${__('save_changes', 'Save Changes')}</button>
                     </div>
                 `;
                 document.getElementById('saveOwnScreenSettingsBtn').addEventListener('click', saveOwnScreenSettings);
@@ -3549,25 +3719,30 @@ function __(key, def) {
 
             hostEl.innerHTML = `
                 <div class="tab-pane active" id="group-screen_settings" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h5 class="mb-0"><i class="fas fa-display mr-2 text-primary"></i>${__('screen_settings', 'Screen Settings')}</h5>
-                        <span class="badge badge-pill badge-light" id="screen-settings-total-badge"></span>
+                    <div class="as-subhead">
+                        <p class="ac-sub">${__('screen_settings_admin_desc_scale', 'Search a user and set their display scale, fullscreen behavior and color theme (Light / Dark).')}</p>
+                        <span class="sr-pill tone-slate" id="screen-settings-total-badge"><span class="sr-dot"></span>-</span>
                     </div>
-                    <p class="text-muted mb-3">${__('screen_settings_admin_desc_scale', 'Search a user and set their display scale, fullscreen behavior and color theme (Light / Dark).')}</p>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <label for="screen-settings-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i>${__('select_user')}</label>
+                    <div class="sr-card as-section as-picker">
+                        <div class="as-picker-ico"><i class="mdi mdi-account-plus"></i></div>
+                        <div class="as-picker-body">
+                            <label for="screen-settings-user-select">${__('select_user')}</label>
                             <select id="screen-settings-user-select" class="form-control select2"></select>
-                            <small class="form-text text-muted">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
+                            <small class="sr-fhint">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
                         </div>
                     </div>
 
-                    <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i>${__('assigned_users', 'Assigned Users')}</h6>
-                    <div id="screen-settings-assigned-users-list">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            <span class="ml-2">${__('loading')}</span>
+                    <div class="sr-card as-section">
+                        <div class="sr-toolbar">
+                            <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('assigned_users', 'Assigned Users')}</div>
+                            <div class="sr-search as-list-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="screen-settings-assigned-search" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                            </div>
+                        </div>
+                        <div id="screen-settings-assigned-users-list" class="as-user-list">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                         </div>
                     </div>
                 </div>
@@ -3575,6 +3750,7 @@ function __(key, def) {
 
             await new Promise(resolve => setTimeout(resolve, 300));
 
+            bindUserCardSearch('screen-settings-assigned-search', 'screen-settings-assigned-users-list');
             const { users } = await fetchScreenSettingsData();
             const select = document.getElementById('screen-settings-user-select');
             if (!select) return;
@@ -3711,15 +3887,10 @@ function __(key, def) {
             const userMap = new Map((users || []).map(u => [String(u.emp_id || ''), u]));
             const assignedEmpIds = Object.keys(screenSettingsMap || {});
 
-            const totalBadge = document.getElementById('screen-settings-total-badge');
-            if (totalBadge) {
-                totalBadge.textContent = assignedEmpIds.length + ' ' + __('assigned', 'assigned');
-                totalBadge.classList.toggle('badge-primary', assignedEmpIds.length > 0);
-                totalBadge.classList.toggle('badge-light', assignedEmpIds.length === 0);
-            }
+            setAssignedCountPill('screen-settings-total-badge', assignedEmpIds.length);
 
             if (!assignedEmpIds.length) {
-                container.innerHTML = `<div class="special-access-empty-state"><i class="fas fa-display"></i>${__('no_assigned_users_yet')}</div>`;
+                container.innerHTML = `<div class="sr-empty"><i class="mdi mdi-monitor-multiple"></i>${__('no_assigned_users_yet')}</div>`;
                 return;
             }
 
@@ -3730,24 +3901,14 @@ function __(key, def) {
                 const role = user ? ((user.user_type || '').trim()) : '';
                 const s = screenSettingsMap[empId] || screenSettingsDefaults;
 
-                html += '<div class="special-access-user-card">';
-                html += '<div class="d-flex justify-content-between align-items-start">';
-                html += `<div>
-                    <strong>${escapeHtml(name)}</strong>
-                    <span class="text-muted ml-1">#${escapeHtml(empId)}</span>
-                    ${role ? `<span class="badge badge-primary ml-1">${escapeHtml(formatRoleLabel(role))}</span>` : ''}
-                </div>`;
-                html += `<div class="text-nowrap">
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-sm btn-outline-primary edit-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="fas fa-edit"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-danger remove-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="fas fa-trash-alt"></i></button>
-                    </div>
-                </div>`;
-                html += '</div>';
-                html += `<div class="mt-2">
-                    <span class="badge badge-info mr-1 mb-1">${__('screen_scale', 'Scale')}: ${s.scale}%</span>
-                    <span class="badge ${s.fullscreen ? 'badge-success' : 'badge-secondary'} mr-1 mb-1">${s.fullscreen ? __('fullscreen_on', 'Fullscreen: On') : __('fullscreen_off', 'Fullscreen: Off')}</span>
-                    <span class="badge ${s.theme === 'dark' ? 'badge-dark' : (s.theme === 'light' ? 'badge-warning' : 'badge-secondary')} mr-1 mb-1"><i class="fas ${s.theme === 'dark' ? 'fa-moon' : (s.theme === 'light' ? 'fa-sun' : 'fa-circle-half-stroke')} mr-1"></i>${__('theme_color', 'Theme')}: ${screenThemeLabel(s.theme)}</span>
+                html += '<div class="as-user-card">';
+                html += srUserCardHead(name, empId, role, '', `
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-screen-settings-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>`);
+                html += `<div class="as-user-body as-chip-wrap">
+                    <span class="sr-pill tone-indigo"><i class="mdi mdi-monitor"></i> ${__('screen_scale', 'Scale')}: ${escapeHtml(s.scale)}%</span>
+                    <span class="sr-pill tone-${s.fullscreen ? 'green' : 'slate'}"><span class="sr-dot"></span>${s.fullscreen ? __('fullscreen_on', 'Fullscreen: On') : __('fullscreen_off', 'Fullscreen: Off')}</span>
+                    <span class="sr-pill tone-${s.theme === 'dark' ? 'indigo' : (s.theme === 'light' ? 'amber' : 'slate')}"><i class="mdi mdi-theme-light-dark"></i> ${__('theme_color', 'Theme')}: ${escapeHtml(screenThemeLabel(s.theme))}</span>
                 </div>`;
                 html += '</div>';
             });
@@ -3770,6 +3931,8 @@ function __(key, def) {
                         title: __('remove_user_assignment'),
                         text: __('this_will_remove_screen_settings_for_this_user', 'This will remove the custom screen settings for this user (they revert to the 100% / no-fullscreen default).'),
                         icon: 'warning',
+                        allowOutsideClick: false,
+                        confirmButtonColor: '#dc2626',
                         showCancelButton: true,
                         confirmButtonText: __('yes_remove_it'),
                         cancelButtonText: __('cancel')
@@ -3814,23 +3977,32 @@ function __(key, def) {
             Swal.fire({
                 title: `${__('screen_settings', 'Screen Settings')}: ${escapeHtml(name)}`,
                 html: `
-                    <div class="text-left">
-                        <div class="form-group">
-                            <label>${__('screen_scale', 'Scale %')}</label>
-                            <input type="number" min="25" max="300" step="5" id="swal-ss-scale" class="form-control" value="${s.scale}">
+                    <form class="sr-form" onsubmit="return false">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-monitor-multiple"></i> ${__('screen_settings', 'Screen Settings')}</span><span class="sr-chip sr-mono">#${escapeHtml(targetEmpId)}</span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-6">
+                                    <label for="swal-ss-scale">${__('screen_scale', 'Scale %')}</label>
+                                    <input type="number" min="25" max="300" step="5" id="swal-ss-scale" class="form-control" value="${escapeHtml(s.scale)}">
+                                </div>
+                                <div class="sr-fcol c-6">
+                                    <label for="swal-ss-theme">${__('theme_color', 'Theme')}</label>
+                                    <select id="swal-ss-theme" class="form-control">${screenThemeOptions(s.theme)}</select>
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <div class="custom-control custom-switch">
+                                        <input type="checkbox" class="custom-control-input" id="swal-ss-fullscreen" ${s.fullscreen ? 'checked' : ''}>
+                                        <label class="custom-control-label" for="swal-ss-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="custom-control custom-checkbox mb-3">
-                            <input type="checkbox" class="custom-control-input" id="swal-ss-fullscreen" ${s.fullscreen ? 'checked' : ''}>
-                            <label class="custom-control-label" for="swal-ss-fullscreen">${__('open_in_fullscreen', 'Open in Fullscreen')}</label>
-                        </div>
-                        <div class="form-group mb-0">
-                            <label for="swal-ss-theme">${__('theme_color', 'Theme')}</label>
-                            <select id="swal-ss-theme" class="form-control">${screenThemeOptions(s.theme)}</select>
-                        </div>
-                    </div>
+                    </form>
                 `,
+                width: '560px',
+                allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: __('save_changes', 'Save Changes'),
+                confirmButtonText: `<i class="mdi mdi-content-save"></i> ${__('save_changes', 'Save Changes')}`,
                 cancelButtonText: __('cancel'),
                 focusConfirm: false,
                 preConfirm: () => ({
@@ -3907,26 +4079,30 @@ function __(key, def) {
         async function renderSpecialAccessSettings() {
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-special-access" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <h5 class="mb-0"><i class="fas fa-user-shield mr-2 text-primary"></i>${__('special_access_by_user')}</h5>
-                        <span class="badge badge-pill badge-light" id="special-access-total-users-badge"></span>
-                    </div>
-                    <p class="text-muted mb-3">${__('select_a_user_and_grant_them_specific_admin_hr_abilities')} ${__('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.')}</p>
+                    ${srTabHead(groupMeta('special_access').icon, __('special_access_by_user'),
+                        __('select_a_user_and_grant_them_specific_admin_hr_abilities') + ' ' + __('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.'),
+                        '<span class="sr-pill tone-slate" id="special-access-total-users-badge"><span class="sr-dot"></span>-</span>')}
 
                     <div id="special-access-panel">
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <label for="special-access-user-select" class="font-weight-bold mb-2"><i class="fas fa-search mr-1 text-muted"></i>${__('select_user')}</label>
+                        <div class="sr-card as-section as-picker">
+                            <div class="as-picker-ico"><i class="mdi mdi-account-plus"></i></div>
+                            <div class="as-picker-body">
+                                <label for="special-access-user-select">${__('select_user')}</label>
                                 <select id="special-access-user-select" class="form-control select2"></select>
-                                <small class="form-text text-muted">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
+                                <small class="sr-fhint">${__('picking_a_user_opens_the_access_editor', 'Picking a user opens the access editor.')}</small>
                             </div>
                         </div>
 
-                        <h6 class="mb-2"><i class="fas fa-users mr-1 text-muted"></i>${__('assigned_users')}</h6>
-                        <div id="special-access-assigned-users-list">
-                            <div class="text-center text-muted">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <span class="ml-2">${__('loading')}</span>
+                        <div class="sr-card as-section">
+                            <div class="sr-toolbar">
+                                <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('assigned_users')}</div>
+                                <div class="sr-search as-list-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="search" id="special-access-assigned-search" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                                </div>
+                            </div>
+                            <div id="special-access-assigned-users-list" class="as-user-list">
+                                <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                             </div>
                         </div>
 
@@ -3954,6 +4130,7 @@ function __(key, def) {
             // Plain employees are included here on purpose - the "Access Page: ..." special
             // access keys exist specifically to grant a single employee access to a page that's
             // normally blocked for their role (see get_special_access_page_labels()).
+            bindUserCardSearch('special-access-assigned-search', 'special-access-assigned-users-list');
             const users = await fetchSpecialAccessUsers();
             specialAccessEligibleUsers = users;
             const select = document.getElementById('special-access-user-select');
@@ -3996,358 +4173,23 @@ function __(key, def) {
             renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
         }
 
-        function renderJobTitlesSettings(hostEl) {
-            hostEl = hostEl || settingsContainer;
-            let formHtml = `<div class="tab-pane active" id="group-job" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('job_titles_management')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-job-title"><i class="mdi mdi-plus"></i> ${__('add_new_job_title')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('manage_job_titles_in_english_and_arabic')}</p>`;
-            
-            // Search field
-            formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="job-search-input" class="form-control" placeholder="${__('search_job_titles_english_or_arabic')}" style="max-width: 400px;">`;
-            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_job_title_in_english_or_arabic')}</small>`;
-            formHtml += `</div>`;
-            
-            formHtml += `<div id="job-titles-container" class="border rounded p-3 bg-light">`;
-            formHtml += `<div class="text-center text-muted">`;
-            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
-            formHtml += `<span class="ml-2">${__('loading')}</span>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            hostEl.innerHTML = formHtml;
-
-            // Load job titles
-            loadJobTitles();
-
-            // Attach event listener for "Add Job Title" button
-            const btnAddJobTitle = document.getElementById('btn-add-job-title');
-            if (btnAddJobTitle) {
-                btnAddJobTitle.addEventListener('click', showAddJobTitleModal);
-            }
-            
-            // Attach event listener for search input
-            const searchInput = document.getElementById('job-search-input');
-            if (searchInput) {
-                searchInput.addEventListener('input', function() {
-                    filterJobTitles(this.value);
-                });
-            }
-        }
-
-        async function loadJobTitles() {
-            try {
-                const response = await fetch('./includes/job_titles_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_job_titles' })
-                });
-
-                if (!response.ok) throw new Error('' + __('Failed to load job titles') + '');
-                const data = await response.json();
-
-                const container = document.getElementById('job-titles-container');
-                if (!data.success || !data.jobs || data.jobs.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('No job titles configured yet.') + '</p>';
-                    return;
-                }
-
-                let jobsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('job_title_english') + '</th><th>' + __('job_title_arabic') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
-                data.jobs.forEach((job) => {
-                    jobsHtml += `
-                        <tr>
-                            <td><strong>${job.job || 'N/A'}</strong></td>
-                            <td><strong>${job.job_ar || 'N/A'}</strong></td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-job-btn" data-job-id="${job.id}" title="${__('edit')}">
-                                        <i class="mdi mdi-pencil"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-job-btn" data-job-id="${job.id}" title="${__('delete')}">
-                                        <i class="mdi mdi-delete"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                jobsHtml += '</tbody></table></div>';
-                container.innerHTML = jobsHtml;
-
-                // Attach event listeners
-                container.querySelectorAll('.edit-job-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        showEditJobTitleModal(this.dataset.jobId);
-                    });
-                });
-
-                container.querySelectorAll('.delete-job-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        deleteJobTitle(this.dataset.jobId);
-                    });
-                });
-
-            } catch (error) {
-                console.error('Error loading job titles:', error);
-                const container = document.getElementById('job-titles-container');
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
-            }
-        }
-
-        function showAddJobTitleModal() {
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_job_title') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="job-title-en">${__('job_title_english')}</label>
-                        <input type="text" id="job-title-en" class="form-control" placeholder="${__('enter_job_title_in_english')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="job-title-ar">${__('job_title_arabic')}</label>
-                        <input type="text" id="job-title-ar" class="form-control" placeholder="${__('enter_job_title_in_arabic')}">
-                    </div>
-                `,
-                allowOutsideClick: false,
-                showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                preConfirm: () => {
-                    const titleEn = document.getElementById('job-title-en').value.trim();
-                    const titleAr = document.getElementById('job-title-ar').value.trim();
-                    
-                    if (!titleEn) {
-                        Swal.showValidationMessage('' + __('job_title_in_english_is_required') + '');
-                        return false;
-                    }
-                    if (!titleAr) {
-                        Swal.showValidationMessage('' + __('job_title_in_arabic_is_required') + '');
-                        return false;
-                    }
-                    return { titleEn, titleAr };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    await addJobTitle(result.value.titleEn, result.value.titleAr);
-                }
-            });
-        }
-
-        async function addJobTitle(titleEn, titleAr) {
-            try {
-                const response = await fetch('./includes/job_titles_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'add_job_title',
-                        job_title_en: titleEn,
-                        job_title_ar: titleAr
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_add_job_title') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('job_title_added_successfully') + '', 'success');
-                    loadJobTitles(); // Reload the list
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_job_title') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function showEditJobTitleModal(jobId) {
-            try {
-                const response = await fetch('./includes/job_titles_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'get_job_title',
-                        job_id: jobId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_job_title') + '');
-                const data = await response.json();
-
-                if (!data.success || !data.job) {
-                    Swal.fire('' + __('error') + '', '' + __('job_title_not_found') + '', 'error');
-                    return;
-                }
-
-                const job = data.job;
-                const result = await Swal.fire({
-                    icon: 'info',
-                    title: '' + __('edit_job_title') + '',
-                    html: `
-                        <div class="form-group text-left">
-                            <label for="edit-job-title-en">${__('job_title_english')}</label>
-                            <input type="text" id="edit-job-title-en" class="form-control" value="${job.job || ''}" placeholder="${__('enter_job_title_in_english')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-job-title-ar">${__('job_title_arabic')}</label>
-                            <input type="text" id="edit-job-title-ar" class="form-control" value="${job.job_ar || ''}" placeholder="${__('enter_job_title_in_arabic')}">
-                        </div>
-                    `,
-                    allowOutsideClick: false,
-                    showCancelButton: true,
-                    confirmButtonText: '' + __('update') + '',
-                    cancelButtonText: '' + __('cancel') + '',
-                    preConfirm: () => {
-                        const titleEn = document.getElementById('edit-job-title-en').value.trim();
-                        const titleAr = document.getElementById('edit-job-title-ar').value.trim();
-                        
-                        if (!titleEn) {
-                            Swal.showValidationMessage('' + __('job_title_in_english_is_required') + '');
-                            return false;
-                        }
-                        if (!titleAr) {
-                            Swal.showValidationMessage('' + __('job_title_in_arabic_is_required') + '');
-                            return false;
-                        }
-                        return { titleEn, titleAr };
-                    }
-                });
-
-                if (result.isConfirmed) {
-                    await updateJobTitle(jobId, result.value.titleEn, result.value.titleAr);
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function updateJobTitle(jobId, titleEn, titleAr) {
-            try {
-                const response = await fetch('./includes/job_titles_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'update_job_title',
-                        job_id: jobId,
-                        job_title_en: titleEn,
-                        job_title_ar: titleAr
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_update_job_title') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('updated') + '', '' + __('job_title_updated_successfully') + '', 'success');
-                    loadJobTitles(); // Reload the list
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_update_job_title') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function deleteJobTitle(jobId) {
-            const result = await Swal.fire({
-                title: '' + __('delete_job_title') + '',
-                text: '' + __('this_action_cannot_be_undone') + '',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '' + __('yes_delete_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
-            });
-
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/job_titles_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'delete_job_title',
-                        job_id: jobId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_delete_job_title') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('deleted') + '', '' + __('job_title_deleted_successfully') + '', 'success');
-                    loadJobTitles(); // Reload the list
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_delete_job_title') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        function filterJobTitles(searchTerm) {
-            const rows = document.querySelectorAll('#job-titles-container tbody tr');
-            let visibleCount = 0;
-
-            rows.forEach(row => {
-                const jobEn = row.cells[0].textContent.toLowerCase();
-                const jobAr = row.cells[1].textContent.toLowerCase();
-                const searchLower = searchTerm.toLowerCase();
-
-                if (jobEn.includes(searchLower) || jobAr.includes(searchLower)) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-
-            // Show "no results" message if nothing matches
-            const container = document.getElementById('job-titles-container');
-            let noResultsMsg = container.querySelector('.no-results-msg');
-            
-            if (visibleCount === 0 && searchTerm.trim() !== '') {
-                if (!noResultsMsg) {
-                    noResultsMsg = document.createElement('div');
-                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_job_titles_match_your_search')}`;
-                    container.appendChild(noResultsMsg);
-                }
-            } else if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-        }
-
+        /**
+         * =================================================================
+         * == ORG STRUCTURE SUB-TABS (Departments, Sub-Departments, Job Titles,
+         * == Locations, Companies) - one config-driven list + add/edit/delete
+         * == renderer (renderOrgCrud) in the sr-* design (.ac-* / .org-* rules in
+         * == app_settings.php). Each config only describes its handler, columns
+         * == and form fields; the handler actions/params are unchanged.
+         * =================================================================
+         */
+        const ORG_DEPT_COLORS = [
+            { v: 'custom', l: 'custom', hex: '#02c0ce' },
+            { v: 'purple', l: 'purple', hex: '#777edd' },
+            { v: 'primary', l: 'primary', hex: '#2d7bf4' },
+            { v: 'success', l: 'success', hex: '#0acf97' }
+        ];
         let citiesListCache = null;
-
-        function renderLocationsSettings(hostEl) {
-            hostEl = hostEl || settingsContainer;
-            let formHtml = `<div class="tab-pane active" id="group-locations" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('locations_management', 'Locations Management')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-location"><i class="mdi mdi-plus"></i> ${__('add_new_location', 'Add New Location')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('manage_locations_by_city', 'Manage locations and assign each one to a city')}</p>`;
-
-            formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="location-search-input" class="form-control" placeholder="${__('search_locations', 'Search locations or cities')}" style="max-width: 400px;">`;
-            formHtml += `</div>`;
-
-            formHtml += `<div id="locations-container" class="border rounded p-3 bg-light">`;
-            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2">${__('loading')}</span></div>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            hostEl.innerHTML = formHtml;
-
-            loadLocations();
-
-            const btnAddLocation = document.getElementById('btn-add-location');
-            if (btnAddLocation) btnAddLocation.addEventListener('click', showAddLocationModal);
-
-            const searchInput = document.getElementById('location-search-input');
-            if (searchInput) searchInput.addEventListener('input', function() { filterLocations(this.value); });
-        }
+        let departmentsListCache = null;
 
         async function fetchCitiesList() {
             if (citiesListCache) return citiesListCache;
@@ -4359,284 +4201,6 @@ function __(key, def) {
             const data = await response.json();
             citiesListCache = (data.success && data.cities) ? data.cities : [];
             return citiesListCache;
-        }
-
-        function citySelectOptionsHtml(cities, selectedCityId) {
-            let opts = `<option value="">${__('select_city', 'Select City')}</option>`;
-            cities.forEach(city => {
-                const selected = (String(city.id) === String(selectedCityId)) ? 'selected' : '';
-                opts += `<option value="${city.id}" ${selected}>${city.name_en}</option>`;
-            });
-            return opts;
-        }
-
-        async function loadLocations() {
-            try {
-                const response = await fetch('./includes/locations_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_locations' })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_locations', 'Failed to load locations') + '');
-                const data = await response.json();
-
-                const container = document.getElementById('locations-container');
-                if (!data.success || !data.locations || data.locations.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_locations_configured_yet', 'No locations configured yet.') + '</p>';
-                    return;
-                }
-
-                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('city') + '</th><th>' + __('location_name_english', 'Location (English)') + '</th><th>' + __('location_name_arabic', 'Location (Arabic)') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
-                data.locations.forEach((loc) => {
-                    html += `
-                        <tr>
-                            <td>${loc.city_name_en || 'N/A'}</td>
-                            <td><strong>${loc.name_en || 'N/A'}</strong></td>
-                            <td><strong>${loc.name_ar || 'N/A'}</strong></td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-location-btn" data-location-id="${loc.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-location-btn" data-location-id="${loc.id}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                html += '</tbody></table></div>';
-                container.innerHTML = html;
-
-                container.querySelectorAll('.edit-location-btn').forEach(btn => {
-                    btn.addEventListener('click', function() { showEditLocationModal(this.dataset.locationId); });
-                });
-                container.querySelectorAll('.delete-location-btn').forEach(btn => {
-                    btn.addEventListener('click', function() { deleteLocation(this.dataset.locationId); });
-                });
-            } catch (error) {
-                console.error('Error loading locations:', error);
-                document.getElementById('locations-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
-            }
-        }
-
-        async function showAddLocationModal() {
-            const cities = await fetchCitiesList();
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_location', 'Add New Location') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="location-city">${__('city')}</label>
-                        <select id="location-city" class="form-control">${citySelectOptionsHtml(cities, '')}</select>
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="location-name-en">${__('location_name_english', 'Location (English)')}</label>
-                        <input type="text" id="location-name-en" class="form-control">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="location-name-ar">${__('location_name_arabic', 'Location (Arabic)')}</label>
-                        <input type="text" id="location-name-ar" class="form-control">
-                    </div>
-                `,
-                allowOutsideClick: false,
-                showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                didOpen: () => {
-                    $('#location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
-                },
-                preConfirm: () => {
-                    const cityId = document.getElementById('location-city').value;
-                    const nameEn = document.getElementById('location-name-en').value.trim();
-                    const nameAr = document.getElementById('location-name-ar').value.trim();
-                    if (!cityId) { Swal.showValidationMessage('' + __('please_select_a_city', 'Please select a city') + ''); return false; }
-                    if (!nameEn) { Swal.showValidationMessage('' + __('location_name_in_english_is_required', 'Location name in English is required') + ''); return false; }
-                    if (!nameAr) { Swal.showValidationMessage('' + __('location_name_in_arabic_is_required', 'Location name in Arabic is required') + ''); return false; }
-                    return { cityId, nameEn, nameAr };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) await addLocation(result.value.cityId, result.value.nameEn, result.value.nameAr);
-            });
-        }
-
-        async function addLocation(cityId, nameEn, nameAr) {
-            try {
-                const response = await fetch('./includes/locations_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'add_location', city_id: cityId, name_en: nameEn, name_ar: nameAr })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('location_added_successfully', 'Location added successfully') + '', 'success');
-                    loadLocations();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_location', 'Failed to add location') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function showEditLocationModal(locationId) {
-            try {
-                const [cities, response] = await Promise.all([
-                    fetchCitiesList(),
-                    fetch('./includes/locations_handler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ action: 'get_location', location_id: locationId })
-                    })
-                ]);
-
-                const data = await response.json();
-                if (!data.success || !data.location) {
-                    Swal.fire('' + __('error') + '', '' + __('location_not_found', 'Location not found') + '', 'error');
-                    return;
-                }
-
-                const loc = data.location;
-                const result = await Swal.fire({
-                    icon: 'info',
-                    title: '' + __('edit_location', 'Edit Location') + '',
-                    html: `
-                        <div class="form-group text-left">
-                            <label for="edit-location-city">${__('city')}</label>
-                            <select id="edit-location-city" class="form-control">${citySelectOptionsHtml(cities, loc.city_id)}</select>
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-location-name-en">${__('location_name_english', 'Location (English)')}</label>
-                            <input type="text" id="edit-location-name-en" class="form-control" value="${loc.name_en || ''}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-location-name-ar">${__('location_name_arabic', 'Location (Arabic)')}</label>
-                            <input type="text" id="edit-location-name-ar" class="form-control" value="${loc.name_ar || ''}">
-                        </div>
-                    `,
-                    allowOutsideClick: false,
-                    showCancelButton: true,
-                    confirmButtonText: '' + __('update') + '',
-                    cancelButtonText: '' + __('cancel') + '',
-                    didOpen: () => {
-                        $('#edit-location-city').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
-                    },
-                    preConfirm: () => {
-                        const cityId = document.getElementById('edit-location-city').value;
-                        const nameEn = document.getElementById('edit-location-name-en').value.trim();
-                        const nameAr = document.getElementById('edit-location-name-ar').value.trim();
-                        if (!cityId) { Swal.showValidationMessage('' + __('please_select_a_city', 'Please select a city') + ''); return false; }
-                        if (!nameEn) { Swal.showValidationMessage('' + __('location_name_in_english_is_required', 'Location name in English is required') + ''); return false; }
-                        if (!nameAr) { Swal.showValidationMessage('' + __('location_name_in_arabic_is_required', 'Location name in Arabic is required') + ''); return false; }
-                        return { cityId, nameEn, nameAr };
-                    }
-                });
-
-                if (result.isConfirmed) {
-                    await updateLocation(locationId, result.value.cityId, result.value.nameEn, result.value.nameAr);
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function updateLocation(locationId, cityId, nameEn, nameAr) {
-            try {
-                const response = await fetch('./includes/locations_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'update_location', location_id: locationId, city_id: cityId, name_en: nameEn, name_ar: nameAr })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('updated') + '', '' + __('location_updated_successfully', 'Location updated successfully') + '', 'success');
-                    loadLocations();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_update_location', 'Failed to update location') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function deleteLocation(locationId) {
-            const result = await Swal.fire({
-                title: '' + __('delete_location', 'Delete Location') + '',
-                text: '' + __('this_action_cannot_be_undone') + '',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '' + __('yes_delete_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
-            });
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/locations_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'delete_location', location_id: locationId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('deleted') + '', '' + __('location_deleted_successfully', 'Location deleted successfully') + '', 'success');
-                    loadLocations();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_delete_location', 'Failed to delete location') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        function filterLocations(searchTerm) {
-            const rows = document.querySelectorAll('#locations-container tbody tr');
-            const searchLower = searchTerm.toLowerCase();
-            let visibleCount = 0;
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
-                else { row.style.display = 'none'; }
-            });
-            const container = document.getElementById('locations-container');
-            let noResultsMsg = container.querySelector('.no-results-msg');
-            if (visibleCount === 0 && searchTerm.trim() !== '') {
-                if (!noResultsMsg) {
-                    noResultsMsg = document.createElement('div');
-                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_locations_match_your_search', 'No locations match your search')}`;
-                    container.appendChild(noResultsMsg);
-                }
-            } else if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-        }
-
-        let departmentsListCache = null;
-
-        function renderSubDepartmentsSettings(hostEl) {
-            hostEl = hostEl || settingsContainer;
-            let formHtml = `<div class="tab-pane active" id="group-sub_departments" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('sub_departments_management', 'Sub-Departments Management')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-sub-department"><i class="mdi mdi-plus"></i> ${__('add_new_sub_department', 'Add New Sub-Department')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('manage_sub_departments_by_department', 'Manage sub-departments and assign each one to a department')}</p>`;
-
-            formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="sub-department-search-input" class="form-control" placeholder="${__('search_sub_departments', 'Search sub-departments or departments')}" style="max-width: 400px;">`;
-            formHtml += `</div>`;
-
-            formHtml += `<div id="sub-departments-container" class="border rounded p-3 bg-light">`;
-            formHtml += `<div class="text-center text-muted"><div class="spinner-border spinner-border-sm" role="status"></div><span class="ml-2">${__('loading')}</span></div>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            hostEl.innerHTML = formHtml;
-
-            loadSubDepartments();
-
-            const btnAdd = document.getElementById('btn-add-sub-department');
-            if (btnAdd) btnAdd.addEventListener('click', showAddSubDepartmentModal);
-
-            const searchInput = document.getElementById('sub-department-search-input');
-            if (searchInput) searchInput.addEventListener('input', function() { filterSubDepartments(this.value); });
         }
 
         async function fetchDepartmentsList() {
@@ -4651,974 +4215,487 @@ function __(key, def) {
             return departmentsListCache;
         }
 
-        function departmentSelectOptionsHtml(departments, selectedDeptId) {
-            let opts = `<option value="">${__('select_department', 'Select Department')}</option>`;
-            departments.forEach(dept => {
-                const selected = (String(dept.id) === String(selectedDeptId)) ? 'selected' : '';
-                opts += `<option value="${dept.id}" ${selected}>${dept.dep_nme}</option>`;
-            });
-            return opts;
+        // Name cell: English title + Arabic underneath
+        function orgNameCell(icon, en, ar) {
+            return `<div class="org-name">
+                        <span class="ac-ico"><i class="mdi ${icon}"></i></span>
+                        <div class="org-name-text">
+                            <span class="sr-cell-title">${escapeHtml(en || 'N/A')}</span>
+                            ${ar ? `<span class="sr-cell-sub org-ar" dir="rtl">${escapeHtml(ar)}</span>` : ''}
+                        </div>
+                    </div>`;
         }
 
-        async function loadSubDepartments() {
-            try {
-                const response = await fetch('./includes/sub_departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_sub_departments' })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_sub_departments', 'Failed to load sub-departments') + '');
-                const data = await response.json();
-
-                const container = document.getElementById('sub-departments-container');
-                if (!data.success || !data.sub_departments || data.sub_departments.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_sub_departments_configured_yet', 'No sub-departments configured yet.') + '</p>';
-                    return;
-                }
-
-                let html = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('department_label') + '</th><th>' + __('sub_department_name_english', 'Sub-Department (English)') + '</th><th>' + __('sub_department_name_arabic', 'Sub-Department (Arabic)') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
-                data.sub_departments.forEach((sd) => {
-                    html += `
-                        <tr>
-                            <td>${sd.dep_nme || 'N/A'}</td>
-                            <td><strong>${sd.name_en || 'N/A'}</strong></td>
-                            <td><strong>${sd.name_ar || 'N/A'}</strong></td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-sub-department-btn" data-sub-dept-id="${sd.id}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-sub-department-btn" data-sub-dept-id="${sd.id}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                html += '</tbody></table></div>';
-                container.innerHTML = html;
-
-                container.querySelectorAll('.edit-sub-department-btn').forEach(btn => {
-                    btn.addEventListener('click', function() { showEditSubDepartmentModal(this.dataset.subDeptId); });
-                });
-                container.querySelectorAll('.delete-sub-department-btn').forEach(btn => {
-                    btn.addEventListener('click', function() { deleteSubDepartment(this.dataset.subDeptId); });
-                });
-            } catch (error) {
-                console.error('Error loading sub-departments:', error);
-                document.getElementById('sub-departments-container').innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
-            }
+        function orgColorPill(value) {
+            const c = ORG_DEPT_COLORS.find(x => x.v === String(value || '').trim().toLowerCase()) || ORG_DEPT_COLORS[0];
+            return `<span class="org-color"><span class="org-swatch" style="background:${c.hex}"></span>${escapeHtml(c.l)}</span>`;
         }
 
-        async function showAddSubDepartmentModal() {
-            const departments = await fetchDepartmentsList();
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_sub_department', 'Add New Sub-Department') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="sub-department-dept">${__('department_label')}</label>
-                        <select id="sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, '')}</select>
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="sub-department-name-en">${__('sub_department_name_english', 'Sub-Department (English)')}</label>
-                        <input type="text" id="sub-department-name-en" class="form-control">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="sub-department-name-ar">${__('sub_department_name_arabic', 'Sub-Department (Arabic)')}</label>
-                        <input type="text" id="sub-department-name-ar" class="form-control">
-                    </div>
-                `,
-                allowOutsideClick: false,
-                showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                didOpen: () => {
-                    $('#sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
+        const ORG_CRUD = {
+            departments: {
+                pane: 'group-departments', prefix: 'department', url: './includes/departments_handler.php',
+                icon: 'mdi-domain',
+                title: __('department_management', 'Department Management'),
+                sub: __('manage_departments_in_english_and_arabic', 'Manage departments in English and Arabic.'),
+                addLabel: __('add_new_department', 'Add New Department'),
+                editTitle: __('edit_department', 'Edit Department'),
+                deleteTitle: __('delete_department', 'Delete Department'),
+                searchPh: __('search_departments_english_or_arabic', 'Search departments (English or Arabic)...'),
+                actions: { list: 'get_departments', get: 'get_department', add: 'add_department', update: 'update_department', del: 'delete_department' },
+                idParam: 'department_id', listKey: 'departments', getKey: 'department',
+                nameOf: r => r.dep_nme,
+                empty: __('no_departments_configured_yet', 'No departments configured yet'),
+                noMatch: __('no_departments_match_your_search', 'No departments match your search'),
+                msgs: {
+                    added: __('department_added_successfully', 'Department added successfully'),
+                    updated: __('department_updated_successfully', 'Department updated successfully'),
+                    deleted: __('department_deleted_successfully', 'Department deleted successfully'),
+                    notFound: __('department_not_found', 'Department not found')
                 },
-                preConfirm: () => {
-                    const departmentId = document.getElementById('sub-department-dept').value;
-                    const nameEn = document.getElementById('sub-department-name-en').value.trim();
-                    const nameAr = document.getElementById('sub-department-name-ar').value.trim();
-                    if (!departmentId) { Swal.showValidationMessage('' + __('please_select_a_department', 'Please select a department') + ''); return false; }
-                    if (!nameEn) { Swal.showValidationMessage('' + __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') + ''); return false; }
-                    if (!nameAr) { Swal.showValidationMessage('' + __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') + ''); return false; }
-                    return { departmentId, nameEn, nameAr };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) await addSubDepartment(result.value.departmentId, result.value.nameEn, result.value.nameAr);
+                columns: [
+                    { label: __('department', 'Department'), cell: r => orgNameCell('mdi-domain', r.dep_nme, r.dep_nme_ar) },
+                    { label: __('department_color', 'Color'), cell: r => orgColorPill(r.dept_clr) }
+                ],
+                search: r => [r.dep_nme, r.dep_nme_ar, r.dept_clr],
+                fields: [
+                    { name: 'department_en', key: 'dep_nme', label: __('department_english', 'Department (English)'), ph: __('enter_department_in_english', 'Enter department in English'), col: 6,
+                      msg: __('department_in_english_is_required', 'Department name in English is required') },
+                    { name: 'department_ar', key: 'dep_nme_ar', label: __('department_arabic', 'Department (Arabic)'), ph: __('enter_department_in_arabic', 'Enter department in Arabic'), col: 6, rtl: true,
+                      msg: __('department_in_arabic_is_required', 'Department name in Arabic is required') },
+                    { name: 'department_color', key: 'dept_clr', label: __('department_color', 'Color'), type: 'swatch', col: 12, options: ORG_DEPT_COLORS,
+                      msg: __('invalid_department_color', 'Please select a valid department color') }
+                ],
+                // Sub-Departments' department dropdown caches this list
+                onChange: () => { departmentsListCache = null; }
+            },
+            sub_departments: {
+                pane: 'group-sub_departments', prefix: 'sub-department', url: './includes/sub_departments_handler.php',
+                icon: 'mdi-source-fork',
+                title: __('sub_departments_management', 'Sub-Departments Management'),
+                sub: __('manage_sub_departments_by_department', 'Manage sub-departments and assign each one to a department'),
+                addLabel: __('add_new_sub_department', 'Add New Sub-Department'),
+                editTitle: __('edit_sub_department', 'Edit Sub-Department'),
+                deleteTitle: __('delete_sub_department', 'Delete Sub-Department'),
+                searchPh: __('search_sub_departments', 'Search sub-departments or departments'),
+                actions: { list: 'get_sub_departments', get: 'get_sub_department', add: 'add_sub_department', update: 'update_sub_department', del: 'delete_sub_department' },
+                idParam: 'sub_dept_id', listKey: 'sub_departments', getKey: 'sub_department',
+                nameOf: r => r.name_en,
+                empty: __('no_sub_departments_configured_yet', 'No sub-departments configured yet.'),
+                noMatch: __('no_sub_departments_match_your_search', 'No sub-departments match your search'),
+                msgs: {
+                    added: __('sub_department_added_successfully', 'Sub-department added successfully'),
+                    updated: __('sub_department_updated_successfully', 'Sub-department updated successfully'),
+                    deleted: __('sub_department_deleted_successfully', 'Sub-department deleted successfully'),
+                    notFound: __('sub_department_not_found', 'Sub-department not found')
+                },
+                columns: [
+                    { label: __('sub_department', 'Sub-Department'), cell: r => orgNameCell('mdi-source-fork', r.name_en, r.name_ar) },
+                    { label: __('department_label'), cell: r => r.dep_nme ? `<span class="sr-chip"><i class="mdi mdi-domain"></i> ${escapeHtml(r.dep_nme)}</span>` : '<span class="ac-muted">-</span>' }
+                ],
+                search: r => [r.name_en, r.name_ar, r.dep_nme],
+                fields: [
+                    { name: 'department_id', key: 'department_id', label: __('department_label'), type: 'select', col: 12,
+                      placeholder: __('select_department', 'Select Department'),
+                      options: async () => (await fetchDepartmentsList()).map(d => ({ v: d.id, l: d.dep_nme })),
+                      msg: __('please_select_a_department', 'Please select a department') },
+                    { name: 'name_en', key: 'name_en', label: __('sub_department_name_english', 'Sub-Department (English)'), col: 6,
+                      msg: __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') },
+                    { name: 'name_ar', key: 'name_ar', label: __('sub_department_name_arabic', 'Sub-Department (Arabic)'), col: 6, rtl: true,
+                      msg: __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') }
+                ]
+            },
+            job_titles: {
+                pane: 'group-job', prefix: 'job', url: './includes/job_titles_handler.php',
+                icon: 'mdi-briefcase',
+                title: __('job_titles_management'),
+                sub: __('manage_job_titles_in_english_and_arabic'),
+                addLabel: __('add_new_job_title'),
+                editTitle: __('edit_job_title'),
+                deleteTitle: __('delete_job_title'),
+                searchPh: __('search_job_titles_english_or_arabic'),
+                actions: { list: 'get_job_titles', get: 'get_job_title', add: 'add_job_title', update: 'update_job_title', del: 'delete_job_title' },
+                idParam: 'job_id', listKey: 'jobs', getKey: 'job',
+                nameOf: r => r.job,
+                empty: __('No job titles configured yet.'),
+                noMatch: __('no_job_titles_match_your_search'),
+                msgs: {
+                    added: __('job_title_added_successfully'),
+                    updated: __('job_title_updated_successfully'),
+                    deleted: __('job_title_deleted_successfully'),
+                    notFound: __('job_title_not_found')
+                },
+                columns: [
+                    { label: __('job_title_english'), cell: r => orgNameCell('mdi-briefcase', r.job, '') },
+                    { label: __('job_title_arabic'), cell: r => r.job_ar ? `<span class="org-ar-cell" dir="rtl">${escapeHtml(r.job_ar)}</span>` : '<span class="ac-muted">N/A</span>' }
+                ],
+                search: r => [r.job, r.job_ar],
+                fields: [
+                    { name: 'job_title_en', key: 'job', label: __('job_title_english'), ph: __('enter_job_title_in_english'), col: 6,
+                      msg: __('job_title_in_english_is_required') },
+                    { name: 'job_title_ar', key: 'job_ar', label: __('job_title_arabic'), ph: __('enter_job_title_in_arabic'), col: 6, rtl: true,
+                      msg: __('job_title_in_arabic_is_required') }
+                ]
+            },
+            locations: {
+                pane: 'group-locations', prefix: 'location', url: './includes/locations_handler.php',
+                icon: 'mdi-map-marker',
+                title: __('locations_management', 'Locations Management'),
+                sub: __('manage_locations_by_city', 'Manage locations and assign each one to a city'),
+                addLabel: __('add_new_location', 'Add New Location'),
+                editTitle: __('edit_location', 'Edit Location'),
+                deleteTitle: __('delete_location', 'Delete Location'),
+                searchPh: __('search_locations', 'Search locations or cities'),
+                actions: { list: 'get_locations', get: 'get_location', add: 'add_location', update: 'update_location', del: 'delete_location' },
+                idParam: 'location_id', listKey: 'locations', getKey: 'location',
+                nameOf: r => r.name_en,
+                empty: __('no_locations_configured_yet', 'No locations configured yet.'),
+                noMatch: __('no_locations_match_your_search', 'No locations match your search'),
+                msgs: {
+                    added: __('location_added_successfully', 'Location added successfully'),
+                    updated: __('location_updated_successfully', 'Location updated successfully'),
+                    deleted: __('location_deleted_successfully', 'Location deleted successfully'),
+                    notFound: __('location_not_found', 'Location not found')
+                },
+                columns: [
+                    { label: __('location', 'Location'), cell: r => orgNameCell('mdi-map-marker', r.name_en, r.name_ar) },
+                    { label: __('city'), cell: r => r.city_name_en ? `<span class="sr-chip"><i class="mdi mdi-city"></i> ${escapeHtml(r.city_name_en)}</span>` : '<span class="ac-muted">-</span>' }
+                ],
+                search: r => [r.name_en, r.name_ar, r.city_name_en],
+                fields: [
+                    { name: 'city_id', key: 'city_id', label: __('city'), type: 'select', col: 12,
+                      placeholder: __('select_city', 'Select City'),
+                      options: async () => (await fetchCitiesList()).map(c => ({ v: c.id, l: c.name_en })),
+                      msg: __('please_select_a_city', 'Please select a city') },
+                    { name: 'name_en', key: 'name_en', label: __('location_name_english', 'Location (English)'), col: 6,
+                      msg: __('location_name_in_english_is_required', 'Location name in English is required') },
+                    { name: 'name_ar', key: 'name_ar', label: __('location_name_arabic', 'Location (Arabic)'), col: 6, rtl: true,
+                      msg: __('location_name_in_arabic_is_required', 'Location name in Arabic is required') }
+                ]
+            },
+            // Company Code = comp_id (the legacy numeric code employees.comp_no matches
+            // against); Default Timetable = companies.timetable_id (list comes with get_companies).
+            companies: {
+                pane: 'group-companies', prefix: 'company', url: './includes/companies_handler.php',
+                icon: 'mdi-office',
+                title: __('company_management', 'Company Management'),
+                sub: __('manage_companies_in_english_and_arabic', 'Manage companies in English and Arabic.'),
+                addLabel: __('add_new_company', 'Add New Company'),
+                editTitle: __('edit_company', 'Edit Company'),
+                deleteTitle: __('delete_company', 'Delete Company'),
+                searchPh: __('search_companies_english_or_arabic', 'Search companies (English or Arabic)...'),
+                actions: { list: 'get_companies', get: 'get_company', add: 'add_company', update: 'update_company', del: 'delete_company' },
+                idParam: 'company_id', listKey: 'companies', getKey: 'company',
+                nameOf: r => r.comp_name,
+                empty: __('no_companies_configured_yet', 'No companies configured yet'),
+                noMatch: __('no_companies_match_your_search', 'No companies match your search'),
+                msgs: {
+                    added: __('company_added_successfully', 'Company added successfully'),
+                    updated: __('company_updated_successfully', 'Company updated successfully'),
+                    deleted: __('company_deleted_successfully', 'Company deleted successfully'),
+                    notFound: __('company_not_found', 'Company not found')
+                },
+                onList: data => { companiesTimetablesCache = Array.isArray(data.timetables) ? data.timetables : []; },
+                columns: [
+                    { label: __('company', 'Company'), cell: r => orgNameCell('mdi-office', r.comp_name, r.comp_name_ar) },
+                    { label: __('company_code', 'Company Code'), cell: r => `<span class="sr-chip sr-mono">${escapeHtml(String(r.comp_id ?? ''))}</span>` },
+                    { label: __('default_timetable', 'Default Timetable'), cell: r => r.timetable_name
+                        ? `<span class="sr-pill tone-sky"><i class="mdi mdi-calendar-clock"></i> ${escapeHtml(r.timetable_name)}</span>`
+                        : `<span class="ac-muted">${__('none', 'None')}</span>` }
+                ],
+                search: r => [r.comp_name, r.comp_name_ar, r.comp_id, r.timetable_name],
+                fields: [
+                    { name: 'company_en', key: 'comp_name', label: __('company_english', 'Company (English)'), ph: __('enter_company_in_english', 'Enter company in English'), col: 6,
+                      msg: __('company_in_english_is_required', 'Company name in English is required') },
+                    { name: 'company_ar', key: 'comp_name_ar', label: __('company_arabic', 'Company (Arabic)'), ph: __('enter_company_in_arabic', 'Enter company in Arabic'), col: 6, rtl: true,
+                      msg: __('company_in_arabic_is_required', 'Company name in Arabic is required') },
+                    { name: 'comp_id', key: 'comp_id', label: __('company_code', 'Company Code'), type: 'number', ph: __('enter_company_code', 'Enter a unique numeric company code'), col: 6, mono: true,
+                      msg: __('valid_company_code_is_required', 'A valid Company Code is required'),
+                      check: v => parseInt(v, 10) > 0 },
+                    { name: 'timetable_id', key: 'timetable_id', label: __('default_timetable', 'Default Timetable'), type: 'select', col: 6, optional: true,
+                      placeholder: __('no_default_timetable', 'No default timetable'),
+                      options: async () => companiesTimetablesCache.map(t => ({ v: t.id, l: t.name })) }
+                ]
+            }
+        };
+
+        function renderDepartmentsSettings(hostEl) { renderOrgCrud(ORG_CRUD.departments, hostEl); }
+        function renderSubDepartmentsSettings(hostEl) { renderOrgCrud(ORG_CRUD.sub_departments, hostEl); }
+        function renderJobTitlesSettings(hostEl) { renderOrgCrud(ORG_CRUD.job_titles, hostEl); }
+        function renderLocationsSettings(hostEl) { renderOrgCrud(ORG_CRUD.locations, hostEl); }
+        function renderCompaniesSettings(hostEl) { renderOrgCrud(ORG_CRUD.companies, hostEl); }
+
+        function orgPost(cfg, params) {
+            return fetch(cfg.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams(params)
+            }).then(response => {
+                if (!response.ok) throw new Error(`${__('error')} (${response.status})`);
+                return response.json();
             });
         }
 
-        async function addSubDepartment(departmentId, nameEn, nameAr) {
-            try {
-                const response = await fetch('./includes/sub_departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'add_sub_department', department_id: departmentId, name_en: nameEn, name_ar: nameAr })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('sub_department_added_successfully', 'Sub-department added successfully') + '', 'success');
-                    loadSubDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_sub_department', 'Failed to add sub-department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function showEditSubDepartmentModal(subDeptId) {
-            try {
-                const [departments, response] = await Promise.all([
-                    fetchDepartmentsList(),
-                    fetch('./includes/sub_departments_handler.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ action: 'get_sub_department', sub_dept_id: subDeptId })
-                    })
-                ]);
-
-                const data = await response.json();
-                if (!data.success || !data.sub_department) {
-                    Swal.fire('' + __('error') + '', '' + __('sub_department_not_found', 'Sub-department not found') + '', 'error');
-                    return;
-                }
-
-                const sd = data.sub_department;
-                const result = await Swal.fire({
-                    icon: 'info',
-                    title: '' + __('edit_sub_department', 'Edit Sub-Department') + '',
-                    html: `
-                        <div class="form-group text-left">
-                            <label for="edit-sub-department-dept">${__('department_label')}</label>
-                            <select id="edit-sub-department-dept" class="form-control">${departmentSelectOptionsHtml(departments, sd.department_id)}</select>
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-sub-department-name-en">${__('sub_department_name_english', 'Sub-Department (English)')}</label>
-                            <input type="text" id="edit-sub-department-name-en" class="form-control" value="${sd.name_en || ''}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-sub-department-name-ar">${__('sub_department_name_arabic', 'Sub-Department (Arabic)')}</label>
-                            <input type="text" id="edit-sub-department-name-ar" class="form-control" value="${sd.name_ar || ''}">
-                        </div>
-                    `,
-                    allowOutsideClick: false,
-                    showCancelButton: true,
-                    confirmButtonText: '' + __('update') + '',
-                    cancelButtonText: '' + __('cancel') + '',
-                    didOpen: () => {
-                        $('#edit-sub-department-dept').select2({ width: '100%', dropdownParent: $(Swal.getPopup()) });
-                    },
-                    preConfirm: () => {
-                        const departmentId = document.getElementById('edit-sub-department-dept').value;
-                        const nameEn = document.getElementById('edit-sub-department-name-en').value.trim();
-                        const nameAr = document.getElementById('edit-sub-department-name-ar').value.trim();
-                        if (!departmentId) { Swal.showValidationMessage('' + __('please_select_a_department', 'Please select a department') + ''); return false; }
-                        if (!nameEn) { Swal.showValidationMessage('' + __('sub_department_name_in_english_is_required', 'Sub-department name in English is required') + ''); return false; }
-                        if (!nameAr) { Swal.showValidationMessage('' + __('sub_department_name_in_arabic_is_required', 'Sub-department name in Arabic is required') + ''); return false; }
-                        return { departmentId, nameEn, nameAr };
-                    }
-                });
-
-                if (result.isConfirmed) {
-                    await updateSubDepartment(subDeptId, result.value.departmentId, result.value.nameEn, result.value.nameAr);
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function updateSubDepartment(subDeptId, departmentId, nameEn, nameAr) {
-            try {
-                const response = await fetch('./includes/sub_departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'update_sub_department', sub_dept_id: subDeptId, department_id: departmentId, name_en: nameEn, name_ar: nameAr })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('updated') + '', '' + __('sub_department_updated_successfully', 'Sub-department updated successfully') + '', 'success');
-                    loadSubDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_update_sub_department', 'Failed to update sub-department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function deleteSubDepartment(subDeptId) {
-            const result = await Swal.fire({
-                title: '' + __('delete_sub_department', 'Delete Sub-Department') + '',
-                text: '' + __('this_action_cannot_be_undone') + '',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '' + __('yes_delete_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
-            });
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/sub_departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'delete_sub_department', sub_dept_id: subDeptId })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    Swal.fire('' + __('deleted') + '', '' + __('sub_department_deleted_successfully', 'Sub-department deleted successfully') + '', 'success');
-                    loadSubDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_delete_sub_department', 'Failed to delete sub-department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        function filterSubDepartments(searchTerm) {
-            const rows = document.querySelectorAll('#sub-departments-container tbody tr');
-            const searchLower = searchTerm.toLowerCase();
-            let visibleCount = 0;
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                if (text.includes(searchLower)) { row.style.display = ''; visibleCount++; }
-                else { row.style.display = 'none'; }
-            });
-            const container = document.getElementById('sub-departments-container');
-            let noResultsMsg = container.querySelector('.no-results-msg');
-            if (visibleCount === 0 && searchTerm.trim() !== '') {
-                if (!noResultsMsg) {
-                    noResultsMsg = document.createElement('div');
-                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_sub_departments_match_your_search', 'No sub-departments match your search')}`;
-                    container.appendChild(noResultsMsg);
-                }
-            } else if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-        }
-
-        function renderDepartmentsSettings(hostEl) {
+        function renderOrgCrud(cfg, hostEl) {
             hostEl = hostEl || settingsContainer;
-            let formHtml = `<div class="tab-pane active" id="group-departments" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('department_management', 'Department Management')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-department"><i class="mdi mdi-plus"></i> ${__('add_new_department', 'Add New Department')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('manage_departments_in_english_and_arabic', 'Manage departments in English and Arabic.')}</p>`;
+            const p = cfg.prefix;
+            hostEl.innerHTML = `
+                <div class="tab-pane active" id="${cfg.pane}" role="tabpanel">
+                    <div class="ac-head">
+                        <div>
+                            <h5 class="ac-title"><i class="mdi ${cfg.icon}"></i> ${escapeHtml(cfg.title)}</h5>
+                            <p class="ac-sub">${escapeHtml(cfg.sub)}</p>
+                        </div>
+                        <div class="ac-head-actions">
+                            <button type="button" class="sr-btn sr-btn-success sr-btn-sm" id="btn-add-${p}"><i class="mdi mdi-plus"></i> ${escapeHtml(cfg.addLabel)}</button>
+                        </div>
+                    </div>
+                    <div class="sr-card aca-card">
+                        <div class="sr-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="${p}-search-input" placeholder="${escapeHtml(cfg.searchPh)}" autocomplete="off" aria-label="${__('search')}">
+                            </div>
+                            <span class="sr-chip" id="${p}-count-chip"><i class="mdi mdi-format-list-bulleted"></i> <span id="${p}-count">-</span></span>
+                        </div>
+                        <div id="${p}-container">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
+                        </div>
+                    </div>
+                </div>`;
 
-            formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="department-search-input" class="form-control" placeholder="${__('search_departments_english_or_arabic', 'Search departments (English or Arabic)...')}" style="max-width: 400px;">`;
-            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_department_in_english_or_arabic', 'Search by department in English or Arabic')}</small>`;
-            formHtml += `</div>`;
+            document.getElementById(`btn-add-${p}`).addEventListener('click', () => openOrgForm(cfg, null));
 
-            formHtml += `<div id="departments-container" class="border rounded p-3 bg-light">`;
-            formHtml += `<div class="text-center text-muted">`;
-            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
-            formHtml += `<span class="ml-2">${__('loading')}</span>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            hostEl.innerHTML = formHtml;
+            const searchInput = document.getElementById(`${p}-search-input`);
+            // Inside #settingsForm - Enter must not submit the settings form
+            searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+            searchInput.addEventListener('input', () => filterOrgRows(cfg));
 
-            loadDepartments();
-
-            const btnAddDepartment = document.getElementById('btn-add-department');
-            if (btnAddDepartment) {
-                btnAddDepartment.addEventListener('click', showAddDepartmentModal);
-            }
-
-            const searchInput = document.getElementById('department-search-input');
-            if (searchInput) {
-                searchInput.addEventListener('input', function() {
-                    filterDepartments(this.value);
-                });
-            }
+            loadOrgRows(cfg);
         }
 
-        async function loadDepartments() {
+        async function loadOrgRows(cfg) {
+            const p = cfg.prefix;
+            const container = document.getElementById(`${p}-container`);
+            if (!container) return;
             try {
-                const response = await fetch('./includes/departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_departments' })
-                });
+                const data = await orgPost(cfg, { action: cfg.actions.list });
+                if (cfg.onList) cfg.onList(data);
+                const rows = (data.success && Array.isArray(data[cfg.listKey])) ? data[cfg.listKey] : [];
+                const countEl = document.getElementById(`${p}-count`);
+                if (countEl) countEl.textContent = rows.length;
 
-                if (!response.ok) throw new Error('' + __('failed_to_load_departments', 'Failed to load departments') + '');
-                const data = await response.json();
-
-                const container = document.getElementById('departments-container');
-                if (!data.success || !data.departments || data.departments.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_departments_configured_yet', 'No departments configured yet') + '</p>';
+                if (rows.length === 0) {
+                    container.innerHTML = `<div class="sr-empty"><i class="mdi ${cfg.icon}"></i>${escapeHtml(cfg.empty)}</div>`;
                     return;
                 }
 
-                let departmentsHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('department_english', 'Department (English)') + '</th><th>' + __('department_arabic', 'Department (Arabic)') + '</th><th>' + __('department_color', 'Color') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
-                data.departments.forEach((department) => {
-                    const rawColor = String(department.dept_clr || '').trim();
-                    const allowedColors = ['custom', 'purple', 'primary', 'success'];
-                    const safeColorClass = allowedColors.includes(rawColor.toLowerCase()) ? rawColor.toLowerCase() : 'custom';
-                    departmentsHtml += `
-                        <tr>
-                            <td><strong>${department.dep_nme || 'N/A'}</strong></td>
-                            <td><strong>${department.dep_nme_ar || 'N/A'}</strong></td>
-                            <td>
-                                <span class="badge ${safeColorClass}">${safeColorClass}</span>
-                            </td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-department-btn" data-department-id="${department.id}" title="${__('edit')}">
-                                        <i class="mdi mdi-pencil"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-department-btn" data-department-id="${department.id}" title="${__('delete')}">
-                                        <i class="mdi mdi-delete"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                departmentsHtml += '</tbody></table></div>';
-                container.innerHTML = departmentsHtml;
-
-                container.querySelectorAll('.edit-department-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        showEditDepartmentModal(this.dataset.departmentId);
-                    });
+                let body = '';
+                rows.forEach(r => {
+                    const search = cfg.search(r).filter(v => v != null).join(' ').toLowerCase();
+                    body += `<tr data-search="${escapeHtml(search)}">
+                        ${cfg.columns.map(c => `<td>${c.cell(r)}</td>`).join('')}
+                        <td class="aca-actions">
+                            <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon org-edit-btn" data-id="${escapeHtml(r.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                            <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove org-delete-btn" data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(cfg.nameOf(r) || '')}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>
+                        </td>
+                    </tr>`;
                 });
 
-                container.querySelectorAll('.delete-department-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        deleteDepartment(this.dataset.departmentId);
-                    });
+                container.innerHTML = `
+                    <div class="sr-table-wrap aca-table-wrap">
+                        <table class="sr-table aca-table org-table">
+                            <thead><tr>${cfg.columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}<th class="aca-actions">${__('actions')}</th></tr></thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    </div>
+                    <div class="sr-empty org-no-results" style="display:none"><i class="mdi mdi-magnify"></i>${escapeHtml(cfg.noMatch)}</div>`;
+
+                container.querySelectorAll('.org-edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => editOrgRow(cfg, btn.dataset.id));
+                });
+                container.querySelectorAll('.org-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', () => deleteOrgRow(cfg, btn.dataset.id, btn.dataset.name));
                 });
 
+                filterOrgRows(cfg);
             } catch (error) {
-                console.error('Error loading departments:', error);
-                const container = document.getElementById('departments-container');
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+                console.error(`Error loading ${cfg.listKey}:`, error);
+                container.innerHTML = `<div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div>`;
             }
         }
 
-        function showAddDepartmentModal() {
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_department', 'Add New Department') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="department-title-en">${__('department_english', 'Department (English)')}</label>
-                        <input type="text" id="department-title-en" class="form-control" placeholder="${__('enter_department_in_english', 'Enter department in English')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="department-title-ar">${__('department_arabic', 'Department (Arabic)')}</label>
-                        <input type="text" id="department-title-ar" class="form-control" placeholder="${__('enter_department_in_arabic', 'Enter department in Arabic')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="department-color">${__('department_color', 'Color')}</label>
-                        <select id="department-color" class="form-control">
-                            <option value="custom">custom</option>
-                            <option value="purple">purple</option>
-                            <option value="primary">primary</option>
-                            <option value="success">success</option>
-                        </select>
-                    </div>
-                `,
+        function filterOrgRows(cfg) {
+            const p = cfg.prefix;
+            const container = document.getElementById(`${p}-container`);
+            const input = document.getElementById(`${p}-search-input`);
+            if (!container || !input) return;
+            const q = input.value.trim().toLowerCase();
+            let shown = 0;
+            container.querySelectorAll('tbody tr').forEach(tr => {
+                const hit = !q || tr.dataset.search.includes(q);
+                tr.style.display = hit ? '' : 'none';
+                if (hit) shown++;
+            });
+            const noRes = container.querySelector('.org-no-results');
+            const wrap = container.querySelector('.aca-table-wrap');
+            if (noRes) noRes.style.display = shown ? 'none' : '';
+            if (wrap) wrap.style.display = shown ? '' : 'none';
+        }
+
+        async function editOrgRow(cfg, id) {
+            try {
+                const data = await orgPost(cfg, { action: cfg.actions.get, [cfg.idParam]: id });
+                if (!data.success || !data[cfg.getKey]) throw new Error(cfg.msgs.notFound);
+                openOrgForm(cfg, data[cfg.getKey], id);
+            } catch (error) {
+                Swal.fire({ title: __('error'), text: error.message, icon: 'error', customClass: { popup: 'sr-addline-popup sr-page' } });
+            }
+        }
+
+        async function openOrgForm(cfg, record, id) {
+            const isEdit = !!record;
+            const p = cfg.prefix;
+            const fid = f => `org-${p}-${f.name}`;
+
+            // Async option lists (cities, departments, timetables) are loaded first
+            const optionLists = {};
+            try {
+                for (const f of cfg.fields) {
+                    if (f.type === 'select') optionLists[f.name] = await f.options();
+                }
+            } catch (error) {
+                Swal.fire({ title: __('error'), text: error.message, icon: 'error', customClass: { popup: 'sr-addline-popup sr-page' } });
+                return;
+            }
+
+            const valueOf = f => {
+                if (!record) return f.type === 'swatch' ? f.options[0].v : '';
+                const v = record[f.key];
+                if (f.type === 'swatch') {
+                    const norm = String(v || '').trim().toLowerCase();
+                    return f.options.some(o => o.v === norm) ? norm : f.options[0].v;
+                }
+                return v == null ? '' : String(v);
+            };
+
+            const fieldsHtml = cfg.fields.map(f => {
+                const val = valueOf(f);
+                const req = f.optional ? '' : ' <span class="text-danger">*</span>';
+                let control;
+                if (f.type === 'select') {
+                    control = `<select id="${fid(f)}" class="form-control">
+                        <option value="">${escapeHtml(f.placeholder || __('select', 'Select'))}</option>
+                        ${optionLists[f.name].map(o => `<option value="${escapeHtml(o.v)}"${String(o.v) === val ? ' selected' : ''}>${escapeHtml(o.l)}</option>`).join('')}
+                    </select>`;
+                } else if (f.type === 'swatch') {
+                    control = `<div class="org-swatches" id="${fid(f)}">
+                        ${f.options.map(o => `<label class="org-swatch-opt">
+                            <input type="radio" name="${fid(f)}" value="${o.v}"${o.v === val ? ' checked' : ''}>
+                            <span><span class="org-swatch" style="background:${o.hex}"></span>${escapeHtml(o.l)}</span>
+                        </label>`).join('')}
+                    </div>`;
+                } else {
+                    control = `<input type="${f.type === 'number' ? 'number' : 'text'}" id="${fid(f)}" class="form-control${f.mono ? ' sr-mono' : ''}"${f.type === 'number' ? ' min="1"' : ''}${f.rtl ? ' dir="rtl"' : ''}
+                        autocomplete="off" value="${escapeHtml(val)}" placeholder="${escapeHtml(f.ph || '')}">`;
+                }
+                return `<div class="sr-fcol c-${f.col || 12}"><label for="${fid(f)}">${escapeHtml(f.label)}${req}</label>${control}</div>`;
+            }).join('');
+
+            const result = await Swal.fire({
+                title: isEdit ? cfg.editTitle : cfg.addLabel,
+                html: `<form class="sr-form" id="org-form-${p}" onsubmit="return false">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi ${cfg.icon}"></i> ${escapeHtml(isEdit ? (cfg.nameOf(record) || cfg.editTitle) : cfg.addLabel)}</span></div>
+                            <div class="sr-fgrid">${fieldsHtml}</div>
+                        </div>
+                    </form>`,
+                width: '640px',
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                preConfirm: () => {
-                    const titleEn = document.getElementById('department-title-en').value.trim();
-                    const titleAr = document.getElementById('department-title-ar').value.trim();
-                    const color = (document.getElementById('department-color').value || '').trim().toLowerCase();
-
-                    if (!titleEn) {
-                        Swal.showValidationMessage('' + __('department_in_english_is_required', 'Department name in English is required') + '');
+                confirmButtonText: isEdit ? `<i class="mdi mdi-content-save"></i> ${__('update')}` : `<i class="mdi mdi-plus"></i> ${__('add')}`,
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                didOpen: () => {
+                    const popup = Swal.getPopup();
+                    cfg.fields.filter(f => f.type === 'select').forEach(f => {
+                        $(`#${fid(f)}`).select2({ width: '100%', dropdownParent: $(popup) })
+                            .on('change', function() { $(this).next('.select2-container').removeClass('is-invalid'); });
+                    });
+                    popup.querySelector('form').addEventListener('input', e => e.target.classList.remove('is-invalid'));
+                    const first = popup.querySelector('input.form-control');
+                    if (first && !isEdit) first.focus();
+                },
+                preConfirm: async () => {
+                    const params = { action: isEdit ? cfg.actions.update : cfg.actions.add };
+                    if (isEdit) params[cfg.idParam] = id;
+                    for (const f of cfg.fields) {
+                        let v;
+                        if (f.type === 'swatch') {
+                            const checked = document.querySelector(`input[name="${fid(f)}"]:checked`);
+                            v = checked ? checked.value : '';
+                        } else {
+                            v = document.getElementById(fid(f)).value.trim();
+                        }
+                        const bad = (!f.optional && !v) || (v && f.check && !f.check(v));
+                        if (bad) {
+                            const el = document.getElementById(fid(f));
+                            if (f.type === 'select') $(el).next('.select2-container').addClass('is-invalid');
+                            else el.classList.add('is-invalid');
+                            if (f.type !== 'select' && f.type !== 'swatch') el.focus();
+                            Swal.showValidationMessage(f.msg);
+                            return false;
+                        }
+                        params[f.name] = v;
+                    }
+                    try {
+                        const data = await orgPost(cfg, params);
+                        if (!data.success) throw new Error(data.message || __('could_not_save_settings'));
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
                         return false;
                     }
-                    if (!titleAr) {
-                        Swal.showValidationMessage('' + __('department_in_arabic_is_required', 'Department name in Arabic is required') + '');
-                        return false;
-                    }
-                    if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
-                        Swal.showValidationMessage('' + __('invalid_department_color', 'Please select a valid department color') + '');
-                        return false;
-                    }
-                    return { titleEn, titleAr, color };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    await addDepartment(result.value.titleEn, result.value.titleAr, result.value.color);
                 }
             });
-        }
 
-        async function addDepartment(titleEn, titleAr, color) {
-            try {
-                const response = await fetch('./includes/departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'add_department',
-                        department_en: titleEn,
-                        department_ar: titleAr,
-                        department_color: color
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_add_department', 'Failed to add department') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('department_added_successfully', 'Department added successfully') + '', 'success');
-                    loadDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_department', 'Failed to add department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
+            if (result.isConfirmed && result.value) {
+                if (cfg.onChange) cfg.onChange();
+                acToast('success', isEdit ? cfg.msgs.updated : cfg.msgs.added);
+                loadOrgRows(cfg);
             }
         }
 
-        async function showEditDepartmentModal(departmentId) {
-            try {
-                const response = await fetch('./includes/departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'get_department',
-                        department_id: departmentId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_department', 'Failed to load department') + '');
-                const data = await response.json();
-
-                if (!data.success || !data.department) {
-                    Swal.fire('' + __('error') + '', '' + __('department_not_found', 'Department not found') + '', 'error');
-                    return;
-                }
-
-                const department = data.department;
-                const result = await Swal.fire({
-                    icon: 'info',
-                    title: '' + __('edit_department', 'Edit Department') + '',
-                    html: `
-                        <div class="form-group text-left">
-                            <label for="edit-department-title-en">${__('department_english', 'Department (English)')}</label>
-                            <input type="text" id="edit-department-title-en" class="form-control" value="${department.dep_nme || ''}" placeholder="${__('enter_department_in_english', 'Enter department in English')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-department-title-ar">${__('department_arabic', 'Department (Arabic)')}</label>
-                            <input type="text" id="edit-department-title-ar" class="form-control" value="${department.dep_nme_ar || ''}" placeholder="${__('enter_department_in_arabic', 'Enter department in Arabic')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-department-color">${__('department_color', 'Color')}</label>
-                            <select id="edit-department-color" class="form-control">
-                                <option value="custom" ${(String(department.dept_clr || '').trim().toLowerCase() === 'custom' || !String(department.dept_clr || '').trim()) ? 'selected' : ''}>custom</option>
-                                <option value="purple" ${String(department.dept_clr || '').trim().toLowerCase() === 'purple' ? 'selected' : ''}>purple</option>
-                                <option value="primary" ${String(department.dept_clr || '').trim().toLowerCase() === 'primary' ? 'selected' : ''}>primary</option>
-                                <option value="success" ${String(department.dept_clr || '').trim().toLowerCase() === 'success' ? 'selected' : ''}>success</option>
-                            </select>
-                        </div>
-                    `,
-                    allowOutsideClick: false,
-                    showCancelButton: true,
-                    confirmButtonText: '' + __('update') + '',
-                    cancelButtonText: '' + __('cancel') + '',
-                    preConfirm: () => {
-                        const titleEn = document.getElementById('edit-department-title-en').value.trim();
-                        const titleAr = document.getElementById('edit-department-title-ar').value.trim();
-                        const color = (document.getElementById('edit-department-color').value || '').trim().toLowerCase();
-
-                        if (!titleEn) {
-                            Swal.showValidationMessage('' + __('department_in_english_is_required', 'Department name in English is required') + '');
-                            return false;
-                        }
-                        if (!titleAr) {
-                            Swal.showValidationMessage('' + __('department_in_arabic_is_required', 'Department name in Arabic is required') + '');
-                            return false;
-                        }
-                        if (!['custom', 'purple', 'primary', 'success'].includes(color)) {
-                            Swal.showValidationMessage('' + __('invalid_department_color', 'Please select a valid department color') + '');
-                            return false;
-                        }
-                        return { titleEn, titleAr, color };
-                    }
-                });
-
-                if (result.isConfirmed) {
-                        await updateDepartment(departmentId, result.value.titleEn, result.value.titleAr, result.value.color);
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-            async function updateDepartment(departmentId, titleEn, titleAr, color) {
-            try {
-                const response = await fetch('./includes/departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'update_department',
-                        department_id: departmentId,
-                        department_en: titleEn,
-                            department_ar: titleAr,
-                            department_color: color
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_update_department', 'Failed to update department') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('updated') + '', '' + __('department_updated_successfully', 'Department updated successfully') + '', 'success');
-                    loadDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_update_department', 'Failed to update department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function deleteDepartment(departmentId) {
+        async function deleteOrgRow(cfg, id, name) {
             const result = await Swal.fire({
-                title: '' + __('delete_department', 'Delete Department') + '',
-                text: '' + __('this_action_cannot_be_undone') + '',
+                title: cfg.deleteTitle,
+                html: `<div class="sr-form"><div class="sr-notice tone-red is-compact"><i class="mdi mdi-alert-outline"></i>
+                        <div>${name ? `<strong>${escapeHtml(name)}</strong><br>` : ''}${__('this_action_cannot_be_undone')}</div></div></div>`,
                 icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '' + __('yes_delete_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
-            });
-
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/departments_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'delete_department',
-                        department_id: departmentId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_delete_department', 'Failed to delete department') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('deleted') + '', '' + __('department_deleted_successfully', 'Department deleted successfully') + '', 'success');
-                    loadDepartments();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_delete_department', 'Failed to delete department') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        function filterDepartments(searchTerm) {
-            const rows = document.querySelectorAll('#departments-container tbody tr');
-            let visibleCount = 0;
-
-            rows.forEach(row => {
-                const depEn = row.cells[0].textContent.toLowerCase();
-                const depAr = row.cells[1].textContent.toLowerCase();
-                const depColor = row.cells[2].textContent.toLowerCase();
-                const searchLower = searchTerm.toLowerCase();
-
-                if (depEn.includes(searchLower) || depAr.includes(searchLower) || depColor.includes(searchLower)) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-
-            const container = document.getElementById('departments-container');
-            let noResultsMsg = container.querySelector('.no-results-msg');
-
-            if (visibleCount === 0 && searchTerm.trim() !== '') {
-                if (!noResultsMsg) {
-                    noResultsMsg = document.createElement('div');
-                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_departments_match_your_search', 'No departments match your search')}`;
-                    container.appendChild(noResultsMsg);
-                }
-            } else if (noResultsMsg) {
-                noResultsMsg.remove();
-            }
-        }
-
-        // --- Companies (Org Structure sub-tab) ---
-        // Mirrors renderDepartmentsSettings/loadDepartments/etc. above, against
-        // includes/companies_handler.php and the `companies` table instead of `department`.
-        // No color field (companies has none); adds Company Code (comp_id - the legacy
-        // numeric code employees.comp_no matches against) and an optional Default
-        // Timetable dropdown (companies.timetable_id) that Departments has no analog for.
-        function renderCompaniesSettings(hostEl) {
-            hostEl = hostEl || settingsContainer;
-            let formHtml = `<div class="tab-pane active" id="group-companies" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('company_management', 'Company Management')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-company"><i class="mdi mdi-plus"></i> ${__('add_new_company', 'Add New Company')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('manage_companies_in_english_and_arabic', 'Manage companies in English and Arabic.')}</p>`;
-
-            formHtml += `<div class="form-group mb-3">`;
-            formHtml += `<input type="text" id="company-search-input" class="form-control" placeholder="${__('search_companies_english_or_arabic', 'Search companies (English or Arabic)...')}" style="max-width: 400px;">`;
-            formHtml += `<small class="form-text text-muted mt-1">${__('search_by_company_in_english_or_arabic', 'Search by company in English or Arabic')}</small>`;
-            formHtml += `</div>`;
-
-            formHtml += `<div id="companies-container" class="border rounded p-3 bg-light">`;
-            formHtml += `<div class="text-center text-muted">`;
-            formHtml += `<div class="spinner-border spinner-border-sm" role="status"></div>`;
-            formHtml += `<span class="ml-2">${__('loading')}</span>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            formHtml += `</div>`;
-            hostEl.innerHTML = formHtml;
-
-            loadCompanies();
-
-            const btnAddCompany = document.getElementById('btn-add-company');
-            if (btnAddCompany) {
-                btnAddCompany.addEventListener('click', showAddCompanyModal);
-            }
-
-            const searchInput = document.getElementById('company-search-input');
-            if (searchInput) {
-                searchInput.addEventListener('input', function() {
-                    filterCompanies(this.value);
-                });
-            }
-        }
-
-        function buildTimetableOptionsHtml(selectedId) {
-            const selected = selectedId != null ? String(selectedId) : '';
-            let options = `<option value="">${__('no_default_timetable', 'No default timetable')}</option>`;
-            companiesTimetablesCache.forEach(t => {
-                options += `<option value="${t.id}" ${String(t.id) === selected ? 'selected' : ''}>${escapeHtml(t.name)}</option>`;
-            });
-            return options;
-        }
-
-        async function loadCompanies() {
-            try {
-                const response = await fetch('./includes/companies_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ action: 'get_companies' })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_companies', 'Failed to load companies') + '');
-                const data = await response.json();
-
-                companiesTimetablesCache = Array.isArray(data.timetables) ? data.timetables : [];
-
-                const container = document.getElementById('companies-container');
-                if (!data.success || !data.companies || data.companies.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_companies_configured_yet', 'No companies configured yet') + '</p>';
-                    return;
-                }
-
-                let companiesHtml = '<div class="table-responsive"><table class="table table-hover mb-0"><thead class="bg-light"><tr><th>' + __('company_english', 'Company (English)') + '</th><th>' + __('company_arabic', 'Company (Arabic)') + '</th><th>' + __('company_code', 'Company Code') + '</th><th>' + __('default_timetable', 'Default Timetable') + '</th><th>' + __('actions') + '</th></tr></thead><tbody>';
-                data.companies.forEach((company) => {
-                    companiesHtml += `
-                        <tr>
-                            <td><strong>${escapeHtml(company.comp_name || 'N/A')}</strong></td>
-                            <td><strong>${escapeHtml(company.comp_name_ar || 'N/A')}</strong></td>
-                            <td>${escapeHtml(String(company.comp_id ?? ''))}</td>
-                            <td>${escapeHtml(company.timetable_name || __('none', 'None'))}</td>
-                            <td>
-                                <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary edit-company-btn" data-company-id="${company.id}" title="${__('edit')}">
-                                        <i class="mdi mdi-pencil"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger delete-company-btn" data-company-id="${company.id}" title="${__('delete')}">
-                                        <i class="mdi mdi-delete"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                });
-                companiesHtml += '</tbody></table></div>';
-                container.innerHTML = companiesHtml;
-
-                container.querySelectorAll('.edit-company-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        showEditCompanyModal(this.dataset.companyId);
-                    });
-                });
-
-                container.querySelectorAll('.delete-company-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        deleteCompany(this.dataset.companyId);
-                    });
-                });
-
-            } catch (error) {
-                console.error('Error loading companies:', error);
-                const container = document.getElementById('companies-container');
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
-            }
-        }
-
-        function showAddCompanyModal() {
-            Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_company', 'Add New Company') + '',
-                html: `
-                    <div class="form-group text-left">
-                        <label for="company-title-en">${__('company_english', 'Company (English)')}</label>
-                        <input type="text" id="company-title-en" class="form-control" placeholder="${__('enter_company_in_english', 'Enter company in English')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="company-title-ar">${__('company_arabic', 'Company (Arabic)')}</label>
-                        <input type="text" id="company-title-ar" class="form-control" placeholder="${__('enter_company_in_arabic', 'Enter company in Arabic')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="company-code">${__('company_code', 'Company Code')}</label>
-                        <input type="number" min="1" id="company-code" class="form-control" placeholder="${__('enter_company_code', 'Enter a unique numeric company code')}">
-                    </div>
-                    <div class="form-group text-left">
-                        <label for="company-timetable">${__('default_timetable', 'Default Timetable')}</label>
-                        <select id="company-timetable" class="form-control">${buildTimetableOptionsHtml(null)}</select>
-                    </div>
-                `,
+                width: '480px',
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                preConfirm: () => {
-                    const titleEn = document.getElementById('company-title-en').value.trim();
-                    const titleAr = document.getElementById('company-title-ar').value.trim();
-                    const compCode = document.getElementById('company-code').value.trim();
-                    const timetableId = document.getElementById('company-timetable').value;
-
-                    if (!titleEn) {
-                        Swal.showValidationMessage('' + __('company_in_english_is_required', 'Company name in English is required') + '');
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: `<i class="mdi mdi-delete"></i> ${__('yes_delete_it')}`,
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                preConfirm: async () => {
+                    try {
+                        const data = await orgPost(cfg, { action: cfg.actions.del, [cfg.idParam]: id });
+                        if (!data.success) throw new Error(data.message || __('error'));
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
                         return false;
                     }
-                    if (!titleAr) {
-                        Swal.showValidationMessage('' + __('company_in_arabic_is_required', 'Company name in Arabic is required') + '');
-                        return false;
-                    }
-                    if (!compCode || parseInt(compCode, 10) <= 0) {
-                        Swal.showValidationMessage('' + __('valid_company_code_is_required', 'A valid Company Code is required') + '');
-                        return false;
-                    }
-                    return { titleEn, titleAr, compCode, timetableId };
-                }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    await addCompany(result.value.titleEn, result.value.titleAr, result.value.compCode, result.value.timetableId);
-                }
-            });
-        }
-
-        async function addCompany(titleEn, titleAr, compCode, timetableId) {
-            try {
-                const response = await fetch('./includes/companies_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'add_company',
-                        company_en: titleEn,
-                        company_ar: titleAr,
-                        comp_id: compCode,
-                        timetable_id: timetableId || ''
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_add_company', 'Failed to add company') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('company_added_successfully', 'Company added successfully') + '', 'success');
-                    loadCompanies();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_company', 'Failed to add company') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function showEditCompanyModal(companyId) {
-            try {
-                const response = await fetch('./includes/companies_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'get_company',
-                        company_id: companyId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_load_company', 'Failed to load company') + '');
-                const data = await response.json();
-
-                if (!data.success || !data.company) {
-                    Swal.fire('' + __('error') + '', '' + __('company_not_found', 'Company not found') + '', 'error');
-                    return;
-                }
-
-                const company = data.company;
-                const result = await Swal.fire({
-                    icon: 'info',
-                    title: '' + __('edit_company', 'Edit Company') + '',
-                    html: `
-                        <div class="form-group text-left">
-                            <label for="edit-company-title-en">${__('company_english', 'Company (English)')}</label>
-                            <input type="text" id="edit-company-title-en" class="form-control" value="${escapeHtml(company.comp_name || '')}" placeholder="${__('enter_company_in_english', 'Enter company in English')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-company-title-ar">${__('company_arabic', 'Company (Arabic)')}</label>
-                            <input type="text" id="edit-company-title-ar" class="form-control" value="${escapeHtml(company.comp_name_ar || '')}" placeholder="${__('enter_company_in_arabic', 'Enter company in Arabic')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-company-code">${__('company_code', 'Company Code')}</label>
-                            <input type="number" min="1" id="edit-company-code" class="form-control" value="${escapeHtml(String(company.comp_id ?? ''))}" placeholder="${__('enter_company_code', 'Enter a unique numeric company code')}">
-                        </div>
-                        <div class="form-group text-left">
-                            <label for="edit-company-timetable">${__('default_timetable', 'Default Timetable')}</label>
-                            <select id="edit-company-timetable" class="form-control">${buildTimetableOptionsHtml(company.timetable_id)}</select>
-                        </div>
-                    `,
-                    allowOutsideClick: false,
-                    showCancelButton: true,
-                    confirmButtonText: '' + __('update') + '',
-                    cancelButtonText: '' + __('cancel') + '',
-                    preConfirm: () => {
-                        const titleEn = document.getElementById('edit-company-title-en').value.trim();
-                        const titleAr = document.getElementById('edit-company-title-ar').value.trim();
-                        const compCode = document.getElementById('edit-company-code').value.trim();
-                        const timetableId = document.getElementById('edit-company-timetable').value;
-
-                        if (!titleEn) {
-                            Swal.showValidationMessage('' + __('company_in_english_is_required', 'Company name in English is required') + '');
-                            return false;
-                        }
-                        if (!titleAr) {
-                            Swal.showValidationMessage('' + __('company_in_arabic_is_required', 'Company name in Arabic is required') + '');
-                            return false;
-                        }
-                        if (!compCode || parseInt(compCode, 10) <= 0) {
-                            Swal.showValidationMessage('' + __('valid_company_code_is_required', 'A valid Company Code is required') + '');
-                            return false;
-                        }
-                        return { titleEn, titleAr, compCode, timetableId };
-                    }
-                });
-
-                if (result.isConfirmed) {
-                    await updateCompany(companyId, result.value.titleEn, result.value.titleAr, result.value.compCode, result.value.timetableId);
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function updateCompany(companyId, titleEn, titleAr, compCode, timetableId) {
-            try {
-                const response = await fetch('./includes/companies_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'update_company',
-                        company_id: companyId,
-                        company_en: titleEn,
-                        company_ar: titleAr,
-                        comp_id: compCode,
-                        timetable_id: timetableId || ''
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_update_company', 'Failed to update company') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('updated') + '', '' + __('company_updated_successfully', 'Company updated successfully') + '', 'success');
-                    loadCompanies();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_update_company', 'Failed to update company') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        async function deleteCompany(companyId) {
-            const result = await Swal.fire({
-                title: '' + __('delete_company', 'Delete Company') + '',
-                text: '' + __('this_action_cannot_be_undone') + '',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: '' + __('yes_delete_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
-            });
-
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/companies_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        action: 'delete_company',
-                        company_id: companyId
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_delete_company', 'Failed to delete company') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('deleted') + '', '' + __('company_deleted_successfully', 'Company deleted successfully') + '', 'success');
-                    loadCompanies();
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_delete_company', 'Failed to delete company') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
-            }
-        }
-
-        function filterCompanies(searchTerm) {
-            const rows = document.querySelectorAll('#companies-container tbody tr');
-            let visibleCount = 0;
-
-            rows.forEach(row => {
-                const compEn = row.cells[0].textContent.toLowerCase();
-                const compAr = row.cells[1].textContent.toLowerCase();
-                const compCode = row.cells[2].textContent.toLowerCase();
-                const searchLower = searchTerm.toLowerCase();
-
-                if (compEn.includes(searchLower) || compAr.includes(searchLower) || compCode.includes(searchLower)) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
                 }
             });
 
-            const container = document.getElementById('companies-container');
-            let noResultsMsg = container.querySelector('.no-results-msg');
-
-            if (visibleCount === 0 && searchTerm.trim() !== '') {
-                if (!noResultsMsg) {
-                    noResultsMsg = document.createElement('div');
-                    noResultsMsg.className = 'alert alert-info no-results-msg mt-2';
-                    noResultsMsg.innerHTML = `<i class="mdi mdi-information-outline"></i> ${__('no_companies_match_your_search', 'No companies match your search')}`;
-                    container.appendChild(noResultsMsg);
-                }
-            } else if (noResultsMsg) {
-                noResultsMsg.remove();
+            if (result.isConfirmed && result.value) {
+                if (cfg.onChange) cfg.onChange();
+                acToast('success', cfg.msgs.deleted);
+                loadOrgRows(cfg);
             }
         }
 
@@ -6159,10 +5236,28 @@ function __(key, def) {
         async function renderAssetClearanceSettings() {
             settingsContainer.innerHTML = `
                 <div id="group-asset_clearance" class="tab-pane active">
-                    <h5 class="mb-3">${__('asset_clearance_handlers', 'Asset Clearance Handlers')}</h5>
-                    <p class="text-muted">${__('asset_clearance_handlers_note', "Assign who confirms an asset's return during vacation approval. If left unassigned, the department's manager handles it automatically (or a system administrator, if that manager is the employee's own direct manager).")}</p>
-                    <div id="asset-clearance-table-wrapper" class="approval-chain-container border rounded p-3 bg-light">
-                        <div class="d-flex justify-content-center align-items-center" style="height: 80px;"><div class="loader"></div></div>
+                    <div class="ac-head">
+                        <div>
+                            <h5 class="ac-title"><i class="mdi mdi-package-variant-closed"></i> ${__('asset_clearance_handlers', 'Asset Clearance Handlers')}</h5>
+                            <p class="ac-sub">${__('asset_clearance_handlers_sub', 'Who confirms each asset type is returned when an employee goes on vacation.')}</p>
+                        </div>
+                        <div class="ac-head-actions">
+                            <div class="sr-search ac-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="acAssetFilter" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sr-notice tone-sky"><i class="mdi mdi-information-outline"></i><div>${__('asset_clearance_handlers_note', "Assign who confirms an asset's return during vacation approval. If left unassigned, the department's manager handles it automatically (or a system administrator, if that manager is the employee's own direct manager).")}</div></div>
+                    <div class="ac-stats">
+                        <div class="ac-stat"><span class="ac-stat-ico tone-indigo"><i class="mdi mdi-package-variant"></i></span><div><span class="ac-stat-val" id="acaStatTypes">-</span><span class="ac-stat-lbl">${__('asset_types', 'Asset types')}</span></div></div>
+                        <div class="ac-stat"><span class="ac-stat-ico tone-green"><i class="mdi mdi-account-multiple"></i></span><div><span class="ac-stat-val" id="acaStatAssigned">-</span><span class="ac-stat-lbl">${__('handlers_assigned', 'Handlers assigned')}</span></div></div>
+                        <div class="ac-stat"><span class="ac-stat-ico tone-slate"><i class="mdi mdi-autorenew"></i></span><div><span class="ac-stat-val" id="acaStatAuto">-</span><span class="ac-stat-lbl">${__('automatic_dept_manager', 'Automatic (dept. manager)')}</span></div></div>
+                    </div>
+                    <div class="sr-card aca-card">
+                        <div id="asset-clearance-table-wrapper">
+                            <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -6177,41 +5272,77 @@ function __(key, def) {
                 if (!data.success) throw new Error(data.message || 'Failed to load asset clearance handlers');
                 renderAssetClearanceTable(data.assets || []);
             } catch (error) {
-                document.getElementById('asset-clearance-table-wrapper').innerHTML = `<p class="text-danger text-center">${error.message}</p>`;
+                document.getElementById('asset-clearance-table-wrapper').innerHTML =
+                    `<div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div>`;
             }
         }
 
         function renderAssetClearanceTable(assets) {
             const wrapper = document.getElementById('asset-clearance-table-wrapper');
+            // Saved handler ids per asset - drives the unsaved-changes state and the stats
+            const savedIds = {};
+            assets.forEach(a => {
+                savedIds[a.asset_id] = (Array.isArray(a.handlers) ? a.handlers : []).map(h => String(h.emp_id)).sort();
+            });
+
+            const updateStats = () => {
+                const ids = Object.values(savedIds);
+                const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+                set('acaStatTypes', ids.length);
+                set('acaStatAssigned', ids.filter(list => list.length).length);
+                set('acaStatAuto', ids.filter(list => !list.length).length);
+            };
+            const modePill = (count) => count
+                ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${count} ${count === 1 ? __('handler', 'Handler') : __('handlers', 'Handlers')}</span>`
+                : `<span class="sr-pill tone-slate"><span class="sr-dot"></span>${__('automatic', 'Automatic')}</span>`;
+            const assetIcon = (name) => {
+                const n = String(name || '').toLowerCase();
+                if (n.includes('laptop') || n.includes('computer')) return 'mdi-laptop';
+                if (n.includes('mobile') || n.includes('phone')) return 'mdi-cellphone';
+                if (n.includes('sim')) return 'mdi-sim';
+                if (n.includes('car') || n.includes('vehicle')) return 'mdi-car';
+                return 'mdi-package-variant';
+            };
+
+            updateStats();
+
             if (assets.length === 0) {
-                wrapper.innerHTML = `<p class="text-muted text-center mb-0">${__('no_asset_types_configured', 'No asset types configured yet.')}</p>`;
+                wrapper.innerHTML = `<div class="sr-empty"><i class="mdi mdi-package-variant"></i>${__('no_asset_types_configured', 'No asset types configured yet.')}</div>`;
                 return;
             }
 
             let rowsHtml = '';
             assets.forEach(asset => {
+                const name = escapeHtml(asset.asset_name);
                 rowsHtml += `
-                    <tr data-asset-id="${asset.asset_id}" data-dept-id="${asset.clearance_dept_id || ''}">
-                        <td>${asset.asset_name}</td>
-                        <td>${asset.dept_name || '<span class="text-muted">-</span>'}</td>
-                        <td style="width:1%;">
-                            <select class="form-control form-control-sm asset-handler-select" multiple>
-                            </select>
-                        </td>
+                    <tr data-asset-id="${escapeHtml(asset.asset_id)}" data-dept-id="${escapeHtml(asset.clearance_dept_id || '')}" data-search="${escapeHtml(((asset.asset_name || '') + ' ' + (asset.dept_name || '')).toLowerCase())}">
                         <td>
-                            <button type="button" class="btn btn-sm btn-outline-primary asset-handler-save">${__('save', 'Save')}</button>
+                            <div class="aca-asset">
+                                <span class="ac-ico"><i class="mdi ${assetIcon(asset.asset_name)}"></i></span>
+                                <span class="sr-cell-title">${name}</span>
+                            </div>
+                        </td>
+                        <td>${asset.dept_name ? `<span class="sr-chip">${escapeHtml(asset.dept_name)}</span>` : '<span class="ac-muted">-</span>'}</td>
+                        <td class="aca-mode">${modePill(savedIds[asset.asset_id].length)}</td>
+                        <td class="aca-handler">
+                            <select class="form-control form-control-sm asset-handler-select" multiple></select>
+                        </td>
+                        <td class="aca-actions">
+                            <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost sr-btn-icon asset-handler-undo" title="${__('undo', 'Undo')}" disabled><i class="mdi mdi-undo"></i></button>
+                            <button type="button" class="sr-btn sr-btn-sm sr-btn-primary asset-handler-save" disabled><i class="mdi mdi-content-save"></i> ${__('save', 'Save')}</button>
                         </td>
                     </tr>
                 `;
             });
 
             wrapper.innerHTML = `
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
+                <div class="sr-table-wrap aca-table-wrap">
+                    <table class="sr-table aca-table">
                         <thead>
                             <tr>
                                 <th>${__('asset_type', 'Asset Type')}</th>
                                 <th>${__('department', 'Department')}</th>
+                                <th>${__('mode', 'Mode')}</th>
                                 <th>${__('handler', 'Handler')}</th>
                                 <th></th>
                             </tr>
@@ -6219,10 +5350,35 @@ function __(key, def) {
                         <tbody>${rowsHtml}</tbody>
                     </table>
                 </div>
+                <div class="sr-empty" id="acaNoResults" style="display:none"><i class="mdi mdi-magnify"></i>${__('no_results_found', 'No results found')}</div>
             `;
 
-            // One shared employee list for every row - the handler pool is no longer
+            const currentIds = (tr) => Array.from(tr.querySelector('.asset-handler-select').selectedOptions).map(o => o.value).sort();
+            const refreshRow = (tr) => {
+                const dirty = currentIds(tr).join(',') !== savedIds[tr.dataset.assetId].join(',');
+                tr.classList.toggle('is-dirty', dirty);
+                tr.querySelector('.asset-handler-save').disabled = !dirty;
+                tr.querySelector('.asset-handler-undo').disabled = !dirty;
+            };
+            const fillSelect = (tr, employees) => {
+                const select = tr.querySelector('.asset-handler-select');
+                const assigned = savedIds[tr.dataset.assetId];
+                if ($(select).data('select2')) $(select).select2('destroy');
+                select.innerHTML = employees.map(emp =>
+                    `<option value="${escapeHtml(emp.emp_id)}"${assigned.includes(String(emp.emp_id)) ? ' selected' : ''}>${escapeHtml(emp.name)} (${escapeHtml(emp.emp_id)})</option>`
+                ).join('');
+                $(select).select2({
+                    width: '100%',
+                    multiple: true,
+                    allowClear: true,
+                    placeholder: __('automatic', 'Automatic (department manager)')
+                }).off('change.aca').on('change.aca', () => refreshRow(tr));
+                refreshRow(tr);
+            };
+
+            // One shared employee list for every row - the handler pool is not
             // restricted by department, so there's nothing to fetch per-row.
+            let employees = [];
             fetch('./includes/ajaxFile/leaveHandler.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -6230,33 +5386,19 @@ function __(key, def) {
             })
             .then(r => r.json())
             .then(res => {
-                const employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
-
-                wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => {
-                    const assetId = tr.dataset.assetId;
-                    const asset = assets.find(a => String(a.asset_id) === assetId);
-                    const select = tr.querySelector('.asset-handler-select');
-                    const assignedIds = (asset && Array.isArray(asset.handlers)) ? asset.handlers.map(h => String(h.emp_id)) : [];
-
-                    let optionsHtml = '';
-                    employees.forEach(emp => {
-                        const selected = assignedIds.includes(String(emp.emp_id)) ? 'selected' : '';
-                        optionsHtml += `<option value="${emp.emp_id}" ${selected}>${emp.name} (${emp.emp_id})</option>`;
-                    });
-                    select.innerHTML = optionsHtml;
-                    $(select).select2({
-                        width: '400px',
-                        multiple: true,
-                        allowClear: true,
-                        placeholder: __('automatic', 'Automatic (department manager)')
-                    });
-                });
+                employees = Array.isArray(res.employees) ? res.employees : (Array.isArray(res.data) ? res.data : []);
+                // Keep already-assigned handlers selectable even if the list no longer returns them
+                assets.forEach(a => (a.handlers || []).forEach(h => {
+                    if (!employees.some(e => String(e.emp_id) === String(h.emp_id))) employees.push({ emp_id: h.emp_id, name: h.name });
+                }));
+                wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => fillSelect(tr, employees));
             })
             .catch(() => {
-                wrapper.querySelectorAll('.asset-handler-select').forEach(select => {
-                    select.innerHTML = '';
-                    $(select).select2({ width: '400px', multiple: true });
-                });
+                wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => fillSelect(tr, []));
+            });
+
+            wrapper.querySelectorAll('.asset-handler-undo').forEach(btn => {
+                btn.addEventListener('click', () => fillSelect(btn.closest('tr'), employees));
             });
 
             wrapper.querySelectorAll('.asset-handler-save').forEach(btn => {
@@ -6270,6 +5412,7 @@ function __(key, def) {
                     handlerEmpIds.forEach(id => params.append('handler_emp_id[]', id));
 
                     btn.disabled = true;
+                    btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span> ${__('save', 'Save')}`;
                     try {
                         const response = await fetch('./includes/approval_chain_handler.php', {
                             method: 'POST',
@@ -6278,14 +5421,34 @@ function __(key, def) {
                         });
                         const data = await response.json();
                         if (!data.success) throw new Error(data.message || 'Failed to save');
-                        Swal.fire({ icon: 'success', title: __('saved', 'Saved'), text: data.message, timer: 1500, showConfirmButton: false });
+                        savedIds[assetId] = handlerEmpIds.slice().sort();
+                        tr.querySelector('.aca-mode').innerHTML = modePill(handlerEmpIds.length);
+                        updateStats();
+                        acToast('success', data.message || __('saved', 'Saved'));
                     } catch (error) {
-                        Swal.fire(__('Error!', 'Error!'), error.message, 'error');
+                        Swal.fire({ title: __('Error!', 'Error!'), text: error.message, icon: 'error', customClass: { popup: 'sr-addline-popup sr-page' } });
                     } finally {
-                        btn.disabled = false;
+                        btn.innerHTML = `<i class="mdi mdi-content-save"></i> ${__('save', 'Save')}`;
+                        refreshRow(tr);
                     }
                 });
             });
+
+            const filter = document.getElementById('acAssetFilter');
+            if (filter) {
+                // Inside #settingsForm - Enter must not submit the settings form
+                filter.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+                filter.addEventListener('input', function() {
+                    const q = this.value.trim().toLowerCase();
+                    let shown = 0;
+                    wrapper.querySelectorAll('tr[data-asset-id]').forEach(tr => {
+                        const hit = !q || tr.dataset.search.includes(q);
+                        tr.style.display = hit ? '' : 'none';
+                        if (hit) shown++;
+                    });
+                    document.getElementById('acaNoResults').style.display = shown ? 'none' : '';
+                });
+            }
         }
 
         function attachPreviewListeners() {
@@ -6343,7 +5506,7 @@ function __(key, def) {
             }
 
             let html = `<div id="announcement-recipient-list">${recipients.map(announcementRecipientRowHtml).join('')}</div>`;
-            html += `<button type="button" class="btn btn-sm btn-outline-primary mt-1" id="add-announcement-recipient-btn"><i class="mdi mdi-plus"></i> ${__('add_recipient', 'Add Recipient')}</button>`;
+            html += `<button type="button" class="sr-btn sr-btn-sm mt-1" id="add-announcement-recipient-btn"><i class="mdi mdi-plus"></i> ${__('add_recipient', 'Add Recipient')}</button>`;
             html += `<small class="form-text text-muted">${__('announcement_recipients_hint', 'These appear as the Recipients choices on the Send Announcement page. Use a mailing-list address to reach a whole group.')}</small>`;
             html += `<input type="hidden" id="${id}" name="${setting.setting_name}" value="">`;
             return html;
@@ -6506,7 +5669,7 @@ function __(key, def) {
                         restrictedNavHtml += `
                             <li class="nav-item">
                                 <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
-                                    <span class="text-capitalize">${translatedGroup}</span>
+                                    <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize">${translatedGroup}</span>
                                 </a>
                             </li>
                         `;
@@ -6649,7 +5812,7 @@ function __(key, def) {
                     navHtml += `
                         <li class="nav-item">
                             <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
-                                <span class="text-capitalize">${translatedGroup}</span>
+                                <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize">${translatedGroup}</span>
                             </a>
                         </li>
                     `;
