@@ -273,6 +273,13 @@ if ($can_see_all_depts) {
         .si-sum-tiles .is-date { background: var(--tone-indigo-bg); }
         .si-sum-tiles .is-date > span, .si-sum-tiles .is-date > b { color: var(--tone-indigo-fg); }
         .si-gm-badge { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 10px; font-weight: 700; line-height: 16px; background: var(--tone-green-fg); color: #fff; vertical-align: 1px; }
+        /* Report popup */
+        .si-report-hero { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); }
+        .si-report-hero .sr-avatar { width: 44px; height: 44px; font-size: 15px; }
+        .si-report-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+        .si-report .sr-activity { max-height: none; }
+        .si-report .sr-activity-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        @media (max-width: 767px) { .si-report-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -949,183 +956,246 @@ if ($can_see_all_depts) {
             });
         }
 
+        const SI_COMPANY_LOGO = <?= json_encode((string)get_setting($conDB, 'logo', 'assets/images/logo.png')) ?>;
+
+        // Report popup (new GUI view) + compact A4 print of the same data.
         function viewSalaryIncrementReport(requestInvNo) {
-            const escapeHtml = (value) => String(value == null ? '' : value)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-            const statusMetaMap = {
-                approved:  { icon: 'fa-check', cls: 'et-status-success', label: __('approved', 'Approved') },
-                rejected:  { icon: 'fa-times', cls: 'et-status-danger', label: __('rejected', 'Rejected') },
-                cancelled: { icon: 'fa-ban', cls: 'et-status-secondary', label: __('cancelled', 'Cancelled') },
-                pending:   { icon: 'fa-hourglass-half', cls: 'et-status-warning', label: __('pending', 'Pending') },
-                awaiting:  { icon: 'fa-pause-circle', cls: 'et-status-primary', label: __('awaiting', 'Awaiting') }
+            const esc = SRForm.esc;
+            const num = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const money = (v) => '<i class="icon-saudi_riyal"></i> ' + num(v);
+            const fmtDate = (v) => {
+                if (!v) return '';
+                const d = new Date(String(v).replace(' ', 'T'));
+                return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
             };
-            const getStatusMeta = (statusValue) => {
-                const normalized = String(statusValue || '').toLowerCase().replace(/_/g, ' ').trim();
-                const key = Object.keys(statusMetaMap).find(k => normalized.includes(k));
-                return statusMetaMap[key] || { icon: 'fa-circle', cls: 'et-status-secondary', label: normalized.replace(/\b\w/g, c => c.toUpperCase()) || __('unknown', 'Unknown') };
+            const fmtDateTime = (v) => {
+                if (!v) return '';
+                const d = new Date(String(v).replace(' ', 'T'));
+                return isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             };
-            // Same per-step map used by the Employee Transfer / Settlement approval-chain timelines.
-            const stepMeta = {
-                approved: { icon: 'fa-check', cls: 'et-step-success', label: __('approved', 'Approved') },
-                pending:  { icon: 'fa-clock', cls: 'et-step-warning', label: __('pending', 'Pending') },
-                rejected: { icon: 'fa-times', cls: 'et-step-danger', label: __('rejected', 'Rejected') },
-                awaiting: { icon: 'fa-hourglass-half', cls: 'et-step-secondary', label: __('awaiting', 'Awaiting') }
+            const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+            const roleLabel = (r) => {
+                const map = { gm: 'GM', hr: 'HR', hr_payroll: 'HR Payroll', administrator: 'Administrator', finance_officer: 'Finance' };
+                r = String(r || '').toLowerCase();
+                return map[r] || r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             };
+            const statusInfo = (s) => {
+                s = String(s || '').toLowerCase();
+                if (s.includes('approved')) return { tone: 'green', icon: 'mdi-check-circle', label: __('approved', 'Approved') };
+                if (s.includes('rejected')) return { tone: 'red', icon: 'mdi-close-circle', label: __('rejected', 'Rejected') };
+                if (s.includes('cancel')) return { tone: 'slate', icon: 'mdi-cancel', label: __('cancelled', 'Cancelled') };
+                if (s.includes('pending')) return { tone: 'amber', icon: 'mdi-clock', label: __('pending', 'Pending') };
+                if (s.includes('awaiting')) return { tone: 'sky', icon: 'mdi-timer-sand', label: __('awaiting', 'Awaiting') };
+                return { tone: 'slate', icon: 'mdi-help-circle', label: s || '-' };
+            };
+            const SALARY_ROWS = [
+                ['basic', __('basic', 'Basic')], ['housing', __('housing', 'Housing')], ['transport', __('transport', 'Transport')],
+                ['food', __('food', 'Food')], ['misc', __('misc', 'Misc')], ['cashier', __('cashier', 'Cashier')],
+                ['fuel', __('fuel', 'Fuel')], ['tel', __('tel', 'Telephone')], ['other', __('others', 'Other')], ['guard', __('guard', 'Guard')]
+            ];
 
-            Swal.fire({
-                title: __('loading', 'Loading...'),
-                html: '<div style="padding:20px;"><i class="fa fa-spinner fa-spin fa-2x"></i></div>',
-                showConfirmButton: false,
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
+            Swal.fire({ title: __('loading', 'Loading...'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            $.ajax({
-                url: './includes/ajaxFile/ajaxSalaryIncrement.php',
-                dataType: 'JSON',
-                type: 'POST',
-                data: { ajaxType: 'getSalaryIncrementReport', request_inv_no: requestInvNo },
-                success: function (res) {
+            $.post('./includes/ajaxFile/ajaxSalaryIncrement.php', { ajaxType: 'getSalaryIncrementReport', request_inv_no: requestInvNo }, null, 'json')
+                .done((res) => {
                     if (!res || res.status !== 'success' || !res.request) {
-                        Swal.fire('Error', (res && res.message) || 'Failed to load report.', 'error');
+                        Swal.fire({ icon: 'error', title: __('error', 'Error'), text: (res && res.message) || 'Failed to load report.' });
                         return;
                     }
 
                     const req = res.request;
                     const chain = Array.isArray(res.approval_chain) ? res.approval_chain : [];
-                    const statusMeta = getStatusMeta(req.current_status);
-                    const submittedDate = req.created_at ? new Date(req.created_at.replace(' ', 'T')) : null;
-                    const submittedLabel = submittedDate && !isNaN(submittedDate.getTime()) ? submittedDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : (req.created_at || '-');
-
-                    const infoRow = (icon, label, value) => `
-                        <div class="et-report-row">
-                            <div class="et-report-row-label"><i class="fa ${icon}"></i> ${label}</div>
-                            <div class="et-report-row-value">${value || 'N/A'}</div>
-                        </div>`;
-
-                    let timelineHtml = '';
-                    chain.forEach(c => {
-                        const step = stepMeta[c.status] || stepMeta.awaiting;
-                        const approverName = escapeHtml((c.approver_name && String(c.approver_name).trim() !== '') ? c.approver_name : ('Emp#' + c.approver_id));
-                        const actionDate = c.action_date ? new Date(String(c.action_date).replace(' ', 'T')) : null;
-                        const actionLabel = actionDate && !isNaN(actionDate.getTime()) ? actionDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-                        timelineHtml += `
-                            <div class="et-timeline-item ${step.cls}">
-                                <div class="et-timeline-dot"><i class="fa ${step.icon}"></i></div>
-                                <div class="et-timeline-content">
-                                    <div class="et-timeline-top">
-                                        <span class="et-timeline-level">${__('level', 'Level')} ${c.level}</span>
-                                        <span class="et-timeline-badge">${step.label}</span>
-                                    </div>
-                                    <div class="et-timeline-approver">${approverName}</div>
-                                    ${actionLabel ? `<div class="et-timeline-approver">${actionLabel}</div>` : ''}
-                                    ${c.note ? `<div class="et-timeline-note"><i class="fas fa-comment"></i> ${escapeHtml(c.note)}</div>` : ''}
-                                </div>
-                            </div>`;
-                    });
-
                     const salary = res.salary_info || null;
-                    let salaryHtml = '<div style="padding:6px 2px;color:#8a94a6;font-size:13px;">' + (__('no_data_found', 'No data found')) + '</div>';
-                    if (salary) {
-                        const salaryIcons = {
-                            basic_salary: 'fa-money-bill-alt', housing_allowance: 'fa-home', transport_allowance: 'fa-car',
-                            food_allowance: 'fa-utensils', miscellaneous_allowance: 'fa-shapes', cashier_allowance: 'fa-cash-register',
-                            fuel_allowance: 'fa-gas-pump', telephone_allowance: 'fa-phone', other_allowance: 'fa-ellipsis-h', guard_allowance: 'fa-shield-alt'
-                        };
-                        const salaryRows = [
-                            ['basic_salary', 'Basic Salary', salary.basic],
-                            ['housing_allowance', 'Housing Allowance', salary.housing],
-                            ['transport_allowance', 'Transport Allowance', salary.transport],
-                            ['food_allowance', 'Food Allowance', salary.food],
-                            ['miscellaneous_allowance', 'Miscellaneous Allowance', salary.misc],
-                            ['cashier_allowance', 'Cashier Allowance', salary.cashier],
-                            ['fuel_allowance', 'Fuel Allowance', salary.fuel],
-                            ['telephone_allowance', 'Telephone Allowance', salary.tel],
-                            ['other_allowance', 'Others', salary.other],
-                            ['guard_allowance', 'Guard Allowance', salary.guard]
-                        ];
-                        salaryHtml = salaryRows.filter(([, , val]) => Number(val) > 0)
-                            .map(([key, fallback, val]) => infoRow(salaryIcons[key] || 'fa-money-bill', __(key, fallback), Number(val).toFixed(2))).join('')
-                            + infoRow('fa-calculator', __('total_salary', 'Total salary'), '<strong style="color:#667eea;">' + Number(salary.total_salary).toFixed(2) + '</strong>');
-                    }
+                    const st = statusInfo(req.current_status);
+                    const hasApproved = req.approved_amount !== null && req.approved_amount !== undefined;
+                    const gmStep = chain.find(c => String(c.approver_role).toLowerCase() === 'gm' && c.status === 'approved');
+                    const service = req.service_years !== null && req.service_years !== undefined
+                        ? `${req.service_years} ${__('years', 'years')} ${req.service_months || 0} ${__('months', 'months')}` : '-';
+                    const salaryLines = salary ? SALARY_ROWS.filter(([k]) => Number(salary[k]) > 0).map(([k, l]) => ({ label: l, value: Number(salary[k]) })) : [];
+                    const salaryTotal = salary ? Number(salary.total_salary) : null;
 
-                    let html = '<div class="et-report">';
-                    html += `
-                        <div class="et-report-header">
-                            <div class="et-report-avatar"><i class="fa fa-arrow-trend-up"></i></div>
-                            <div class="et-report-heading">
-                                <div class="et-report-name">${escapeHtml(req.employee_name)}</div>
-                                <div class="et-report-subid">${__('emp_id', 'Employee ID')}: ${escapeHtml(req.emp_id)} &bull; ${escapeHtml(req.request_inv_no)}</div>
+                    const empInfo = [
+                        [__('iqama', 'Iqama'), req.iqama],
+                        [__('iqama_expiry', 'Iqama Expiry'), fmtDate(req.iqama_exp_g)],
+                        [__('nationality', 'Nationality'), req.nationality],
+                        [__('job_title', 'Job Title'), req.job_title],
+                        [__('department', 'Department'), req.department_name],
+                        [__('company', 'Company'), req.company_name],
+                        [__('location', 'Location'), req.location_name],
+                        [__('employee_type', 'Employee Type'), req.emptype],
+                        [__('cost_center', 'Cost Center'), req.cost_center],
+                        [__('joining_date', 'Joining Date'), fmtDate(req.joining_date)],
+                        [__('years_of_service', 'Years of Service'), service],
+                        [__('direct_supervisor', 'Direct Supervisor'), req.direct_supervisor_name],
+                        [__('mobile', 'Mobile'), req.mobile],
+                        [__('company_email', 'Company Email'), req.c_email]
+                    ];
+                    const reqInfo = [
+                        [__('request_no', 'Request No'), req.request_inv_no],
+                        [__('submitted_by', 'Submitted By'), req.submitted_by_name || req.submitted_by],
+                        [__('submitted_date', 'Submitted Date'), fmtDateTime(req.created_at)]
+                    ];
+
+                    /* ---------- popup ---------- */
+                    const kv = (rows) => '<dl class="sr-kv">' + rows.map(([l, v]) =>
+                        `<div class="row-kv"><dt>${esc(l)}</dt><dd>${esc(v || '-')}</dd></div>`).join('') + '</dl>';
+
+                    const salaryTable = salary
+                        ? `<div class="sr-table-wrap"><table class="sr-table" style="margin: 0;">
+                            <tbody>${salaryLines.map(r => `<tr><td>${esc(r.label)}</td><td class="text-right sr-mono">${money(r.value)}</td></tr>`).join('')}
+                            <tr style="border-top: 2px solid var(--sr-border-strong);"><td style="font-weight: 700;">${esc(__('total_salary', 'Total Salary'))}</td>
+                                <td class="text-right sr-mono" style="font-weight: 800; color: var(--sr-accent-strong);">${money(salaryTotal)}</td></tr></tbody>
+                        </table></div>`
+                        : `<div class="sr-notice tone-slate"><i class="mdi mdi-information-outline"></i><div>${esc(__('no_salary_breakdown', 'No active salary breakdown on record.'))}</div></div>`;
+
+                    const chainHtml = chain.length ? '<ul class="sr-activity">' + chain.map(c => {
+                        const s = statusInfo(c.status);
+                        return `<li>
+                            <span class="sr-activity-icon tone-${s.tone}"><i class="mdi ${s.icon}"></i></span>
+                            <div class="sr-activity-body">
+                                <div class="sr-activity-title">${esc(c.approver_name || ('Emp#' + c.approver_id))}
+                                    ${c.approver_role ? `<span class="sr-chip">${esc(roleLabel(c.approver_role))}</span>` : ''}
+                                    ${'<span class="sr-pill tone-' + s.tone + '" style="margin-inline-start: 6px;"><span class="sr-dot"></span>' + esc(s.label) + '</span>'}</div>
+                                ${c.note ? `<div class="sr-activity-note"><i class="mdi mdi-comment-text-outline"></i> ${esc(c.note)}</div>` : ''}
+                                <div class="sr-activity-meta"><span>${esc(__('level', 'Level'))} ${esc(c.level)}</span>${c.approver_job ? `<span>${esc(c.approver_job)}</span>` : ''}${c.action_date ? `<span><i class="mdi mdi-clock"></i> ${esc(fmtDateTime(c.action_date))}</span>` : ''}</div>
                             </div>
-                            <div class="et-report-status-pill ${statusMeta.cls}"><i class="fa ${statusMeta.icon}"></i> ${statusMeta.label}</div>
-                        </div>`;
+                        </li>`;
+                    }).join('') + '</ul>' : `<div class="sr-empty">${esc(__('no_data_found', 'No data found'))}</div>`;
 
-                    html += '<div class="row">';
-                    html += `
-                        <div class="col-md-6">
-                            <div class="vacation-card">
-                                <div class="vacation-card-header"><i class="fa fa-file-alt"></i> ${__('applied_information', 'Applied Information')}</div>
-                                ${infoRow('fa-sitemap', __('department', 'Department'), escapeHtml(req.department_name || '-'))}
-                                ${infoRow('fa-arrow-trend-up', __('increment_amount', 'Increment Amount'), Number(req.increment_amount).toFixed(2))}
-                                ${(req.approved_amount !== null && req.approved_amount !== undefined) ? infoRow('fa-check-circle', __('approved_amount', 'Approved Amount'), '<strong style="color:#28a745;">' + Number(req.approved_amount).toFixed(2) + '</strong>') : ''}
-                                ${infoRow('fa-star', __('evaluation_score', 'Evaluation Score'), req.evaluation_score !== null ? Number(req.evaluation_score).toFixed(2) : '-')}
-                                ${req.last_increment_date ? infoRow('fa-calendar-day', __('last_increment_date', 'Date of Last Increment (Optional)'), escapeHtml(req.last_increment_date)) : ''}
-                                ${infoRow('fa-user-edit', __('submitted_by', 'Submitted By'), escapeHtml(req.submitted_by_name || req.submitted_by))}
-                                ${infoRow('fa-calendar-alt', __('submitted_date', 'Submitted Date'), submittedLabel)}
+                    const html = `<div class="sr-page"><div class="sr-form si-report">
+                        <div class="si-report-hero">
+                            <span class="sr-avatar">${esc(initials(req.employee_name))}</span>
+                            <div class="si-sum-who">
+                                <span class="sr-cell-title">${esc(req.employee_name)}</span>
+                                <span class="sr-cell-sub">${esc(__('emp_id', 'Emp ID'))}: <b>${esc(req.emp_id)}</b>${req.job_title ? ' · ' + esc(req.job_title) : ''}${req.department_name ? ' · ' + esc(req.department_name) : ''}</span>
+                            </div>
+                            <span class="sr-pill tone-${st.tone}"><span class="sr-dot"></span>${esc(st.label)}</span>
+                        </div>
+
+                        <div class="si-sum-tiles si-report-tiles">
+                            <div><span>${esc(__('increment_amount', 'Increment Amount'))}</span><b>${money(req.increment_amount)}</b><small>${esc(__('requested_by_supervisor', 'Requested by supervisor'))}</small></div>
+                            <div class="${hasApproved ? 'is-approved' : ''}"><span>${esc(__('approved_amount', 'Approved Amount'))}</span><b>${hasApproved ? money(req.approved_amount) : '-'}</b>${gmStep ? `<small><span class="si-gm-badge">${esc(__('gm', 'GM'))}</span> ${esc(gmStep.approver_name)}</small>` : ''}</div>
+                            <div class="is-date"><span>${esc(__('increment_effective_date', 'Increment Effective Date'))}</span><b>${esc(fmtDate(req.last_increment_date) || '-')}</b></div>
+                            <div><span>${esc(__('evaluation_score', 'Evaluation Score'))}</span><b>${req.evaluation_score !== null ? num(req.evaluation_score) : '-'}</b></div>
+                        </div>
+
+                        <div class="si-approve-grid">
+                            <div class="si-approve-col">
+                                ${SRForm.section('mdi-account-card-details', __('employee_information', 'Employee Information'), '<div class="sr-fcol c-12">' + kv(empInfo) + '</div>')}
+                            </div>
+                            <div class="si-approve-col">
+                                ${SRForm.section('mdi-cash-multiple', __('current_salary', 'Current Salary'), '<div class="sr-fcol c-12">' + salaryTable + '</div>')}
+                                ${SRForm.section('mdi-file-document', __('request_information', 'Request Information'), '<div class="sr-fcol c-12">' + kv(reqInfo) + '</div>')}
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="vacation-card">
-                                <div class="vacation-card-header"><i class="fa fa-money-bill-wave"></i> ${__('salary_information', 'Salary Information')}</div>
-                                ${salaryHtml}
-                            </div>
-                        </div>`;
-                    html += '</div>';
+                        ${req.reason ? SRForm.section('mdi-note-text', __('reason', 'Reason'), `<div class="sr-fcol c-12"><div class="sr-notice tone-slate" style="white-space: pre-line;">${esc(req.reason)}</div></div>`) : ''}
+                        ${SRForm.section('mdi-sitemap', __('approval_chain', 'Approval Chain'), '<div class="sr-fcol c-12">' + chainHtml + '</div>')}
+                    </div></div>`;
 
-                    if (req.reason) {
-                        html += `
-                            <div class="vacation-card">
-                                <div class="vacation-card-header"><i class="fa fa-sticky-note"></i> ${__('reason', 'Reason')}</div>
-                                <div class="et-notes-text">${escapeHtml(req.reason)}</div>
-                            </div>`;
-                    }
+                    /* ---------- print (compact A4) ---------- */
+                    const printReport = () => {
+                        const pe = (v) => esc(v == null || v === '' ? '-' : v);
+                        const grid = (rows) => rows.map(([l, v]) => `<div class="f"><span>${pe(l)}</span><b>${pe(v)}</b></div>`).join('');
+                        const logo = new URL(SI_COMPANY_LOGO || 'assets/images/logo.png', window.location.href).href;
+                        const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${pe(req.request_inv_no)}</title>
+<style>
+@page { size: A4; margin: 10mm; }
+* { box-sizing: border-box; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #1f2937; margin: 0; }
+.hd { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #4f46e5; padding-bottom: 6px; margin-bottom: 8px; }
+.hd img { height: 42px; }
+.hd h1 { margin: 0; font-size: 16px; color: #111827; text-align: center; flex: 1; }
+.hd .meta { text-align: right; font-size: 9.5px; color: #6b7280; line-height: 1.5; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-weight: 700; font-size: 9.5px; border: 1px solid; }
+.t-green { color: #15803d; border-color: #86efac; background: #f0fdf4; } .t-red { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+.t-amber { color: #b45309; border-color: #fcd34d; background: #fffbeb; } .t-slate, .t-sky { color: #475569; border-color: #cbd5e1; background: #f8fafc; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #4f46e5; margin: 9px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #e5e7eb; }
+.emp { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px; }
+.emp .n { font-size: 14px; font-weight: 700; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 12px; }
+.f { display: flex; flex-direction: column; padding: 2px 0; border-bottom: 1px dotted #e5e7eb; }
+.f span { font-size: 8.5px; color: #6b7280; text-transform: uppercase; }
+.f b { font-size: 10.5px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
+.tiles div { padding: 5px 8px; border-right: 1px solid #d1d5db; } .tiles div:last-child { border-right: 0; }
+.tiles span { display: block; font-size: 8.5px; color: #6b7280; text-transform: uppercase; } .tiles b { font-size: 13px; } .tiles small { display: block; color: #6b7280; font-size: 9px; }
+.tiles .ok { background: #f0fdf4; } .tiles .ok b { color: #15803d; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 3px 6px; border: 1px solid #e5e7eb; text-align: left; font-size: 10px; }
+th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; color: #4b5563; }
+td.r, th.r { text-align: right; } tr.tot td { font-weight: 700; background: #eef2ff; }
+.reason { border: 1px solid #e5e7eb; border-radius: 4px; padding: 5px 7px; white-space: pre-line; }
+.sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 26px; }
+.sign div { border-top: 1px solid #9ca3af; padding-top: 3px; text-align: center; font-size: 9.5px; color: #4b5563; }
+.ft { margin-top: 10px; font-size: 8.5px; color: #9ca3af; text-align: center; }
+</style></head><body>
+<div class="hd"><img src="${esc(logo)}" alt=""><h1>${pe(__('salary_increment_report', 'Salary Increment Report'))}</h1>
+<div class="meta">${pe(req.request_inv_no)}<br>${pe(__('printed_on', 'Printed on'))}: ${pe(fmtDateTime(new Date().toISOString()))}<br><span class="pill t-${st.tone}">${pe(st.label)}</span></div></div>
 
-                    if (timelineHtml) {
-                        html += `
-                            <div class="vacation-card">
-                                <div class="vacation-card-header et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">
-                                    <i class="fa fa-sitemap"></i> ${__('approval_chain', 'Approval Chain')}
-                                    <i class="fa fa-chevron-down et-timeline-chevron"></i>
-                                </div>
-                                <div class="et-timeline d-none">${timelineHtml}</div>
-                            </div>`;
-                    }
-                    html += '</div>';
+<div class="emp"><span class="n">${pe(req.employee_name)}</span><span>${pe(__('emp_id', 'Emp ID'))}: <b>${pe(req.emp_id)}</b></span></div>
+<h2>${pe(__('employee_information', 'Employee Information'))}</h2>
+<div class="grid">${grid(empInfo)}</div>
+
+<h2>${pe(__('increment_details', 'Increment Details'))}</h2>
+<div class="tiles">
+<div><span>${pe(__('increment_amount', 'Increment Amount'))}</span><b>${num(req.increment_amount)}</b><small>${pe(__('requested_by_supervisor', 'Requested by supervisor'))}</small></div>
+<div class="${hasApproved ? 'ok' : ''}"><span>${pe(__('approved_amount', 'Approved Amount'))}</span><b>${hasApproved ? num(req.approved_amount) : '-'}</b>${gmStep ? `<small>GM: ${pe(gmStep.approver_name)}</small>` : ''}</div>
+<div><span>${pe(__('increment_effective_date', 'Increment Effective Date'))}</span><b>${pe(fmtDate(req.last_increment_date))}</b></div>
+<div><span>${pe(__('evaluation_score', 'Evaluation Score'))}</span><b>${req.evaluation_score !== null ? num(req.evaluation_score) : '-'}</b></div>
+</div>
+
+<div class="cols">
+<div><h2>${pe(__('current_salary', 'Current Salary'))}</h2>
+${salary ? `<table><thead><tr><th>${pe(__('salary_component', 'Salary Component'))}</th><th class="r">${pe(__('amount', 'Amount'))} (SAR)</th></tr></thead><tbody>
+${salaryLines.map(r => `<tr><td>${pe(r.label)}</td><td class="r">${num(r.value)}</td></tr>`).join('')}
+<tr class="tot"><td>${pe(__('total_salary', 'Total Salary'))}</td><td class="r">${num(salaryTotal)}</td></tr></tbody></table>` : `<div class="reason">${pe(__('no_salary_breakdown', 'No active salary breakdown on record.'))}</div>`}
+</div>
+<div><h2>${pe(__('request_information', 'Request Information'))}</h2>
+<table><tbody>${reqInfo.map(([l, v]) => `<tr><th style="width: 40%;">${pe(l)}</th><td>${pe(v)}</td></tr>`).join('')}</tbody></table>
+${req.reason ? `<h2>${pe(__('reason', 'Reason'))}</h2><div class="reason">${pe(req.reason)}</div>` : ''}
+</div>
+</div>
+
+<h2>${pe(__('approval_chain', 'Approval Chain'))}</h2>
+<table><thead><tr><th>${pe(__('level', 'Level'))}</th><th>${pe(__('approver', 'Approver'))}</th><th>${pe(__('role', 'Role'))}</th><th>${pe(__('status', 'Status'))}</th><th>${pe(__('date', 'Date'))}</th><th>${pe(__('comment', 'Comment'))}</th></tr></thead><tbody>
+${chain.map(c => `<tr><td>${pe(c.level)}</td><td>${pe(c.approver_name || ('Emp#' + c.approver_id))}</td><td>${pe(roleLabel(c.approver_role))}</td><td>${pe(statusInfo(c.status).label)}</td><td>${pe(fmtDateTime(c.action_date))}</td><td>${pe(c.note)}</td></tr>`).join('')}
+</tbody></table>
+
+<div class="sign"><div>${pe(__('direct_supervisor', 'Direct Supervisor'))}</div><div>${pe(__('hr_department', 'HR Department'))}</div><div>${pe(__('general_manager', 'General Manager'))}</div></div>
+<div class="ft">${pe(__('system_generated_document', 'This is a system generated document.'))}</div>
+</body></html>`;
+                        const w = window.open('', '_blank');
+                        if (!w) {
+                            Swal.showValidationMessage(__('allow_popups_to_print', 'Please allow pop-ups to print.'));
+                            return;
+                        }
+                        w.document.open();
+                        w.document.write(doc);
+                        w.document.close();
+                        // Wait for the logo so it shows on paper.
+                        const img = w.document.querySelector('img');
+                        const go = () => { w.focus(); w.print(); };
+                        if (img && !img.complete) { img.onload = go; img.onerror = go; } else { setTimeout(go, 150); }
+                    };
 
                     Swal.fire({
-                        title: __('salary_increment_approval_history', 'Salary Increment Approval History'),
+                        title: __('salary_increment_report', 'Salary Increment Report'),
                         html: html,
-                        showConfirmButton: false,
+                        width: '1100px',
+                        showConfirmButton: true,
                         showCancelButton: true,
+                        confirmButtonColor: APP_COLORS.primary,
                         cancelButtonColor: APP_COLORS.danger_dark,
-                        cancelButtonText: '<i class="fa fa-times"></i> ' + (__('close', 'Close')),
+                        confirmButtonText: '<i class="mdi mdi-printer"></i> ' + esc(__('print', 'Print')),
+                        cancelButtonText: '<i class="mdi mdi-close"></i> ' + esc(__('close', 'Close')),
                         allowOutsideClick: false,
-                        width: '60%',
-                        padding: '20px',
-                        scrollbarPadding: false,
-                        customClass: {
-                            popup: 'vacation-modal-popup',
-                            title: 'vacation-modal-title',
-                            cancelButton: 'btn-modern-cancel'
-                        }
+                        customClass: { popup: 'sr-addline-popup sr-page' },
+                        // Print keeps the popup open.
+                        preConfirm: () => { printReport(); return false; }
                     });
-                },
-                error: function () {
-                    Swal.fire('Error', 'Failed to load report.', 'error');
-                }
-            });
+                })
+                .fail(() => Swal.fire({ icon: 'error', title: __('error', 'Error'), text: 'Failed to load report.' }));
         }
     </script>
 </body>

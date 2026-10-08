@@ -492,11 +492,19 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
         }
 
         $request_row = null;
-        $stmt = mysqli_prepare($conDB, "SELECT si.*, e.name AS employee_name, d.dep_nme AS department_name, sup.name AS submitted_by_name
+        $stmt = mysqli_prepare($conDB, "SELECT si.*, e.name AS employee_name, e.dept AS employee_dept, d.dep_nme AS department_name, sup.name AS submitted_by_name,
+                e.iqama, e.iqama_exp_g, e.mobile, e.c_email, e.joining_date, e.emptype, e.salary AS master_salary, e.cost_center,
+                j.job AS job_title, co.name AS nationality, cp.comp_name AS company_name, l.name_en AS location_name,
+                dsup.name AS direct_supervisor_name
             FROM emp_salary_increment si
             JOIN employees e ON si.emp_id = e.emp_id
             LEFT JOIN department d ON e.dept = d.id
             LEFT JOIN employees sup ON si.submitted_by = sup.emp_id
+            LEFT JOIN employees dsup ON e.supervisor_id = dsup.emp_id
+            LEFT JOIN ac_jobs j ON j.id = e.actual_job
+            LEFT JOIN countries co ON co.id = e.country
+            LEFT JOIN companies cp ON cp.comp_id = e.comp_no
+            LEFT JOIN locations l ON l.id = e.location_id
             WHERE si.request_inv_no = ? LIMIT 1");
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, "s", $request_inv_no);
@@ -514,6 +522,32 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
             exit;
         }
 
+        // Same visibility as all_applied_salary_increment.php: admin/HR/finance see all;
+        // others only their department, their own submissions or requests they approve.
+        $report_type_id = getSalaryIncrementRequestTypeId($conDB);
+        $can_view = !empty($is_system_admin) || !empty($isHR) || (isset($user_type) && stripos((string)$user_type, 'finance') !== false)
+            || (string)$request_row['submitted_by'] === (string)$current_user_id
+            || (isset($user_dept) && (string)$request_row['employee_dept'] === (string)$user_dept);
+        if (!$can_view) {
+            $delegated_from_id = (int)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+            $acc_stmt = mysqli_prepare($conDB, "SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ?) LIMIT 1");
+            mysqli_stmt_bind_param($acc_stmt, 'siii', $request_inv_no, $report_type_id, $current_user_id, $delegated_from_id);
+            mysqli_stmt_execute($acc_stmt);
+            $acc_res = mysqli_stmt_get_result($acc_stmt);
+            $can_view = ($acc_res && mysqli_num_rows($acc_res) > 0);
+            if ($acc_res) mysqli_free_result($acc_res);
+            mysqli_stmt_close($acc_stmt);
+        }
+        if (!$can_view) {
+            echo json_encode(['status' => 'error', 'message' => 'You do not have access to this request.']);
+            exit;
+        }
+
+        // Years of service for the report header / print.
+        $join_dt = parseSalaryIncrementDate($request_row['joining_date'] ?? '');
+        $request_row['service_years'] = $join_dt ? $join_dt->diff(new DateTime('today'))->y : null;
+        $request_row['service_months'] = $join_dt ? $join_dt->diff(new DateTime('today'))->m : null;
+
         $salary_info = null;
         $salary_stmt = mysqli_prepare($conDB, "SELECT basic, housing, transport, food, misc, cashier, fuel, tel, other, guard,
                 (basic + housing + transport + food + misc + cashier + fuel + tel + other + guard) AS total_salary
@@ -530,13 +564,16 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
         }
 
         $approval_chain = [];
-        $chain_stmt = mysqli_prepare($conDB, "SELECT ra.approval_level, ra.status, ra.approver_id, ra.note, ra.action_date, e.name AS approver_name
+        $chain_stmt = mysqli_prepare($conDB, "SELECT ra.approval_level, ra.status, ra.approver_id, ra.note, ra.action_date, e.name AS approver_name,
+                j.job AS approver_job,
+                (SELECT al.user_type FROM admin_login al WHERE al.emp_id = ra.approver_id LIMIT 1) AS approver_role
             FROM request_approvers ra
             LEFT JOIN employees e ON e.emp_id = ra.approver_id
-            WHERE ra.request_inv_no = ?
+            LEFT JOIN ac_jobs j ON j.id = e.actual_job
+            WHERE ra.request_inv_no = ? AND ra.request_type_id = ?
             ORDER BY ra.approval_level ASC, ra.id ASC");
         if ($chain_stmt) {
-            mysqli_stmt_bind_param($chain_stmt, "s", $request_inv_no);
+            mysqli_stmt_bind_param($chain_stmt, "si", $request_inv_no, $report_type_id);
             mysqli_stmt_execute($chain_stmt);
             $chain_res = mysqli_stmt_get_result($chain_stmt);
             if ($chain_res) {
@@ -545,6 +582,8 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementRepor
                         'level' => (int)($chain_row['approval_level'] ?? 0),
                         'approver_id' => (int)($chain_row['approver_id'] ?? 0),
                         'approver_name' => (string)($chain_row['approver_name'] ?? ''),
+                        'approver_job' => (string)($chain_row['approver_job'] ?? ''),
+                        'approver_role' => (string)($chain_row['approver_role'] ?? ''),
                         'status' => (string)($chain_row['status'] ?? ''),
                         'note' => (string)($chain_row['note'] ?? ''),
                         'action_date' => $chain_row['action_date']
