@@ -4,8 +4,9 @@
  * Handles submission, approval, and rejection of salary increment requests.
  *
  * A Direct Supervisor submits this request for one of their own assigned
- * employees (employees.supervisor_id = current user). It is a workflow /
- * approval record only - it does NOT modify any salary/payroll table.
+ * employees (employees.supervisor_id = current user). The last approver in
+ * the chain picks the salary component the approved amount goes into; their
+ * approval writes a new active emp_salary row and updates employees.salary.
  *
  * Features:
  * - Multi-level approval workflow based on app_settings configuration
@@ -111,6 +112,284 @@ function parseSalaryIncrementDate($rawValue)
     return null;
 }
 
+// emp_salary component columns (same whitelist as hrHandler.php 'update_salary').
+const SALARY_INCREMENT_COMPONENTS = ['basic', 'housing', 'transport', 'food', 'misc', 'cashier', 'fuel', 'tel', 'other', 'guard'];
+
+/**
+ * True when the pending row for one of $approver_ids is the last level of the chain,
+ * i.e. approving it finalizes the request.
+ */
+function isSalaryIncrementFinalStep($conDB, $request_inv_no, $request_type_id, $approver_id, $delegated_from_id)
+{
+    $stmt = mysqli_prepare($conDB, "SELECT ra.approval_level,
+            (SELECT MAX(r2.approval_level) FROM request_approvers r2 WHERE r2.request_inv_no = ra.request_inv_no AND r2.request_type_id = ra.request_type_id) AS max_level
+        FROM request_approvers ra
+        WHERE ra.request_inv_no = ? AND ra.request_type_id = ? AND ra.approver_id IN (?, ?) AND ra.status = 'pending'
+        LIMIT 1");
+    if (!$stmt) return false;
+    mysqli_stmt_bind_param($stmt, 'siii', $request_inv_no, $request_type_id, $approver_id, $delegated_from_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = $res ? mysqli_fetch_assoc($res) : null;
+    if ($res) mysqli_free_result($res);
+    mysqli_stmt_close($stmt);
+    return $row && (int)$row['approval_level'] === (int)$row['max_level'];
+}
+
+/** Active (status = 1) emp_salary row for the employee, or null. */
+function getActiveSalaryRow($conDB, $emp_id)
+{
+    $stmt = mysqli_prepare($conDB, "SELECT * FROM emp_salary WHERE emp_id = ? AND status = 1 ORDER BY id DESC LIMIT 1");
+    if (!$stmt) return null;
+    mysqli_stmt_bind_param($stmt, 's', $emp_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = $res ? mysqli_fetch_assoc($res) : null;
+    if ($res) mysqli_free_result($res);
+    mysqli_stmt_close($stmt);
+    return $row ?: null;
+}
+
+/**
+ * Final approval: add the approved amount to one salary component. Same versioning as
+ * hrHandler.php 'update_salary' (old emp_salary row -> status 0, new row -> status 1),
+ * then employees.salary = new component total and the "Update Salary" flag is cleared.
+ * Returns the old/new breakdown, or null when the request is not approved or a write failed.
+ */
+function applySalaryIncrementToSalary($conDB, $request_inv_no, $si_full, $salary_row, $component, $approved_amount_override)
+{
+    $st_stmt = mysqli_prepare($conDB, "SELECT current_status, approved_amount, increment_amount FROM emp_salary_increment WHERE request_inv_no = ? LIMIT 1");
+    mysqli_stmt_bind_param($st_stmt, 's', $request_inv_no);
+    mysqli_stmt_execute($st_stmt);
+    $st_res = mysqli_stmt_get_result($st_stmt);
+    $st = $st_res ? mysqli_fetch_assoc($st_res) : null;
+    if ($st_res) mysqli_free_result($st_res);
+    mysqli_stmt_close($st_stmt);
+    if (!$st || $st['current_status'] !== 'approved') {
+        return null;
+    }
+
+    $amount = $approved_amount_override ?? ($st['approved_amount'] !== null ? (float)$st['approved_amount'] : (float)$st['increment_amount']);
+    $increment = (int)round($amount); // emp_salary columns are INT
+    $emp_id = (string)$si_full['emp_id'];
+
+    $old = [];
+    foreach (SALARY_INCREMENT_COMPONENTS as $col) {
+        $old[$col] = (int)$salary_row[$col];
+    }
+    $new = $old;
+    $new[$component] += $increment;
+    $old_total = array_sum($old);
+    $new_total = array_sum($new);
+
+    $cols = implode(', ', SALARY_INCREMENT_COMPONENTS);
+    $ins_stmt = mysqli_prepare($conDB, "INSERT INTO emp_salary (emp_id, {$cols}, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+    if (!$ins_stmt) {
+        error_log('Salary increment apply failed (prepare insert): ' . mysqli_error($conDB));
+        return null;
+    }
+    $vals = array_values($new);
+    mysqli_stmt_bind_param($ins_stmt, 'siiiiiiiiii', $emp_id, ...$vals);
+    if (!mysqli_stmt_execute($ins_stmt)) {
+        error_log('Salary increment apply failed (insert): ' . mysqli_stmt_error($ins_stmt));
+        mysqli_stmt_close($ins_stmt);
+        return null;
+    }
+    $new_salary_id = mysqli_insert_id($conDB);
+    mysqli_stmt_close($ins_stmt);
+
+    $old_id = (int)$salary_row['id'];
+    $off_stmt = mysqli_prepare($conDB, "UPDATE emp_salary SET status = 0 WHERE id = ?");
+    mysqli_stmt_bind_param($off_stmt, 'i', $old_id);
+    mysqli_stmt_execute($off_stmt);
+    mysqli_stmt_close($off_stmt);
+
+    $new_total_str = (string)$new_total;
+    $emp_stmt = mysqli_prepare($conDB, "UPDATE employees SET salary = ?, salary_update_pending = 0 WHERE emp_id = ?");
+    mysqli_stmt_bind_param($emp_stmt, 'ss', $new_total_str, $emp_id);
+    mysqli_stmt_execute($emp_stmt);
+    mysqli_stmt_close($emp_stmt);
+
+    // Requests with no GM amount step keep the requested amount as the approved one.
+    $amt_stmt = mysqli_prepare($conDB, "UPDATE emp_salary_increment SET approved_amount = ? WHERE request_inv_no = ? AND approved_amount IS NULL");
+    $amount_f = (float)$increment;
+    mysqli_stmt_bind_param($amt_stmt, 'ds', $amount_f, $request_inv_no);
+    mysqli_stmt_execute($amt_stmt);
+    mysqli_stmt_close($amt_stmt);
+
+    if (class_exists('ActivityLogger')) {
+        ActivityLogger::logUpdate('Employee Salary', 'ajaxSalaryIncrement.php', $new_salary_id, $old, $new,
+            "Salary increment {$request_inv_no}: +{$increment} to {$component} for employee ID: {$emp_id}, Total: {$old_total} -> {$new_total}", 'emp_salary');
+    }
+
+    return [
+        'component' => $component,
+        'amount' => $increment,
+        'old' => $old,
+        'new' => $new,
+        'old_total' => $old_total,
+        'new_total' => $new_total,
+    ];
+}
+
+/**
+ * Final notice to the submitting supervisor, with the employees the last approver picked in CC.
+ */
+function sendSalaryIncrementFinalEmail($conDB, $request_inv_no, $si_full, $applied, $cc_emp_ids, $approver_name)
+{
+    if (!function_exists('send_approval_email')) return;
+
+    $lookup = function ($ids) use ($conDB) {
+        $out = [];
+        if (empty($ids)) return $out;
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = mysqli_prepare($conDB, "SELECT e.emp_id, e.name, MIN(al.email) AS email FROM admin_login al
+            JOIN employees e ON e.emp_id = al.emp_id
+            WHERE al.emp_id IN ({$ph}) AND al.email IS NOT NULL AND al.email <> ''
+            GROUP BY e.emp_id, e.name");
+        if (!$stmt) return $out;
+        mysqli_stmt_bind_param($stmt, str_repeat('s', count($ids)), ...$ids);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        while ($res && ($r = mysqli_fetch_assoc($res))) {
+            $out[(string)$r['emp_id']] = $r;
+        }
+        if ($res) mysqli_free_result($res);
+        mysqli_stmt_close($stmt);
+        return $out;
+    };
+
+    $submitter = $lookup([(string)$si_full['submitted_by']]);
+    $submitter = reset($submitter) ?: null;
+    $cc_rows = $lookup($cc_emp_ids);
+
+    $to = $submitter;
+    if (!$to) {
+        $to = array_shift($cc_rows);
+    }
+    if (!$to || !filter_var($to['email'], FILTER_VALIDATE_EMAIL)) return;
+
+    $cc = [];
+    foreach ($cc_rows as $r) {
+        if (strcasecmp($r['email'], $to['email']) !== 0) {
+            $cc[$r['email']] = $r['name'];
+        }
+    }
+
+    $h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+    $labels = ['basic' => 'Basic', 'housing' => 'Housing', 'transport' => 'Transport', 'food' => 'Food', 'misc' => 'Misc', 'cashier' => 'Cashier', 'fuel' => 'Fuel', 'tel' => 'Telephone', 'other' => 'Other', 'guard' => 'Guard'];
+    $cell = 'padding: 8px 10px; border-bottom: 1px solid #404040; font-size: 13px;';
+    $rows = '';
+    foreach (SALARY_INCREMENT_COMPONENTS as $col) {
+        if ($applied['old'][$col] == 0 && $applied['new'][$col] == 0) continue;
+        $hit = $col === $applied['component'];
+        $rows .= '<tr' . ($hit ? ' style="background-color:#24352a;"' : '') . '>'
+            . '<td style="' . $cell . ' color:#e0e0e0; text-align:left;">' . $h($labels[$col]) . ($hit ? ' &#9650;' : '') . '</td>'
+            . '<td style="' . $cell . ' color:#a0a0a0; text-align:right;">' . number_format($applied['old'][$col], 2) . '</td>'
+            . '<td style="' . $cell . ' color:' . ($hit ? '#4CAF50' : '#ffffff') . '; text-align:right; font-weight:600;">' . number_format($applied['new'][$col], 2) . '</td>'
+            . '</tr>';
+    }
+    $th = 'padding: 8px 10px; font-size: 12px; color: #a0a0a0; text-transform: uppercase; border-bottom: 1px solid #404040;';
+    $table = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#2a2a2a; border:1px solid #404040; border-radius:8px;">'
+        . '<tr><th style="' . $th . ' text-align:left;">Component</th><th style="' . $th . ' text-align:right;">Current</th><th style="' . $th . ' text-align:right;">New</th></tr>'
+        . $rows
+        . '<tr><td style="padding:10px; color:#ffffff; font-weight:700; text-align:left;">Total Salary</td>'
+        . '<td style="padding:10px; color:#a0a0a0; text-align:right;">' . number_format($applied['old_total'], 2) . '</td>'
+        . '<td style="padding:10px; color:#4CAF50; font-weight:700; text-align:right;">' . number_format($applied['new_total'], 2) . ' SAR</td></tr>'
+        . '</table>';
+
+    $template_data = [
+        'APPROVER_NAME' => $to['name'],
+        'REQUEST_ID' => $request_inv_no,
+        'EMPLOYEE_NAME' => $si_full['employee_name'],
+        'EMPLOYEE_ID' => $si_full['emp_id'],
+        'DEPARTMENT' => $si_full['department_name'] ?: 'N/A',
+        'INCREMENT_AMOUNT' => number_format($applied['amount'], 2),
+        'START_DATE' => $si_full['last_increment_date'] ?: date('Y-m-d'),
+        'SUBMITTED_BY' => $approver_name,
+        'EMAIL_MESSAGE' => 'The salary increment for ' . $si_full['employee_name'] . ' has been fully approved and the salary has been updated (+' . number_format($applied['amount'], 2) . ' SAR to ' . $labels[$applied['component']] . ').',
+        'EMAIL_MESSAGE_HTML' => $table,
+        'REQUEST_URL' => get_base_url() . '/salary_increment_status_history.php?request_inv_no=' . urlencode($request_inv_no),
+    ];
+
+    send_approval_email($conDB, $to['email'], $to['name'], 'Salary Increment Approved - ' . $si_full['employee_name'], 'salary_increment_approved', $template_data, $cc);
+}
+
+/**
+ * Data for the last approver's popup: current salary breakdown, approved amount and
+ * the people who can be CC'd on the final notice.
+ */
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getSalaryIncrementFinalContext') {
+    try {
+        $request_type_id = getSalaryIncrementRequestTypeId($conDB);
+        $request_inv_no = trim((string)($_POST['request_inv_no'] ?? ''));
+        $delegated_from_id = (int)(getDelegatedFromEmpId($conDB, $current_user_id) ?? $current_user_id);
+
+        if ($request_inv_no === '' || !isSalaryIncrementFinalStep($conDB, $request_inv_no, $request_type_id, (int)$current_user_id, $delegated_from_id)) {
+            echo json_encode(['status' => 'success', 'is_final' => false]);
+            exit;
+        }
+
+        $si_stmt = mysqli_prepare($conDB, "SELECT emp_id, increment_amount, approved_amount, last_increment_date FROM emp_salary_increment WHERE request_inv_no = ? LIMIT 1");
+        mysqli_stmt_bind_param($si_stmt, 's', $request_inv_no);
+        mysqli_stmt_execute($si_stmt);
+        $si_res = mysqli_stmt_get_result($si_stmt);
+        $si = $si_res ? mysqli_fetch_assoc($si_res) : null;
+        if ($si_res) mysqli_free_result($si_res);
+        mysqli_stmt_close($si_stmt);
+        if (!$si) {
+            throw new Exception('Salary increment request not found.');
+        }
+
+        $salary_row = getActiveSalaryRow($conDB, $si['emp_id']);
+        $components = [];
+        foreach (SALARY_INCREMENT_COMPONENTS as $col) {
+            $components[$col] = $salary_row ? (float)$salary_row[$col] : 0;
+        }
+
+        $master_salary = null;
+        $ms_stmt = mysqli_prepare($conDB, "SELECT salary FROM employees WHERE emp_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($ms_stmt, 's', $si['emp_id']);
+        mysqli_stmt_execute($ms_stmt);
+        $ms_res = mysqli_stmt_get_result($ms_stmt);
+        if ($ms_res && ($ms_row = mysqli_fetch_assoc($ms_res))) {
+            $master_salary = (float)$ms_row['salary'];
+        }
+        if ($ms_res) mysqli_free_result($ms_res);
+        mysqli_stmt_close($ms_stmt);
+
+        // Active employees with a login email - HR, finance or anyone else to keep informed.
+        $cc_people = [];
+        $cc_res = mysqli_query($conDB, "SELECT e.emp_id, e.name, MIN(al.email) AS email, MIN(d.dep_nme) AS dep_nme
+            FROM admin_login al
+            JOIN employees e ON e.emp_id = al.emp_id AND e.status = 1
+            LEFT JOIN department d ON d.id = e.dept
+            WHERE al.email IS NOT NULL AND al.email <> ''
+            GROUP BY e.emp_id, e.name
+            ORDER BY e.name ASC");
+        if ($cc_res) {
+            while ($r = mysqli_fetch_assoc($cc_res)) {
+                $cc_people[] = ['id' => (string)$r['emp_id'], 'name' => (string)$r['name'], 'dept' => (string)($r['dep_nme'] ?? '')];
+            }
+            mysqli_free_result($cc_res);
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'is_final' => true,
+            'has_salary_row' => $salary_row !== null,
+            'components' => $components,
+            'master_salary' => $master_salary,
+            'amount' => (float)($si['approved_amount'] ?? $si['increment_amount']),
+            'effective_date' => (string)($si['last_increment_date'] ?? ''),
+            'cc_people' => $cc_people,
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => 'Failed to load salary details: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 /**
  * Get the current-year evaluation score - submitted by the employee's actual assigned
  * direct supervisor (employees.supervisor_id), regardless of who is currently viewing
@@ -124,32 +403,19 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getEmployeeEvaluationLa
             exit;
         }
 
-        $supervisor_id = null;
-        $sup_stmt = mysqli_prepare($conDB, "SELECT supervisor_id FROM employees WHERE emp_id = ? LIMIT 1");
-        if ($sup_stmt) {
-            mysqli_stmt_bind_param($sup_stmt, "s", $target_emp_id);
-            mysqli_stmt_execute($sup_stmt);
-            $sup_res = mysqli_stmt_get_result($sup_stmt);
-            if ($sup_res && ($sup_row = mysqli_fetch_assoc($sup_res))) {
-                $supervisor_id = $sup_row['supervisor_id'];
-            }
-            if ($sup_res) mysqli_free_result($sup_res);
-            mysqli_stmt_close($sup_stmt);
-        }
-
+        // Any current-year evaluation counts, whoever submitted it - employee_evaluation.php
+        // already limits evaluators to the direct supervisor or a system admin.
         $score = null;
-        if (!empty($supervisor_id)) {
-            $stmt = mysqli_prepare($conDB, "SELECT total_score FROM emp_evaluations WHERE employee_emp_id = ? AND manager_emp_id = ? AND YEAR(created_at) = YEAR(CURDATE()) ORDER BY id DESC LIMIT 1");
-            if ($stmt) {
-                mysqli_stmt_bind_param($stmt, "ss", $target_emp_id, $supervisor_id);
-                mysqli_stmt_execute($stmt);
-                $res = mysqli_stmt_get_result($stmt);
-                if ($res && ($row = mysqli_fetch_assoc($res))) {
-                    $score = (float)$row['total_score'];
-                }
-                if ($res) mysqli_free_result($res);
-                mysqli_stmt_close($stmt);
+        $stmt = mysqli_prepare($conDB, "SELECT total_score FROM emp_evaluations WHERE employee_emp_id = ? AND YEAR(created_at) = YEAR(CURDATE()) ORDER BY id DESC LIMIT 1");
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "s", $target_emp_id);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res && ($row = mysqli_fetch_assoc($res))) {
+                $score = (float)$row['total_score'];
             }
+            if ($res) mysqli_free_result($res);
+            mysqli_stmt_close($stmt);
         }
 
         echo json_encode(['status' => 'success', 'has_score' => ($score !== null), 'evaluation_score' => $score]);
@@ -463,15 +729,13 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitSalaryIncrement')
         }
 
         // Evaluation score is never taken from client input - pulled directly from the
-        // employee's assigned direct supervisor's current-year evaluation, so it can't be
-        // typed/tampered, and works whether the submitter is the supervisor or an admin
-        // acting on their behalf.
+        // employee's latest current-year evaluation (by the supervisor or an admin), so it
+        // can't be typed/tampered.
         $has_evaluation = 'no';
         $evaluation_score = null;
-        $eval_stmt = mysqli_prepare($conDB, "SELECT total_score FROM emp_evaluations WHERE employee_emp_id = ? AND manager_emp_id = ? AND YEAR(created_at) = YEAR(CURDATE()) ORDER BY id DESC LIMIT 1");
+        $eval_stmt = mysqli_prepare($conDB, "SELECT total_score FROM emp_evaluations WHERE employee_emp_id = ? AND YEAR(created_at) = YEAR(CURDATE()) ORDER BY id DESC LIMIT 1");
         if ($eval_stmt) {
-            $eval_manager_id = (string)($emp_ctx['supervisor_id'] ?? '');
-            mysqli_stmt_bind_param($eval_stmt, "ss", $target_emp_id, $eval_manager_id);
+            mysqli_stmt_bind_param($eval_stmt, "s", $target_emp_id);
             mysqli_stmt_execute($eval_stmt);
             $eval_res = mysqli_stmt_get_result($eval_stmt);
             if ($eval_res && ($eval_row = mysqli_fetch_assoc($eval_res))) {
@@ -483,7 +747,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitSalaryIncrement')
         }
 
         if ($has_evaluation !== 'yes' || $evaluation_score === null) {
-            echo json_encode(['status' => 'error', 'title' => 'Evaluation Required', 'message' => 'This employee does not have a current-year evaluation from you yet. Please evaluate them first.', 'type' => 'warning']);
+            echo json_encode(['status' => 'error', 'title' => 'Evaluation Required', 'message' => 'This employee does not have a current-year evaluation yet. Please evaluate them first.', 'type' => 'warning']);
             exit;
         }
 
@@ -831,6 +1095,42 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'approveSalaryIncrement'
             exit;
         }
 
+        // Last approver: must pick the salary component; the approval then writes the new salary.
+        $is_final_step = isSalaryIncrementFinalStep($conDB, $request_inv_no, $request_type_id, (int)$current_user_id, $delegated_from_id);
+        $salary_component = '';
+        $cc_emp_ids = [];
+        $si_full = null;
+        $salary_row = null;
+        if ($is_final_step) {
+            $salary_component = trim((string)($_POST['salary_component'] ?? ''));
+            if (!in_array($salary_component, SALARY_INCREMENT_COMPONENTS, true)) {
+                echo json_encode(['status' => 'error', 'title' => 'Validation Error', 'message' => 'Please select the salary component for this increment.', 'type' => 'error']);
+                exit;
+            }
+            $cc_raw = $_POST['cc_emp_ids'] ?? [];
+            $cc_emp_ids = array_values(array_unique(array_filter(array_map(function ($v) {
+                return preg_replace('/[^A-Za-z0-9]/', '', (string)$v);
+            }, is_array($cc_raw) ? $cc_raw : []))));
+
+            $sf_stmt = mysqli_prepare($conDB, "SELECT si.*, e.name AS employee_name, e.email AS employee_email, d.dep_nme AS department_name
+                FROM emp_salary_increment si
+                JOIN employees e ON e.emp_id = si.emp_id
+                LEFT JOIN department d ON d.id = e.dept
+                WHERE si.request_inv_no = ? LIMIT 1");
+            mysqli_stmt_bind_param($sf_stmt, 's', $request_inv_no);
+            mysqli_stmt_execute($sf_stmt);
+            $sf_res = mysqli_stmt_get_result($sf_stmt);
+            $si_full = $sf_res ? mysqli_fetch_assoc($sf_res) : null;
+            if ($sf_res) mysqli_free_result($sf_res);
+            mysqli_stmt_close($sf_stmt);
+
+            $salary_row = $si_full ? getActiveSalaryRow($conDB, $si_full['emp_id']) : null;
+            if (!$salary_row) {
+                echo json_encode(['status' => 'error', 'title' => 'Salary Not Set', 'message' => 'This employee has no active salary breakdown. Please set it from the employee profile first.', 'type' => 'warning']);
+                exit;
+            }
+        }
+
         $approval_result = handle_approval_action(
             $conDB,
             $request_inv_no,
@@ -860,6 +1160,14 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'approveSalaryIncrement'
             }
         }
 
+        $salary_applied = null;
+        if ($is_final_step) {
+            $salary_applied = applySalaryIncrementToSalary($conDB, $request_inv_no, $si_full, $salary_row, $salary_component, $approved_amount);
+            if ($salary_applied) {
+                sendSalaryIncrementFinalEmail($conDB, $request_inv_no, $si_full, $salary_applied, $cc_emp_ids, $userwel);
+            }
+        }
+
         if (class_exists('ActivityLogger')) {
             ActivityLogger::logApproval(
                 'Salary Increment',
@@ -871,10 +1179,17 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'approveSalaryIncrement'
             );
         }
 
+        $message = 'Salary increment request approved successfully.';
+        if ($salary_applied) {
+            $message .= ' New total salary: ' . number_format($salary_applied['new_total'], 2) . ' SAR.';
+        } elseif ($is_final_step) {
+            $message .= ' The salary could not be updated automatically - please update it from the employee profile.';
+        }
+
         echo json_encode([
             'status' => 'success',
             'title' => 'Approved',
-            'message' => 'Salary increment request approved successfully.',
+            'message' => $message,
             'type' => 'success',
             'request_inv_no' => $request_inv_no
         ]);
@@ -984,7 +1299,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'rejectSalaryIncrement')
                     $emp_row['submitted_by'],
                     'Salary Increment Request Rejected',
                     'Your salary increment request ' . htmlspecialchars($request_inv_no) . ' was rejected. Reason: ' . $rejection_reason,
-                    'salary_increment_status_history.php?inv_no=' . urlencode($request_inv_no)
+                    'salary_increment_status_history.php?request_inv_no=' . urlencode($request_inv_no)
                 );
             }
             if ($emp_row_res) mysqli_free_result($emp_row_res);
@@ -1124,7 +1439,7 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'cancelSalaryIncrementAd
                 $si_row['submitted_by'],
                 'Salary Increment Request Cancelled',
                 'Salary increment request ' . htmlspecialchars($request_inv_no) . ' was cancelled by an administrator.' . ($cancellation_note !== '' ? ' Reason: ' . $cancellation_note : ''),
-                'salary_increment_status_history.php?inv_no=' . urlencode($request_inv_no)
+                'salary_increment_status_history.php?request_inv_no=' . urlencode($request_inv_no)
             );
         }
 

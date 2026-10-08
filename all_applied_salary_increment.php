@@ -234,6 +234,7 @@ if ($can_see_all_depts) {
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
@@ -241,6 +242,13 @@ if ($can_see_all_depts) {
         .detail-item i { color: #4a90e2; margin-right: 15px; width: 20px; text-align: center; }
         .detail-item strong { color: #8a94a6; min-width: 140px; display: inline-block; }
         .detail-item { flex-direction: <?= ($is_rtl) ? 'row-reverse !important' : 'row !important' ?>; text-align: <?= ($is_rtl) ? 'right !important' : 'left !important' ?>; }
+        /* Approval popup: two columns side by side, stacked on narrow screens */
+        .si-approve-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+        .si-approve-col { min-width: 0; }
+        .si-approve-col:empty { display: none; }
+        .si-approve-col .sr-fsec:last-child { margin-bottom: 0; }
+        .si-approve-grid .sr-table th, .si-approve-grid .sr-table td { padding: 7px 10px; }
+        @media (max-width: 991px) { .si-approve-grid { grid-template-columns: minmax(0, 1fr); } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -324,6 +332,12 @@ if ($can_see_all_depts) {
                                             $inv_js = htmlspecialchars((string)$req['request_inv_no'], ENT_QUOTES);
                                             $name_js = htmlspecialchars((string)$req['employee_name'], ENT_QUOTES);
                                             $amount_js = number_format((float)$req['increment_amount'], 2);
+                                            $meta_js = htmlspecialchars(json_encode([
+                                                'emp_id' => (string)$req['emp_id'],
+                                                'evaluation_score' => $req['evaluation_score'] !== null ? (float)$req['evaluation_score'] : null,
+                                                'reason' => (string)($req['reason'] ?? ''),
+                                                'submitted_by' => (string)($req['submitted_by_name'] ?? $req['submitted_by'] ?? ''),
+                                            ], JSON_UNESCAPED_UNICODE), ENT_QUOTES);
                                             ?>
                                             <tr>
                                                 <td><?= sr_person_cell(getDisplayName(parseName($req['employee_name'])), $req['emp_id']) ?></td>
@@ -349,7 +363,7 @@ if ($can_see_all_depts) {
                                                 <td class="text-right">
                                                     <div class="sr-actions">
                                                         <?php if ($can_take_action): ?>
-                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSalaryIncrementRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $amount_js ?>')"><i class="mdi mdi-check"></i> <?= $isHRPayrollRole ? __('submit_salary_increment_request', 'Submit') : __('approve') ?></a>
+                                                            <a href="javascript:void(0);" class="sr-open-btn" onclick="approveSalaryIncrementRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $amount_js ?>', <?= $meta_js ?>)"><i class="mdi mdi-check"></i> <?= $isHRPayrollRole ? __('submit_salary_increment_request', 'Submit') : __('approve') ?></a>
                                                         <?php else: ?>
                                                             <a href="javascript:void(0);" class="sr-open-btn" onclick="viewSalaryIncrementReport('<?= $inv_js ?>')"><i class="mdi mdi-file-document"></i> <?= __('report') ?></a>
                                                         <?php endif; ?>
@@ -409,6 +423,8 @@ if ($can_see_all_depts) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+    <script src="./plugins/select2/js/select2.min.js" type="text/javascript"></script>
+    <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
         <?= sr_list_js() ?>
     <script>
         const IS_HR_PAYROLL_APPROVER = <?= $isHRPayrollRole ? 'true' : 'false' ?>;
@@ -426,68 +442,229 @@ if ($can_see_all_depts) {
         }
 
 
-        function approveSalaryIncrementRequest(requestInvNo, employeeName, amount) {
+        const SALARY_COMPONENTS = [
+            { v: 'basic', l: __('basic', 'Basic') }, { v: 'housing', l: __('housing', 'Housing') },
+            { v: 'transport', l: __('transport', 'Transport') }, { v: 'food', l: __('food', 'Food') },
+            { v: 'misc', l: __('misc', 'Misc') }, { v: 'cashier', l: __('cashier', 'Cashier') },
+            { v: 'fuel', l: __('fuel', 'Fuel') }, { v: 'tel', l: __('tel', 'Telephone') },
+            { v: 'other', l: __('others', 'Other') }, { v: 'guard', l: __('guard', 'Guard') }
+        ];
+
+        // The last approver also picks the salary component + CC list, so ask the server
+        // whether this is the final step before building the popup.
+        function approveSalaryIncrementRequest(requestInvNo, employeeName, amount, meta) {
+            Swal.fire({ title: __('loading', 'Loading...'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            $.post('./includes/ajaxFile/ajaxSalaryIncrement.php', { ajaxType: 'getSalaryIncrementFinalContext', request_inv_no: requestInvNo }, null, 'json')
+                .done((ctx) => {
+                    if (!ctx || ctx.status !== 'success') {
+                        Swal.fire({ icon: 'error', title: __('error', 'Error'), text: (ctx && ctx.message) || 'Failed to load request details.' });
+                        return;
+                    }
+                    openSalaryIncrementApproval(requestInvNo, employeeName, amount, meta, ctx.is_final ? ctx : null);
+                })
+                .fail(() => Swal.fire({ icon: 'error', title: __('error', 'Error'), text: __('failed_to_load_details', 'Failed to load request details.') }));
+        }
+
+        function openSalaryIncrementApproval(requestInvNo, employeeName, amount, meta, finalCtx) {
+            meta = meta || {};
             const showLastIncrementDate = IS_HR_PAYROLL_APPROVER && !IS_GM_APPROVER;
             const showGMFields = IS_GM_APPROVER;
-            const rawAmount = parseFloat(String(amount).replace(/,/g, '')) || 0;
-            Swal.fire({
+            const rawAmount = SRForm.num(amount);
+            const esc = SRForm.esc;
+            const money = (v) => '<i class="icon-saudi_riyal"></i> ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const kv = (label, value) => `<div class="row-kv"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+            const evalScore = (meta.evaluation_score !== null && meta.evaluation_score !== undefined) ? Number(meta.evaluation_score).toFixed(2) : '-';
+
+            const summaryHtml = `
+                <div class="sr-fcol c-6"><dl class="sr-kv">
+                    ${kv(__('employee', 'Employee'), esc(employeeName))}
+                    ${kv(__('employee_id', 'Emp ID'), esc(meta.emp_id || '-'))}
+                    ${kv(__('request_no', 'Request No'), '<span class="sr-mono">' + esc(requestInvNo) + '</span>')}
+                </dl></div>
+                <div class="sr-fcol c-6"><dl class="sr-kv">
+                    ${kv(__('increment_amount', 'Increment Amount'), money(rawAmount))}
+                    ${kv(__('evaluation_score', 'Evaluation Score'), '<span class="sr-chip">' + esc(evalScore) + '</span>')}
+                    ${kv(__('submitted_by', 'Submitted By'), esc(meta.submitted_by || '-'))}
+                </dl></div>
+                ${meta.reason ? `<div class="sr-fcol c-12"><label>${esc(__('reason', 'Reason'))}</label><div class="sr-notice tone-slate" style="white-space: pre-line;">${esc(meta.reason)}</div></div>` : ''}`;
+
+            const gmHtml = showGMFields ? SRForm.section('mdi-gavel', __('gm_decision', 'GM Decision'),
+                SRForm.field({ name: 'approved_amount', id: 'si_gm_approved_amount', type: 'number', col: 6, req: true,
+                    label: __('approved_amount', 'Approved Amount'), value: rawAmount,
+                    attrs: ` step="0.01" min="0.01" max="${SALARY_INCREMENT_MAX_AMOUNT}"`,
+                    msg: (__('approved_amount_required') || 'Approved amount is required and must be between 0 and {max}.').replace('{max}', SALARY_INCREMENT_MAX_AMOUNT),
+                    hint: `${esc(__('max', 'Max'))} ${SALARY_INCREMENT_MAX_AMOUNT} <i class="icon-saudi_riyal"></i>` }) +
+                SRForm.field({ name: 'effective_date', id: 'si_gm_effective_date', col: 6, req: true,
+                    label: __('increment_effective_date', 'Increment Effective Date'), ph: 'YYYY-MM-DD',
+                    msg: __('increment_effective_date_required') || 'Increment effective date is required.' }) +
+                `<div class="sr-fcol c-12"><div class="sr-addline-summary" style="grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0;">
+                    <div><span>${esc(__('requested', 'Requested'))}</span><b>${money(rawAmount)}</b></div>
+                    <div class="accent"><span>${esc(__('approved_amount', 'Approved Amount'))}</span><b id="si_gm_sum_approved">${money(rawAmount)}</b></div>
+                    <div><span>${esc(__('difference', 'Difference'))}</span><b id="si_gm_sum_diff">${money(0)}</b></div>
+                </div></div>`) : '';
+
+            const hrHtml = showLastIncrementDate ? SRForm.section('mdi-history', __('last_increment', 'Last Increment'),
+                SRForm.field({ name: 'last_increment_date', id: 'si_last_increment_date', col: 6,
+                    label: __('last_increment_date') || 'Date of Last Increment (Optional)', ph: 'YYYY-MM-DD' })) : '';
+
+            let salaryHtml = '';
+            let ccHtml = '';
+            if (finalCtx) {
+                const breakdownTotal = SALARY_COMPONENTS.reduce((t, c) => t + Number(finalCtx.components[c.v] || 0), 0);
+                const masterMismatch = finalCtx.master_salary !== null && Math.abs(Number(finalCtx.master_salary) - breakdownTotal) > 0.01;
+                salaryHtml = SRForm.section('mdi-cash-multiple', __('salary_update', 'Salary Update'),
+                    (!finalCtx.has_salary_row
+                        ? `<div class="sr-fcol c-12"><div class="sr-notice tone-amber"><i class="mdi mdi-alert-outline"></i><div>${esc(__('no_salary_breakdown_hint', 'This employee has no active salary breakdown. Please set it from the employee profile before approving.'))}</div></div></div>`
+                        : '') +
+                    SRForm.field({ name: 'salary_component', id: 'si_salary_component', col: 6, req: true,
+                        label: __('add_increment_to_component', 'Add Increment To'),
+                        html: SRForm.select({ name: 'salary_component', id: 'si_salary_component', req: true,
+                            msg: __('select_salary_component', 'Please select the salary component for this increment.'),
+                            placeholder: __('select_salary_component_ph', 'Select salary component'), options: SALARY_COMPONENTS }) }) +
+                    `<div class="sr-fcol c-6"><dl class="sr-kv">
+                        ${kv(__('increment_amount', 'Increment Amount'), '<span id="si_final_amount">' + money(finalCtx.amount) + '</span>')}
+                        ${kv(__('increment_effective_date', 'Increment Effective Date'), esc(finalCtx.effective_date || '-'))}
+                    </dl></div>
+                    <div class="sr-fcol c-12"><div class="sr-table-wrap"><table class="sr-table" style="margin: 0;">
+                        <thead><tr>
+                            <th>${esc(__('salary_component', 'Salary Component'))}</th>
+                            <th class="text-right">${esc(__('current', 'Current'))}</th>
+                            <th class="text-right">${esc(__('increment', 'Increment'))}</th>
+                            <th class="text-right">${esc(__('new', 'New'))}</th>
+                        </tr></thead>
+                        <tbody id="si_breakdown_body"></tbody>
+                    </table></div></div>` +
+                    (masterMismatch
+                        ? `<div class="sr-fcol c-12"><div class="sr-notice tone-amber"><i class="mdi mdi-alert-outline"></i><div>${esc(__('master_salary_mismatch_hint', 'Master salary differs from the component total; the new total salary will be based on the components.'))} (${money(finalCtx.master_salary)})</div></div></div>`
+                        : ''));
+
+                ccHtml = SRForm.section('mdi-email-outline', __('notify_by_email_cc', 'Notify by Email (CC)'),
+                    SRForm.field({ name: 'cc_emp_ids', id: 'si_cc_emp_ids', col: 12,
+                        label: __('cc_employees', 'CC Employees (HR, Finance, ...)'),
+                        hint: esc(__('cc_employees_hint', 'The submitting supervisor receives the approval email; selected employees are added in CC.')),
+                        html: `<select id="si_cc_emp_ids" multiple class="form-control">${(finalCtx.cc_people || []).map(p =>
+                            `<option value="${esc(p.id)}" data-emp-id="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>` }));
+            }
+
+            // Salary breakdown preview (final step): current / increment / new per component.
+            // emp_salary columns are whole numbers, so the increment is rounded like the server does.
+            function renderBreakdown() {
+                if (!finalCtx) return;
+                const comp = $('#si_salary_component').val() || '';
+                const inc = Math.round(showGMFields ? SRForm.num($('#si_gm_approved_amount').val()) : Number(finalCtx.amount || 0));
+                $('#si_final_amount').html(money(inc));
+                let curTotal = 0, newTotal = 0, rows = '';
+                SALARY_COMPONENTS.forEach((c) => {
+                    const cur = Number(finalCtx.components[c.v] || 0);
+                    const add = c.v === comp ? inc : 0;
+                    curTotal += cur; newTotal += cur + add;
+                    if (cur === 0 && add === 0) return;
+                    rows += `<tr${add ? ' style="background: var(--tone-green-bg);"' : ''}>
+                        <td>${esc(c.l)}${add ? ' <i class="mdi mdi-arrow-up-bold" style="color: var(--tone-green-fg);"></i>' : ''}</td>
+                        <td class="text-right sr-mono">${money(cur)}</td>
+                        <td class="text-right sr-mono" style="${add ? 'color: var(--tone-green-fg); font-weight: 700;' : ''}">${add ? '+' + money(add) : '-'}</td>
+                        <td class="text-right sr-mono" style="font-weight: 600;">${money(cur + add)}</td>
+                    </tr>`;
+                });
+                rows += `<tr style="border-top: 2px solid var(--sr-border-strong);">
+                    <td style="font-weight: 700;">${esc(__('total_salary', 'Total Salary'))}</td>
+                    <td class="text-right sr-mono" style="font-weight: 700;">${money(curTotal)}</td>
+                    <td class="text-right sr-mono" style="color: var(--tone-green-fg); font-weight: 700;">${comp ? '+' + money(inc) : '-'}</td>
+                    <td class="text-right sr-mono" style="font-weight: 800; color: var(--sr-accent-strong);">${money(newTotal)}</td>
+                </tr>`;
+                $('#si_breakdown_body').html(rows);
+            }
+
+            const commentHtml = SRForm.section('mdi-comment-text-outline', __('add_approval_comment') || 'Approval Comment (Optional)',
+                SRForm.field({ name: 'approval_comment', id: 'si_approval_comment', type: 'textarea', col: 12, rows: 2,
+                    ph: __('enter_comment_here') || 'Enter comment...' }));
+
+            SRForm.open({
                 title: __('confirm_approval') || 'Confirm Approval',
-                html: `<div class="text-left">
-                        <p><strong>${__('employee') || 'Employee'}:</strong> ${employeeName}</p>
-                        <p><strong>${__('increment_amount', 'Increment Amount') || 'Increment Amount'}:</strong> ${amount}</p>
-                        ${showGMFields ? `<div class="form-group">
-                            <label>${__('approved_amount', 'Approved Amount')} <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" min="0.01" max="${SALARY_INCREMENT_MAX_AMOUNT}" id="si_gm_approved_amount" class="form-control" value="${rawAmount}">
+                // Landscape: request info + approver inputs on the left, salary/CC/comment on the right.
+                html: `<div class="sr-page"><form class="sr-form si-approve-grid" id="si_approve_form" onsubmit="return false;">
+                        <div class="si-approve-col">
+                            ${SRForm.section('mdi-account-card-details', __('request_summary', 'Request Summary'), summaryHtml)}
+                            ${gmHtml}${hrHtml}
                         </div>
-                        <div class="form-group">
-                            <label>${__('increment_effective_date') || 'Increment Effective Date'} <span class="text-danger">*</span></label>
-                            <input type="text" id="si_gm_effective_date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
-                        </div>` : ''}
-                        ${showLastIncrementDate ? `<div class="form-group">
-                            <label>${__('last_increment_date') || 'Date of Last Increment (Optional)'}</label>
-                            <input type="text" id="si_last_increment_date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
-                        </div>` : ''}
-                        <div class="form-group">
-                            <label>${__('add_approval_comment') || 'Approval Comment (Optional)'}</label>
-                            <textarea id="si_approval_comment" class="form-control" rows="3" placeholder="${__('enter_comment_here') || 'Enter comment...'}"></textarea>
+                        <div class="si-approve-col">
+                            ${salaryHtml}${ccHtml}${commentHtml}
                         </div>
-                    </div>`,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: APP_COLORS.success,
-                cancelButtonColor: APP_COLORS.danger,
-                confirmButtonText: showLastIncrementDate ? (__('submit_salary_increment_request') || 'Submit') : (__('approve') || 'Approve'),
-                cancelButtonText: __('cancel') || 'Cancel',
-                showLoaderOnConfirm: true,
-                allowOutsideClick: false,
+                    </form></div>`,
+                width: finalCtx ? '1180px' : '960px',
+                icon: 'mdi-check',
+                confirm: showLastIncrementDate ? (__('submit_salary_increment_request') || 'Submit') : (__('approve') || 'Approve'),
+                confirmColor: APP_COLORS.success,
+                extra: { customClass: { popup: 'sr-addline-popup sr-page' } },
                 didOpen: () => {
+                    const $form = $('#si_approve_form');
+                    SRForm.liveClear($form);
                     // Last increment: future days blocked. GM effective date: past days blocked.
-                    AppDate.single('#si_last_increment_date', { maxDate: 'today' });
-                    AppDate.single('#si_gm_effective_date', { minDate: 'today' });
+                    SRForm.datepicker($('#si_last_increment_date'), { maxDate: 'today' });
+                    SRForm.datepicker($('#si_gm_effective_date'), { minDate: 'today' });
+                    $('#si_gm_approved_amount').on('input', function () {
+                        const v = SRForm.num(this.value);
+                        const diff = v - rawAmount;
+                        $('#si_gm_sum_approved').html(money(v));
+                        $('#si_gm_sum_diff').html((diff > 0 ? '+' : diff < 0 ? '−' : '') + money(Math.abs(diff)))
+                            .css('color', diff < 0 ? 'var(--tone-red-fg)' : diff > 0 ? 'var(--tone-green-fg)' : '');
+                        renderBreakdown();
+                    });
+
+                    if (!finalCtx) return;
+                    SRForm.select2($('#si_salary_component'), { placeholder: __('select_salary_component_ph', 'Select salary component'), minimumResultsForSearch: Infinity });
+                    // Shows names only; search matches name or emp_id.
+                    SRForm.select2($('#si_cc_emp_ids'), { placeholder: __('search_by_name_or_id', 'Search by name or Emp ID...'), closeOnSelect: false,
+                        matcher: (params, data) => {
+                            const term = $.trim(params.term || '').toLowerCase();
+                            if (term === '') return data;
+                            const id = String($(data.element).data('emp-id') || '').toLowerCase();
+                            return (String(data.text || '').toLowerCase().indexOf(term) > -1 || id.indexOf(term) > -1) ? data : null;
+                        } });
+                    $('#si_salary_component').on('change', renderBreakdown);
+                    renderBreakdown();
                 },
                 preConfirm: () => {
-                    const approvalComment = (document.getElementById('si_approval_comment') || {}).value || '';
-                    const lastIncrementDate = showLastIncrementDate ? ((document.getElementById('si_last_increment_date') || {}).value || '') : '';
+                    const $form = $('#si_approve_form');
+                    const approvalComment = $('#si_approval_comment').val() || '';
+                    const lastIncrementDate = showLastIncrementDate ? ($('#si_last_increment_date').val() || '') : '';
 
                     let approvedAmount = '';
                     let gmEffectiveDate = '';
                     if (showGMFields) {
-                        approvedAmount = (document.getElementById('si_gm_approved_amount') || {}).value || '';
-                        gmEffectiveDate = (document.getElementById('si_gm_effective_date') || {}).value || '';
+                        approvedAmount = $('#si_gm_approved_amount').val() || '';
+                        gmEffectiveDate = $('#si_gm_effective_date').val() || '';
 
-                        if (approvedAmount === '' || parseFloat(approvedAmount) <= 0 || parseFloat(approvedAmount) > SALARY_INCREMENT_MAX_AMOUNT) {
-                            Swal.showValidationMessage((__('approved_amount_required') || 'Approved amount is required and must be between 0 and {max}.').replace('{max}', SALARY_INCREMENT_MAX_AMOUNT));
+                        const err = SRForm.validate($form, () => {
+                            const amt = parseFloat(approvedAmount);
+                            if (!(amt > 0) || amt > SALARY_INCREMENT_MAX_AMOUNT) {
+                                return { el: document.getElementById('si_gm_approved_amount'), msg: $('#si_gm_approved_amount').data('msg') };
+                            }
+                            if (gmEffectiveDate < SRForm.today()) {
+                                return { el: document.getElementById('si_gm_effective_date'), msg: __('increment_effective_date_must_be_future') || 'Increment effective date cannot be a past date.' };
+                            }
+                            return null;
+                        });
+                        if (err) {
+                            Swal.showValidationMessage(err);
                             return false;
                         }
-                        if (gmEffectiveDate === '') {
-                            Swal.showValidationMessage(__('increment_effective_date_required') || 'Increment effective date is required.');
+                    }
+
+                    let salaryComponent = '';
+                    let ccEmpIds = [];
+                    if (finalCtx) {
+                        if (!finalCtx.has_salary_row) {
+                            Swal.showValidationMessage(__('no_salary_breakdown_hint', 'This employee has no active salary breakdown. Please set it from the employee profile before approving.'));
                             return false;
                         }
-                        const todayStr = new Date().toISOString().slice(0, 10);
-                        if (gmEffectiveDate < todayStr) {
-                            Swal.showValidationMessage(__('increment_effective_date_must_be_future') || 'Increment effective date cannot be a past date.');
+                        const err = SRForm.validate($form);
+                        if (err) {
+                            Swal.showValidationMessage(err);
                             return false;
                         }
+                        salaryComponent = $('#si_salary_component').val() || '';
+                        ccEmpIds = $('#si_cc_emp_ids').val() || [];
                     }
 
                     return new Promise((resolve, reject) => {
@@ -497,6 +674,8 @@ if ($can_see_all_depts) {
                             dataType: 'JSON',
                             data: {
                                 ajaxType: 'approveSalaryIncrement',
+                                salary_component: salaryComponent,
+                                cc_emp_ids: ccEmpIds,
                                 request_inv_no: requestInvNo,
                                 approval_comment: approvalComment,
                                 last_increment_date: lastIncrementDate,

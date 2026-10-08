@@ -2451,9 +2451,10 @@ if (!function_exists('send_approval_email')) {
             $mail->addAddress($to_email, $to_name);
             $mail->addReplyTo($smtp_from_email, $smtp_from_name);
 
-            // Add CC recipients ONLY for leave_request (excuse leave)
+            // Add CC recipients ONLY for leave_request (excuse leave) and the final
+            // salary increment notice (CC list picked by the last approver).
             // CC is disabled for all other request types
-            if ($request_type === 'leave_request' && !empty($cc_emails) && is_array($cc_emails)) {
+            if (in_array($request_type, ['leave_request', 'salary_increment_approved'], true) && !empty($cc_emails) && is_array($cc_emails)) {
                 foreach ($cc_emails as $cc_email => $cc_name) {
                     if (filter_var($cc_email, FILTER_VALIDATE_EMAIL)) {
                         $mail->addCC($cc_email, $cc_name);
@@ -2495,6 +2496,7 @@ if (!function_exists('load_email_template')) {
             'smart_request' => 'smart_request_email_template.html',
             'business_trip' => 'smart_request_email_template.html',
             'salary_increment' => 'smart_request_email_template.html',
+            'salary_increment_approved' => 'salary_increment_approved_email_template.html',
             'employee_transfer_request' => 'smart_request_email_template.html',
             'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
