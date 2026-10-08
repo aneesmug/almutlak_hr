@@ -1164,6 +1164,24 @@ ${chain.map(c => `<tr><td>${pe(c.level)}</td><td>${pe(c.approver_name || ('Emp#'
 
 <div class="sign"><div>${pe(__('direct_supervisor', 'Direct Supervisor'))}</div><div>${pe(__('hr_department', 'HR Department'))}</div><div>${pe(__('general_manager', 'General Manager'))}</div></div>
 <div class="ft">${pe(__('system_generated_document', 'This is a system generated document.'))}</div>
+<script>
+/* The print tab prints itself once loaded (logo included) and closes when the dialog is done. */
+(function () {
+    var closed = false;
+    function done() { if (closed) return; closed = true; setTimeout(function () { window.close(); }, 100); }
+    window.addEventListener('afterprint', done);
+    window.addEventListener('load', function () {
+        setTimeout(function () {
+            window.focus();
+            var t = Date.now();
+            window.print();
+            // Chrome/Edge block in print() until the dialog closes - close right away there.
+            // Where print() returns at once, wait for afterprint instead.
+            if (Date.now() - t > 300) done();
+        }, 200);
+    });
+})();
+<\/script>
 </body></html>`;
                         const w = window.open('', '_blank');
                         if (!w) {
@@ -1173,10 +1191,6 @@ ${chain.map(c => `<tr><td>${pe(c.level)}</td><td>${pe(c.approver_name || ('Emp#'
                         w.document.open();
                         w.document.write(doc);
                         w.document.close();
-                        // Wait for the logo so it shows on paper.
-                        const img = w.document.querySelector('img');
-                        const go = () => { w.focus(); w.print(); };
-                        if (img && !img.complete) { img.onload = go; img.onerror = go; } else { setTimeout(go, 150); }
                     };
 
                     Swal.fire({
