@@ -5622,17 +5622,43 @@ function __(key, def) {
             }
         }
 
-        function renderApprovalChainSettings() {
-            //* const defaultRequestTypes = [
-            //*     { id: 'vacation_request', name: '<?//= __('vacation_request') ?>', description: '<?//= __('annual_vacation_and_fly_vacation_approval_chain') ?>' },
-            //*     { id: 'excuse_leave', name: '<?//= __('excuse_leave') ?>', description: '<?//= __('sick_leave_exam_leave_and_other_excuse_types') ?>' },
-            //*     { id: 'loan_request', name: '<?//= __('loan_request') ?>', description: '<?//= __('employee_loan_application_approval_chain') ?>' },
-            //*     { id: 'settlement', name: '<?//= __('settlement_payment') ?>', description: '<?//= __('settlement_payment_processing_approval_chain_after_request_final_approval') ?>' },
-            //*     { id: 'resignation_request', name: '<?//= __('resignation_request') ?>', description: '<?//= __('employee_resignation_approval_chain') ?>' },
-            //*     { id: 'rejoin_request', name: '<?//= __('rejoin_request') ?>', description: '<?//= __('employee_rejoin_after_resignation_approval_chain') ?>' }
-            //* ];
+        /**
+         * =================================================================
+         * == APPROVAL CHAIN SETTINGS (sr-* design: assets/css/smart_request.css
+         * == + the .ac-* rules in app_settings.php)
+         * =================================================================
+         */
+        const APPROVER_ROLES = [
+            { v: 'administrator', l: 'administrator' },
+            { v: 'gm', l: 'general_manager_gm' },
+            { v: 'hr_senior_bp', l: 'hr_senior_bp' },
+            { v: 'hr_operations', l: 'hr_operations' },
+            { v: 'hr_supervisor', l: 'hr_supervisor' },
+            { v: 'hr_recruitment', l: 'hr_recruitment' },
+            { v: 'hr_payroll', l: 'hr_payroll' },
+            { v: 'hr', l: 'hr_manager' },
+            { v: 'finance_officer', l: 'finance_officer' },
+            { v: 'finance', l: 'finance_manager' },
+            { v: 'auditor', l: 'auditor' },
+            { v: 'gr_officer', l: 'gr_officer' },
+            { v: 'it', l: 'it_manager' },
+            { v: 'dept_user', l: 'department_user' },
+            { v: 'assistant', l: 'assistant' },
+            { v: 'direct_supervisor', l: 'direct_supervisor' },
+            { v: 'dept_manager', l: 'department_manager' },
+            { v: 'admin_manager', l: 'admin_manager' },
+            { v: 'transportation_manager', l: 'transportation_manager' }
+        ];
 
-            // Fetch all request types including custom ones
+        // Loaded chain per request type: { [typeId]: [{level, user_type, role_label}] | null (failed) }
+        let approvalChains = {};
+
+        const acToast = (icon, title) => Swal.fire({
+            toast: true, position: 'top-end', icon, title,
+            showConfirmButton: false, timer: 2200, timerProgressBar: true
+        });
+
+        function renderApprovalChainSettings() {
             fetch('./includes/approval_chain_handler.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -5640,57 +5666,75 @@ function __(key, def) {
             })
             .then(response => response.json())
             .then(data => {
-                const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
-                //* const requestTypes = data.success && Array.isArray(data.types) ? data.types : defaultRequestTypes;
-                // Filter out request types you want to skip from the UI
-                const skipRequestTypes = ['smart_request', 'general_request']; // Add any request types to skip
-                const filteredTypes = requestTypes.filter(type => !skipRequestTypes.includes(type.id));
-                
-                renderApprovalChainUI(filteredTypes);
+                if (!data.success || !Array.isArray(data.types)) throw new Error(data.message || __('failed_to_load_approval_chain'));
+                // Request types handled elsewhere (their own approval logic) are not shown here
+                const skipRequestTypes = ['smart_request', 'general_request'];
+                renderApprovalChainUI(data.types.filter(type => !skipRequestTypes.includes(type.id)));
             })
             .catch(error => {
                 console.error('Error loading request types:', error);
-                //* renderApprovalChainUI(defaultRequestTypes);
+                settingsContainer.innerHTML = `<div class="tab-pane active" id="group-approval" role="tabpanel">
+                    <div class="sr-notice tone-red"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div></div>`;
             });
         }
 
         function renderApprovalChainUI(requestTypes) {
-            let formHtml = `<div class="tab-pane active" id="group-approval" role="tabpanel">`;
-            formHtml += `<div class="d-flex justify-content-between align-items-center mb-3">`;
-            formHtml += `<h5 class="mb-0">${__('approval_chain_configuration')}</h5>`;
-            formHtml += `<button type="button" class="btn btn-sm btn-success" id="btn-add-request-type"><i class="mdi mdi-plus"></i> ${__('add_new_request_type')}</button>`;
-            formHtml += `</div>`;
-            formHtml += `<p class="text-muted mb-4">${__('configure_approval_workflow')}</p>`;
+            approvalChains = {};
 
+            let cardsHtml = '';
             requestTypes.forEach(requestType => {
-                formHtml += `
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">
-                                <i class="mdi mdi-check-circle-outline mr-2"></i>${translateText(requestType.name)}
-                                <small class="text-muted ml-2">${translateText(requestType.description)}</small>
-                            </h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="form-group">
-                                <label>${__('approval_steps_in_order')}</label>
-                                <div id="approval-chain-${requestType.id}" class="approval-chain-container border rounded p-3 bg-light">
-                                    <div class="text-center text-muted">
-                                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                                        <span class="ml-2">${__('loading')}</span>
-                                    </div>
+                const name = translateText(requestType.name);
+                const desc = requestType.description ? translateText(requestType.description) : '';
+                cardsHtml += `
+                    <div class="sr-card ac-card" data-request-type="${escapeHtml(requestType.id)}" data-search="${escapeHtml((name + ' ' + desc + ' ' + requestType.id).toLowerCase())}">
+                        <div class="sr-card-head">
+                            <div class="ac-card-id">
+                                <span class="ac-ico"><i class="mdi mdi-file-tree"></i></span>
+                                <div class="ac-card-text">
+                                    <div class="sr-card-title">${escapeHtml(name)}</div>
+                                    ${desc ? `<div class="sr-card-sub">${escapeHtml(desc)}</div>` : ''}
                                 </div>
-                                <button type="button" class="btn btn-sm btn-outline-primary mt-2 add-approver-btn" data-request-type="${requestType.id}">
-                                    <i class="mdi mdi-plus"></i> ${__('add_approver')}
-                                </button>
+                            </div>
+                            <span id="approval-status-${escapeHtml(requestType.id)}" class="sr-pill tone-slate"><span class="sr-dot"></span>${__('loading')}</span>
+                        </div>
+                        <div class="sr-card-body">
+                            <div id="approval-chain-${escapeHtml(requestType.id)}" class="approval-chain-container">
+                                <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                             </div>
                         </div>
-                    </div>
-                `;
+                        <div class="ac-card-foot">
+                            <span class="ac-hint"><i class="mdi mdi-drag-vertical"></i> ${__('drag_to_reorder', 'Drag to reorder')}</span>
+                            <button type="button" class="sr-btn sr-btn-sm add-approver-btn" data-request-type="${escapeHtml(requestType.id)}" data-name="${escapeHtml(name)}">
+                                <i class="mdi mdi-account-plus"></i> ${__('add_approver')}
+                            </button>
+                        </div>
+                    </div>`;
             });
 
-            formHtml += `</div>`;
-            settingsContainer.innerHTML = formHtml;
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-approval" role="tabpanel">
+                    <div class="ac-head">
+                        <div>
+                            <h5 class="ac-title"><i class="mdi mdi-sitemap"></i> ${__('approval_chain_configuration')}</h5>
+                            <p class="ac-sub">${__('configure_approval_workflow')}</p>
+                        </div>
+                        <div class="ac-head-actions">
+                            <div class="sr-search ac-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="search" id="acFilter" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                            </div>
+                            <button type="button" class="sr-btn sr-btn-success sr-btn-sm" id="btn-add-request-type"><i class="mdi mdi-plus"></i> ${__('add_new_request_type')}</button>
+                        </div>
+                    </div>
+                    <div class="ac-stats">
+                        <div class="ac-stat"><span class="ac-stat-ico tone-indigo"><i class="mdi mdi-file-tree"></i></span><div><span class="ac-stat-val" id="acStatTypes">${requestTypes.length}</span><span class="ac-stat-lbl">${__('request_types', 'Request types')}</span></div></div>
+                        <div class="ac-stat"><span class="ac-stat-ico tone-green"><i class="mdi mdi-account-check"></i></span><div><span class="ac-stat-val" id="acStatSteps">-</span><span class="ac-stat-lbl">${__('approval_steps', 'Approval steps')}</span></div></div>
+                        <div class="ac-stat"><span class="ac-stat-ico tone-amber"><i class="mdi mdi-alert-outline"></i></span><div><span class="ac-stat-val" id="acStatEmpty">-</span><span class="ac-stat-lbl">${__('not_configured', 'Not configured')}</span></div></div>
+                    </div>
+                    <div class="ac-grid" id="acGrid">${cardsHtml}</div>
+                    <div class="sr-empty" id="acNoResults" style="display:none"><i class="mdi mdi-magnify"></i>${__('no_results_found', 'No results found')}</div>
+                    ${requestTypes.length ? '' : `<div class="sr-empty"><i class="mdi mdi-file-tree"></i>${__('no_data_available', 'No data available')}</div>`}
+                </div>`;
 
             // Load approval chains one at a time (parallel fetches trip the
             // per-IP concurrency limit in db.php and fail with a 429)
@@ -5700,63 +5744,98 @@ function __(key, def) {
                 }
             })();
 
-            // Attach event listeners for "Add Approver" buttons
-            document.querySelectorAll('.add-approver-btn').forEach(btn => {
+            settingsContainer.querySelectorAll('.add-approver-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
-                    const requestType = this.dataset.requestType;
-                    showAddApproverModal(requestType);
+                    showAddApproverModal(this.dataset.requestType, this.dataset.name);
                 });
             });
 
-            // Attach event listener for "Add New Request Type" button
             const btnAddRequestType = document.getElementById('btn-add-request-type');
-            if (btnAddRequestType) {
-                btnAddRequestType.addEventListener('click', showAddNewRequestTypeModal);
+            if (btnAddRequestType) btnAddRequestType.addEventListener('click', showAddNewRequestTypeModal);
+
+            const filter = document.getElementById('acFilter');
+            if (filter) {
+                // Inside #settingsForm - Enter must not submit the settings form
+                filter.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+                filter.addEventListener('input', function() {
+                    const q = this.value.trim().toLowerCase();
+                    let shown = 0;
+                    settingsContainer.querySelectorAll('.ac-card').forEach(card => {
+                        const hit = !q || card.dataset.search.includes(q);
+                        card.style.display = hit ? '' : 'none';
+                        if (hit) shown++;
+                    });
+                    document.getElementById('acNoResults').style.display = (requestTypes.length && !shown) ? '' : 'none';
+                });
+            }
+        }
+
+        function updateApprovalStats() {
+            const loaded = Object.values(approvalChains).filter(Array.isArray);
+            const stepsEl = document.getElementById('acStatSteps');
+            const emptyEl = document.getElementById('acStatEmpty');
+            if (stepsEl) stepsEl.textContent = loaded.reduce((sum, chain) => sum + chain.length, 0);
+            if (emptyEl) emptyEl.textContent = loaded.filter(chain => chain.length === 0).length;
+        }
+
+        function setApprovalStatus(requestType, tone, text) {
+            const pill = document.getElementById(`approval-status-${requestType}`);
+            if (pill) {
+                pill.className = `sr-pill tone-${tone}`;
+                pill.innerHTML = `<span class="sr-dot"></span>${escapeHtml(text)}`;
             }
         }
 
         async function loadApprovalChain(requestType) {
+            const container = document.getElementById(`approval-chain-${requestType}`);
+            if (!container) return;
             try {
                 const response = await fetch('./includes/approval_chain_handler.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'get_approval_chain', 
-                        request_type: requestType 
+                    body: new URLSearchParams({
+                        action: 'get_approval_chain',
+                        request_type: requestType
                     })
                 });
 
                 if (!response.ok) throw new Error('' + __('failed_to_load_approval_chain') + '');
                 const data = await response.json();
+                const chain = (data.success && Array.isArray(data.chain)) ? data.chain : [];
+                approvalChains[requestType] = chain;
+                updateApprovalStats();
 
-                const container = document.getElementById(`approval-chain-${requestType}`);
-                if (!data.success || !data.chain || data.chain.length === 0) {
-                    container.innerHTML = '<p class="text-muted mb-0"><i class="mdi mdi-information-outline"></i> ' + __('no_approval_steps_configured_yet') + '</p>';
+                if (chain.length === 0) {
+                    setApprovalStatus(requestType, 'amber', __('not_configured', 'Not configured'));
+                    container.innerHTML = `<div class="ac-empty"><i class="mdi mdi-playlist-check"></i><span>${__('no_approval_steps_configured_yet')}</span></div>`;
                     return;
                 }
 
-                let chainHtml = '<div class="approval-steps">';
-                data.chain.forEach((step, index) => {
+                setApprovalStatus(requestType, 'indigo', `${chain.length} ${chain.length === 1 ? __('level') : __('levels', 'Levels')}`);
+
+                let chainHtml = '<ol class="approval-steps ac-steps">';
+                chain.forEach((step, index) => {
+                    const isFinal = index === chain.length - 1;
+                    const label = translateText(step.role_label);
                     chainHtml += `
-                        <div class="approval-step d-flex align-items-center justify-content-between p-2 mb-2 bg-white border rounded" draggable="true" data-level="${step.level}" data-role="${step.user_type}">
-                            <div class="d-flex align-items-center">
-                                <i class="mdi mdi-drag-vertical text-muted mr-1"></i>
-                                <span class="badge badge-primary mr-2">${__('level')} ${step.level}</span>
-                                <span class="font-weight-bold">${translateText(step.role_label)}</span>
+                        <li class="approval-step ac-step${isFinal ? ' is-final' : ''}" draggable="true" data-level="${escapeHtml(step.level)}" data-role="${escapeHtml(step.user_type)}">
+                            <span class="ac-handle" title="${__('drag_to_reorder', 'Drag to reorder')}"><i class="mdi mdi-drag-vertical"></i></span>
+                            <span class="ac-num">${isFinal ? '<i class="mdi mdi-flag-checkered"></i>' : escapeHtml(step.level)}</span>
+                            <div class="ac-step-main">
+                                <div class="ac-step-role">${escapeHtml(label)}</div>
+                                <div class="ac-step-sub">${__('level')} ${escapeHtml(step.level)}${isFinal ? ` &middot; <span class="ac-final">${__('final_approval', 'Final approval')}</span>` : ''}</div>
                             </div>
-                            <button type="button" class="btn btn-sm btn-outline-danger remove-approver-btn" data-request-type="${requestType}" data-level="${step.level}">
+                            <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-approver-btn" data-request-type="${escapeHtml(requestType)}" data-level="${escapeHtml(step.level)}" data-label="${escapeHtml(label)}" title="${__('remove_approval_step')}">
                                 <i class="mdi mdi-delete"></i>
                             </button>
-                        </div>
-                    `;
+                        </li>`;
                 });
-                chainHtml += '</div>';
+                chainHtml += '</ol>';
                 container.innerHTML = chainHtml;
 
-                // Attach remove button listeners
                 container.querySelectorAll('.remove-approver-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
-                        removeApprovalStep(this.dataset.requestType, this.dataset.level);
+                        removeApprovalStep(this.dataset.requestType, this.dataset.level, this.dataset.label);
                     });
                 });
 
@@ -5764,21 +5843,22 @@ function __(key, def) {
 
             } catch (error) {
                 console.error('Error loading approval chain:', error);
-                const container = document.getElementById(`approval-chain-${requestType}`);
-                container.innerHTML = `<p class="text-danger"><i class="mdi mdi-alert"></i> ${__('Error:')} ${error.message}</p>`;
+                approvalChains[requestType] = null;
+                setApprovalStatus(requestType, 'red', __('error'));
+                container.innerHTML = `<div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(error.message)}</div></div>`;
             }
         }
 
-        // Native HTML5 drag-and-drop reorder for the approval-step rows - the
-        // markup/CSS (cursor: move) and the backend ('update_approval_order' in
-        // approval_chain_handler.php) were already there, nothing ever actually
-        // wired dragstart/dragover/drop up, so rows just showed the move cursor
-        // without moving. Reorders the DOM live as you drag over other rows,
-        // then persists + reloads (for fresh Level badges) on drop.
+        // Native HTML5 drag-and-drop reorder for the approval-step rows: reorders
+        // the DOM live as you drag over other rows, then persists via
+        // 'update_approval_order' (approval_chain_handler.php) and reloads for
+        // fresh level numbers on drop.
         function enableApprovalDragReorder(container, requestType) {
             const stepsWrap = container.querySelector('.approval-steps');
             if (!stepsWrap) return;
             let draggedEl = null;
+            let startOrder = '';
+            const currentOrder = () => [...stepsWrap.querySelectorAll('.approval-step')].map(el => el.dataset.role).join(',');
 
             const getDragAfterElement = (y) => {
                 const els = [...stepsWrap.querySelectorAll('.approval-step:not(.dragging)')];
@@ -5795,14 +5875,18 @@ function __(key, def) {
             stepsWrap.querySelectorAll('.approval-step').forEach(step => {
                 step.addEventListener('dragstart', () => {
                     draggedEl = step;
+                    startOrder = currentOrder();
+                    stepsWrap.classList.add('is-sorting');
                     // Deferred so the drag ghost image is captured before the class changes it.
                     setTimeout(() => step.classList.add('dragging'), 0);
                 });
                 step.addEventListener('dragend', () => {
                     step.classList.remove('dragging');
+                    stepsWrap.classList.remove('is-sorting');
                     if (draggedEl) {
                         draggedEl = null;
-                        persistApprovalOrder(requestType, stepsWrap);
+                        // Dropped back where it started - nothing to save
+                        if (currentOrder() !== startOrder) persistApprovalOrder(requestType, stepsWrap);
                     }
                 });
             });
@@ -5832,70 +5916,83 @@ function __(key, def) {
                 });
                 const data = await response.json();
                 if (!data.success) throw new Error(data.message || '' + __('could_not_save_settings') + '');
+                acToast('success', __('order_saved', 'Order saved'));
                 await loadApprovalChain(requestType);
             } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
+                Swal.fire({ title: __('error'), text: error.message, icon: 'error', customClass: { popup: 'sr-addline-popup sr-page' } });
                 await loadApprovalChain(requestType);
             }
         }
 
-        function showAddApproverModal(requestType) {
+        function showAddApproverModal(requestType, typeName) {
+            const chain = Array.isArray(approvalChains[requestType]) ? approvalChains[requestType] : [];
+            const used = chain.map(step => step.user_type);
+            const options = APPROVER_ROLES.map(role => {
+                const isUsed = used.includes(role.v);
+                return `<option value="${role.v}"${isUsed ? ' disabled' : ''}>${escapeHtml(__(role.l))}${isUsed ? ` (${__('already_in_chain', 'already in chain')})` : ''}</option>`;
+            }).join('');
+            const chainPreview = chain.length
+                ? chain.map(step => `<span class="sr-chip">${escapeHtml(step.level)}. ${escapeHtml(translateText(step.role_label))}</span>`).join('<i class="mdi mdi-chevron-right ac-arrow"></i>')
+                : `<span class="ac-muted">${__('no_approval_steps_configured_yet')}</span>`;
+
             Swal.fire({
-                icon: 'info',
-                title: '' + __('add_approver') + '',
+                title: __('add_approver'),
                 html: `
-                    <div class="form-group text-left">
-                        <label for="approver-role">${__('select_approver_role')}</label>
-                        <select id="approver-role" class="form-control">
-                            <option value="">-- ${__('select_role')} --</option>
-                            <option value="administrator">${__('administrator')}</option>
-                            <option value="gm">${__('general_manager_gm')}</option>
-                            <option value="hr_senior_bp">${__('hr_senior_bp')}</option>
-                            <option value="hr_operations">${__('hr_operations')}</option>
-                            <option value="hr_supervisor">${__('hr_supervisor')}</option>
-                            <option value="hr_recruitment">${__('hr_recruitment')}</option>
-                            <option value="hr_payroll">${__('hr_payroll')}</option>
-                            <option value="hr">${__('hr_manager')}</option>
-                            <option value="finance_officer">${__('finance_officer')}</option>
-                            <option value="finance">${__('finance_manager')}</option>
-                            <option value="auditor">${__('auditor')}</option>
-                            <option value="gr_officer">${__('gr_officer')}</option>
-                            <option value="it">${__('it_manager')}</option>
-                            <option value="dept_user">${__('department_user')}</option>
-                            <option value="assistant">${__('assistant')}</option>
-                            <option value="direct_supervisor">${__('direct_supervisor')}</option>
-                            <option value="dept_manager">${__('department_manager')}</option>
-                            <option value="admin_manager">${__('admin_manager')}</option>
-                            <option value="transportation_manager">${__('transportation_manager')}</option>
-                        </select>
-                    </div>
-                `,
+                    <form class="sr-form" onsubmit="return false">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-file-tree"></i> ${escapeHtml(typeName || requestType)}</span><span class="sr-chip">${__('level')} ${chain.length + 1}</span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-12">
+                                    <label for="approver-role">${__('select_approver_role')} <span class="text-danger">*</span></label>
+                                    <select id="approver-role" class="form-control">
+                                        <option value="">-- ${__('select_role')} --</option>
+                                        ${options}
+                                    </select>
+                                    <small class="sr-fhint">${__('approver_added_at_end_hint', 'The approver is added at the end of the chain; drag the steps afterwards to change the order.')}</small>
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <label>${__('approval_steps_in_order')}</label>
+                                    <div class="ac-preview">${chainPreview}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>`,
+                width: '560px',
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('add') + '',
-                cancelButtonText: '' + __('cancel') + '',
-                preConfirm: () => {
-                    const role = document.getElementById('approver-role').value;
-                    if (!role) {
-                        Swal.showValidationMessage('' + __('please_select_a_role') + '');
+                confirmButtonText: `<i class="mdi mdi-account-plus"></i> ${__('add')}`,
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                didOpen: () => {
+                    const sel = document.getElementById('approver-role');
+                    sel.addEventListener('change', () => sel.classList.remove('is-invalid'));
+                },
+                preConfirm: async () => {
+                    const sel = document.getElementById('approver-role');
+                    if (!sel.value) {
+                        sel.classList.add('is-invalid');
+                        Swal.showValidationMessage(__('please_select_a_role'));
                         return false;
                     }
-                    return { role };
+                    return await addApprovalStep(requestType, sel.value);
                 }
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    await addApprovalStep(requestType, result.value.role);
+            }).then(result => {
+                if (result.isConfirmed && result.value) {
+                    acToast('success', __('approval_step_added_successfully'));
+                    loadApprovalChain(requestType);
                 }
             });
         }
 
+        // Resolves true on success; shows the error inside the open popup otherwise.
         async function addApprovalStep(requestType, userType) {
             try {
                 const response = await fetch('./includes/approval_chain_handler.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'add_approval_step', 
+                    body: new URLSearchParams({
+                        action: 'add_approval_step',
                         request_type: requestType,
                         user_type: userType
                     })
@@ -5903,101 +6000,110 @@ function __(key, def) {
 
                 if (!response.ok) throw new Error('' + __('failed_to_add_approval_step') + '');
                 const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('added') + '', '' + __('approval_step_added_successfully') + '', 'success');
-                    loadApprovalChain(requestType); // Reload the chain
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_add_approval_step') + '');
-                }
+                if (!data.success) throw new Error(data.message || '' + __('failed_to_add_approval_step') + '');
+                return true;
             } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
+                Swal.showValidationMessage(error.message);
+                return false;
             }
         }
 
-        async function removeApprovalStep(requestType, level) {
+        async function removeApprovalStep(requestType, level, label) {
             const result = await Swal.fire({
-                title: '' + __('remove_approval_step') + '',
-                text: '' + __('this_will_remove_this_approval_level_from_the_chain') + '',
+                title: __('remove_approval_step'),
+                html: `<div class="sr-form"><div class="sr-notice tone-red is-compact"><i class="mdi mdi-alert-outline"></i>
+                        <div><strong>${__('level')} ${escapeHtml(level)} &middot; ${escapeHtml(label || '')}</strong><br>${__('this_will_remove_this_approval_level_from_the_chain')}</div></div></div>`,
                 icon: 'warning',
+                width: '480px',
+                allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('yes_remove_it') + '',
-                cancelButtonText: '' + __('cancel') + ''
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: `<i class="mdi mdi-delete"></i> ${__('yes_remove_it')}`,
+                cancelButtonText: __('cancel'),
+                showLoaderOnConfirm: true,
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                preConfirm: async () => {
+                    try {
+                        const response = await fetch('./includes/approval_chain_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({
+                                action: 'remove_approval_step',
+                                request_type: requestType,
+                                level: level
+                            })
+                        });
+                        if (!response.ok) throw new Error('' + __('failed_to_remove_approval_step') + '');
+                        const data = await response.json();
+                        if (!data.success) throw new Error(data.message || '' + __('failed_to_remove_approval_step') + '');
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
+                        return false;
+                    }
+                }
             });
 
-            if (!result.isConfirmed) return;
-
-            try {
-                const response = await fetch('./includes/approval_chain_handler.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
-                        action: 'remove_approval_step', 
-                        request_type: requestType,
-                        level: level
-                    })
-                });
-
-                if (!response.ok) throw new Error('' + __('failed_to_remove_approval_step') + '');
-                const data = await response.json();
-
-                if (data.success) {
-                    Swal.fire('' + __('removed') + '', '' + __('approval_step_removed_successfully') + '', 'success');
-                    loadApprovalChain(requestType); // Reload the chain
-                } else {
-                    throw new Error(data.message || '' + __('failed_to_remove_approval_step') + '');
-                }
-            } catch (error) {
-                Swal.fire('' + __('error') + '', error.message, 'error');
+            if (result.isConfirmed && result.value) {
+                acToast('success', __('approval_step_removed_successfully'));
+                loadApprovalChain(requestType);
             }
         }
 
         async function showAddNewRequestTypeModal() {
             const result = await Swal.fire({
-                icon: 'info',
-                title: '' + __('add_new_request_type') + '',
+                title: __('add_new_request_type'),
                 html: `
-                    <div class="text-left">
-                        <div class="form-group">
-                            <label for="new-request-type-id">${__('request_type_id')} <small class="text-danger">(${__('lowercase, underscores')})</small></label>
-                            <input type="text" id="new-request-type-id" class="form-control" placeholder="${__('e.g., travel_request, business_trip')}" pattern="[a-z_]+" title="${__('use_lowercase_letters_and_underscores_only')}">
+                    <form class="sr-form" id="acNewTypeForm" onsubmit="return false">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-file-tree"></i> ${__('request_type', 'Request type')}</span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-6">
+                                    <label for="new-request-type-id">${__('request_type_id')} <span class="text-danger">*</span></label>
+                                    <input type="text" id="new-request-type-id" class="form-control sr-mono" autocomplete="off" placeholder="${__('e.g., travel_request, business_trip')}">
+                                    <small class="sr-fhint">${__('use_lowercase_letters_and_underscores_only')}</small>
+                                </div>
+                                <div class="sr-fcol c-6">
+                                    <label for="new-request-type-name">${__('request_type_name')} <span class="text-danger">*</span></label>
+                                    <input type="text" id="new-request-type-name" class="form-control" autocomplete="off" placeholder="${__('e.g., Travel Request')}">
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <label for="new-main-table-name">${__('main_table_name')} <small class="text-muted">(${__('optional')})</small></label>
+                                    <input type="text" id="new-main-table-name" class="form-control sr-mono" autocomplete="off" placeholder="${__('e.g., travel_requests')}">
+                                </div>
+                                <div class="sr-fcol c-12">
+                                    <label for="new-request-type-description">${__('description')}</label>
+                                    <textarea id="new-request-type-description" class="form-control" rows="2" placeholder="${__('brief_description_of_this_request_type')}"></textarea>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="new-request-type-name">${__('request_type_name')}</label>
-                            <input type="text" id="new-request-type-name" class="form-control" placeholder="${__('e.g., Travel Request')}">
-                        </div>
-                        <div class="form-group">
-                            <label for="new-main-table-name">${__('main_table_name')} <small class="text-muted">(${__('optional')})</small></label>
-                            <input type="text" id="new-main-table-name" class="form-control" placeholder="${__('e.g., travel_requests')}">
-                        </div>
-                        <div class="form-group">
-                            <label for="new-request-type-description">${__('description')}</label>
-                            <textarea id="new-request-type-description" class="form-control" rows="2" placeholder="${__('brief_description_of_this_request_type')}"></textarea>
-                        </div>
-                    </div>
-                `,
+                    </form>`,
+                width: '640px',
                 allowOutsideClick: false,
                 showCancelButton: true,
-                confirmButtonText: '' + __('create') + '',
-                cancelButtonText: '' + __('cancel') + '',
+                confirmButtonText: `<i class="mdi mdi-plus"></i> ${__('create')}`,
+                cancelButtonText: __('cancel'),
+                customClass: { popup: 'sr-addline-popup sr-page' },
+                didOpen: () => {
+                    const form = document.getElementById('acNewTypeForm');
+                    form.addEventListener('input', e => e.target.classList.remove('is-invalid'));
+                    // Type the ID the way it must be stored
+                    const idInput = document.getElementById('new-request-type-id');
+                    idInput.addEventListener('input', () => { idInput.value = idInput.value.toLowerCase().replace(/[\s-]+/g, '_'); });
+                    idInput.focus();
+                },
                 preConfirm: () => {
-                    const id = document.getElementById('new-request-type-id').value.trim().toLowerCase();
-                    const name = document.getElementById('new-request-type-name').value.trim();
+                    const idEl = document.getElementById('new-request-type-id');
+                    const nameEl = document.getElementById('new-request-type-name');
+                    const id = idEl.value.trim().toLowerCase();
+                    const name = nameEl.value.trim();
                     const mainTable = document.getElementById('new-main-table-name').value.trim();
                     const description = document.getElementById('new-request-type-description').value.trim();
 
-                    if (!id) {
-                        Swal.showValidationMessage('' + __('request_type_id_is_required') + '');
-                        return false;
-                    }
-                    if (!name) {
-                        Swal.showValidationMessage('' + __('request_type_name_is_required') + '');
-                        return false;
-                    }
-                    if (!/^[a-z_]+$/.test(id)) {
-                        Swal.showValidationMessage('' + __('request_type_id_must_contain_only_lowercase_letters_and_underscores') + '');
-                        return false;
-                    }
+                    const fail = (el, msg) => { el.classList.add('is-invalid'); el.focus(); Swal.showValidationMessage(msg); return false; };
+                    if (!id) return fail(idEl, __('request_type_id_is_required'));
+                    if (!/^[a-z_]+$/.test(id)) return fail(idEl, __('request_type_id_must_contain_only_lowercase_letters_and_underscores'));
+                    if (!name) return fail(nameEl, __('request_type_name_is_required'));
                     return { id, name, mainTable, description };
                 }
             });
@@ -6012,7 +6118,7 @@ function __(key, def) {
                 const response = await fetch('./includes/approval_chain_handler.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ 
+                    body: new URLSearchParams({
                         action: 'create_new_request_type',
                         request_type_id: requestTypeId,
                         request_type_name: requestTypeName,
@@ -6025,15 +6131,20 @@ function __(key, def) {
                 const data = await response.json();
 
                 if (data.success) {
-                    Swal.fire('' + __('Created!') + '', `${__('New request type')} "${requestTypeName}" ${__('has been added successfully. You can now configure its approval chain.')}`, 'success')
-                        .then(() => {
-                            renderApprovalChainSettings(); // Reload the approval chain settings
-                        });
+                    Swal.fire({
+                        title: __('Created!'),
+                        text: `${__('New request type')} "${requestTypeName}" ${__('has been added successfully. You can now configure its approval chain.')}`,
+                        icon: 'success',
+                        allowOutsideClick: false,
+                        customClass: { popup: 'sr-addline-popup sr-page' }
+                    }).then(() => {
+                        renderApprovalChainSettings();
+                    });
                 } else {
                     throw new Error(data.message || '' + __('Failed to create request type') + '');
                 }
             } catch (error) {
-                Swal.fire('' + __('Error!') + '', error.message, 'error');
+                Swal.fire({ title: __('Error!'), text: error.message, icon: 'error', customClass: { popup: 'sr-addline-popup sr-page' } });
             }
         }
 
