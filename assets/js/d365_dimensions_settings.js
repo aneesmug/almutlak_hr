@@ -340,7 +340,9 @@
                 : '';
             host.innerHTML = warningsHtml(meta) + autoNote + noTpl +
                 '<div class="sr-toolbar mb-2" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
-                '<select class="form-control form-control-sm" id="dimCompany" style="max-width:340px">' + options + '</select>' +
+                '<select class="form-control form-control-sm" id="dimCompany" style="max-width:340px" title="' + esc(t('payroll_company_label', 'Payroll Company')) + '">' + options + '</select>' +
+                // App company (assigned in the HR app, employees.comp_no) - filled from the loaded rows
+                '<select class="form-control form-control-sm" id="dimAppCompany" style="max-width:260px" title="' + esc(t('company', 'Company')) + '"><option value="*">' + esc(t('all_companies', 'All companies')) + '</option></select>' +
                 '<div class="sr-search" style="flex:1;min-width:180px"><i class="mdi mdi-magnify"></i><input type="search" id="dimSearch" placeholder="' + esc(t('search', 'Search')) + '..."></div>' +
                 '<label class="sr-check mb-0"><input type="checkbox" id="dimOnlyMissing"> ' + esc(t('d365_only_not_ready', 'Only not ready')) + '</label>' +
                 '<span class="sr-pill tone-red" id="dimMissingCount" style="display:none;cursor:pointer" title="' + esc(t('d365_missing_count_hint', 'Employees with a Missing dimension - click to show only them')) + '"><span class="sr-dot"></span>' +
@@ -365,6 +367,10 @@
                 }
                 try { localStorage.setItem('d365_dim_company', this.value); } catch (e) {}
                 loadGrid(host, grid, this.value);
+            });
+            host.querySelector('#dimAppCompany').addEventListener('change', function () {
+                state.appCompany = this.value;
+                filterGrid(host);
             });
             host.querySelector('#dimSearch').addEventListener('input', function () { filterGrid(host); });
             host.querySelector('#dimOnlyMissing').addEventListener('change', function () { filterGrid(host); });
@@ -529,12 +535,13 @@
         var tpl = state.templates[company] || [];
         if (!company) return '<span class="text-muted">' + esc(t('d365_pick_company', 'Pick the payroll company')) + '</span>';
         if (!tpl.length) return '<span class="text-muted">' + esc(company + ': ' + t('d365_no_template', 'No template - uses D365 employment dims')) + '</span>';
-        return '<div style="display:flex;flex-wrap:wrap;gap:6px">' + tpl.map(function (d) {
+        // all dimensions side by side on one line (the table scrolls sideways when they do not fit)
+        return '<div style="display:flex;flex-wrap:nowrap;align-items:flex-end;gap:8px">' + tpl.map(function (d) {
             if (isWorker(d.dimension)) {
-                return '<div><div class="sr-cell-sub">Worker</div><span class="sr-chip sr-mono">' + esc(tr.dataset.emp) + '</span></div>';
+                return '<div style="flex:none"><div class="sr-cell-sub">Worker</div><span class="sr-chip sr-mono">' + esc(tr.dataset.emp) + '</span></div>';
             }
             var v = tr._values[d.dimension] || '';
-            return '<div style="width:200px"><div class="sr-cell-sub">' + esc(d.dimension) + '</div>' +
+            return '<div style="width:200px;flex:none"><div class="sr-cell-sub">' + esc(d.dimension) + '</div>' +
                 '<select class="form-control form-control-sm js-dim" style="width:200px" data-dim="' + esc(d.dimension) + '">' +
                 dimOptions(d.dimension, v, d.default) + '</select></div>';
         }).join('') + '</div>';
@@ -592,16 +599,18 @@
                 state.templates[c].forEach(function (d) { if (!isWorker(d.dimension)) dims[d.dimension] = true; });
             });
             return Promise.all(Object.keys(dims).map(loadDimValues)).then(function () {
-                var head = '<th>' + esc(t('employee', 'Employee')) + '</th><th>' + esc(t('payroll_company_label', 'Payroll Company')) + '</th>' +
+                var head = '<th>' + esc(t('employee', 'Employee')) + '</th><th>' + esc(t('company', 'Company')) + '</th><th>' + esc(t('payroll_company_label', 'Payroll Company')) + '</th>' +
                     '<th>' + esc(t('d365_dimensions', 'D365 Dimensions')) + '</th><th>' + esc(t('status', 'Status')) + '</th><th></th>';
+                fillAppCompanyFilter(host, j.employees);
                 var body = j.employees.map(function (r) {
-                    return '<tr data-emp="' + esc(r.emp_id) + '" data-pc="' + esc(r.payroll_company) + '" data-emp-company="' + esc(r.employment_company) + '" data-search="' + esc((r.emp_id + ' ' + r.name).toLowerCase()) + '">' +
+                    return '<tr data-emp="' + esc(r.emp_id) + '" data-pc="' + esc(r.payroll_company) + '" data-emp-company="' + esc(r.employment_company) + '" data-app-company="' + esc(r.app_company || '') + '" data-search="' + esc((r.emp_id + ' ' + r.name).toLowerCase()) + '">' +
                         '<td><div class="sr-cell-title">' + esc(r.name) + '</div><div class="sr-cell-sub sr-mono"><a href="view_employee.php?emp_id=' + encodeURIComponent(r.emp_id) + '" target="_blank">' + esc(r.emp_id) + '</a></div></td>' +
+                        '<td>' + (r.app_company_name ? esc(r.app_company_name) : '<span class="text-muted">-</span>') + '</td>' +
                         '<td>' + companySelect(r) + '</td><td class="js-dims"></td><td class="js-status"></td>' +
                         '<td><button type="button" class="sr-btn sr-btn-sm sr-btn-success js-save" style="visibility:hidden" title="' + esc(t('save', 'Save')) + '"><i class="mdi mdi-check"></i></button></td></tr>';
                 }).join('');
-                grid.innerHTML = datalists() + '<div class="sr-table-wrap"><table class="sr-table"><thead><tr>' + head + '</tr></thead><tbody>' +
-                    (body || '<tr><td colspan="5"><div class="sr-empty">' + esc(t('d365_no_employees_company', 'No active employees here')) + '</div></td></tr>') +
+                grid.innerHTML = datalists() + '<div class="sr-table-wrap" style="overflow-x:auto"><table class="sr-table"><thead><tr>' + head + '</tr></thead><tbody>' +
+                    (body || '<tr><td colspan="6"><div class="sr-empty">' + esc(t('d365_no_employees_company', 'No active employees here')) + '</div></td></tr>') +
                     '</tbody></table></div>';
                 j.employees.forEach(function (r) {
                     var tr = grid.querySelector('tr[data-emp="' + CSS.escape(r.emp_id) + '"]');
@@ -745,11 +754,37 @@
         });
     }
 
+    // App company filter options (company assigned in the HR app) from the loaded employees, with counts;
+    // keeps the chosen company while it is still in the list
+    function fillAppCompanyFilter(host, employees) {
+        var sel = host.querySelector('#dimAppCompany');
+        if (!sel) return;
+        var counts = {}, names = {};
+        employees.forEach(function (r) {
+            var id = String(r.app_company || '');
+            counts[id] = (counts[id] || 0) + 1;
+            names[id] = r.app_company_name || '';
+        });
+        var ids = Object.keys(counts).filter(function (id) { return id !== ''; }).sort(function (a, b) {
+            return (names[a] || a).localeCompare(names[b] || b);
+        });
+        var cur = state.appCompany || '*';
+        if (cur !== '*' && !counts.hasOwnProperty(cur)) cur = '*';
+        state.appCompany = cur;
+        var opt = function (v, label) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+        sel.innerHTML = opt('*', t('all_companies', 'All companies') + ' (' + employees.length + ')') +
+            ids.map(function (id) { return opt(id, (names[id] || ('#' + id)) + ' (' + counts[id] + ')'); }).join('') +
+            (counts[''] ? opt('', t('d365_no_company_short', 'No company') + ' (' + counts[''] + ')') : '');
+    }
+
     function filterGrid(host) {
         var q = (host.querySelector('#dimSearch').value || '').toLowerCase();
         var onlyMissing = host.querySelector('#dimOnlyMissing').checked;
+        var appSel = host.querySelector('#dimAppCompany');
+        var appCompany = appSel ? appSel.value : '*';
         host.querySelectorAll('#dimGrid tbody tr[data-emp]').forEach(function (tr) {
             var show = tr.dataset.search.indexOf(q) !== -1;
+            if (show && appCompany !== '*') show = (tr.dataset.appCompany || '') === appCompany;
             if (show && onlyMissing) show = tr.dataset.ready !== '1';
             tr.style.display = show ? '' : 'none';
         });

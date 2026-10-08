@@ -66,6 +66,31 @@ function d365_cached($key, $ttl, callable $fn)
 }
 unset($_SESSION['d365_cache']); // old session-based cache
 
+/** App company (employees.comp_no, set in the HR app - not the D365 company) per employee of a payroll month */
+function d365pp_emp_companies(mysqli $conDB, $month)
+{
+    $map = [];
+    $stmt = $conDB->prepare("SELECT p.emp_id, e.comp_no FROM payrolls p LEFT JOIN employees e ON e.emp_id = p.emp_id WHERE p.month_year = ?");
+    $stmt->bind_param('s', $month);
+    $stmt->execute();
+    foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+        $map[(string)$r['emp_id']] = (string)($r['comp_no'] ?? '');
+    }
+    $stmt->close();
+    return $map;
+}
+
+/** App companies: comp_id => comp_name */
+function d365pp_app_companies(mysqli $conDB)
+{
+    $list = [];
+    $res = $conDB->query("SELECT comp_id, comp_name FROM companies ORDER BY comp_name");
+    while ($res && ($r = $res->fetch_assoc())) {
+        $list[(string)$r['comp_id']] = (string)$r['comp_name'];
+    }
+    return $list;
+}
+
 function d365_json($data, $code = 200)
 {
     http_response_code($code);
@@ -87,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die('Access Denied: Only system administrators can change the D365 account mapping');
         }
         $payroll->saveSettings($_POST['s'] ?? [], $userId);
-        header('Location: d365_payroll_push.php?month=' . urlencode($_POST['month'] ?? '') . '&entity=' . urlencode($_POST['entity'] ?? '') . '&saved=1#mapping');
+        header('Location: d365_payroll_push.php?month=' . urlencode($_POST['month'] ?? '') . '&entity=' . urlencode($_POST['entity'] ?? '') . '&comp=' . urlencode($_POST['comp'] ?? '') . '&saved=1#mapping');
         exit;
     }
 
@@ -164,7 +189,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // A journal deleted in D365 frees its employees for a new sync
                 $payroll->checkMonthJournals($environment, $month);
-                d365_json(['emp_ids' => $payroll->getPendingEmpIds($environment, $month)]);
+                $pendingIds = $payroll->getPendingEmpIds($environment, $month);
+                // Company filter of the page = the app company (employees.comp_no), not the D365 company
+                $syncComp = preg_replace('/[^0-9]/', '', (string)($_POST['comp'] ?? ''));
+                if ($syncComp !== '') {
+                    $empComp = d365pp_emp_companies($conDB, $month);
+                    $pendingIds = array_values(array_filter($pendingIds, function ($id) use ($empComp, $syncComp) {
+                        return ($empComp[(string)$id] ?? '') === $syncComp;
+                    }));
+                }
+                d365_json(['emp_ids' => $pendingIds]);
             } catch (Throwable $ex) {
                 d365_json(['error' => $ex->getMessage()], 500);
             }
@@ -195,6 +229,10 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
     $month = date('Y-m');
 }
 $entityFilter = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)($_GET['entity'] ?? '')));
+// App company filter (companies.comp_id = employees.comp_no, assigned in the HR app)
+$compFilter = preg_replace('/[^0-9]/', '', (string)($_GET['comp'] ?? ''));
+$appCompanies = d365pp_app_companies($conDB);
+$empCompanies = d365pp_emp_companies($conDB, $month);
 $transDateDefault = date('Y-m-t', strtotime($month . '-01'));
 $approval = $payroll->getApprovalStatus($month);
 
@@ -230,6 +268,7 @@ $pushed = $payroll->getPushedMap($environment, $month);
 $rows = $payroll->getPayrolls($month);
 $preview = [];
 $entityCounts = [];
+$compCounts = [];
 foreach ($rows as $id => $p) {
     $emp = $employments[$id] ?? null;
     $built = D365Payroll::buildLines($p, $settings, $month);
@@ -245,12 +284,27 @@ foreach ($rows as $id => $p) {
     }
     $ent = $emp['entity'] ?? '-';
     $entityCounts[$ent] = ($entityCounts[$ent] ?? 0) + 1;
+    $cmp = $empCompanies[(string)$id] ?? '';
+    $compCounts[$cmp] = ($compCounts[$cmp] ?? 0) + 1;
     if ($entityFilter !== '' && $ent !== $entityFilter) {
         continue;
     }
-    $preview[$id] = ['p' => $p, 'emp' => $emp, 'built' => $built, 'state' => $state];
+    if ($compFilter !== '' && $cmp !== $compFilter) {
+        continue;
+    }
+    $preview[$id] = ['p' => $p, 'emp' => $emp, 'built' => $built, 'state' => $state, 'comp' => $cmp];
 }
 ksort($entityCounts);
+// App companies with employees in this month, in name order
+$compOptions = [];
+foreach ($appCompanies as $cid => $cname) {
+    if (isset($compCounts[$cid])) {
+        $compOptions[$cid] = [$cname, $compCounts[$cid]];
+    }
+}
+$compLabel = function ($cid) use ($appCompanies) {
+    return $cid === '' ? '-' : ($appCompanies[$cid] ?? ('#' . $cid));
+};
 $stateCounts = array_count_values(array_column($preview, 'state'));
 
 $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
@@ -337,6 +391,15 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                     </select>
                 </div>
                 <div>
+                    <label>Company</label>
+                    <select name="comp" class="form-control" onchange="this.form.submit()">
+                        <option value="">All companies</option>
+                        <?php foreach ($compOptions as $cid => [$cname, $n]): ?>
+                            <option value="<?= $e($cid) ?>" <?= (string)$cid === $compFilter ? 'selected' : '' ?>><?= $e($cname) ?> (<?= (int)$n ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
                     <label>D365 company</label>
                     <select name="entity" class="form-control" onchange="this.form.submit()">
                         <option value="">All companies (preview)</option>
@@ -367,7 +430,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
 
     <div class="sr-card">
         <div class="sr-card-head">
-            <div class="sr-card-title">Employees · <?= $e($month) ?><?= $entityFilter ? ' · ' . $e($entityFilter) : '' ?></div>
+            <div class="sr-card-title">Employees · <?= $e($month) ?><?= $compFilter !== '' ? ' · ' . $e($compLabel($compFilter)) : '' ?><?= $entityFilter ? ' · ' . $e($entityFilter) : '' ?></div>
             <div class="sr-card-sub">Click a row to preview its journal lines, or Open to sync that employee.</div>
         </div>
         <div class="sr-table-wrap">
@@ -375,7 +438,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                 <thead>
                 <tr>
                     <th style="width:60px"></th>
-                    <th>Employee</th><th>Company</th><th class="pp-num">Gross</th><th class="pp-num">Benefits</th><th class="pp-num">Deductions</th><th class="pp-num">Net</th><th class="pp-num">Lines</th><th>Status</th>
+                    <th>Employee</th><th>Company</th><th>D365 company</th><th class="pp-num">Gross</th><th class="pp-num">Benefits</th><th class="pp-num">Deductions</th><th class="pp-num">Net</th><th class="pp-num">Lines</th><th>Status</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -383,6 +446,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                     <tr data-toggle-detail="<?= $e($id) ?>">
                         <td onclick="event.stopPropagation()"><a class="sr-btn sr-btn-ghost sr-btn-sm" href="view_employee.php?emp_id=<?= urlencode($id) ?>#d365" target="_blank">Open</a></td>
                         <td><div class="sr-cell-title"><?= $e($p['name'] ?? '') ?></div><div class="sr-cell-sub sr-mono"><?= $e($id) ?></div></td>
+                        <td><?= $e($compLabel($r['comp'])) ?></td>
                         <td><?= $r['emp'] ? '<span class="sr-chip">' . $e($r['emp']['entity']) . '</span>' : '-' ?></td>
                         <td class="pp-num"><?= $money($p['total_gross_salary']) ?></td>
                         <td class="pp-num"><?= $money($p['total_benefits']) ?></td>
@@ -397,7 +461,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                     </tr>
                     <tr class="pp-detail" id="detail-<?= $e($id) ?>" style="display:none">
                         <td></td>
-                        <td colspan="8">
+                        <td colspan="9">
                             <?php foreach (array_merge($r['built']['errors'], $r['built']['warnings']) as $msg): ?><div class="pp-msg">⚠ <?= $e($msg) ?></div><?php endforeach; ?>
                             <?php if (!$r['emp']): ?><div class="pp-msg">⚠ Personnel number <?= $e($id) ?> has no employment in D365 - company and dimensions unknown.</div><?php endif; ?>
                             <table class="table pp-lines" style="margin:6px 0 0">
@@ -416,7 +480,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                         </td>
                     </tr>
                 <?php endforeach; ?>
-                <?php if (!$preview): ?><tr><td colspan="9"><div class="sr-empty">No payroll rows for this month / company.</div></td></tr><?php endif; ?>
+                <?php if (!$preview): ?><tr><td colspan="10"><div class="sr-empty">No payroll rows for this month / company.</div></td></tr><?php endif; ?>
                 </tbody>
             </table>
         </div>
@@ -436,6 +500,7 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
                 <input type="hidden" name="action" value="save_settings">
                 <input type="hidden" name="month" value="<?= $e($month) ?>">
                 <input type="hidden" name="entity" value="<?= $e($entityFilter) ?>">
+                <input type="hidden" name="comp" value="<?= $e($compFilter) ?>">
 
                 <div class="pp-section">Journal</div>
                 <div class="pp-map">
@@ -514,6 +579,9 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
     var csrf = <?= json_encode($csrf) ?>;
     var month = <?= json_encode($month) ?>;
     var entity = <?= json_encode($entityFilter) ?>;
+    // App company filter: "Sync month to D365" only sends this company's employees ('' = all)
+    var comp = <?= json_encode($compFilter) ?>;
+    var compName = <?= json_encode($compFilter !== '' ? $compLabel($compFilter) : '') ?>;
     var env = <?= json_encode($environment) ?>;
 
     document.querySelectorAll('tr[data-toggle-detail]').forEach(function (tr) {
@@ -577,7 +645,8 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
 
         Swal.fire({
             title: 'Sync month to D365',
-            html: '<p style="font-size:13px;margin:0 0 12px">Only <b>paid</b> payroll is sent. Employees already synced are skipped.</p>' + html,
+            html: '<p style="font-size:13px;margin:0 0 12px">Only <b>paid</b> payroll is sent. Employees already synced are skipped.'
+                + (comp ? '<br>Company: <b>' + esc(compName) + '</b> only (the counts below are for all companies).' : '') + '</p>' + html,
             showCancelButton: true,
             confirmButtonText: 'Continue',
             allowOutsideClick: false,
@@ -594,14 +663,14 @@ $stateTone = ['ready' => ['sky', 'Ready'], 'pushed' => ['green', 'Synced'], 'mis
 
     function loadPending(m) {
         Swal.fire({ title: 'Preparing ' + m, html: 'Collecting paid employees...', allowOutsideClick: false, customClass: popupClass, didOpen: function () { Swal.showLoading(); } });
-        post({ action: 'month_pending', month: m }).then(function (res) {
+        post({ action: 'month_pending', month: m, comp: comp }).then(function (res) {
             if (res.error) { Swal.fire({ icon: 'error', title: 'Cannot sync', text: res.error, customClass: popupClass }); return; }
             var ids = res.emp_ids || [];
-            if (!ids.length) { Swal.fire({ icon: 'info', title: 'Nothing to sync', text: 'All paid employees of ' + m + ' are already in D365.', customClass: popupClass }); return; }
+            if (!ids.length) { Swal.fire({ icon: 'info', title: 'Nothing to sync', text: 'All paid employees of ' + m + (comp ? ' in ' + compName : '') + ' are already in D365.', customClass: popupClass }); return; }
             Swal.fire({
                 icon: 'question',
                 title: 'Sync ' + ids.length + ' employees?',
-                html: 'Payroll <b>' + esc(m) + '</b> goes to D365 <b>' + esc(env.toUpperCase()) + '</b> as unposted journals (one per payroll company) dated <b>' + lastDay(m) + '</b>.<br><br>Keep this window open until it finishes.',
+                html: 'Payroll <b>' + esc(m) + '</b>' + (comp ? ' of <b>' + esc(compName) + '</b>' : '') + ' goes to D365 <b>' + esc(env.toUpperCase()) + '</b> as unposted journals (one per payroll company) dated <b>' + lastDay(m) + '</b>.<br><br>Keep this window open until it finishes.',
                 showCancelButton: true,
                 confirmButtonText: 'Start sync',
                 allowOutsideClick: false,

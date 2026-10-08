@@ -823,7 +823,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $payrollLink ?>"><i class="fa-duotone fa-money-bill-transfer" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('payroll') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (d365_enabled($conDB) && user_has_special_access($conDB, $empid ?? '', 'd365_employee_dimensions', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)): ?>
-                    <li><a href="d365_employee_dimensions.php" target="_blank"><i class="mdi mdi-microsoft" style="color:#0078d4"></i><span><?=__('d365_employee_dimensions', 'D365 Employee Dimensions') ?></span></a></li>
+                    <li><a href="d365_employee_dimensions.php" target="_blank"><i class="fa-duotone fa-layer-group" style="--fa-primary-color:#0078d4;--fa-secondary-color:#0078d4;--fa-secondary-opacity:.4"></i><span><?=__('d365_employee_dimensions', 'D365 Employee Dimensions') ?></span></a></li>
                 <?php endif; ?>
                 <?php /* ?>
                 <li>

@@ -50,7 +50,9 @@ $action = (string)($_POST['action'] ?? '');
 function d365dim_employees(mysqli $db, $environment, array $employments = null)
 {
     cost_center_ensure_column($db);
-    $stmt = $db->prepare("SELECT e.emp_id, e.name, e.payroll_company,
+    // app_company / app_company_name = the company assigned in the HR app (employees.comp_no), not D365
+    $stmt = $db->prepare("SELECT e.emp_id, e.name, e.payroll_company, e.comp_no AS app_company,
+            (SELECT c.comp_name FROM companies c WHERE c.comp_id = e.comp_no LIMIT 1) AS app_company_name,
             (SELECT ws.legal_entity FROM d365_worker_status ws WHERE ws.emp_id = e.emp_id AND ws.legal_entity <> ''
              ORDER BY ws.environment = ? DESC, ws.checked_at DESC LIMIT 1) AS employment_company
         FROM employees e WHERE e.status = 1 ORDER BY CAST(e.emp_id AS UNSIGNED), e.emp_id");
@@ -62,6 +64,8 @@ function d365dim_employees(mysqli $db, $environment, array $employments = null)
         if ($employments !== null && isset($employments[$r['emp_id']])) {
             $r['employment_company'] = $employments[$r['emp_id']]['entity'];
         }
+        $r['app_company'] = (string)($r['app_company'] ?? '');
+        $r['app_company_name'] = (string)($r['app_company_name'] ?? '');
         $r['payroll_company'] = strtoupper(trim((string)$r['payroll_company']));
         $r['employment_company'] = strtoupper(trim((string)$r['employment_company']));
         $r['company'] = $r['payroll_company'] !== '' ? $r['payroll_company'] : $r['employment_company'];
