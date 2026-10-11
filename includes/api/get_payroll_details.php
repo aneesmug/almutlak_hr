@@ -14,6 +14,7 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 require_once("./../../includes/payroll_approval_helpers.php");
+require_once __DIR__ . '/../payroll_loan_sync.php';
 
 function hasVacationGosiDeductedForMonth(PDO $pdo, $empId, $monthYear) {
     global $conDB;
@@ -588,8 +589,11 @@ try {
     $feedbacks = $stmtFeedback->fetchAll(PDO::FETCH_ASSOC);
     
 
+    $loanOptions = payroll_loan_options($pdo, $empId, $monthYear);
+
     echo json_encode([
         'status' => 'success',
+        'loans' => $loanOptions,
         'employee' => $employee,
         'payroll' => $payroll,
         'benefits' => $benefits,

@@ -50,13 +50,13 @@ function generatePayroll($emp_id, $month_year, $conDB) {
                 WHERE pd.emp_id = ?
                     AND pd.month = ?
                     AND pd.status = 1
-                    AND NOT EXISTS (
+                    AND (COALESCE(pd.calculation_type, 'fixed') = 'loan' OR NOT EXISTS (
                             SELECT 1
                             FROM emp_loan el
                             WHERE el.emp_id = pd.emp_id
                                 AND el.deduction_mode = 'manual'
                                 AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
-                    )
+                    ))
         ";
         $deductions_stmt = $conDB->prepare($deductions_sql);
         $deductions_stmt->bind_param("ss", $emp_id, $month_year);

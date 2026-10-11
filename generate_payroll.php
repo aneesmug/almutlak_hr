@@ -1243,6 +1243,8 @@ function isSelectedMonthFullyPaid() {
 }
 let currentEventListeners = []; // Array to store cleanup functions for event listeners
 let payroll; // Globally available payroll object for modal calculations
+let payrollLoans = []; // Employee loans with a remaining balance (Deductions -> Loan option)
+const PAYROLL_LOAN_DEDUCTION_PREFIX = 'Loan Deduction - ';
 let employeeStatusFilterRegistered = false;
 let generatedPayrollMonthsCache = [];
 let feedbackFilterActive = false;
@@ -1724,6 +1726,23 @@ function collectPayrollModalData(employee) {
         const calcType = typeSelect ? typeSelect.value : 'fixed';
         const nameInput = row.querySelector('.deduction-name');
         const amountVal = parseFloat(row.querySelector('.deduction-amount')?.value) || 0;
+
+        if (calcType === 'loan') {
+            const loanSelect = row.querySelector('.deduction-loan');
+            const loanOption = loanSelect ? loanSelect.options[loanSelect.selectedIndex] : null;
+            const loanInv = loanOption ? (loanOption.dataset.inv || '') : '';
+            updatedDeductions.push({
+                id: deductionId,
+                calculation_type: 'loan',
+                loan_id: loanSelect && loanSelect.value ? parseInt(loanSelect.value, 10) : null,
+                deduction: loanInv ? PAYROLL_LOAN_DEDUCTION_PREFIX + loanInv : '',
+                note: amountVal,
+                hours: 0,
+                minutes: 0,
+                days: 0,
+            });
+            return;
+        }
         // Sent as separate whole-number fields, never folded into one fractional hours
         // value - the backend stores hours and minutes in their own columns.
         let hours = 0;
@@ -1841,8 +1860,21 @@ const buildDeductionsHtml = (deductions, payrollData, gosiPercentage) => {
         const deductionMinutes = (calcType === 'hourly_deduction' || calcType === 'minute_deduction') ? minutes : '';
         const days = d.days || '';
         const isGosi = deductionName.toUpperCase() === 'GOSI';
-        const isCalculated = calcType !== 'fixed';
+        const isLoan = calcType === 'loan';
+        const isCalculated = calcType !== 'fixed' && !isLoan;
         const isAmountReadonly = isGosi || isCalculated;
+        const loanInv = isLoan && deductionName.indexOf(PAYROLL_LOAN_DEDUCTION_PREFIX) === 0
+            ? deductionName.substring(PAYROLL_LOAN_DEDUCTION_PREFIX.length).trim()
+            : '';
+        const loanTypeLabel = (type) => {
+            const key = String(type || 'regular');
+            return __(key + '_loan', key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+        };
+        const loanOptionsHtml = payrollLoans.map(loan => `
+            <option value="${loan.id}" data-inv="${loan.inv_no}" data-available="${loan.available}" data-monthly="${loan.monthly_deduction}" ${loan.inv_no === loanInv ? 'selected' : ''}>
+                ${loan.inv_no} · ${loanTypeLabel(loan.loan_type)} · ${__('remaining', 'Remaining')} ${Number(loan.available).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </option>`).join('');
+        const showLoanOption = payrollLoans.length > 0 || isLoan;
         const deductionByTimeLabelRaw = __('deduction_by_time_option');
         const deductionByTimeLabel = (!deductionByTimeLabelRaw || deductionByTimeLabelRaw === 'deduction_by_time_option')
             ? (__('deduction_by_hour_option') || 'Deduction by Time')
@@ -1852,6 +1884,7 @@ const buildDeductionsHtml = (deductions, payrollData, gosiPercentage) => {
             <option value="hourly_deduction" ${calcType === 'hourly_deduction' ? 'selected' : ''}>${deductionByTimeLabel}</option>
             <option value="minute_deduction" ${calcType === 'minute_deduction' ? 'selected' : ''}>${__('deduction_by_minute_option', 'Deduction by Minutes')}</option>
             <option value="daily_deduction" ${calcType === 'daily_deduction' ? 'selected' : ''}>${__('deduction_by_day_option')}</option>
+            ${showLoanOption ? `<option value="loan" ${isLoan ? 'selected' : ''}>${__('loan_deduction_option', 'Loan')}</option>` : ''}
         `;
         let nameColumnHtml;
         if (isGosi) {
@@ -1870,9 +1903,14 @@ const buildDeductionsHtml = (deductions, payrollData, gosiPercentage) => {
                 <div class="input-group input-group-sm">
                     <select class="form-control form-control-sm deduction-type">${options}</select>
                     <input type="text" class="form-control form-control-sm deduction-name" 
-                           placeholder="${__('deduction_reason_placeholder')}" value="${deductionName}" 
-                           style="${isCalculated ? 'display: none;' : ''}">
+                           placeholder="${__('deduction_reason_placeholder')}" value="${isLoan ? '' : deductionName}"
+                           style="${isCalculated || isLoan ? 'display: none;' : ''}">
+                    ${showLoanOption ? `<select class="form-control form-control-sm deduction-loan" style="${isLoan ? '' : 'display: none;'}">
+                        <option value="">${__('select_loan_placeholder', 'Select loan...')}</option>
+                        ${loanOptionsHtml}
+                    </select>` : ''}
                 </div>
+                <small class="d-block mt-1 deduction-loan-info" style="${isLoan ? '' : 'display: none;'}"></small>
             `;
         }
         const periodSlotClass = isCalculated ? 'deduction-period-slot' : 'deduction-period-slot deduction-period-input-empty';
@@ -1912,6 +1950,72 @@ placeholder="${__('minutes_placeholder') || 'Mins'}" value="${deductionMinutes}"
         </div>`;
     }).join('');
 };
+
+// Loan deduction row helpers (Deductions -> Loan). Amount is capped at the loan's
+// remaining balance; the server re-checks and mirrors it into emp_loan_payments.
+function getLoanRowOption(row) {
+    const select = $(row).find('.deduction-loan')[0];
+    return select && select.value ? select.options[select.selectedIndex] : null;
+}
+
+function prefillLoanAmount(row, force = false) {
+    const option = getLoanRowOption(row);
+    const amountInput = $(row).find('.deduction-amount');
+    if (!option || (!force && (parseFloat(amountInput.val()) || 0) > 0)) {
+        return;
+    }
+    const available = parseFloat(option.dataset.available) || 0;
+    const monthly = parseFloat(option.dataset.monthly) || 0;
+    amountInput.val((monthly > 0 ? Math.min(monthly, available) : available).toFixed(2));
+}
+
+function updateLoanInfo(row) {
+    const info = $(row).find('.deduction-loan-info');
+    if (!info.length || $(row).find('.deduction-type').val() !== 'loan') {
+        return;
+    }
+    const option = getLoanRowOption(row);
+    if (!option) {
+        info.removeClass('text-danger text-success').addClass('text-muted')
+            .html(`<i class="fas fa-info-circle"></i> ${__('select_loan_to_deduct', 'Select the loan this amount will be deducted from.')}`);
+        return;
+    }
+    const fmt = (v) => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const available = parseFloat(option.dataset.available) || 0;
+    const amount = parseFloat($(row).find('.deduction-amount').val()) || 0;
+    const after = Math.round((available - amount) * 100) / 100;
+    const over = after < -0.009;
+    const paidOff = !over && after <= 0.009;
+    info.removeClass('text-muted text-danger text-success').addClass(over ? 'text-danger' : (paidOff ? 'text-success' : 'text-muted'))
+        .html(`<i class="fas fa-hand-holding-usd"></i> ${__('remaining_balance', 'Remaining Balance')}: <b>${fmt(available)}</b>
+            &nbsp;&rarr;&nbsp; ${__('after_deduction', 'After deduction')}: <b>${fmt(Math.max(after, 0))}</b>
+            ${over ? ` &middot; ${__('loan_amount_exceeds_balance', 'Amount exceeds remaining balance')}` : (paidOff ? ` &middot; ${__('loan_will_be_fully_paid', 'Loan will be fully paid')}` : '')}`);
+}
+
+function validateLoanDeductions() {
+    const totals = {};
+    let error = '';
+    document.querySelectorAll('#deductions-list .deduction-row').forEach(row => {
+        if (error || row.querySelector('.deduction-type')?.value !== 'loan') {
+            return;
+        }
+        const option = getLoanRowOption(row);
+        const amount = parseFloat(row.querySelector('.deduction-amount')?.value) || 0;
+        if (!option) {
+            error = __('select_loan_to_deduct', 'Select the loan this amount will be deducted from.');
+            return;
+        }
+        if (amount <= 0) {
+            error = `${__('enter_loan_deduction_amount', 'Enter the loan deduction amount for')} ${option.dataset.inv}`;
+            return;
+        }
+        totals[option.value] = (totals[option.value] || 0) + amount;
+        if (totals[option.value] > (parseFloat(option.dataset.available) || 0) + 0.009) {
+            error = `${option.dataset.inv}: ${__('loan_amount_exceeds_balance', 'Amount exceeds remaining balance')} (${Number(option.dataset.available).toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
+        }
+    });
+    return error;
+}
 
 function buildBenefitsHtml(benefits, benefitTypes) {
     if (!benefits || benefits.length === 0) {
@@ -5705,6 +5809,7 @@ async function showPayrollDetails(empId, empName, month) {
 
         if (data.status === 'success') {
             payroll = data.payroll; // Set global payroll object
+            payrollLoans = Array.isArray(data.loans) ? data.loans : [];
             // Paid payrolls are locked: this employee's payroll for the month has already
             // been paid, so the modal opens read-only with no Save Changes button and no
             // editable fields - once paid, last month's payroll can no longer be changed.
@@ -6661,7 +6766,12 @@ async function showPayrollDetails(empId, empName, month) {
                         const periodSlot = row.find('.deduction-period-slot');
                         const amountInput = row.find('.deduction-amount');
                         const nameInput = row.find('.deduction-name');
-                        const isFixed = deductionType === 'fixed';
+                        const loanSelect = row.find('.deduction-loan');
+                        const isLoan = deductionType === 'loan';
+                        const isFixed = deductionType === 'fixed' || isLoan;
+
+                        loanSelect.toggle(isLoan);
+                        row.find('.deduction-loan-info').toggle(isLoan);
 
                         periodSlot.toggleClass('deduction-period-input-empty', isFixed);
                         row.find('.deduction-hours').toggle(deductionType === 'hourly_deduction');
@@ -6671,7 +6781,16 @@ async function showPayrollDetails(empId, empName, month) {
                             .text(deductionType === 'hourly_deduction' ? 'time' : (deductionType === 'minute_deduction' ? 'minutes' : 'days'))
                             .toggle(!isFixed);
 
-                        if (isFixed) {
+                        if (isLoan) {
+                            row.find('.deduction-hours, .deduction-minutes, .deduction-days').val('');
+                            amountInput.prop('readonly', false);
+                            nameInput.hide();
+                            if (!loanSelect.val() && payrollLoans.length === 1) {
+                                loanSelect.val(String(payrollLoans[0].id));
+                            }
+                            prefillLoanAmount(row);
+                            updateLoanInfo(row);
+                        } else if (isFixed) {
                             row.find('.deduction-hours, .deduction-minutes, .deduction-days').val('');
                             amountInput.prop('readonly', false);
                             nameInput.show();
@@ -6697,6 +6816,13 @@ async function showPayrollDetails(empId, empName, month) {
                         applyDeductionTypeRules(this);
                     });
 
+                    $(swalContainer).on('change', '.deduction-loan', function() {
+                        const row = $(this).closest('.deduction-row');
+                        prefillLoanAmount(row, true);
+                        updateLoanInfo(row);
+                        updateDynamicNetSalary();
+                    });
+
                     $(swalContainer).on('change', '.deduction-type', function() {
                         const row = $(this).closest('.deduction-row');
                         const isGosiRow = row.find('.gosi-deduction-name').length > 0;
@@ -6707,6 +6833,7 @@ async function showPayrollDetails(empId, empName, month) {
                     });
                     $(swalContainer).on('keyup change', '.deduction-hours, .deduction-minutes, .deduction-days', calculateDeductionAmount);
                     $(swalContainer).on('keyup change', '.deduction-amount', function() {
+                        updateLoanInfo($(this).closest('.deduction-row'));
                         if (!$(this).is('[readonly]')) {
                             updateNetSalaryDisplay(payroll.total_gross_salary);
                         }
@@ -6726,6 +6853,11 @@ async function showPayrollDetails(empId, empName, month) {
                     updateNetSalaryDisplay(payroll.total_gross_salary);
                 },
                 preConfirm: () => {
+                    const loanError = validateLoanDeductions();
+                    if (loanError) {
+                        Swal.showValidationMessage(loanError);
+                        return false;
+                    }
                     return collectPayrollModalData(employee);
                 }
             }).then((result) => {

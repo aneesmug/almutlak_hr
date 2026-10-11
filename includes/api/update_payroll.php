@@ -12,6 +12,7 @@ header('Content-Type: application/json');
 // Include the database connection file
 require_once("./../../includes/db.php");
 require_once("./../../includes/session_check.php");
+require_once __DIR__ . '/../payroll_loan_sync.php';
 
 // This endpoint edits payroll records and previously had no auth check at all -
 // anyone reaching the URL, logged in or not, could modify payroll data for any
@@ -113,6 +114,14 @@ try {
         $stmtDelete = $pdo->prepare("DELETE FROM payroll_benefits WHERE id IN ($placeholders)");
         $stmtDelete->execute(array_values($idsToDelete));
     }
+
+    // Loans deducted this month before the save, so removed loan rows still resync.
+    $loanInvsToSync = array_fill_keys(payroll_loan_month_invs($pdo, $empId, $monthYear), true);
+    $loanOptions = [];
+    foreach (payroll_loan_options($pdo, $empId, $monthYear) as $loanOption) {
+        $loanOptions[$loanOption['id']] = $loanOption;
+    }
+    $loanAmountsById = [];
 
     // --- LOGIC TO HANDLE DELETED DEDUCTIONS ---
     // Only delete deductions that had existing IDs but are no longer in the submitted list
@@ -311,6 +320,32 @@ try {
             continue; 
         }
 
+        if (($deduction['calculation_type'] ?? '') === 'loan') {
+            $loanId = (int)($deduction['loan_id'] ?? 0);
+            $loanOption = $loanOptions[$loanId] ?? null;
+            if (!$loanOption || !payroll_loan_find($pdo, $empId, $loanId)) {
+                throw new Exception('Selected loan is not active for this employee.');
+            }
+            if ($deductionAmount <= 0) {
+                throw new Exception('Enter the loan deduction amount for ' . $loanOption['inv_no'] . '.');
+            }
+            $loanAmountsById[$loanId] = ($loanAmountsById[$loanId] ?? 0) + $deductionAmount;
+            if ($loanAmountsById[$loanId] > $loanOption['available'] + 0.009) {
+                throw new Exception('Loan deduction for ' . $loanOption['inv_no'] . ' exceeds the remaining balance (' . number_format($loanOption['available'], 2) . ').');
+            }
+            $loanName = payroll_loan_deduction_name($loanOption['inv_no']);
+            $loanParams = [':deduction_name' => $loanName, ':deduction_amount' => number_format($deductionAmount, 2, '.', '')];
+            if ($deductionId) {
+                $stmt = $pdo->prepare("UPDATE payroll_deductions SET deduction = :deduction_name, note = :deduction_amount, calculation_type = 'loan', hours = NULL, minutes = NULL, days = NULL WHERE id = :id AND emp_id = :emp_id");
+                $stmt->execute($loanParams + [':id' => $deductionId, ':emp_id' => $empId]);
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO payroll_deductions (emp_id, deduction, note, month, status, calculation_type) VALUES (:emp_id, :deduction_name, :deduction_amount, :month_year, 1, 'loan')");
+                $stmt->execute($loanParams + [':emp_id' => $empId, ':month_year' => $monthYear]);
+            }
+            $loanInvsToSync[$loanOption['inv_no']] = true;
+            continue;
+        }
+
         if ($deductionId) {
             $calcType = $deduction['calculation_type'] ?? 'fixed';
             // hours keeps whatever decimal the user typed (e.g. 1.46); minutes and days are
@@ -344,6 +379,11 @@ try {
                 ':payment_date' => $paymentDate
             ]);
         }
+    }
+
+    // Mirror loan deductions into emp_loan_payments and refresh paid/approved status.
+    foreach (array_keys($loanInvsToSync) as $loanInv) {
+        payroll_loan_sync($pdo, $empId, $monthYear, (string)$loanInv);
     }
 
     // Enforce joining-date deduction based on days before joining in this month.

@@ -8,6 +8,7 @@
 header('Content-Type: application/json');
 require_once("./../../includes/db.php");
 require_once("./../../includes/session_check.php");
+require_once __DIR__ . '/../payroll_loan_sync.php';
 
 // This endpoint deletes payroll deduction line items and previously had no auth
 // check at all. Restrict to system admin / HR Payroll.
@@ -33,7 +34,7 @@ try {
     $pdo->beginTransaction();
 
     // First, get the details of the deduction to check if it's a loan payment
-    $stmtFetch = $pdo->prepare("SELECT deduction FROM payroll_deductions WHERE id = :id");
+    $stmtFetch = $pdo->prepare("SELECT deduction, calculation_type FROM payroll_deductions WHERE id = :id");
     $stmtFetch->execute([':id' => $deductionId]);
     $deduction = $stmtFetch->fetch(PDO::FETCH_ASSOC);
 
@@ -44,6 +45,14 @@ try {
         ':emp_id' => $empId,
         ':month' => $month
     ]);
+
+    // Manual loan deduction from the payroll modal: drop its mirrored loan payment.
+    if ($deduction && ($deduction['calculation_type'] ?? '') === 'loan') {
+        $loanInv = payroll_loan_inv_from_name((string)$deduction['deduction']);
+        if ($loanInv !== null) {
+            payroll_loan_sync($pdo, $empId, $month, $loanInv);
+        }
+    }
 
     // If the deduction was a "Loan Installment", also delete the corresponding payment
     if ($deduction && $deduction['deduction'] === 'Loan Installment') {

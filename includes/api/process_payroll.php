@@ -791,7 +791,7 @@ try {
         // Cleanup: ensure no loan deductions persist for loans set to manual mode for this employee/month
         // This handles cases where mode was switched after scheduling or legacy rows exist
         $stmtCleanup = $pdo->prepare("DELETE pd FROM payroll_deductions pd
-            WHERE pd.emp_id = :emp_id AND pd.month = :month_year AND (
+            WHERE pd.emp_id = :emp_id AND pd.month = :month_year AND COALESCE(pd.calculation_type, 'fixed') <> 'loan' AND (
                 EXISTS (
                     SELECT 1 FROM emp_loan el
                     WHERE el.emp_id = pd.emp_id
@@ -891,12 +891,12 @@ try {
                         AND pd.month = :month_year
                         AND pd.status = 1
                         AND COALESCE(dt.counts_in_net, 1) = 1
-                        AND NOT EXISTS (
+                        AND (COALESCE(pd.calculation_type, 'fixed') = 'loan' OR NOT EXISTS (
                                 SELECT 1 FROM emp_loan el
                                 WHERE el.emp_id = pd.emp_id
                                     AND el.deduction_mode = 'manual'
                                     AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
-                        )");
+                        ))");
             $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
             $totalDeductions = round((float)$stmtDeductionsSum->fetchColumn(), 0);
         } else {
@@ -913,12 +913,12 @@ try {
                     WHERE pd.emp_id = :emp_id
                         AND pd.month = :month_year
                         AND pd.status = 1
-                        AND NOT EXISTS (
+                        AND (COALESCE(pd.calculation_type, 'fixed') = 'loan' OR NOT EXISTS (
                                 SELECT 1 FROM emp_loan el
                                 WHERE el.emp_id = pd.emp_id
                                     AND el.deduction_mode = 'manual'
                                     AND pd.deduction LIKE CONCAT('%', el.inv_no, '%')
-                        )
+                        ))
             ");
             $stmtDeductionsSum->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
             $totalDeductions = round((float)$stmtDeductionsSum->fetchColumn(), 0);
