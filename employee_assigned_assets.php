@@ -5,6 +5,7 @@
  */
 
 require_once("./includes/session_check.php");
+require_once __DIR__ . '/includes/sr_history_helpers.php';
 include('./includes/MainClass.php');
 include("./includes/Hijri_GregorianConvert.php");
 $DateConv = new Hijri_GregorianConvert;
@@ -74,268 +75,76 @@ $stmt = $conDB->prepare($cars_drv_query);
 $stmt->bind_param("s", $emp_id);
 $stmt->execute();
 $cars_drv_result = $stmt->get_result();
-?>
 
-<!doctype html>
-<html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
-<head>
-    <meta charset="utf-8" />
-    <title><?= $site_title ?> - Loan History</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-    <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="./assets/css/metisMenu.min.css" rel="stylesheet" type="text/css" />
-    <link href="./assets/css/icons.min.css" rel="stylesheet" type="text/css" />
-    <link href="./assets/css/style.css" rel="stylesheet" type="text/css" />
-    <style>
-        :root {
-            --primary: #007bff;
-            --secondary: #6c757d;
-            --success: #28a745;
-            --danger: #dc3545;
-            --warning: #ffc107;
-            --info: #17a2b8;
-            --light: #f8f9fa;
-            --dark: #343a40;
-            --white: #ffffff;
-            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
-            --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.15);
-            --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.2);
-        }
+// Normalise both sources (employee_assets + cars_drv) into one list.
+$items = [];
+while ($asset = $employee_assets_result->fetch_assoc()) {
+    $st = (string)($asset['status'] ?? '');
+    $tone = 'green';
+    if ($st === 'Returned') $tone = 'slate';
+    elseif ($st === 'Lost') $tone = 'red';
+    elseif ($st === 'Damaged') $tone = 'amber';
+    $items[] = [
+        'type' => $asset['asset_type'] ?? $asset['asset_name'] ?? 'Asset', 'type_tone' => 'indigo', 'icon' => 'mdi-laptop',
+        'name' => $asset['asset_name'] ?? 'N/A', 'details' => $asset['description'] ?? '',
+        'serial' => $asset['serial_number'] ?? '', 'assigned' => $asset['assigned_date'] ?? null, 'returned' => $asset['return_date'] ?? null,
+        'status' => $st !== '' ? $st : 'Active', 'tone' => $tone,
+    ];
+}
+while ($car = $cars_drv_result->fetch_assoc()) {
+    $active = ($car['status'] == 1) && empty($car['return_date']);
+    $items[] = [
+        'type' => 'Car', 'type_tone' => 'sky', 'icon' => 'mdi-car',
+        'name' => trim(($car['maker_name'] ?? 'N/A') . ' ' . ($car['model_name'] ?? '')),
+        'details' => 'Type: ' . ($car['type'] ?? 'N/A') . ' · Year: ' . ($car['made_year'] ?? 'N/A'),
+        'serial' => $car['plate_no'] ?? '', 'assigned' => $car['assigned_date'] ?? null, 'returned' => $car['return_date'] ?? null,
+        'status' => $active ? 'Active' : 'Returned', 'tone' => $active ? 'green' : 'slate',
+    ];
+}
+$in_hand = count(array_filter($items, fn($i) => $i['tone'] === 'green'));
+$cars = count(array_filter($items, fn($i) => $i['type'] === 'Car'));
 
-        body.authentication-bg-pattern {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-        }
+srh_page_open(__('assigned_assets', 'Assigned Assets'), srh_portal_head());
+echo srh_header(__('assigned_assets', 'Assigned Assets'), '', srh_profile_url($emprow));
+echo srh_emp_hero($emprow);
+echo srh_tiles([
+    [__('total_assets', 'Total Assets'), count($items), 'indigo', ''],
+    [__('in_hand', 'In Hand'), $in_hand, 'green', ''],
+    [__('returned_items', 'Returned'), count($items) - $in_hand, '', ''],
+    [__('cars', 'Cars'), $cars, '', ''],
+]);
 
-        .profile-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+$fmt_date = function ($d) use ($DateConv, $format) {
+    if (empty($d)) return '-';
+    return '<span class="sr-date">' . sr_h(format_safe_date($d, 'd M Y')) . '<small>' . sr_h($DateConv->GregorianToHijri($d, $format)) . '</small></span>';
+};
 
-        .profile-header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--info) 100%);
-            border-radius: 16px;
-            padding: 28px;
-            color: white;
-            margin: 20px auto 24px;
-            box-shadow: var(--shadow-lg);
-            position: relative;
-            overflow: hidden;
-        }
+if (!$items) {
+    $body = sr_empty_state(__('no_assets_assigned', 'No assets assigned to this employee.'));
+} else {
+    $body = '<div class="sr-table-wrap"><table class="sr-table srh-dt"><thead><tr>'
+        . '<th>#</th>'
+        . '<th>' . sr_h(__('name_model')) . '</th>'
+        . '<th>' . sr_h(__('details')) . '</th>'
+        . '<th>' . sr_h(__('serial_number')) . '</th>'
+        . '<th>' . sr_h(__('assigned_date')) . '</th>'
+        . '<th>' . sr_h(__('return_date')) . '</th>'
+        . '<th>' . sr_h(__('status')) . '</th>'
+        . '</tr></thead><tbody>';
+    foreach ($items as $i => $it) {
+        $body .= '<tr>'
+            . '<td>' . ($i + 1) . '</td>'
+            . '<td><div class="sr-person"><span class="sr-avatar" style="background: var(--tone-' . $it['type_tone'] . '-bg); color: var(--tone-' . $it['type_tone'] . '-fg);"><i class="mdi ' . $it['icon'] . '"></i></span>'
+                . '<div style="min-width: 0;"><span class="sr-cell-title">' . sr_h($it['name']) . '</span><span class="sr-cell-sub">' . sr_h($it['type']) . '</span></div></div></td>'
+            . '<td><span class="sr-wrap-text">' . sr_h($it['details'] !== '' ? $it['details'] : '-') . '</span></td>'
+            . '<td><span class="sr-mono">' . sr_h($it['serial'] !== '' ? $it['serial'] : '-') . '</span></td>'
+            . '<td data-order="' . sr_h($it['assigned']) . '">' . $fmt_date($it['assigned']) . '</td>'
+            . '<td data-order="' . sr_h($it['returned']) . '">' . $fmt_date($it['returned']) . '</td>'
+            . '<td>' . sr_pill($it['tone'], $it['status']) . '</td>'
+            . '</tr>';
+    }
+    $body .= '</tbody></table></div>';
+}
+echo srh_card('mdi-laptop', __('assigned_assets', 'Assigned Assets'), $body, $items ? srh_search_box() : '', 'sr-card-body p-0');
 
-        .profile-header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -10%;
-            width: 420px;
-            height: 420px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-        }
-
-        .profile-header .container-custom {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            gap: 24px;
-            align-items: center;
-            position: relative;
-            z-index: 1;
-        }
-
-        .profile-avatar {
-            width: 90px;
-            height: 90px;
-            border-radius: 50%;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            object-fit: cover;
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .profile-header-info h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-        .profile-header-info p { font-size: 13px; opacity: 0.95; margin: 2px 0; }
-
-        .qr-code { width: 100px; height: 100px; }
-
-        .card { border: none; border-radius: 12px; box-shadow: var(--shadow-md); }
-        .card .card-body { padding: 24px; }
-
-        .btn-light:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-        }
-
-        @media (max-width: 768px) {
-            .profile-header { padding: 20px; }
-            .profile-header .container-custom { grid-template-columns: auto 1fr; gap: 16px; }
-            .qr-code { width: 80px; height: 80px; }
-            .profile-avatar { width: 70px; height: 70px; }
-        }
-        @media (max-width: 480px) {
-            .profile-header .container-custom { grid-template-columns: 1fr; text-align: center; }
-            .qr-code { justify-self: center; }
-        }
-    </style>
-    <?php if ($is_rtl): ?>
-        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
-    <?php endif; ?>
-    <script>
-        window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
-    </script>
-</head>
-<body class="authentication-bg-pattern">
-
-    <?php include('./includes/profile_employee_header.php'); ?>
-
-    <div class="account-pages" style="max-width: 1400px; margin: 20px auto; padding: 0 20px;">
-        <div class="container-fluid" style="max-width: none;">
-            <div class="row">
-                <div class="col-lg-12">
-                    <div class="card">
-                        <div class="card-body p-4">
-                            <div class="table-responsive">
-                                <table class="table table-hover mb-0 datatable">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th><?= __('asset_type') ?></th>
-                                            <th><?= __('name_model') ?></th>
-                                            <th><?= __('details') ?></th>
-                                            <th><?= __('serial_number') ?></th>
-                                            <th><?= __('assigned_date') ?></th>
-                                            <th><?= __('return_date') ?></th>
-                                            <th><?= __('status') ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php 
-                                        $count = 0;
-                                        
-                                        // Display employee assets (laptops, mobiles, SIMs, etc.)
-                                        while ($asset = $employee_assets_result->fetch_assoc()): 
-                                            $count++;
-                                        ?>
-                                            <tr>
-                                                <td><?= $count ?></td>
-                                                <td>
-                                                    <span class="badge badge-primary">
-                                                        <?= htmlspecialchars($asset['asset_type'] ?? $asset['asset_name'] ?? 'Asset') ?>
-                                                    </span>
-                                                </td>
-                                                <td><?= htmlspecialchars($asset['asset_name'] ?? 'N/A') ?></td>
-                                                <td><?= htmlspecialchars($asset['description'] ?? 'N/A') ?></td>
-                                                <td><?= htmlspecialchars($asset['serial_number'] ?? 'N/A') ?></td>
-                                                <td>
-                                                    <?php if (isset($asset['assigned_date']) && $asset['assigned_date']): ?>
-                                                        <?= format_safe_date($asset['assigned_date'], 'M d, Y') ?>
-                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri($asset['assigned_date'], $format) ?></small>
-                                                    <?php else: echo 'N/A'; endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if (isset($asset['return_date']) && $asset['return_date']): ?>
-                                                        <?= format_safe_date($asset['return_date'], 'M d, Y') ?>
-                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri($asset['return_date'], $format) ?></small>
-                                                    <?php else: echo '-'; endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php
-                                                    $status_class = 'success';
-                                                    if ($asset['status'] == 'Returned') $status_class = 'secondary';
-                                                    elseif ($asset['status'] == 'Lost') $status_class = 'danger';
-                                                    elseif ($asset['status'] == 'Damaged') $status_class = 'warning';
-                                                    ?>
-                                                    <span class="badge badge-<?= $status_class ?>"><?= htmlspecialchars($asset['status']) ?></span>
-                                                </td>
-                                            </tr>
-                                        <?php endwhile; ?>
-                                        
-                                        <?php 
-                                        // Display car assignments from cars_drv table
-                                        while ($car_drv = $cars_drv_result->fetch_assoc()): 
-                                            $count++;
-                                            // Determine if car is still assigned or returned
-                                            $is_active = ($car_drv['status'] == 1);
-                                            $has_return_date = !empty($car_drv['return_date']);
-                                        ?>
-                                            <tr>
-                                                <td><?= $count ?></td>
-                                                <td>
-                                                    <span class="badge badge-info">
-                                                        Car
-                                                    </span>
-                                                </td>
-                                                <td><?= htmlspecialchars($car_drv['maker_name'] ?? 'N/A') ?> <?= htmlspecialchars($car_drv['model_name'] ?? '') ?></td>
-                                                <td>
-                                                    Type: <?= htmlspecialchars($car_drv['type'] ?? 'N/A') ?><br>
-                                                    Year: <?= htmlspecialchars($car_drv['made_year'] ?? 'N/A') ?>
-                                                </td>
-                                                <td><?= htmlspecialchars($car_drv['plate_no'] ?? 'N/A') ?></td>
-                                                <td>
-                                                    <?php if (isset($car_drv['assigned_date']) && $car_drv['assigned_date']): ?>
-                                                        <?= format_safe_date($car_drv['assigned_date'], 'M d, Y') ?>
-                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri($car_drv['assigned_date'], $format) ?></small>
-                                                    <?php else: echo 'N/A'; endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if ($has_return_date): ?>
-                                                        <?= format_safe_date($car_drv['return_date'], 'M d, Y') ?>
-                                                        <br><small class="text-muted"><?= $DateConv->GregorianToHijri($car_drv['return_date'], $format) ?></small>
-                                                    <?php else: echo '-'; endif; ?>
-                                                </td>
-                                                <td>
-                                                    <?php if ($is_active && !$has_return_date): ?>
-                                                        <span class="badge badge-success">Active</span>
-                                                    <?php else: ?>
-                                                        <span class="badge badge-secondary">Returned</span>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endwhile; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <?php if ($count == 0): ?>
-                                <div class="alert alert-info mt-3">
-                                    <i class="fa fa-info-circle"></i> No assets assigned to this employee.
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="./assets/js/jquery.min.js"></script>
-    <script src="./assets/js/bootstrap.bundle.min.js"></script>
-    <script src="./plugins/datatables/jquery.dataTables.min.js"></script>
-    <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
-    <script src="assets/js/employee_profile.js"></script>
-    <script>
-        $(document).ready(function() {
-            $('.datatable').DataTable({
-                order: [[5, 'desc']], // Sort by Assigned Date column
-                pageLength: 8,
-                language: {
-                    search: `<span>${__('search')}:</span> _INPUT_`,
-                    searchPlaceholder: `${__('search')}...`,
-                    lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
-                    info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                    infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                    infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
-                    paginate: {
-                        first: __('first'),
-                        last: __('last'),
-                        next: __('next'),
-                        previous: __('previous')
-                    },
-                    emptyTable: __('no_data_available_in_table'),
-                    zeroRecords: __('no_matching_records_found'),
-                    processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
-                }
-            });
-        });
-    </script>
-</body>
-</html>
+srh_page_close('<script src="assets/js/employee_profile.js"></script>' . srh_dt_js('.srh-dt', 4, 'desc', 'mdi-laptop'));

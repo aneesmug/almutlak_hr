@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/sr_history_helpers.php';
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
 }
@@ -12,7 +13,7 @@ load_language($current_lang);
 // Input
 $request_inv_no = isset($_GET['request_inv_no']) ? trim($_GET['request_inv_no']) : '';
 if ($request_inv_no === '') {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Salary increment request invoice number not provided.</div>');
+    srh_die('Salary increment request invoice number not provided.');
 }
 
 // Salary increment details
@@ -37,7 +38,7 @@ if ($res && $res->num_rows === 1) {
 }
 $stmt->close();
 if (!$req) {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Salary increment request not found.</div>');
+    srh_die('Salary increment request not found.');
 }
 
 // Current salary information (only non-zero components are shown)
@@ -100,7 +101,7 @@ if (!$canSeeAll && !$isSelfRecord) {
     }
     if (!$sameDept && !$isSubmitter && !$inChain) {
         http_response_code(403);
-        die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">Access denied: You are not authorized to view this request.</div>');
+        srh_die('Access denied: You are not authorized to view this request.');
     }
 }
 
@@ -147,250 +148,65 @@ if ($request_type_id > 0) {
     $stmt->close();
 }
 
-// Helpers
-$status_class = 'secondary';
-$status_icon = 'fa-circle';
-if ($req['current_status'] === 'approved') { $status_class = 'success'; $status_icon = 'fa-check-circle'; }
-elseif ($req['current_status'] === 'rejected') { $status_class = 'danger'; $status_icon = 'fa-times-circle'; }
-elseif ($req['current_status'] === 'cancelled') { $status_class = 'secondary'; $status_icon = 'fa-ban'; }
-elseif (strpos($req['current_status'], 'pending') !== false) { $status_class = 'warning'; $status_icon = 'fa-clock'; }
-
 // Use getAvatarImagePath function for proper gender-based default avatars
 $avatar_path = getAvatarImagePath($req['avatar'] ?? '', $req['sex'] ?? 1);
+$dept_label = ($is_rtl ?? false) ? ($req['department_name_ar'] ?? '') : ($req['department_name'] ?? '');
+
+$gm_name = '';
+foreach ($chain as $c) {
+    if (strtolower((string)($c['user_type'] ?? '')) === 'gm' && ($c['status'] ?? '') === 'approved') $gm_name = (string)$c['approver_name'];
+}
+
+$salary_rows = [];
+if ($salary_info) {
+    foreach ($salary_components as [$key, $fallback, $value]) {
+        if ((float)$value > 0) $salary_rows[] = [__($key, $fallback), srh_money($value)];
+    }
+}
+$salary_html = $salary_info
+    ? srh_kv($salary_rows) . '<div class="srh-total"><span>' . sr_h(__('total_salary', 'Total salary')) . '</span>' . srh_money($salary_info['total_salary']) . '</div>'
+    : sr_empty_state(__('no_data_found', 'No data found'));
+
+$chain_rows = array_map(function ($c) {
+    return ['level' => $c['approval_level'], 'name' => getDisplayName($c['approver_name']), 'role' => $c['user_type'] ?? '', 'status' => $c['status'] ?? 'awaiting', 'date' => $c['action_date'], 'note' => $c['note'] ?? ''];
+}, $chain);
+$history_rows = array_map(function ($e) {
+    return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => $e['note'] ?? ''];
+}, $history);
+
+srh_page_open(__('salary_increment_approval_history', 'Salary Increment Approval History'));
+echo srh_header(__('salary_increment_approval_history', 'Salary Increment Approval History'), __('complete_approval_timeline'), 'all_applied_salary_increment.php');
+
+echo srh_hero(getDisplayName($req['employee_name']), $avatar_path, [
+    [__('emp_id'), $req['emp_id'], 'mdi-account-card-details'],
+    [__('department'), $dept_label, 'mdi-domain'],
+    [__('request_id'), $req['request_inv_no'], 'mdi-barcode'],
+], srh_status_pill($req['current_status']));
+
+echo srh_tiles([
+    [__('increment_amount', 'Increment Amount'), srh_money($req['increment_amount']), '', sr_h(__('requested_by_supervisor', 'Requested by supervisor'))],
+    [__('approved_amount', 'Approved Amount'), $req['approved_amount'] !== null ? srh_money($req['approved_amount']) : '-', $req['approved_amount'] !== null ? 'green' : '', $gm_name !== '' ? 'GM: ' . sr_h(getDisplayName($gm_name)) : ''],
+    [__('increment_effective_date', 'Increment Effective Date'), sr_h(!empty($req['last_increment_date']) ? format_safe_date($req['last_increment_date'], 'd M Y') : '-'), 'indigo', ''],
+    [__('evaluation_score', 'Evaluation Score'), $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : '-', '', ''],
+]);
 ?>
-<!doctype html>
-<html lang="<?= isset($current_lang) ? $current_lang : 'en' ?>" <?= (isset($is_rtl) && $is_rtl) ? 'dir="rtl"' : '' ?>>
-<head>
-    <meta charset="utf-8" />
-    <title><?= isset($site_title) ? $site_title : 'Al-Mutlak' ?> - Salary Increment Approval History</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="shortcut icon" href="<?= function_exists('get_setting') ? (get_setting($conDB, 'favicon') ?? 'assets/images/favicon.ico') : 'assets/images/favicon.ico' ?>">
-    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; }
-        .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .page-header h3 { margin: 0; font-weight: 600; }
-        .info-card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .info-card h5 { color: #667eea; margin-bottom: 20px; font-weight: 600; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
-        .employee-header { display: flex; align-items: center; margin-bottom: 20px; text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .employee-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; <?= $is_rtl ?? false ? 'margin-left' : 'margin-right' ?>: 20px; border: 3px solid #667eea; }
-        .info-row { display: flex; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
-        .info-row:last-child { border-bottom: none; }
-        .info-label { font-weight: 600; color: #666; width: 40%; display: flex; align-items: center; }
-        .info-label i { margin-right: 8px; color: #667eea; width: 20px; }
-        .info-value { color: #333; width: 60%; }
-
-        /* Modern Timeline Design */
-        .timeline { position: relative; padding: 10px 0; }
-        .timeline:before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: #eaedf1; }
-        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
-        .timeline-item:last-child { margin-bottom: 0; }
-        .timeline-marker {
-            position: absolute; left: -11px; top: 15px; width: 24px; height: 24px;
-            border-radius: 50%; background: #fff; border: 2px solid #adb5bd;
-            z-index: 1; display:flex; align-items:center; justify-content:center;
-            font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
-        }
-        .timeline-item.approved .timeline-marker { border-color: #28a745; color: #28a745; background-color: #f6ffed; }
-        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background-color: #fff1f0; }
-        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #ffc107; background-color: #fffbe6; }
-
-        .timeline-content {
-            background: #fff; padding: 15px; border-radius: 8px;
-            border: 1px solid #e3e8ee; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            position: relative; transition: all 0.2s ease-in-out;
-            text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>;
-        }
-        .timeline-content:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); }
-        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-        .timeline-time { color: #999; font-size: 12px; }
-
-        /* RTL Adjustments */
-        [dir="rtl"] .timeline:before { left: auto; right: 19px; }
-        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 50px; }
-        [dir="rtl"] .timeline-marker { left: auto; right: 8px; }
-        .btn-back { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: #fff; padding: 12px 30px; border-radius: 25px; font-weight: 600; }
-    </style>
-</head>
-<body class="enlarged">
-    <div class="page-header">
-        <div class="container">
-            <h3><i class="fas fa-history"></i> <?= __('salary_increment_approval_history', 'Salary Increment Approval History') ?></h3>
-            <p class="mb-0"><?= __('complete_approval_timeline') ?></p>
-        </div>
+<div class="srh-grid">
+    <div>
+        <?= srh_card('mdi-file-document', __('request_information'), srh_kv([
+            [__('request_id'), '<span class="sr-mono">' . sr_h($req['request_inv_no']) . '</span>', 'mdi-barcode'],
+            [__('status'), srh_status_pill($req['current_status']), 'mdi-flag'],
+            [__('approval_level'), (int)($req['current_approval_level'] ?? 0), 'mdi-stairs'],
+            [__('submitted_by', 'Submitted By'), sr_h(getDisplayName((string)($req['submitted_by_name'] ?? $req['submitted_by']))), 'mdi-account-check'],
+            [__('submitted_date'), sr_h(isset($req['created_at']) ? format_safe_date($req['created_at'], 'd M Y H:i') : 'N/A'), 'mdi-calendar'],
+        ])) ?>
+        <?= srh_card('mdi-note-text', __('reason', 'Reason'), '<div class="srh-note">' . sr_h(getDisplayName($req['reason'] ?? 'N/A')) . '</div>') ?>
     </div>
-
-    <div class="container" style="margin-bottom:30px;">
-        <!-- Employee Info -->
-        <div class="info-card">
-            <div class="employee-header">
-                <img src="<?= $avatar_path ?>" class="employee-avatar" alt="avatar" />
-                <div>
-                    <h4 style="margin:0;"><?= getDisplayName($req['employee_name'])?></h4>
-                    <div class="text-muted" style="margin-top:6px;">
-                        <strong><?= __('emp_id') ?>:</strong> <?= htmlspecialchars($req['emp_id']) ?>
-                        &nbsp; | &nbsp;
-                        <strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false ? $req['department_name_ar'] ?? 'N/A' : $req['department_name'] ?? 'N/A') ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6">
-                <div class="info-card">
-                    <h5><i class="fas fa-arrow-trend-up"></i> <?= __('increment_details', 'Increment Details')?></h5>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= __('request_id') ?>:</div><div class="info-value"><code><?= htmlspecialchars($req['request_inv_no']) ?></code></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-arrow-trend-up"></i> <?= __('increment_amount', 'Increment Amount')?>:</div><div class="info-value"><strong><?= number_format((float)$req['increment_amount'], 2) ?></strong></div></div>
-                    <?php if ($req['approved_amount'] !== null): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-check-circle"></i> <?= __('approved_amount', 'Approved Amount')?>:</div><div class="info-value"><strong><?= number_format((float)$req['approved_amount'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($req['last_increment_date'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-check"></i> <?= __('increment_effective_date', 'Increment Effective Date')?>:</div><div class="info-value"><?= htmlspecialchars((string)$req['last_increment_date']) ?></div></div>
-                    <?php endif; ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-clipboard-check"></i> <?= __('evaluation_score', 'Evaluation Score')?>:</div><div class="info-value"><?= $req['evaluation_score'] !== null ? number_format((float)$req['evaluation_score'], 2) : 'N/A' ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-user-tie"></i> <?= __('submitted_by', 'Submitted By') ?>:</div><div class="info-value"><?= htmlspecialchars((string)($req['submitted_by_name'] ?? $req['submitted_by'])) ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('reason', 'Reason') ?>:</div><div class="info-value"><?= nl2br(htmlspecialchars(getDisplayName($req['reason'] ?? 'N/A'))) ?></div></div>
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="info-card">
-                    <h5><i class="fas fa-file-alt"></i> <?= __('request_information')?></h5>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= htmlspecialchars($status_class) ?>"><i class="fas <?= htmlspecialchars($status_icon) ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $req['current_status'])))) ?></span></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-user-check"></i> <?= __('approval_level') ?>:</div><div class="info-value"><?= (int)($req['current_approval_level'] ?? 0) ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar"></i> <?= __('submitted_date') ?>:</div><div class="info-value"><?= isset($req['created_at']) ? format_safe_date($req['created_at'], 'd M Y H:i') : 'N/A' ?></div></div>
-                </div>
-
-                <div class="info-card">
-                    <h5><i class="fas fa-money-bill-wave"></i> <?= __('salary_information', 'Salary Information') ?></h5>
-                    <?php if (!$salary_info): ?>
-                        <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_data_found', 'No data found') ?></div>
-                    <?php else: ?>
-                        <?php foreach ($salary_components as [$key, $fallback, $value]): if ((float)$value <= 0) continue; ?>
-                        <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __($key, $fallback) ?>:</div><div class="info-value"><?= number_format((float)$value, 2) ?></div></div>
-                        <?php endforeach; ?>
-                        <div class="info-row"><div class="info-label"><i class="fas fa-sack-dollar"></i> <?= __('total_salary', 'Total salary') ?>:</div><div class="info-value"><strong style="color:#667eea;"><?= number_format((float)$salary_info['total_salary'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- Approval Chain Timeline -->
-        <div class="info-card">
-            <h5 style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:0;" onclick="toggleApprovalChain()">
-                <span><i class="fas fa-sitemap"></i> <?= __('approval_chain') ?></span>
-                <span id="approvalChainToggleIcon" class="text-muted"><i class="fas fa-chevron-down"></i></span>
-            </h5>
-            <div id="approvalChainBody" style="display:none; margin-top:20px;">
-            <?php if (empty($chain)): ?>
-                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_approvers') ?></div>
-            <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th><?= __('level') ?></th>
-                                <th><?= __('approver') ?></th>
-                                <th><?= __('status') ?></th>
-                                <th><?= __('action_date') ?></th>
-                                <th><?= __('note') ?></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($chain as $item): ?>
-                            <tr>
-                                <td><span class="badge badge-primary"><?= (int)$item['approval_level'] ?></span></td>
-                                <td><?= getDisplayName($item['approver_name']) ?></td>
-                                <td>
-                                    <?php
-                                    $status = $item['status'] ?? 'awaiting';
-                                    $badge_class = 'secondary';
-                                    if ($status === 'approved') $badge_class = 'success';
-                                    elseif ($status === 'rejected') $badge_class = 'danger';
-                                    elseif ($status === 'pending') $badge_class = 'warning';
-                                    elseif ($status === 'awaiting') $badge_class = 'info';
-                                    ?>
-                                    <span class="badge badge-<?= htmlspecialchars($badge_class) ?>"><?= htmlspecialchars(getDisplayName(ucfirst(str_replace('_', ' ', $status)))) ?></span>
-                                </td>
-                                <td><?= $item['action_date'] ? format_safe_date($item['action_date'], 'd M Y H:i') : __('pending') ?></td>
-                                <td><small><?= htmlspecialchars(getDisplayName($item['note'] ?? '-')) ?></small></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Status History Timeline -->
-        <div class="info-card">
-            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline') ?></h5>
-            <?php if (empty($history)): ?>
-                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_history') ?></div>
-            <?php else: ?>
-                <div class="timeline">
-                    <?php foreach ($history as $event):
-                        $event_status = strtolower($event['status'] ?? '');
-                        $event_class = 'pending';
-                        if (strpos($event_status, 'approved') !== false || strpos($event_status, 'completed') !== false) {
-                            $event_class = 'approved';
-                        } elseif (strpos($event_status, 'reject') !== false) {
-                            $event_class = 'rejected';
-                        } elseif (strpos($event_status, 'pending') !== false) {
-                            $event_class = 'pending';
-                        }
-                    ?>
-                    <div class="timeline-item <?= htmlspecialchars($event_class) ?>">
-                        <div class="timeline-marker">
-                            <?php if ($event_class === 'approved'): ?>
-                                <i class="fas fa-check" style="font-size:10px;"></i>
-                            <?php elseif ($event_class === 'rejected'): ?>
-                                <i class="fas fa-times" style="font-size:10px;"></i>
-                            <?php else: ?>
-                                <i class="fas fa-clock" style="font-size:10px;"></i>
-                            <?php endif; ?>
-                        </div>
-                        <div class="timeline-content">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                <strong><?= ucfirst(htmlspecialchars(str_replace('_', ' ', $event['status']))) ?></strong>
-                                <span class="timeline-time"><i class="fas fa-clock"></i> <?= format_safe_date($event['created_at'] ?? null, 'd M Y H:i') ?></span>
-                            </div>
-                            <div style="color:#666; margin-bottom:6px;">
-                                <i class="fas fa-user"></i> <strong><?= getDisplayName($event['emp_name']) ?></strong>
-                            </div>
-                            <?php if (!empty($event['note'])): ?>
-                            <div style="background:#f8f9fa; padding:8px; border-radius:4px; margin-top:8px; font-size:13px;">
-                                <strong><?= __('note') ?>:</strong> <?= nl2br(htmlspecialchars($event['note'])) ?>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-            <div class="text-center mt-4">
-                <a href="all_applied_salary_increment.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_requests') ?></a>
-            </div>
-        </div>
+    <div>
+        <?= srh_card('mdi-cash-multiple', __('salary_information', 'Salary Information'), $salary_html) ?>
+        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
     </div>
-
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="assets/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-    <script>
-        function toggleApprovalChain() {
-            const body = document.getElementById('approvalChainBody');
-            const icon = document.getElementById('approvalChainToggleIcon');
-            const isHidden = body.style.display === 'none';
-            body.style.display = isHidden ? 'block' : 'none';
-            icon.innerHTML = isHidden ? '<i class="fas fa-chevron-up"></i>' : '<i class="fas fa-chevron-down"></i>';
-        }
-    </script>
-</body>
-</html>
-<?php $conDB->close(); ?>
+</div>
+<?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>
+<?php
+srh_page_close();
+$conDB->close();

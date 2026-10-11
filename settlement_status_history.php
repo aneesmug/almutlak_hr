@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/init.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/sr_history_helpers.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 if (file_exists(__DIR__ . '/includes/functions.php')) {
     require_once __DIR__ . '/includes/functions.php';
@@ -23,7 +24,7 @@ if (
 // Input
 $request_inv_no = isset($_GET['request_inv_no']) ? trim($_GET['request_inv_no']) : '';
 if ($request_inv_no === '') {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Settlement request invoice number not provided.</div>');
+    srh_die('Settlement request invoice number not provided.');
 }
 
 // Settlement details
@@ -60,7 +61,7 @@ if ($res && $res->num_rows === 1) {
 }
 $stmt->close();
 if (!$settlement) {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Settlement request not found.</div>');
+    srh_die('Settlement request not found.');
 }
 
 // Calculate payable amount from vacation data (same logic as vacation_report_details.php)
@@ -275,240 +276,79 @@ while ($row = $cr->fetch_assoc()) {
 }
 $stmt->close();
 
-// Helpers
-$status_class = 'secondary';
-$status_icon = 'fa-circle';
-if ($settlement['settlement_status'] === 'approved') { $status_class = 'success'; $status_icon = 'fa-check-circle'; }
-elseif ($settlement['settlement_status'] === 'rejected') { $status_class = 'danger'; $status_icon = 'fa-times-circle'; }
-elseif ($settlement['settlement_status'] === 'pending' || $settlement['settlement_status'] === 'pending_approval') { $status_class = 'warning'; $status_icon = 'fa-clock'; }
-elseif ($settlement['settlement_status'] === 'completed') { $status_class = 'primary'; $status_icon = 'fa-check-circle'; }
-
-// Use getAvatarImagePath function for proper gender-based default avatars
+/// Use getAvatarImagePath function for proper gender-based default avatars
 $avatar_path = getAvatarImagePath($settlement['avatar'] ?? '', $settlement['sex'] ?? 1);
+$dept_label = ($is_rtl ?? false) ? ($settlement['department_name_ar'] ?? '') : ($settlement['department_name'] ?? '');
 
+// Attachments: plain links (open in a new tab). Single file or JSON array.
+$attachments = [];
+$attachments_html = '';
+if (!empty($settlement['attachment'])) {
+    $decoded = json_decode($settlement['attachment'], true);
+    $attachments = is_array($decoded) ? $decoded : [$settlement['attachment']];
+    foreach ($attachments as $path) {
+        $attachments_html .= '<a class="srh-file" href="' . sr_h($path) . '" target="_blank" rel="noopener"><i class="mdi mdi-paperclip"></i> ' . sr_h(basename((string)$path)) . '</a>';
+    }
+}
+
+$has_deductions = (!empty($settlement['deduction_hours']) && $settlement['deduction_hours'] > 0)
+    || (!empty($settlement['deduction_days']) && $settlement['deduction_days'] > 0)
+    || (!empty($settlement['other_deductions']) && $settlement['other_deductions'] > 0);
+
+$chain_rows = array_map(function ($c) {
+    $st = in_array($c['status'], ['approved', 'rejected'], true) ? $c['status'] : 'pending';
+    return ['level' => $c['approval_level'], 'name' => getDisplayName($c['approver_name']), 'role' => $c['user_type'] ?? '', 'status' => $st, 'date' => $c['action_date'], 'note' => ''];
+}, $chain);
+$history_rows = array_map(function ($e) {
+    return ['status' => $e['status'] ?? '', 'by' => getDisplayName($e['emp_name'] ?? ''), 'date' => $e['created_at'] ?? null, 'note' => getDisplayName($e['note'] ?? '')];
+}, $history);
+
+srh_page_open(__('settlement_approval_history'));
+echo srh_header(__('settlement_approval_history'), __('complete_approval_timeline'), 'all_settlements.php');
+
+echo srh_hero(getDisplayName($settlement['employee_name']), $avatar_path, [
+    [__('emp_id'), $settlement['emp_id'], 'mdi-account-card-details'],
+    [__('department'), $dept_label, 'mdi-domain'],
+    [__('invoice_no'), $settlement['request_inv_no'], 'mdi-barcode'],
+], srh_status_pill($settlement['settlement_status']));
+
+echo srh_tiles([
+    [__('amount'), srh_money(round($payableAmount)), 'green', sr_h(ucwords(__($settlement['request_type'] ?? 'N/A')))],
+    [__('deductions'), $has_deductions ? '-' . srh_money($deduction_amount) : '-', $has_deductions ? 'red' : '', ''],
+    [__('created_date'), sr_h(format_safe_date($settlement['created_at'], 'd M Y')), '', ''],
+    [__('settlement_date', 'Settlement Date'), sr_h(!empty($settlement['settlement_date']) ? format_safe_date($settlement['settlement_date'], 'd M Y') : '-'), 'indigo', ''],
+]);
 ?>
-<!doctype html>
-<html lang="<?= isset($current_lang) ? $current_lang : 'en' ?>" <?= (isset($is_rtl) && $is_rtl) ? 'dir="rtl"' : '' ?>>
-<head>
-    <meta charset="utf-8" />
-    <title><?= isset($site_title) ? $site_title : 'Al-Mutlak' ?> - Settlement Approval History</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="shortcut icon" href="<?= function_exists('get_setting') ? (get_setting($conDB, 'favicon') ?? 'assets/images/favicon.ico') : 'assets/images/favicon.ico' ?>">
-    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; }
-        .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 30px 0; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .page-header h3 { margin: 0; font-weight: 600; }
-        .info-card { background: #fff; border-radius: 10px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .info-card h5 { color: #667eea; margin-bottom: 20px; font-weight: 600; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
-        .employee-header { display: flex; align-items: center; margin-bottom: 20px; text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>; }
-        .employee-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; <?= $is_rtl ?? false ? 'margin-left' : 'margin-right' ?>: 20px; border: 3px solid #667eea; }
-        .info-row { display: flex; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
-        .info-row:last-child { border-bottom: none; }
-        .info-label { font-weight: 600; color: #666; width: 40%; display: flex; align-items: center; }
-        .info-label i { margin-right: 8px; color: #667eea; width: 20px; }
-        .info-value { color: #333; width: 60%; }
-        .chain-table thead { background: #f8f9fa; }
-        .chain-table td, .chain-table th { padding: 15px; vertical-align: middle; }
-        .level-badge { display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; font-weight: 700; }
-        .attachment-link { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f0f4ff; border-radius: 6px; color: #667eea; text-decoration: none; font-weight: 500; }
-        .attachment-link:hover { background: #667eea; color: #fff; text-decoration: none; }
-        
-        /* Modern Timeline Design */
-        .timeline { position: relative; padding: 10px 0; }
-        .timeline:before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: #eaedf1; }
-        .timeline-item { position: relative; padding-left: 50px; margin-bottom: 20px; }
-        .timeline-item:last-child { margin-bottom: 0; }
-        .timeline-marker { 
-            position: absolute;
-            top: 15px; 
-            width: 24px; 
-            height: 24px; 
-            border-radius: 50%; background: #fff; border: 2px solid #adb5bd; 
-            z-index: 1; display:flex; align-items:center; justify-content:center; 
-            font-size: 10px; color: #adb5bd; transition: all 0.3s ease;
-        }
-        .timeline-item.approved .timeline-marker, .timeline-item.completed .timeline-marker { border-color: #28a745; color: #28a745; background-color: #f6ffed; }
-        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background-color: #fff1f0; }
-        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #ffc107; background-color: #fffbe6; }
-        
-        .timeline-content { 
-            background: #fff; padding: 15px; border-radius: 8px; 
-            border: 1px solid #e3e8ee; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
-            position: relative; transition: all 0.2s ease-in-out;
-            text-align: <?= $is_rtl ?? false ? 'right' : 'left' ?>;
-        }
-        .timeline-content:hover { border-color: #667eea; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1); }
-        .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-
-        /* RTL Adjustments */
-        [dir="rtl"] .timeline:before { left: auto; right: 19px; }
-        [dir="rtl"] .timeline-item { padding-left: 0; padding-right: 50px; }
-        [dir="rtl"] .timeline-marker { left: auto; right: 8px; }
-        .btn-back { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: #fff; padding: 12px 30px; border-radius: 25px; font-weight: 600; }
-    </style>
-</head>
-<body class="enlarged">
-    <div class="page-header">
-        <div class="container">
-            <h3><i class="fas fa-history"></i> <?= __('settlement_approval_history') ?></h3>
-            <p class="mb-0"><?= __('complete_approval_timeline') ?></p>
-        </div>
+<div class="srh-grid">
+    <div>
+        <?= srh_card('mdi-file-document', __('settlement_details'), srh_kv([
+            [__('invoice_no'), '<span class="sr-mono">' . sr_h($settlement['request_inv_no']) . '</span>', 'mdi-barcode'],
+            [__('amount'), '<strong style="color: var(--tone-green-fg);">' . srh_money(round($payableAmount)) . '</strong>', 'mdi-cash'],
+            [__('created_date'), sr_h(format_safe_date($settlement['created_at'], 'd M Y')), 'mdi-calendar'],
+            [__('settlement_type'), sr_h(ucwords(__($settlement['request_type'] ?? 'N/A'))), 'mdi-tag'],
+            [__('status'), srh_status_pill($settlement['settlement_status']), 'mdi-flag'],
+            [__('attachments') . ' (' . count($attachments) . ')', $attachments_html !== '' ? '<div class="srh-files">' . $attachments_html . '</div>' : null, 'mdi-paperclip'],
+        ])) ?>
+        <?php if (!empty($settlement['notes'])): ?>
+            <?= srh_card('mdi-comment-text-outline', __('notes'), '<div class="srh-note">' . sr_h(getDisplayName($settlement['notes'])) . '</div>') ?>
+        <?php endif; ?>
     </div>
-
-    <div class="container" style="margin-bottom:30px;">
-        <!-- Employee Info -->
-        <div class="info-card">
-            <div class="employee-header">
-                <img src="<?= htmlspecialchars($avatar_path) ?>" class="employee-avatar" alt="avatar" />
-                <div>
-                    <h4 style="margin:0;"><?= getDisplayName($settlement['employee_name'])?></h4>
-                    <div class="text-muted" style="margin-top:6px;">
-                        <strong><?= __('emp_id') ?>:</strong> <?= htmlspecialchars($settlement['emp_id']) ?>
-                        &nbsp; | &nbsp;
-                        <strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false ? $settlement['department_name_ar'] ?? 'N/A' : $settlement['department_name'] ?? 'N/A') ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6">
-                <div class="info-card">
-                    <h5><i class="fas fa-file-invoice"></i> <?= __('settlement_details')?></h5>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-barcode"></i> <?= __('invoice_no') ?>:</div><div class="info-value"><code><?= htmlspecialchars($settlement['request_inv_no']) ?></code></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('amount')?>:</div><div class="info-value"><strong style="color: #28a745;"><?= number_format(round($payableAmount), 2) ?> SAR</strong></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar-alt"></i> <?= __('created_date') ?>:</div><div class="info-value"><?= htmlspecialchars(date('d M Y', strtotime($settlement['created_at']))) ?></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('settlement_type') ?>:</div><div class="info-value"><strong><?= ucwords(__($settlement['request_type'] ?? 'N/A')) ?></strong></div></div>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-info-circle"></i> <?= __('status') ?>:</div><div class="info-value"><span class="badge badge-<?= $status_class ?>" style="font-size:14px;padding:8px 16px;"><i class="fas <?= $status_icon ?>"></i> <?= getDisplayName(ucwords(str_replace('_', ' ', $settlement['settlement_status']))) ?></span></div></div>
-                    <?php if (!empty($settlement['notes'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-comment"></i> <?= __('notes') ?>:</div><div class="info-value"><?= (nl2br(htmlspecialchars(getDisplayName($settlement['notes'])))) ?></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['attachment'])): 
-                        // Handle attachment - could be single file or JSON array
-                        $attachments = [];
-                        if (is_array(json_decode($settlement['attachment'], true))) {
-                            $attachments = json_decode($settlement['attachment'], true);
-                        } else {
-                            $attachments = [$settlement['attachment']];
-                        }
-                    ?>
-                    <div class="info-row">
-                        <div class="info-label"><i class="fas fa-paperclip"></i> <?= __('attachments') ?> (<?= count($attachments) ?>):</div>
-                        <div class="info-value">
-                            <button type="button" class="btn btn-sm btn-info" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")' style="padding: 6px 16px; font-weight: 500;">
-                                <i class="fa fa-eye"></i> <?= __('view_attachments') ?>
-                            </button>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <div class="col-md-6">
-                <div class="info-card mb-3">
-                    <h5><i class="fas fa-money-bill-wave"></i> <?= __('settlement_information') ?></h5>
-                    <?php if (!empty($settlement['reason'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-reason"></i> <?= __('reason') ?>:</div><div class="info-value"><?= nl2br(htmlspecialchars(getDisplayName($settlement['reason']))) ?></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['salary_basic'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-money-bill"></i> <?= __('basic_salary') ?>:</div><div class="info-value"><strong>SAR <?= number_format($settlement['salary_basic'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-clock"></i> <?= __('overtime_hours') ?>:</div><div class="info-value"><strong><?= number_format((float)$settlement['overtime_hours'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['other_earnings']) && $settlement['other_earnings'] > 0): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-plus-circle"></i> <?= __('other_earnings') ?>:</div><div class="info-value"><strong style="color:#28a745;">+SAR <?= number_format((float)$settlement['other_earnings'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if ((!empty($settlement['deduction_hours']) && $settlement['deduction_hours'] > 0) || (!empty($settlement['deduction_days']) && $settlement['deduction_days'] > 0) || (!empty($settlement['other_deductions']) && $settlement['other_deductions'] > 0)): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-minus-circle"></i> <?= __('deductions') ?>:</div><div class="info-value"><strong style="color:#dc3545;">-SAR <?= number_format((float)$deduction_amount, 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['settlement_amount'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-coins"></i> <?= __('settlement_amount') ?>:</div><div class="info-value"><strong style="color:#28a745;">SAR <?= number_format(round($payableAmount), 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['deductions'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-minus-circle"></i> <?= __('deductions') ?>:</div><div class="info-value"><strong>SAR <?= number_format($settlement['deductions'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['final_amount'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-check-double"></i> <?= __('final_amount') ?>:</div><div class="info-value"><strong style="color:#667eea;">SAR <?= number_format($settlement['final_amount'], 2) ?></strong></div></div>
-                    <?php endif; ?>
-                    <?php if (!empty($settlement['settlement_date'])): ?>
-                    <div class="info-row"><div class="info-label"><i class="fas fa-calendar"></i> <?= __('settlement_date') ?>:</div><div class="info-value"><?= htmlspecialchars(date('d M Y', strtotime($settlement['settlement_date']))) ?></div></div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="info-card">
-                    <h5><i class="fas fa-users-cog"></i> <?= __('approval_chain') ?></h5>
-                    <table class="table table-sm chain-table table-hover">
-                        <thead><tr><th width="70" class="text-center"><?= __('level') ?></th><th><?= __('approver') ?></th><th><?= __('status') ?></th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chain as $approver): ?>
-                            <tr>
-                                <td class="text-center"><span class="level-badge"><?= $approver['approval_level'] ?></span></td>
-                                <td><strong><?= getDisplayName($approver['approver_name']) ?></strong><br/><small class="text-muted"><?= htmlspecialchars($approver['user_type'] ?? '') ?></small></td>
-                                <td>
-                                    <?php if ($approver['status'] === 'approved'): ?>
-                                        <span class="badge badge-success"><i class="fas fa-check"></i> <?= __('approved') ?></span>
-                                    <?php elseif ($approver['status'] === 'rejected'): ?>
-                                        <span class="badge badge-danger"><i class="fas fa-times"></i> <?= __('rejected') ?></span>
-                                    <?php else: ?>
-                                        <span class="badge badge-warning"><i class="fas fa-hourglass-half"></i> <?= __('pending') ?></span>
-                                    <?php endif; ?>
-                                    <?php if (!empty($approver['action_date'])): ?>
-                                        <br/><small class="text-muted"><?= htmlspecialchars(date('d M Y H:i', strtotime($approver['action_date']))) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="info-card">
-            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline') ?></h5>
-            <?php if (empty($history)): ?>
-                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_history') ?></div>
-            <?php else: ?>
-                <div class="timeline">
-                    <?php foreach ($history as $item): 
-                        $status_clean = strtolower($item['status']);    
-                        $item_class = 'pending'; $icon = 'fa-clock'; $badge = 'warning';
-                        if (strpos($status_clean, 'approved') !== false || strpos($status_clean, 'completed') !== false) {
-                            $item_class = 'approved'; $icon = 'fa-check'; $badge = 'success';
-                        } elseif (strpos($status_clean, 'rejected') !== false) {
-                            $item_class = 'rejected'; $icon = 'fa-times'; $badge = 'danger';
-                        }
-                    ?>
-                    <div class="timeline-item <?= $item_class ?>">
-                        <div class="timeline-marker" style="<?= ($is_rtl ?? false) ? 'right' : 'left' ?> : -11px !important;"><i class="fas <?= $icon ?>"></i></div>
-                        <div class="timeline-content">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="status-badge bg-<?= $badge ?> text-white"><?= getDisplayName(ucwords(str_replace('_', ' ', $item['status']))) ?></span>
-                                <small class="text-muted"><i class="far fa-clock"></i> <?= date('d M Y, H:i', strtotime($item['created_at'])) ?></small>
-                            </div>
-                            <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName(($item['note']) ?? 'No notes'))) ?></strong></p>
-                            <small class="text-muted"><i class="far fa-user"></i> <?= getDisplayName($item['emp_name']) ?></small>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-            <div class="text-center mt-4">
-                <a href="all_settlements.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_settlements') ?></a>
-            </div>
-        </div>
+    <div>
+        <?= srh_card('mdi-cash-multiple', __('settlement_information'), srh_kv([
+            [__('reason'), !empty($settlement['reason']) ? nl2br(sr_h(getDisplayName($settlement['reason']))) : null, 'mdi-note-text'],
+            [__('basic_salary'), !empty($settlement['salary_basic']) ? srh_money($settlement['salary_basic']) : null, 'mdi-cash'],
+            [__('overtime_hours'), (!empty($settlement['overtime_hours']) && $settlement['overtime_hours'] > 0) ? number_format((float)$settlement['overtime_hours'], 2) : null, 'mdi-clock'],
+            [__('other_earnings'), (!empty($settlement['other_earnings']) && $settlement['other_earnings'] > 0) ? '<span style="color: var(--tone-green-fg);">+' . srh_money($settlement['other_earnings']) . '</span>' : null, 'mdi-plus-circle'],
+            [__('deductions'), $has_deductions ? '<span style="color: var(--tone-red-fg);">-' . srh_money($deduction_amount) . '</span>' : null, 'mdi-minus-circle'],
+            [__('settlement_amount'), !empty($settlement['settlement_amount']) ? '<strong style="color: var(--tone-green-fg);">' . srh_money(round($payableAmount)) . '</strong>' : null, 'mdi-cash-multiple'],
+            [__('deductions'), !empty($settlement['deductions']) ? srh_money($settlement['deductions']) : null, 'mdi-minus-circle'],
+            [__('final_amount'), !empty($settlement['final_amount']) ? '<strong style="color: var(--sr-accent-strong);">' . srh_money($settlement['final_amount']) . '</strong>' : null, 'mdi-check-all'],
+            [__('settlement_date', 'Settlement Date'), !empty($settlement['settlement_date']) ? sr_h(format_safe_date($settlement['settlement_date'], 'd M Y')) : null, 'mdi-calendar'],
+        ])) ?>
+        <?= srh_card('mdi-sitemap', __('approval_chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
     </div>
-
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="assets/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-</body>
-</html>
-<?php $conDB->close(); ?>
+</div>
+<?= srh_card('mdi-history', __('status_history_timeline'), srh_timeline($history_rows)) ?>
+<?php
+srh_page_close();
+$conDB->close();

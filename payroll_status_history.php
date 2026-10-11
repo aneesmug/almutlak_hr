@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/sr_history_helpers.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 require_once __DIR__ . '/includes/payroll_approval_helpers.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
@@ -26,7 +27,7 @@ if (
 
 $requestInvNo = trim((string)($_GET['request_inv_no'] ?? $_GET['inv_no'] ?? ''));
 if ($requestInvNo === '') {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Payroll request invoice number not provided.</div>');
+    srh_die('Payroll request invoice number not provided.');
 }
 
 $pdo = getDbConnection();
@@ -75,7 +76,7 @@ $requestSql = "SELECT
 
 $stmt = $conDB->prepare($requestSql);
 if (!$stmt) {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Unable to prepare payroll history query.</div>');
+    srh_die('Unable to prepare payroll history query.');
 }
 
 $stmt->bind_param('s', $requestInvNo);
@@ -87,7 +88,7 @@ if ($result && $result->num_rows === 1) {
 $stmt->close();
 
 if (!$payrollRequest) {
-    die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">ERROR: Payroll approval request not found.</div>');
+    srh_die('Payroll approval request not found.');
 }
 
 $isFinanceRole = isset($user_type) && stripos((string)$user_type, 'finance') !== false;
@@ -114,7 +115,7 @@ if (!$canSeeAll) {
 
     if (!$sameDept && !$inChain) {
         http_response_code(403);
-        die('<div style="padding:16px;margin:16px;border:1px solid #f5c2c7;background:#f8d7da;color:#842029;border-radius:8px;">Access denied: You are not authorized to view this payroll request.</div>');
+        srh_die('Access denied: You are not authorized to view this payroll request.');
     }
 }
 
@@ -250,470 +251,98 @@ usort($history, static function ($left, $right) {
 });
 
 $status = (string)($payrollRequest['status'] ?? 'pending_approval');
-$statusClass = 'secondary';
-$statusIcon = 'fa-circle';
-if ($status === 'approved') {
-    $statusClass = 'success';
-    $statusIcon = 'fa-check-circle';
-} elseif ($status === 'rejected') {
-    $statusClass = 'danger';
-    $statusIcon = 'fa-times-circle';
-} elseif ($status === 'completed') {
-    $statusClass = 'primary';
-    $statusIcon = 'fa-badge-check';
-} elseif (strpos($status, 'pending') !== false) {
-    $statusClass = 'warning';
-    $statusIcon = 'fa-clock';
-}
-
 $avatarPath = getAvatarImagePath($payrollRequest['requester_avatar'] ?? '', $payrollRequest['requester_sex'] ?? 1);
 $departmentName = ($is_rtl ?? false)
     ? ($payrollRequest['department_name_ar'] ?? $payrollRequest['department_name'] ?? __('not_available', 'N/A'))
     : ($payrollRequest['department_name'] ?? $payrollRequest['department_name_ar'] ?? __('not_available', 'N/A'));
+$na = __('not_available', 'N/A');
+$fmt = function ($v) use ($na) { return !empty($v) ? format_safe_date($v, 'd M Y, H:i') : $na; };
+
+// Approval chain - hr_payroll accounts show as "HR Payroll" instead of their name.
+$chain_rows = array_map(function ($link) {
+    $isHrPayroll = strtolower(trim((string)($link['user_type'] ?? ''))) === 'hr_payroll';
+    return [
+        'level' => (int)($link['approval_level'] ?? 0),
+        'name' => $isHrPayroll ? __('hr_payroll', 'HR Payroll') : getDisplayName(parseName($link['approver_name']) ?? ($link['approver_name'] ?? __('not_available', 'N/A'))),
+        'role' => $isHrPayroll ? '' : ($link['user_type'] ?? ''),
+        'status' => strtolower((string)($link['status'] ?? 'pending')),
+        'date' => $link['action_date'] ?? null,
+        'note' => !empty($link['note']) ? getDisplayName($link['note']) : '',
+    ];
+}, $chain);
+$history_rows = array_map(function ($item) {
+    return [
+        'status' => strtolower((string)($item['status'] ?? 'pending_approval')),
+        'by' => payrollStatusHistoryDisplayName($item['emp_name'] ?? __('system', 'System'), $item['user_type'] ?? ''),
+        'date' => $item['created_at'] ?? null,
+        'note' => getDisplayName($item['note'] ?? ''),
+    ];
+}, $history);
+
+// Finance verification table
+$finance_html = '';
+if (!empty($financeVerification)) {
+    $finance_html = '<div class="sr-table-wrap"><table class="sr-table" style="margin: 0;"><thead><tr>'
+        . '<th>' . sr_h(__('finance_manager', 'Finance Manager')) . '</th><th>' . sr_h(__('finance_officer', 'Finance Officer')) . '</th>'
+        . '<th>' . sr_h(__('assigned_companies', 'Assigned Companies')) . '</th><th>' . sr_h(__('status')) . '</th></tr></thead><tbody>';
+    foreach ($financeVerification as $v) {
+        $isApproved = !empty($v['officer_approved']);
+        $isConfirmed = !empty($v['is_confirmed']);
+        if ($isApproved) { $pill = sr_pill('green', __('approved', 'Approved'), true, 'mdi-check-circle'); }
+        elseif ($isConfirmed) { $pill = sr_pill('amber', __('pending_officer_approval', 'Pending Officer Approval'), true, 'mdi-clock'); }
+        else { $pill = sr_pill('slate', __('not_confirmed', 'Not Confirmed'), true); }
+        $companies = '';
+        foreach ($v['company_names'] as $companyName) $companies .= '<span class="sr-chip" style="margin: 2px;">' . sr_h($companyName) . '</span>';
+        $finance_html .= '<tr><td>' . sr_h(getDisplayName($v['manager_name'] ?: ($v['finance_manager_emp_id'] ?? $na))) . '</td>'
+            . '<td>' . sr_h(getDisplayName($v['officer_name'] ?: ($v['finance_officer_emp_id'] ?? $na))) . '</td>'
+            . '<td>' . ($companies !== '' ? $companies : '<span class="text-muted">' . sr_h($na) . '</span>') . '</td>'
+            . '<td>' . $pill . ($isApproved && !empty($v['officer_approved_at']) ? '<span class="sr-cell-sub">' . sr_h(format_safe_date($v['officer_approved_at'], 'd M Y, H:i')) . '</span>' : '') . '</td></tr>';
+    }
+    $finance_html .= '</tbody></table></div>';
+}
+
+srh_page_open(__('payroll_approval_history', 'Payroll Approval History'));
+echo srh_header(__('payroll_approval_history', 'Payroll Approval History'), __('complete_approval_timeline', 'Complete approval timeline and approver list'), 'all_payroll_approvals.php');
+
+echo srh_hero(payrollStatusHistoryDisplayName($payrollRequest['requester_name'] ?: __('system', 'System'), $payrollRequest['requester_user_type'] ?? ''), $avatarPath, [
+    [__('request_id', 'Request ID'), $payrollRequest['request_inv_no'], 'mdi-barcode'],
+    [__('department'), getDisplayName($departmentName), 'mdi-domain'],
+    [__('payroll_month'), $payrollRequest['payroll_month'] ?? '', 'mdi-calendar'],
+], srh_status_pill($status));
+
+echo srh_tiles([
+    [__('payroll_month'), sr_h($payrollRequest['payroll_month'] ?? $na), 'indigo', ''],
+    [__('employees', 'Employees'), (int)($payrollRequest['employee_count'] ?? 0), '', ''],
+    [__('total_net', 'Total Net'), srh_money($payrollRequest['total_net_salary'] ?? 0), 'green', ''],
+    [__('paid', 'Paid'), (int)($payrollRequest['paid_count'] ?? 0), '', sr_h(__('generated', 'Generated')) . ': ' . (int)($payrollRequest['generated_count'] ?? 0)],
+]);
 ?>
-<!doctype html>
-<html lang="<?= htmlspecialchars($current_lang) ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
-<head>
-    <meta charset="utf-8" />
-    <title><?= htmlspecialchars($site_title ?? 'Al-Mutlak') ?> - <?= __('payroll_approval_history', 'Payroll Approval History') ?></title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="shortcut icon" href="<?= function_exists('get_setting') ? htmlspecialchars((string)(get_setting($conDB, 'favicon') ?? 'assets/images/favicon.ico')) : 'assets/images/favicon.ico' ?>">
-    <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body { background: #f6f8fb; }
-        .page-header {
-            background: linear-gradient(135deg, #1f6aa5 0%, #0b8f7a 100%);
-            color: #fff;
-            padding: 30px 0;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            text-align: <?= ($is_rtl ?? false) ? 'right' : 'left' ?>;
-        }
-        .page-header h3 { margin: 0; font-weight: 600; }
-        .info-card {
-            background: #fff;
-            border-radius: 14px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(19, 44, 72, 0.06);
-            text-align: <?= ($is_rtl ?? false) ? 'right' : 'left' ?>;
-        }
-        .info-card h5 {
-            color: #1f6aa5;
-            margin-bottom: 18px;
-            font-weight: 600;
-            border-bottom: 2px solid #eef3f8;
-            padding-bottom: 10px;
-        }
-        .request-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-        .requester-summary {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-        .requester-avatar {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #d8e9f7;
-        }
-        .stats-grid,
-        .details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 14px;
-        }
-        .stat-box,
-        .detail-box {
-            background: #f8fbfe;
-            border: 1px solid #e6eef5;
-            border-radius: 12px;
-            padding: 14px 16px;
-        }
-        .detail-label,
-        .stat-label {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: #73839b;
-            margin-bottom: 6px;
-        }
-        .detail-value,
-        .stat-value {
-            font-size: 18px;
-            font-weight: 600;
-            color: #24364b;
-        }
-        .chain-table td,
-        .chain-table th {
-            vertical-align: top;
-        }
-        .level-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #eaf4fb;
-            color: #1f6aa5;
-            font-weight: 700;
-        }
-        .timeline { position: relative; padding: 6px 0; }
-        .timeline:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 18px;
-            width: 2px;
-            background: #dbe6f0;
-        }
-        .timeline-item {
-            position: relative;
-            padding-left: 54px;
-            margin-bottom: 18px;
-        }
-        .timeline-marker {
-            position: absolute;
-            top: 14px;
-            left: 7px;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: #fff;
-            border: 2px solid #aebfd0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            color: #7f8fa4;
-            z-index: 1;
-        }
-        .timeline-item.approved .timeline-marker { border-color: #28a745; color: #28a745; background: #f3fff7; }
-        .timeline-item.rejected .timeline-marker { border-color: #dc3545; color: #dc3545; background: #fff5f5; }
-        .timeline-item.pending .timeline-marker { border-color: #ffc107; color: #d39b00; background: #fffdf1; }
-        .timeline-item.completed .timeline-marker { border-color: #007bff; color: #007bff; background: #f2f8ff; }
-        .timeline-content {
-            background: #fff;
-            border: 1px solid #e5edf5;
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .badge-soft-success { background: #eaf8ee; color: #1f8b3c; }
-        .badge-soft-danger { background: #fdecec; color: #c43636; }
-        .badge-soft-warning { background: #fff6dc; color: #b27d00; }
-        .badge-soft-primary { background: #e8f1ff; color: #1c63d5; }
-        .badge-soft-secondary { background: #edf1f5; color: #6c7c90; }
-        .btn-back {
-            background: linear-gradient(135deg, #1f6aa5 0%, #0b8f7a 100%);
-            border: none;
-            color: #fff;
-            padding: 12px 28px;
-            border-radius: 999px;
-            font-weight: 600;
-        }
-        .btn-back:hover { color: #fff; opacity: 0.95; }
-        [dir="rtl"] .timeline:before {
-            left: auto;
-            right: 18px;
-        }
-        [dir="rtl"] .timeline-item {
-            padding-left: 0;
-            padding-right: 54px;
-        }
-        [dir="rtl"] .timeline-marker {
-            left: auto;
-            right: 7px;
-        }
-        @media (max-width: 767px) {
-            .requester-summary { align-items: flex-start; }
-            .detail-value,
-            .stat-value { font-size: 16px; }
-        }
-    </style>
-</head>
-<body>
-    <div class="page-header">
-        <div class="container">
-            <h3><i class="fas fa-history"></i> <?= __('payroll_approval_history', 'Payroll Approval History') ?></h3>
-            <p class="mb-0"><?= __('complete_approval_timeline', 'Complete approval timeline and approver list') ?></p>
-        </div>
+<div class="srh-grid">
+    <div>
+        <?= srh_card('mdi-file-document', __('payroll_request_details', 'Payroll Request Details'), srh_kv([
+            [__('request_id', 'Request ID'), '<span class="sr-mono">' . sr_h($payrollRequest['request_inv_no']) . '</span>', 'mdi-barcode'],
+            [__('status'), srh_status_pill($status), 'mdi-flag'],
+            [__('payroll_month'), sr_h($payrollRequest['payroll_month'] ?? $na), 'mdi-calendar'],
+            [__('submitted', 'Submitted'), sr_h($fmt($payrollRequest['created_at'] ?? null)), 'mdi-send'],
+            [__('approved_at', 'Approved At'), sr_h($fmt($payrollRequest['approved_at'] ?? null)), 'mdi-check-circle'],
+            [__('processed_at', 'Processed At'), sr_h($fmt($payrollRequest['processed_at'] ?? null)), 'mdi-settings'],
+        ])) ?>
+        <?= srh_card('mdi-chart-pie', __('payroll_summary', 'Payroll Summary'), srh_kv([
+            [__('employees', 'Employees'), (int)($payrollRequest['employee_count'] ?? 0), 'mdi-account-multiple'],
+            [__('total_net', 'Total Net'), srh_money($payrollRequest['total_net_salary'] ?? 0), 'mdi-cash-multiple'],
+            [__('generated', 'Generated'), (int)($payrollRequest['generated_count'] ?? 0), 'mdi-file-document'],
+            [__('paid', 'Paid'), (int)($payrollRequest['paid_count'] ?? 0), 'mdi-check-all'],
+            [__('approved_by', 'Approved By'), sr_h(payrollStatusHistoryDisplayName($payrollRequest['approved_by_name'] ?: $na, $payrollRequest['approved_by_user_type'] ?? '')), 'mdi-account-check'],
+            [__('processed_by', 'Processed By'), sr_h(payrollStatusHistoryDisplayName($payrollRequest['processed_by_name'] ?: $na, $payrollRequest['processed_by_user_type'] ?? '')), 'mdi-account'],
+        ])) ?>
     </div>
-
-    <div class="container" style="margin-bottom:30px;">
-        <div class="info-card">
-            <div class="request-header">
-                <div class="requester-summary">
-                    <img src="<?= htmlspecialchars($avatarPath) ?>" class="requester-avatar" alt="requester avatar">
-                    <div>
-                        <h4 style="margin:0;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['requester_name'] ?: __('system', 'System'), $payrollRequest['requester_user_type'] ?? '')) ?></h4>
-                        <div class="text-muted" style="margin-top:6px;">
-                            <strong><?= __('request_id', 'Request ID') ?>:</strong> <?= htmlspecialchars($payrollRequest['request_inv_no']) ?>
-                            &nbsp; | &nbsp;
-                            <strong><?= __('department') ?>:</strong> <?= htmlspecialchars(getDisplayName($departmentName)) ?>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <span class="badge badge-<?= htmlspecialchars($statusClass) ?> p-2"><i class="fas <?= htmlspecialchars($statusIcon) ?>"></i> <?= htmlspecialchars(getDisplayName(ucwords(str_replace('_', ' ', $status)))) ?></span>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-lg-7">
-                <div class="info-card">
-                    <h5><i class="fas fa-file-invoice-dollar"></i> <?= __('payroll_request_details', 'Payroll Request Details') ?></h5>
-                    <div class="details-grid">
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('payroll_month') ?></div>
-                            <div class="detail-value"><?= htmlspecialchars($payrollRequest['payroll_month'] ?? __('not_available', 'N/A')) ?></div>
-                        </div>
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('employees', 'Employees') ?></div>
-                            <div class="detail-value"><?= (int)($payrollRequest['employee_count'] ?? 0) ?></div>
-                        </div>
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('total_net', 'Total Net') ?></div>
-                            <div class="detail-value"><i class="icon-saudi_riyal"></i> <?= number_format((float)($payrollRequest['total_net_salary'] ?? 0), 2) ?></div>
-                        </div>
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('submitted', 'Submitted') ?></div>
-                            <div class="detail-value"><?= !empty($payrollRequest['created_at']) ? htmlspecialchars(date('d M Y, H:i', strtotime($payrollRequest['created_at']))) : __('not_available', 'N/A') ?></div>
-                        </div>
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('approved_at', 'Approved At') ?></div>
-                            <div class="detail-value"><?= !empty($payrollRequest['approved_at']) ? htmlspecialchars(date('d M Y, H:i', strtotime($payrollRequest['approved_at']))) : __('not_available', 'N/A') ?></div>
-                        </div>
-                        <div class="detail-box">
-                            <div class="detail-label"><?= __('processed_at', 'Processed At') ?></div>
-                            <div class="detail-value"><?= !empty($payrollRequest['processed_at']) ? htmlspecialchars(date('d M Y, H:i', strtotime($payrollRequest['processed_at']))) : __('not_available', 'N/A') ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-5">
-                <div class="info-card">
-                    <h5><i class="fas fa-chart-pie"></i> <?= __('payroll_summary', 'Payroll Summary') ?></h5>
-                    <div class="stats-grid">
-                        <div class="stat-box">
-                            <div class="stat-label"><?= __('generated', 'Generated') ?></div>
-                            <div class="stat-value"><?= (int)($payrollRequest['generated_count'] ?? 0) ?></div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-label"><?= __('paid', 'Paid') ?></div>
-                            <div class="stat-value"><?= (int)($payrollRequest['paid_count'] ?? 0) ?></div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-label"><?= __('approved_by', 'Approved By') ?></div>
-                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['approved_by_name'] ?: __('not_available', 'N/A'), $payrollRequest['approved_by_user_type'] ?? '')) ?></div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-label"><?= __('processed_by', 'Processed By') ?></div>
-                            <div class="stat-value" style="font-size:15px;"><?= htmlspecialchars(payrollStatusHistoryDisplayName($payrollRequest['processed_by_name'] ?: __('not_available', 'N/A'), $payrollRequest['processed_by_user_type'] ?? '')) ?></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="info-card">
-            <h5><i class="fas fa-users-cog"></i> <?= __('approval_chain', 'Approval Chain') ?></h5>
-            <div class="table-responsive">
-                <table class="table table-sm chain-table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th width="70" class="text-center"><?= __('level') ?></th>
-                            <th><?= __('approver', 'Approver') ?></th>
-                            <th><?= __('status') ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    <?php if (empty($chain)): ?>
-                        <tr>
-                            <td colspan="3" class="text-center text-muted"><i class="fas fa-info-circle"></i> <?= __('no_approval_chain', 'No approval chain found') ?></td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($chain as $link): ?>
-                            <?php
-                            $chainStatus = strtolower((string)($link['status'] ?? 'pending'));
-                            $chainBadgeClass = 'secondary';
-                            $chainIcon = 'fa-circle';
-                            if ($chainStatus === 'approved') {
-                                $chainBadgeClass = 'success';
-                                $chainIcon = 'fa-check-circle';
-                            } elseif ($chainStatus === 'rejected') {
-                                $chainBadgeClass = 'danger';
-                                $chainIcon = 'fa-times-circle';
-                            } elseif ($chainStatus === 'pending' || $chainStatus === 'awaiting') {
-                                $chainBadgeClass = 'warning';
-                                $chainIcon = 'fa-clock';
-                            }
-                            ?>
-                            <?php $isHrPayrollApproverRow = strtolower(trim((string)($link['user_type'] ?? ''))) === 'hr_payroll'; ?>
-                            <tr>
-                                <td class="text-center"><span class="level-badge"><?= (int)($link['approval_level'] ?? 0) ?></span></td>
-                                <td>
-                                    <?php if ($isHrPayrollApproverRow): ?>
-                                        <strong><?= __('hr_payroll', 'HR Payroll') ?></strong>
-                                    <?php else: ?>
-                                        <strong><?= htmlspecialchars(getDisplayName(parseName($link['approver_name']) ?? ($link['approver_name'] ?? __('not_available', 'N/A')))) ?></strong>
-                                        <?php if (!empty($link['user_type'])): ?>
-                                            <br><small class="text-muted"><i class="fas fa-user-tag"></i> <?= htmlspecialchars(getDisplayName(str_replace("_", " ", $link['user_type']))) ?></small>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge badge-<?= htmlspecialchars($chainBadgeClass) ?>"><i class="fas <?= htmlspecialchars($chainIcon) ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst($chainStatus))) ?></span>
-                                    <?php if (!empty($link['action_date'])): ?>
-                                        <br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= htmlspecialchars(date('d M Y, H:i', strtotime($link['action_date']))) ?></small>
-                                    <?php endif; ?>
-                                    <?php if (!empty($link['note'])): ?>
-                                        <br><small style="background:#f5f8fb;padding:6px 10px;border-radius:6px;display:block;margin-top:8px;border-<?= ($is_rtl ?? false) ? 'right' : 'left' ?>:3px solid #1f6aa5;"><strong><?= __('note') ?>:</strong> <?= nl2br(htmlspecialchars(getDisplayName($link['note']))) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <?php if (!empty($financeVerification)): ?>
-        <div class="info-card">
-            <h5><i class="fas fa-user-check"></i> <?= __('finance_verification_status', 'Finance Verification Status') ?></h5>
-            <div class="table-responsive">
-                <table class="table table-sm chain-table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th><?= __('finance_manager', 'Finance Manager') ?></th>
-                            <th><?= __('finance_officer', 'Finance Officer') ?></th>
-                            <th><?= __('assigned_companies', 'Assigned Companies') ?></th>
-                            <th><?= __('status') ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($financeVerification as $verificationRow): ?>
-                            <?php
-                            $isApproved = !empty($verificationRow['officer_approved']);
-                            $isConfirmed = !empty($verificationRow['is_confirmed']);
-                            if ($isApproved) {
-                                $verificationBadgeClass = 'success';
-                                $verificationIcon = 'fa-check-circle';
-                                $verificationLabel = __('approved', 'Approved');
-                            } elseif ($isConfirmed) {
-                                $verificationBadgeClass = 'warning';
-                                $verificationIcon = 'fa-clock';
-                                $verificationLabel = __('pending_officer_approval', 'Pending Officer Approval');
-                            } else {
-                                $verificationBadgeClass = 'secondary';
-                                $verificationIcon = 'fa-circle';
-                                $verificationLabel = __('not_confirmed', 'Not Confirmed');
-                            }
-                            ?>
-                            <tr>
-                                <td><?= htmlspecialchars(getDisplayName($verificationRow['manager_name'] ?: ($verificationRow['finance_manager_emp_id'] ?? __('not_available', 'N/A')))) ?></td>
-                                <td><?= htmlspecialchars(getDisplayName($verificationRow['officer_name'] ?: ($verificationRow['finance_officer_emp_id'] ?? __('not_available', 'N/A')))) ?></td>
-                                <td>
-                                    <?php if (!empty($verificationRow['company_names'])): ?>
-                                        <?php foreach ($verificationRow['company_names'] as $companyName): ?>
-                                            <span class="status-badge badge-soft-secondary" style="margin:2px;"><?= htmlspecialchars($companyName) ?></span>
-                                        <?php endforeach; ?>
-                                    <?php else: ?>
-                                        <span class="text-muted"><?= __('not_available', 'N/A') ?></span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <span class="badge badge-<?= htmlspecialchars($verificationBadgeClass) ?>"><i class="fas <?= htmlspecialchars($verificationIcon) ?>"></i> <?= htmlspecialchars($verificationLabel) ?></span>
-                                    <?php if ($isApproved && !empty($verificationRow['officer_approved_at'])): ?>
-                                        <br><small class="text-muted"><i class="far fa-calendar-alt"></i> <?= htmlspecialchars(date('d M Y, H:i', strtotime($verificationRow['officer_approved_at']))) ?></small>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <div class="info-card">
-            <h5><i class="fas fa-history"></i> <?= __('status_history_timeline', 'Status History Timeline') ?></h5>
-            <?php if (empty($history)): ?>
-                <div class="alert alert-info"><i class="fas fa-info-circle"></i> <?= __('no_history', 'No history found') ?></div>
-            <?php else: ?>
-                <div class="timeline">
-                    <?php foreach ($history as $item): ?>
-                        <?php
-                        $historyStatus = strtolower((string)($item['status'] ?? 'pending_approval'));
-                        $timelineClass = 'pending';
-                        $timelineIcon = 'fa-clock';
-                        $timelineBadgeClass = 'badge-soft-warning';
-
-                        if (strpos($historyStatus, 'approved') !== false) {
-                            $timelineClass = 'approved';
-                            $timelineIcon = 'fa-check';
-                            $timelineBadgeClass = 'badge-soft-success';
-                        } elseif (strpos($historyStatus, 'rejected') !== false) {
-                            $timelineClass = 'rejected';
-                            $timelineIcon = 'fa-times';
-                            $timelineBadgeClass = 'badge-soft-danger';
-                        } elseif (strpos($historyStatus, 'completed') !== false) {
-                            $timelineClass = 'completed';
-                            $timelineIcon = 'fa-badge-check';
-                            $timelineBadgeClass = 'badge-soft-primary';
-                        } elseif (strpos($historyStatus, 'pending') !== false) {
-                            $timelineClass = 'pending';
-                            $timelineIcon = 'fa-clock';
-                            $timelineBadgeClass = 'badge-soft-warning';
-                        } else {
-                            $timelineBadgeClass = 'badge-soft-secondary';
-                        }
-                        ?>
-                        <div class="timeline-item <?= htmlspecialchars($timelineClass) ?>">
-                            <div class="timeline-marker"><i class="fas <?= htmlspecialchars($timelineIcon) ?>"></i></div>
-                            <div class="timeline-content">
-                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap" style="gap:8px;">
-                                    <span class="status-badge <?= htmlspecialchars($timelineBadgeClass) ?>"><?= htmlspecialchars(getDisplayName(ucwords(str_replace('_', ' ', $historyStatus)))) ?></span>
-                                    <small class="text-muted"><i class="far fa-clock"></i> <?= !empty($item['created_at']) ? htmlspecialchars(date('d M Y, H:i', strtotime($item['created_at']))) : __('not_available', 'N/A') ?></small>
-                                </div>
-                                <p class="mb-1"><strong><?= nl2br(htmlspecialchars(getDisplayName($item['note'] ?? __('no_notes', 'No notes')))) ?></strong></p>
-                                <small class="text-muted"><i class="far fa-user"></i> <?= htmlspecialchars(payrollStatusHistoryDisplayName($item['emp_name'] ?? __('system', 'System'), $item['user_type'] ?? '')) ?></small>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-            <div class="text-center mt-4">
-                <a href="all_payroll_approvals.php" class="btn btn-back"><i class="fas fa-arrow-left"></i> <?= __('back_to_payroll_approvals', 'Back to Payroll Approvals') ?></a>
-            </div>
-        </div>
+    <div>
+        <?= srh_card('mdi-sitemap', __('approval_chain', 'Approval Chain'), srh_chain($chain_rows), count($chain_rows) . ' ' . sr_h(__('levels', 'levels'))) ?>
     </div>
-
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-<?php $conDB->close(); ?>
+</div>
+<?php if ($finance_html !== ''): ?>
+    <?= srh_card('mdi-account-check', __('finance_verification_status', 'Finance Verification Status'), $finance_html) ?>
+<?php endif; ?>
+<?= srh_card('mdi-history', __('status_history_timeline', 'Status History Timeline'), srh_timeline($history_rows)) ?>
+<?php
+srh_page_close();
