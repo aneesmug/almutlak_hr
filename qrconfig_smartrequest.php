@@ -1,4 +1,9 @@
 <?php
+// Only logged-in users may render the QR: it contains the signed upload link for the request.
+define('SKIP_PAGE_ACCESS_CONTROL', true);
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/session_check.php';
+require_once __DIR__ . '/includes/smt_qr_token.php';
 
     include("./includes/qrcode/qrlib.php");
 
@@ -48,9 +53,10 @@ Parameters
 
 
 
-$param = $_GET['id'];
+$param = trim((string)($_GET['id'] ?? ''));
+$qrUrl = 'https://hr.almutlaksystem.com/attach_smt_request.php?id=' . rawurlencode($param) . '&t=' . smt_qr_token($conDB, $param);
 
-QRcode::png('https://hr.almutlaksystem.com/attach_smt_request.php?id='.$param, false, QR_ECLEVEL_L, 6, 1, false);
+QRcode::png($qrUrl, false, QR_ECLEVEL_M, 6, 1, false);
 // QRcode::png('http://192.168.9.158/almutlak/system/attach_smt_request.php?id='.$param, false, QR_ECLEVEL_L, 6, 1, false);
 
 

@@ -3,14 +3,20 @@ require_once __DIR__ . '/includes/session_bootstrap.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-// Opened from the request QR code, often on a phone that is not logged in: the upload needs a login,
-// so send the user to log in first and bring them back here afterwards (see session_check.php).
-if (empty($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
-    $_SESSION['login_return_to'] = './attach_smt_request.php?id=' . rawurlencode((string)($_GET['id'] ?? ''));
-    header('Location: ./index.php');
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/smt_qr_token.php';
+// Opened from the request QR code, usually on a phone that is not logged in: no login needed,
+// the signed token in the link (?t=) allows uploads to this one request. Logged-in users still work without it.
+$qr_inv_no = trim((string)($_GET['id'] ?? ''));
+$qr_token = trim((string)($_GET['t'] ?? ''));
+$qr_logged_in = !empty($_SESSION['auth_user']) && is_array($_SESSION['auth_user']);
+if (!$qr_logged_in && !smt_qr_verify($conDB, $qr_inv_no, $qr_token)) {
+    http_response_code(403);
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Invalid link</title></head>'
+        . '<body style="font-family:sans-serif;padding:40px 16px;text-align:center;color:#333">'
+        . '<h3>This upload link is not valid</h3><p>Please scan the QR code on the request again, or open the request after logging in.</p></body></html>';
     exit();
 }
-require_once __DIR__ . '/includes/db.php';
 //     require_once __DIR__ . '/includes/session_check.php';
 //     include("./includes/convertNumbersToWords.php");
 //     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
@@ -254,6 +260,17 @@ require_once __DIR__ . '/includes/db.php';
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <style>
+        .qr-att-box { margin-top: 16px; }
+        .qr-att-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+        .qr-att-item { position: relative; border: 1px solid #dee2e6; border-radius: 6px; overflow: hidden; background: #f8f9fa; aspect-ratio: 1 / 1; }
+        .qr-att-item a.qr-att-open { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #6c757d; text-decoration: none; }
+        .qr-att-item img { width: 100%; height: 100%; object-fit: cover; }
+        .qr-att-item .qr-att-file { font-size: 36px; }
+        .qr-att-item .qr-att-ext { position: absolute; left: 6px; bottom: 6px; font-size: 11px; background: rgba(0,0,0,.55); color: #fff; padding: 1px 6px; border-radius: 3px; text-transform: uppercase; }
+        .qr-att-item .qr-att-del { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #dc3545; color: #fff; font-size: 16px; line-height: 30px; padding: 0; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+        .qr-att-item.mine { border-color: #28a745; }
+    </style>
     <style type="text/css">
         .noneDIV {
             display: none;
@@ -344,6 +361,11 @@ require_once __DIR__ . '/includes/db.php';
                                                 <button type="button" class="btn btn-danger waves-effect" onclick="window.history.go(-1); return false;">Close</button>
                                                 <button type="button" class="btn btn-success waves-effect waves-light" id="startUpload"><i class="mdi mdi-backup-restore"></i> Upload</button>
                                             </div>
+                                        </div>
+                                        <div class="card-box qr-att-box">
+                                            <h4 class="header-title m-t-0">Uploaded attachments <span class="badge badge-secondary" id="qrAttCount">0</span></h4>
+                                            <p class="text-muted font-13 m-b-10">Request <?= htmlspecialchars($qr_inv_no) ?>. Files you uploaded from this page can be deleted here.</p>
+                                            <div id="qrAttList" class="qr-att-grid"><div class="text-muted">Loading...</div></div>
                                         </div>
                                     </div>
                                 </div>
@@ -510,23 +532,64 @@ require_once __DIR__ . '/includes/db.php';
                             uploadErrors = [];
                             return;
                         }
+                        var dz = this;
+                        loadAttachments();
                         swal({
                             title: "Uploaded!",
-                            text: "Your files bas been uploaded successfully.",
-                            type: 'success',
-                            allowOutsideClick: false
-                        }).then(function(isConfirm) {
-                            (isConfirm) ? window.history.back(): ""
+                            text: "Your files have been uploaded successfully.",
+                            type: 'success'
                         });
+                        setTimeout(function() { dz.removeAllFiles(true); }, 600); // uploaded files now appear in the list below
                     });
                 }
             })
             myDropzone.on('sending', function(file, xhr, formData) {
-                formData.append('id', <?= json_encode((string)($_GET['id'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
+                formData.append('id', <?= json_encode($qr_inv_no, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
+                formData.append('t', <?= json_encode($qr_token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
             })
             $('#startUpload').click(function() {
                 myDropzone.processQueue();
             });
+
+            var QR_API = './includes/ajaxFile/upload_smt_attachments.php';
+            var QR_ID = <?= json_encode($qr_inv_no, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+            var QR_T = <?= json_encode($qr_token, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+            function escHtml(s) { return $('<div>').text(String(s)).html(); }
+
+            function loadAttachments() {
+                $.post(QR_API, { action: 'list', id: QR_ID, t: QR_T }, null, 'json').done(function(r) {
+                    var files = (r && r.files) || [];
+                    $('#qrAttCount').text(files.length);
+                    if (!files.length) { $('#qrAttList').html('<div class="text-muted">No attachments yet.</div>'); return; }
+                    $('#qrAttList').html(files.map(function(f) {
+                        var url = './assets/smt_attachment/' + encodeURIComponent(f.file);
+                        var isImg = /^(jpe?g|png|gif|webp|bmp)$/.test(f.ext);
+                        var inner = isImg ? '<img src="' + url + '" alt="" loading="lazy">'
+                                          : '<i class="mdi ' + (f.ext === 'pdf' ? 'mdi-file-pdf' : 'mdi-file-document') + ' qr-att-file"></i>';
+                        return '<div class="qr-att-item' + (f.can_delete ? ' mine' : '') + '">' +
+                            '<a class="qr-att-open" href="' + url + '" target="_blank" rel="noopener">' + inner + '</a>' +
+                            '<span class="qr-att-ext">' + escHtml(f.ext) + '</span>' +
+                            (f.can_delete ? '<button type="button" class="qr-att-del" data-id="' + f.id + '" title="Delete"><i class="mdi mdi-delete"></i></button>' : '') +
+                            '</div>';
+                    }).join(''));
+                }).fail(function(x) {
+                    $('#qrAttList').html('<div class="text-danger">' + escHtml((x.responseJSON && x.responseJSON.message) || 'Could not load attachments.') + '</div>');
+                });
+            }
+
+            $(document).on('click', '.qr-att-del', function() {
+                var attId = $(this).data('id');
+                swal({ title: 'Delete this file?', text: 'It will be removed from the request.', type: 'warning', showCancelButton: true, confirmButtonColor: '#dc3545', confirmButtonText: 'Delete' }).then(function(res) {
+                    if (!(res === true || (res && res.value))) return;
+                    $.post(QR_API, { action: 'delete', id: QR_ID, t: QR_T, att_id: attId }, null, 'json').done(function() {
+                        loadAttachments();
+                    }).fail(function(x) {
+                        swal({ title: 'Not deleted', text: (x.responseJSON && x.responseJSON.message) || 'Delete failed.', type: 'error' });
+                    });
+                }, function() {});
+            });
+
+            loadAttachments();
         });
 
         function showAttachment() {
