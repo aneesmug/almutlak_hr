@@ -90,7 +90,7 @@ if ($current_filter === 'my_pending') {
     // Use JOIN (not LEFT JOIN) to only get requests where user is the pending approver
     $joinSql = " JOIN `request_approvers` ra_pending ON ra_pending.request_inv_no = s.request_inv_no 
          AND ra_pending.request_type_id = $requestTypeId AND ra_pending.status = 'pending'";
-    $whereClauses[] = "ra_pending.approver_id = ?";
+    $whereClauses[] = "ra_pending.approver_id IN (?, {$approver_alt_id})";
     $params[] = $empid;
     $paramTypes .= "i";
     $whereClauses[] = "s.settlement_status != 'rejected'";
@@ -127,7 +127,7 @@ if (!empty($searchTerm)) {
 
 // Department scoping for non-admin users
 if (!$canSeeAllDepts && !$deptFilterApplied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
-    $whereClauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $whereClauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $user_dept, $requestTypeId, $empid);
     $paramTypes .= "iii";
     $deptFilterApplied = true;
@@ -274,7 +274,7 @@ if ($canSeeAllDepts) {
     $unfilteredResult = mysqli_query($conDB, $unfilteredSql);
     $unfilteredTotalItems = ($unfilteredResult && ($rowUnf = mysqli_fetch_assoc($unfilteredResult))) ? ($rowUnf['total'] ?? 0) : 0;
 } else {
-    $unfilteredSql = "SELECT COUNT(s.id) as total FROM settlement_records s JOIN employees e ON s.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $unfilteredSql = "SELECT COUNT(s.id) as total FROM settlement_records s JOIN employees e ON s.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = s.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     $stmtUnf = $conDB->prepare($unfilteredSql);
     if ($stmtUnf) {
         $stmtUnf->bind_param('iii', $user_dept, $requestTypeId, $empid);

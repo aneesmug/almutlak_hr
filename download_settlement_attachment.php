@@ -67,7 +67,7 @@ try {
                 SELECT COUNT(*) as count FROM request_approvers 
                 WHERE request_inv_no = '" . mysqli_real_escape_string($conDB, $settlement['request_inv_no']) . "'
                 AND request_type_id = $typeId
-                AND approver_id = " . $_SESSION['empid']
+                AND " . (function_exists('approverInSql') ? approverInSql('approver_id', $conDB, (int)$_SESSION['empid']) : 'approver_id = ' . (int)$_SESSION['empid'])
             );
             
             if ($approverQry && mysqli_fetch_assoc($approverQry)['count'] > 0) {

@@ -457,6 +457,22 @@ class ApprovalChainManager {
      * @return array Result with status and next approver details
      * @throws Exception on failure
      */
+    /**
+     * Payer steps (approval_level >= 100) are keyed by approver_id. When the user has no
+     * payer row of their own but is covering someone via a temporary role transfer, act
+     * as that original employee's payer row.
+     */
+    private function resolvePayerOwner($requestInvNo, $userId) {
+        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM request_approvers
+            WHERE request_inv_no = :inv_no AND approver_id = :emp_id AND approval_level >= 100");
+        $stmt->execute([':inv_no' => $requestInvNo, ':emp_id' => $userId]);
+        if ((int)$stmt->fetchColumn() > 0 || !function_exists('getDelegatedFromEmpId')) {
+            return $userId;
+        }
+        $delegatedFrom = getDelegatedFromEmpId($this->conDB, $userId);
+        return $delegatedFrom !== null ? $delegatedFrom : $userId;
+    }
+
     public function processApproval($requestInvNo, $currentUserId, $action, $note = '') {
         // Verify user can approve
         $verification = $this->verifyApprover($requestInvNo, $currentUserId);
@@ -760,6 +776,7 @@ class ApprovalChainManager {
      * @throws Exception on failure
      */
     public function recordPayerPayment($requestInvNo, $payerId, $approvedAmount, $paymentProof = '', $paymentMethod = '') {
+        $payerId = $this->resolvePayerOwner($requestInvNo, $payerId);
         // Verify payer is authorized
         $stmt = $this->pdo->prepare("
             SELECT approver_id, approval_level 
@@ -887,6 +904,7 @@ class ApprovalChainManager {
      * @throws Exception on failure
      */
     public function processPayerPayment($requestInvNo, $currentUserId, $paymentAmount, $paymentProofFile, $approvalComment = '') {
+        $currentUserId = $this->resolvePayerOwner($requestInvNo, $currentUserId);
         // Check if current user is assigned as a PAYER (approval_level >= 100)
         $payer_check_stmt = $this->pdo->prepare("
             SELECT COUNT(*) as is_payer 

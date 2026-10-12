@@ -74,7 +74,7 @@ if ($current_filter === 'my_pending') {
     $params[] = $request_type_id;
     $types .= "i";
 
-    $where_clauses[] = "ra.approver_id = ?";
+    $where_clauses[] = "ra.approver_id IN (?, {$approver_alt_id})";
     $params[] = $empid;
     $types .= "i";
 
@@ -103,7 +103,7 @@ if (!empty($search_term)) {
 }
 
 if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending' && $current_filter !== 'submitted_by_me') {
-    $where_clauses[] = "(e.dept = ? OR si.submitted_by = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = si.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $where_clauses[] = "(e.dept = ? OR si.submitted_by = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = si.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $user_dept, $empid, $request_type_id, $empid);
     $types .= "isii";
     $dept_filter_applied = true;
@@ -213,7 +213,7 @@ if ($can_see_all_depts) {
     $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
-    $unfiltered_sql = "SELECT COUNT(si.id) as total FROM emp_salary_increment si JOIN employees e ON si.emp_id = e.emp_id WHERE (e.dept = ? OR si.submitted_by = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = si.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $unfiltered_sql = "SELECT COUNT(si.id) as total FROM emp_salary_increment si JOIN employees e ON si.emp_id = e.emp_id WHERE (e.dept = ? OR si.submitted_by = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = si.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('isii', $user_dept, $empid, $request_type_id, $empid);
         $stmt_unf->execute();

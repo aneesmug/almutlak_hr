@@ -528,6 +528,41 @@ if (!function_exists('getDelegatedFromEmpId')) {
     }
 }
 
+if (!function_exists('effectiveApproverIds')) {
+    /**
+     * emp_ids whose approval-chain items $emp_id may act on: itself, plus the original
+     * employee when $emp_id is covering a role via an active temporary role transfer.
+     * Defaults to the logged-in user ($empid from session_check.php).
+     */
+    function effectiveApproverIds($conDB = null, $emp_id = null)
+    {
+        global $empid, $approver_alt_id;
+        $sessionEmp = (string)($empid ?? ($_SESSION['empid'] ?? ''));
+        if ($emp_id === null) {
+            $emp_id = $sessionEmp;
+        }
+        if ((string)$emp_id === (string)($empid ?? '') && isset($approver_alt_id)) {
+            $ids = [(int)$emp_id, (int)$approver_alt_id];
+        } else {
+            $conDB = $conDB ?: ($GLOBALS['conDB'] ?? null);
+            $delegated = ($conDB && (string)$emp_id !== '') ? getDelegatedFromEmpId($conDB, $emp_id) : null;
+            $ids = [(int)$emp_id, (int)($delegated ?? $emp_id)];
+        }
+        return array_values(array_unique(array_filter($ids, fn($id) => $id > 0))) ?: [0];
+    }
+}
+
+if (!function_exists('approverInSql')) {
+    /**
+     * "<column> IN (<ids>)" for effectiveApproverIds() - integers only, safe to inline.
+     * Use instead of "<column> = ?" bound to the logged-in emp_id in approval queries.
+     */
+    function approverInSql($column, $conDB = null, $emp_id = null)
+    {
+        return $column . ' IN (' . implode(',', array_map('intval', effectiveApproverIds($conDB, $emp_id))) . ')';
+    }
+}
+
 if (!function_exists('isEffectiveApproverFor')) {
     /**
      * True if $emp_id is either literally the given $approver_id, or is currently covering
@@ -3195,6 +3230,9 @@ if (!function_exists('handle_approval_action')) {
         $inv_no_safe = escape_string($inv_no);
         $note_safe = escape_string($note);
         $current_user_id_safe = (int)$current_user_id;
+        // Temporary role transfer: the covering employee may act on the original
+        // employee's pending approvals (request_approvers.approver_id is never rewritten).
+        $delegated_from_safe = (int)(getDelegatedFromEmpId($conDB, $current_user_id_safe) ?? $current_user_id_safe);
 
         // ** Start Transaction **
         mysqli_begin_transaction($conDB);
@@ -3202,11 +3240,11 @@ if (!function_exists('handle_approval_action')) {
         try {
             // ** Find and Lock Pending Task **
             $find_sql = "SELECT * FROM `request_approvers`
-                         WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` = ? AND `status` = 'pending'
+                         WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` IN (?, ?) AND `status` = 'pending'
                          ORDER BY `approval_level` LIMIT 1 FOR UPDATE"; // Lock the row
             $stmt_find = mysqli_prepare($conDB, $find_sql);
             if (!$stmt_find) throw new Exception("Prepare failed (find task): " . mysqli_error($conDB));
-            mysqli_stmt_bind_param($stmt_find, "sii", $inv_no_safe, $request_type_id, $current_user_id_safe);
+            mysqli_stmt_bind_param($stmt_find, "siii", $inv_no_safe, $request_type_id, $current_user_id_safe, $delegated_from_safe);
             if (!mysqli_stmt_execute($stmt_find)) throw new Exception("Execute failed (find task): " . mysqli_stmt_error($stmt_find));
             $find_result = mysqli_stmt_get_result($stmt_find);
 
@@ -3215,11 +3253,11 @@ if (!function_exists('handle_approval_action')) {
                 mysqli_stmt_close($stmt_find);
                 // Check if already actioned (without locking)
                 $check_actioned_sql = "SELECT `status` FROM `request_approvers`
-                                       WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` = ?
+                                       WHERE `request_inv_no` = ? AND `request_type_id` = ? AND `approver_id` IN (?, ?)
                                        ORDER BY `action_date` DESC LIMIT 1";
                 $stmt_check = mysqli_prepare($conDB, $check_actioned_sql);
                 if (!$stmt_check) throw new Exception("Prepare failed (check actioned): " . mysqli_error($conDB));
-                mysqli_stmt_bind_param($stmt_check, "sii", $inv_no_safe, $request_type_id, $current_user_id_safe);
+                mysqli_stmt_bind_param($stmt_check, "siii", $inv_no_safe, $request_type_id, $current_user_id_safe, $delegated_from_safe);
                 if (!mysqli_stmt_execute($stmt_check)) throw new Exception("Execute failed (check actioned): " . mysqli_stmt_error($stmt_check));
                 $check_result = mysqli_stmt_get_result($stmt_check);
                 if ($check_result && $row = mysqli_fetch_assoc($check_result)) {
@@ -3239,9 +3277,23 @@ if (!function_exists('handle_approval_action')) {
 
             $current_level = (int)$current_task['approval_level'];
             $current_task_id = (int)$current_task['id'];
+            // Owner of the approval step (the original employee when acting via temp role cover).
+            $task_owner_id = (int)$current_task['approver_id'];
+            if ($task_owner_id !== $current_user_id_safe) {
+                $cover_name = '';
+                $cover_q = mysqli_prepare($conDB, "SELECT name FROM employees WHERE emp_id = ? LIMIT 1");
+                if ($cover_q) {
+                    mysqli_stmt_bind_param($cover_q, "i", $current_user_id_safe);
+                    mysqli_stmt_execute($cover_q);
+                    $cover_res = mysqli_stmt_get_result($cover_q);
+                    $cover_name = ($cover_res && ($cover_row = mysqli_fetch_assoc($cover_res))) ? (string)$cover_row['name'] : '';
+                    mysqli_stmt_close($cover_q);
+                }
+                $note_safe = trim($note_safe . ' [' . ($action === 'approve' ? 'Approved' : 'Rejected') . ' by ' . ($cover_name !== '' ? $cover_name : $current_user_id_safe) . ' (' . $current_user_id_safe . ') - temporary role cover]');
+            }
 
             // ** CHECK IF CURRENT APPROVER IS HR PAYROLL **
-            $current_user_role_query = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$current_user_id_safe}'");
+            $current_user_role_query = mysqli_query($conDB, "SELECT user_type FROM admin_login WHERE emp_id = '{$task_owner_id}'");
             $is_current_user_hr_payroll = false;
             if ($current_user_role_query && mysqli_num_rows($current_user_role_query) > 0) {
                 $user_role_row = mysqli_fetch_assoc($current_user_role_query);
@@ -3988,7 +4040,7 @@ if (!function_exists('employee_transfer_user_has_stake')) {
                OR EXISTS (
                     SELECT 1 FROM `request_approvers` ra
                     JOIN `approval_request_types` art ON art.id = ra.request_type_id AND art.type_name = 'employee_transfer_request'
-                    WHERE ra.request_inv_no = et.request_inv_no AND ra.approver_id = ?
+                    WHERE ra.request_inv_no = et.request_inv_no AND (ra.approver_id = ? OR " . approverInSql('ra.approver_id', $conDB, $empid) . ")
                )
             LIMIT 1");
         if (!$stmt) {
@@ -4203,7 +4255,7 @@ if (!function_exists('get_pending_approval_count')) {
         $emp_id_safe = (int)$emp_id;
         $sql = "SELECT COUNT(DISTINCT ra.request_inv_no, ra.request_type_id) as pending_count /* Count distinct requests */
                 FROM `request_approvers` ra
-                WHERE ra.`approver_id` = $emp_id_safe AND ra.`status` = 'pending'";
+                WHERE " . approverInSql('ra.`approver_id`', $conDB, $emp_id_safe) . " AND ra.`status` = 'pending'";
 
         $query = mysqli_query($conDB, $sql);
         if ($query && mysqli_num_rows($query) > 0) {

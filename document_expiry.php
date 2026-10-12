@@ -66,13 +66,16 @@ if ($is_ajax) {
 
     if ($_POST['action'] === 'run_alerts') {
         $s = doc_expiry_run_daily($conDB);
+        if (empty($s['rules'])) {
+            $reply('error', __('doc_expiry_no_rules', 'No active notification rules. Add one in App Settings > Org Structure > Document Expiry Alerts.'), ['summary' => $s]);
+        }
         if (!$s['due'] && !$s['expired_due']) {
             $reply('success', __('doc_expiry_nothing_due', 'Nothing new to send today. Every alert due has already been sent.'), ['summary' => $s]);
         }
         if (!$s['emails_sent']) {
             $reply('error', __('doc_expiry_send_failed', 'No email could be sent. Check App Settings > Email.') . ($s['errors'] ? ' (' . $s['errors'][0] . ')' : ''), ['summary' => $s]);
         }
-        $reply('success', sprintf(__('doc_expiry_sent_summary', '%d email(s) sent for %d expiring and %d expired document(s).'), $s['emails_sent'], $s['due'], $s['expired_due'])
+        $reply('success', sprintf(__('doc_expiry_sent_summary_rules', '%d email(s) sent for %d document(s).'), $s['emails_sent'], $s['due'])
             . ($s['emails_failed'] ? ' ' . sprintf(__('doc_expiry_failed_count', '%d email(s) failed.'), $s['emails_failed']) : ''), ['summary' => $s]);
     }
 
@@ -179,7 +182,7 @@ $can_import_iqama = !empty($is_system_admin) || in_array($user_role ?? '', get_p
                         <div class="sr-head">
                             <div>
                                 <h1><?= __('document_expiry', 'Document Expiry') ?></h1>
-                                <p><?= __('document_expiry_subtitle', 'ID / Iqama, work permit and passport expiry for active employees. Reminders are emailed at 60, 30, 14 and 7 days.') ?></p>
+                                <p><?= __('document_expiry_subtitle_rules', 'ID / Iqama, work permit and passport expiry for active employees. Who is emailed and how many days before is set in App Settings > Org Structure > Document Expiry Alerts.') ?></p>
                             </div>
                             <div class="sr-head-actions">
                                 <button type="button" class="sr-btn sr-btn-primary" id="dxRunAlerts"><i class="mdi mdi-email-outline"></i> <?= __('send_alerts_now', 'Send alerts now') ?></button>

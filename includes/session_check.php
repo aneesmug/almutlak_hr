@@ -375,6 +375,12 @@ if ($temp_role_assignment) {
     $user_type = $temp_role_assignment['granted_role'];
     $is_temp_role_active = true;
 }
+// Approval chains still point at the original employee (request_approvers.approver_id),
+// so approval lists/checks match "approver_id IN ($empid, $approver_alt_id)".
+// $approver_alt_id equals $empid when no temporary role is being covered.
+$delegated_from_empid = ($temp_role_assignment && !empty($temp_role_assignment['employee_emp_id']))
+    ? (string)$temp_role_assignment['employee_emp_id'] : null;
+$approver_alt_id = (int)($delegated_from_empid ?? $empid); // int: safe to inline in SQL
 
 // Store in session for consistency across all pages
 $_SESSION['auth_user']['dept'] = $user_dept;

@@ -121,11 +121,11 @@ if ($currentFilter === 'my_pending') {
     // same request (one row each), so this checks all of them directly rather than
     // through the fin_verify join, which only surfaces a single representative row
     // per request for card display.
-    $where[] = '(ra_pending.approver_id = ? OR EXISTS (
+    $where[] = '(ra_pending.approver_id IN (?, ' . (int)$approver_alt_id . ') OR EXISTS (
         SELECT 1 FROM payroll_finance_verification pfv_mine
         WHERE pfv_mine.request_inv_no = pr.request_inv_no
           AND pfv_mine.payroll_month = p_months.month_year
-          AND pfv_mine.finance_officer_emp_id = ?
+          AND pfv_mine.finance_officer_emp_id IN (?, ' . (int)$approver_alt_id . ')
     ))';
     $params[] = (string)$empid;
     $params[] = (string)$empid;
@@ -152,7 +152,7 @@ if (!$canSeeAllDepts && $currentFilter !== 'my_pending') {
         SELECT 1 FROM request_approvers ra_any
         WHERE ra_any.request_inv_no = pr.request_inv_no
             AND ra_any.request_type_id = ?
-            AND ra_any.approver_id = ?
+            AND ra_any.approver_id IN (?, ' . (int)$approver_alt_id . ')
     ))';
     $params[] = (int)$user_dept;
     $params[] = $requestTypeId;

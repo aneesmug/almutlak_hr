@@ -291,7 +291,7 @@ if ($loan_type_id > 0) {
                 $loan_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                             FROM request_approvers ra
                                                             JOIN emp_loan l ON l.inv_no = ra.request_inv_no
-                                                            WHERE ra.approver_id = " . (int)$empid . "
+                                                            WHERE " . approverInSql('ra.approver_id') . "
                                                                 AND ra.status = 'pending'
                                                                 AND ra.request_type_id = $loan_type_id
                                                                 AND l.status NOT IN ('approved','completed','rejected','paid')";
@@ -335,7 +335,7 @@ if ($is_system_admin || $user_role == 'Administrator') {
                 $smart_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
                                                                 FROM request_approvers ra
                                                                 JOIN smart_request sr ON sr.inv_no = ra.request_inv_no
-                                                                WHERE ra.approver_id = " . (int)$empid . " 
+                                                                WHERE " . approverInSql('ra.approver_id') . " 
                                                                     AND ra.status = 'pending' 
                                                                     AND ra.request_type_id = $smart_request_type_id
                                                                     AND sr.current_status NOT IN ('approved','rejected','paid','draft')";
@@ -380,7 +380,7 @@ if ($is_system_admin || $user_role == 'Administrator') {
                 $general_request_query = "SELECT COUNT(DISTINCT ra.request_inv_no) as count 
                                                                 FROM request_approvers ra
                                                                 JOIN general_requests gr ON gr.inv_no = ra.request_inv_no
-                                                                WHERE ra.approver_id = " . (int)$empid . " 
+                                                                WHERE " . approverInSql('ra.approver_id') . " 
                                                                     AND ra.status = 'pending' 
                                                                     AND ra.request_type_id = $general_request_type_id
                                                                     AND gr.current_status NOT IN ('approved','rejected','draft','completed')";
@@ -430,7 +430,7 @@ if ($vacation_type_id > 0) {
                 $vacation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                      FROM request_approvers ra
                                                                      JOIN emp_vacation v ON v.request_inv_no = ra.request_inv_no
-                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                     WHERE " . approverInSql('ra.approver_id') . "
                                                                          AND ra.status = 'pending'
                                                                          AND ra.request_type_id = $vacation_type_id
                                                                          AND v.current_status NOT IN ('approved','completed','rejected')";
@@ -481,7 +481,7 @@ if ($rejoin_type_id > 0) {
                 $rejoin_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                      FROM request_approvers ra
                                                                      JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
-                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                     WHERE " . approverInSql('ra.approver_id') . "
                                                                          AND ra.status = 'pending'
                                                                          AND rr.status = 'pending'
                                                                          AND ra.request_type_id = $rejoin_type_id";
@@ -530,7 +530,7 @@ if ($resignation_type_id > 0) {
                 $resignation_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                             FROM request_approvers ra
                                                                             JOIN emp_resignations r ON r.request_inv_no = ra.request_inv_no
-                                                                            WHERE ra.approver_id = " . (int)$empid . "
+                                                                            WHERE " . approverInSql('ra.approver_id') . "
                                                                                 AND ra.status IN ('pending','awaiting')
                                                                                 AND ra.request_type_id = $resignation_type_id
                                                                                 AND r.status = 'pending'";
@@ -570,7 +570,7 @@ if ($settlement_type_id > 0) {
     } else {
         // Regular user: count requests awaiting THIS user's approval
         $settlement_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count FROM request_approvers ra 
-                                     WHERE ra.request_type_id = $settlement_type_id AND ra.approver_id = " . (int)$empid . " AND ra.status = 'pending'";
+                                     WHERE ra.request_type_id = $settlement_type_id AND " . approverInSql('ra.approver_id') . " AND ra.status = 'pending'";
         $res_settlement = mysqli_query($conDB, $settlement_pending_query);
         if ($res_settlement && ($rs = mysqli_fetch_assoc($res_settlement))) {
             $settlement_pending_count = (int)$rs['count'];
@@ -621,7 +621,7 @@ if ($payroll_table_exists && $payroll_type_id > 0) {
             FROM request_approvers ra
             JOIN payroll_approval_requests pr ON pr.request_inv_no = ra.request_inv_no
             WHERE ra.request_type_id = $payroll_type_id
-              AND ra.approver_id = '" . mysqli_real_escape_string($conDB, (string)$empid) . "'
+              AND " . approverInSql('ra.approver_id') . "
               AND ra.status = 'pending'
               AND pr.status = 'pending_approval'";
         $res_payroll = mysqli_query($conDB, $payroll_pending_query);
@@ -669,7 +669,7 @@ if ($business_trip_type_id > 0) {
         $business_trip_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                      FROM request_approvers ra
                                                                      JOIN emp_business_trip bt ON bt.request_inv_no = ra.request_inv_no
-                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                     WHERE " . approverInSql('ra.approver_id') . "
                                                                          AND ra.status = 'pending'
                                                                          AND ra.request_type_id = $business_trip_type_id
                                                                          AND bt.current_status = 'pending_approval'";
@@ -717,7 +717,7 @@ if ($salary_increment_type_id > 0) {
         $salary_increment_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                      FROM request_approvers ra
                                                                      JOIN emp_salary_increment si ON si.request_inv_no = ra.request_inv_no
-                                                                     WHERE ra.approver_id = " . (int)$empid . "
+                                                                     WHERE " . approverInSql('ra.approver_id') . "
                                                                          AND ra.status = 'pending'
                                                                          AND ra.request_type_id = $salary_increment_type_id
                                                                          AND si.current_status = 'pending_approval'";

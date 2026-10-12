@@ -748,7 +748,7 @@ $show_process_payment_button = false; // Assigned payer records the payment
 
 if ($is_draft_owner) {
     $show_submit_button = true;
-} elseif ($current_status_get == 'pending_approval' && $empid == $current_pending_approver_id) {
+} elseif ($current_status_get == 'pending_approval' && in_array((int)$current_pending_approver_id, effectiveApproverIds(), true)) {
     $show_action_box = true;
 } elseif ($current_status_get == 'approved' && $emptypeget == 'Manager' && $user_dept == 2 && !$payable_by_emp_id_get) { // Only Finance Manager can assign
     $show_assign_payer_box = true;

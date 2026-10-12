@@ -103,7 +103,7 @@ if ($current_filter === 'my_pending') {
     $join_sql .= " JOIN `request_approvers` ra ON ra.request_inv_no = v.request_inv_no AND ra.request_type_id IN ($request_type_ids_list) ";
     // No params needed - using IN clause with literal values
 
-    $where_clauses[] = "ra.approver_id = ?";
+    $where_clauses[] = "ra.approver_id IN (?, {$approver_alt_id})";
     $params[] = $empid; // $empid is from session_check.php
     $types .= "i";
 
@@ -200,7 +200,7 @@ if ($filter_days_max !== null) {
 // Everyone else is restricted to their own department for history views.
 if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending') {
     // Restrict to user's department OR any request where current user is in approval chain
-    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id = ?))";
+    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $user_dept, $empid);
     $types .= "ii";
     $dept_filter_applied = true;
@@ -356,9 +356,9 @@ if ($can_see_all_depts) {
 } else {
     // Respect the same scoping (dept OR in approval chain) and exclude LEGACY invoices when not searching
     if (empty($search_term)) {
-        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id = ?)) AND v.request_inv_no NOT LIKE 'LEGACY-%'";
+        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id IN (?, {$approver_alt_id}))) AND v.request_inv_no NOT LIKE 'LEGACY-%'";
     } else {
-        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id = ?))";
+        $unfiltered_sql = "SELECT COUNT(v.id) as total FROM emp_vacation v JOIN employees e ON v.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = v.request_inv_no AND ra_any.request_type_id IN ($request_type_ids_list) AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     }
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('ii', $user_dept, $empid);
@@ -740,7 +740,7 @@ if ($can_see_all_depts) {
                                             // This allows GR Officer and other later-stage approvers to see the approve button
                                             $is_pending_approver = false;
                                             if ($req['current_status'] == 'pending_approval' || $req['current_status'] == 'approved') {
-                                                $check_approver = $conDB->prepare("SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND approver_id = ? AND status = 'pending' LIMIT 1");
+                                                $check_approver = $conDB->prepare("SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND approver_id IN (?, {$approver_alt_id}) AND status = 'pending' LIMIT 1");
                                                 $check_approver->bind_param('si', $req['request_inv_no'], $empid);
                                                 $check_approver->execute();
                                                 $is_pending_approver = $check_approver->get_result()->num_rows > 0;

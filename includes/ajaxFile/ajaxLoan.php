@@ -587,7 +587,7 @@ function approve_loan() {
                 error_log("Loan $inv_no: Updated emp_loan status to 'approved' after payer payment confirmation");
                 
                 // ALSO update request_approvers status to 'approved' for payer record
-                $update_approvers = $conDB->prepare("UPDATE request_approvers SET status = 'approved' WHERE request_inv_no = ? AND approver_id = ?");
+                $update_approvers = $conDB->prepare("UPDATE request_approvers SET status = 'approved' WHERE request_inv_no = ? AND (approver_id = ? OR " . approverInSql('approver_id') . ") AND approval_level >= 100");
                 $update_approvers->bind_param("si", $inv_no, $approver_emp_id);
                 if (!$update_approvers->execute()) {
                     throw new Exception("Failed to update request_approvers status: " . $update_approvers->error);
@@ -1827,7 +1827,7 @@ function reject_loan() {
         $request_type_id = ($type_stmt->get_result()->fetch_assoc()['id'] ?? 2);
         $type_stmt->close();
         // Update request_approvers with rejection status and rejection note
-        $rej = $conDB->prepare("UPDATE request_approvers SET status = 'rejected', action_date = NOW(), note = ? WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? AND status = 'pending'");
+        $rej = $conDB->prepare("UPDATE request_approvers SET status = 'rejected', action_date = NOW(), note = ? WHERE request_inv_no = ? AND request_type_id = ? AND (approver_id = ? OR " . approverInSql('approver_id') . ") AND status = 'pending'");
         $rej->bind_param("ssii", $rejection_note, $inv_no, $request_type_id, $approver_emp_id);
         $rej->execute();
         $affectedRows = $rej->affected_rows;

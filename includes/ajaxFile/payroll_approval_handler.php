@@ -475,7 +475,7 @@ function confirmFinanceOfficerVerification(PDO $pdo, string $currentUserId): voi
             FROM payroll_finance_verification
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
-              AND finance_officer_emp_id = :finance_officer
+              AND (finance_officer_emp_id = :finance_officer OR " . approverInSql('finance_officer_emp_id') . ")
               AND is_confirmed = 1
             ORDER BY id DESC
             LIMIT 1");
@@ -1087,7 +1087,7 @@ function togglePayrollEmployeeCheck(PDO $pdo, string $currentUserId, int $reques
             if (!$requestIsApproved) {
                 // During approval phase: verify the HR checklist user has an active pending slot.
                 $permissionStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
-                    WHERE request_inv_no = :inv_no AND request_type_id = :type_id AND approver_id = :approver_id AND status = 'pending'");
+                    WHERE request_inv_no = :inv_no AND request_type_id = :type_id AND (approver_id = :approver_id OR " . approverInSql('approver_id') . ") AND status = 'pending'");
                 $permissionStmt->execute([
                     ':inv_no' => $requestInvNo,
                     ':type_id' => $requestTypeId,
@@ -1219,7 +1219,7 @@ function getFinanceVerificationSetup(PDO $pdo, string $currentUserId, int $reque
         $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
             WHERE request_inv_no = :inv_no
               AND request_type_id = :type_id
-              AND approver_id = :approver_id
+              AND (approver_id = :approver_id OR " . approverInSql('approver_id') . ")
               AND status = 'pending'");
         $pendingStmt->execute([
             ':inv_no' => $requestInvNo,
@@ -1439,7 +1439,7 @@ function submitFinanceVerificationSetup(PDO $pdo, $conDB, string $currentUserId,
         $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers
             WHERE request_inv_no = :inv_no
               AND request_type_id = :type_id
-              AND approver_id = :approver_id
+              AND (approver_id = :approver_id OR " . approverInSql('approver_id') . ")
               AND status = 'pending'");
         $pendingStmt->execute([
             ':inv_no' => $requestInvNo,

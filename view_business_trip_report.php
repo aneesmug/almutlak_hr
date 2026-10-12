@@ -93,7 +93,7 @@ if (mysqli_num_rows($query) == 1) {
         }
     }
 
-    $can_take_action = ($current_pending_approver_id > 0 && $current_pending_approver_id === (int)$empid && ($request['current_status'] ?? '') === 'pending_approval');
+    $can_take_action = ($current_pending_approver_id > 0 && in_array($current_pending_approver_id, effectiveApproverIds(), true) && ($request['current_status'] ?? '') === 'pending_approval');
     
     $route_text = '';
     if (($request['trip_type'] ?? '') === 'international') {

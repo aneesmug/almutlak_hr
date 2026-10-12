@@ -67,7 +67,7 @@ if ($current_filter === 'my_pending') {
     $params[] = $request_type_id;
     $types .= "i";
 
-    $where_clauses[] = "ra.approver_id = ?";
+    $where_clauses[] = "ra.approver_id IN (?, {$approver_alt_id})";
     $params[] = $empid;
     $types .= "s";
 
@@ -84,7 +84,7 @@ if ($current_filter === 'my_pending') {
     $types .= "s";
 } elseif ($current_filter === 'all' && empty($search_term) && !$can_see_all) {
     // Non-privileged users viewing "all": only requests they created, approved on, or are pending on
-    $where_clauses[] = "(et.emp_id = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = et.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $where_clauses[] = "(et.emp_id = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = et.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $empid, $request_type_id, $empid);
     $types .= "sis";
 }

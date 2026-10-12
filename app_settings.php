@@ -22,6 +22,7 @@
     $ownScreenSettings = $canAccessScreenSettingsTab ? get_user_screen_settings($conDB, $empid ?? '') : null;
     $canAccessVacationBlackoutTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_vacation_blackout_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessTempRoleTransferTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_temp_role_transfer', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessDocExpiryAlertsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_doc_expiry_alerts', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $query = mysqli_query($conDB, "SELECT * FROM `admin_login` WHERE `id_iqama`='".$username."'");
     if(mysqli_num_rows($query) == 1){
         include("./includes/avatar_select.php");
@@ -729,6 +730,7 @@
             'canAccessAttendanceConfigTab' => (bool) $canAccessAttendanceConfigTab,
             'canAccessScreenSettingsTab' => (bool) $canAccessScreenSettingsTab,
             'canAccessTempRoleTransferTab' => (bool) $canAccessTempRoleTransferTab,
+            'canAccessDocExpiryAlertsTab' => (bool) $canAccessDocExpiryAlertsTab,
             'canAccessVacationBlackoutTab' => (bool) $canAccessVacationBlackoutTab,
         ]) ?>;
         // Only meaningful for a non-admin 'manage_own_screen_settings' holder (prefills

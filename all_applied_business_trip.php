@@ -77,7 +77,7 @@ if ($current_filter === 'my_pending') {
     $params[] = $request_type_id;
     $types .= "i";
 
-    $where_clauses[] = "ra.approver_id = ?";
+    $where_clauses[] = "ra.approver_id IN (?, {$approver_alt_id})";
     $params[] = $empid;
     $types .= "i";
 
@@ -112,7 +112,7 @@ if (!empty($search_term)) {
 }
 
 if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
-    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = bt.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = bt.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $user_dept, $request_type_id, $empid);
     $types .= "iii";
     $dept_filter_applied = true;
@@ -223,7 +223,7 @@ if ($can_see_all_depts) {
     $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
-    $unfiltered_sql = "SELECT COUNT(bt.id) as total FROM emp_business_trip bt JOIN employees e ON bt.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = bt.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $unfiltered_sql = "SELECT COUNT(bt.id) as total FROM emp_business_trip bt JOIN employees e ON bt.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = bt.request_inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);
         $stmt_unf->execute();

@@ -70,7 +70,7 @@ if (!$canSeeAll) {
     $inChain = false;
     if (!$sameDept) {
         // Check if current user appears in approval chain for this vacation
-        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'vacation_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'vacation_request' WHERE ra.request_inv_no = ? AND ra.approver_id IN (?, {$approver_alt_id}) LIMIT 1")) {
             $chk->bind_param('si', $request_inv_no, $empid);
             if ($chk->execute()) {
                 $resChk = $chk->get_result();

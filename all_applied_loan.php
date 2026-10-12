@@ -101,7 +101,7 @@ if ($current_filter === 'my_pending') {
         $join_sql .= " JOIN `request_approvers` ra ON ra.request_inv_no = l.inv_no AND ra.request_type_id = ? ";
         $params[] = $request_type_id;
         $types .= "i";
-        $where_clauses[] = "ra.approver_id = ?";
+        $where_clauses[] = "ra.approver_id IN (?, {$approver_alt_id})";
         $params[] = $empid;
         $types .= "i";
             $where_clauses[] = "ra.status = 'pending'";
@@ -143,7 +143,7 @@ if (!empty($search_term)) {
 if (!$can_see_all_depts && !$dept_filter_applied && $current_filter !== 'my_pending' && $current_filter !== 'my_team') {
     // Restrict to user's department OR any request where current user is in approval chain
     // Resolve request type id is already available as $request_type_id
-    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+    $where_clauses[] = "(e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     array_push($params, $user_dept, $request_type_id, $empid);
     $types .= "iii";
     $dept_filter_applied = true;
@@ -264,9 +264,9 @@ if ($can_see_all_depts) {
     $unfiltered_total_items = ($unfiltered_result && ($row_unf = mysqli_fetch_assoc($unfiltered_result))) ? ($row_unf['total'] ?? 0) : 0;
 } else {
     if (empty($search_term)) {
-        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?)) AND l.inv_no NOT LIKE 'LEGACY-%'";
+        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id}))) AND l.inv_no NOT LIKE 'LEGACY-%'";
     } else {
-        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id = ?))";
+        $unfiltered_sql = "SELECT COUNT(l.id) as total FROM emp_loan l JOIN employees e ON l.emp_id = e.emp_id WHERE (e.dept = ? OR EXISTS (SELECT 1 FROM request_approvers ra_any WHERE ra_any.request_inv_no = l.inv_no AND ra_any.request_type_id = ? AND ra_any.approver_id IN (?, {$approver_alt_id})))";
     }
     if ($stmt_unf = $conDB->prepare($unfiltered_sql)) {
         $stmt_unf->bind_param('iii', $user_dept, $request_type_id, $empid);

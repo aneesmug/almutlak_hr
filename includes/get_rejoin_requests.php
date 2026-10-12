@@ -43,7 +43,7 @@ try {
     $is_all_visibility = (($is_system_admin ?? false) === true) || $is_admin_label || $is_hr_senior_bp;
     
     // Build WHERE clause based on user role
-    $supervisor_where = $is_all_visibility ? "1 = 1" : "e.supervisor_id = :supervisor_id";
+    $supervisor_where = $is_all_visibility ? "1 = 1" : "(e.supervisor_id = :supervisor_id OR " . approverInSql('e.supervisor_id') . ")";
     $params = $is_all_visibility ? [] : [':supervisor_id' => $supervisor_id];
     $count_params = $params;
     

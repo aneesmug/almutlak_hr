@@ -85,7 +85,7 @@ if (mysqli_num_rows($query) == 1) {
         $sameDept = ($userDeptId !== null && isset($loan_details['dept_id'])) ? ((int)$loan_details['dept_id'] === (int)$userDeptId) : false;
         $inChain = false;
         if (!$sameDept && !empty($loan_details['inv_no'])) {
-            if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+            if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id IN (?, {$approver_alt_id}) LIMIT 1")) {
                 $inv = $loan_details['inv_no'];
                 $chk->bind_param('si', $inv, $empid);
                 if ($chk->execute()) {

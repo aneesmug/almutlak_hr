@@ -127,7 +127,7 @@ if ($ajaxType == 'get_approval_level') {
     // Get current approver's level for this resignation
     $query = "SELECT `approval_level` FROM `request_approvers` 
               WHERE `request_inv_no` = '$requestInvNo' 
-              AND `approver_id` = '$approverId'
+              AND " . approverInSql('`approver_id`') . "
               AND `status` IN ('pending','awaiting')
               LIMIT 1";
     
@@ -959,7 +959,7 @@ if ($ajaxType == 'apply_resignation') {
         
         // Get approval level for this approver
         $levelQuery = "SELECT approval_level FROM request_approvers 
-                      WHERE request_inv_no = '$requestInvNo' AND approver_id = '$approverId' 
+                      WHERE request_inv_no = '$requestInvNo' AND " . approverInSql('approver_id') . " 
                       ORDER BY action_date DESC LIMIT 1";
         $levelResult = mysqli_query($conDB, $levelQuery);
         $levelRow = mysqli_fetch_assoc($levelResult);
@@ -1361,7 +1361,7 @@ if ($ajaxType == 'apply_resignation') {
                                    `action_date` = NOW(),
                                    `note` = '" . mysqli_real_escape_string($conDB, "Rejected by $rejecterName: $rejectionReason") . "'
                                WHERE `request_inv_no` = '$requestInvNo' 
-                               AND `approver_id` = '$rejecterId'
+                               AND " . approverInSql('`approver_id`') . "
                                AND `status` = 'pending'";
         
         if (!mysqli_query($conDB, $updateApprovalQuery)) {

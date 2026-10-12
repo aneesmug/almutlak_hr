@@ -33,6 +33,7 @@ function __(key, def) {
         const canAccessScreenSettingsTab = window.APP_SETTINGS_PERMISSIONS.canAccessScreenSettingsTab;
         const canAccessCompaniesTab = window.APP_SETTINGS_PERMISSIONS.canAccessCompaniesTab;
         const canAccessTempRoleTransferTab = window.APP_SETTINGS_PERMISSIONS.canAccessTempRoleTransferTab;
+        const canAccessDocExpiryAlertsTab = window.APP_SETTINGS_PERMISSIONS.canAccessDocExpiryAlertsTab;
         const canAccessVacationBlackoutTab = window.APP_SETTINGS_PERMISSIONS.canAccessVacationBlackoutTab;
         const requestTypeBlockLabels = {
             smart_request: __('smart_request', 'Smart Request'),
@@ -233,7 +234,7 @@ function __(key, def) {
         }
 
         function getSpecialAccessCatalog() {
-            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_resignation_settings","label":"Access App Settings - Resignation Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_inactive_employees","label":"Employee Master: Show Inactive Employees in All Employees List"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"},{"value":"manage_own_screen_settings","label":"Screen Settings: Allow User to Edit Own Scale\/Resolution\/Fullscreen"},{"value":"manage_company_settings","label":"Access App Settings - Companies Tab"},{"value":"manage_temp_role_transfer","label":"Access App Settings - Temporary Role Transfer Tab"},{"value":"manage_vacation_blackout_dates","label":"Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)"},{"value":"access_import_excel_dynamic","label":"Tools: Dynamic Excel Import (Import Excel Into Any Table)"},{"value":"manage_memo_templates","label":"Employee Memos: Add \/ Edit \/ Delete Memo Templates"},{"value":"access_employee_memos","label":"Access Page: Send Employee Memo"},{"value":"access_d365_employee_compare","label":"Access Page: D365 Employee Compare"},{"value":"d365_sync_employee","label":"D365: Sync to D365 Button (Employee Header Widget & Payrolls Tab)"},{"value":"d365_register_employee","label":"D365: Register Missing Employees & Bulk Change Company (D365 Employee Check Page)"},{"value":"view_employee_d365_tab","label":"D365: View Employee Profile's D365 Tab"},{"value":"d365_sync_payroll","label":"D365: Sync Payroll to D365 (Generate Payroll Actions & D365 Payroll Sync Page)"},{"value":"d365_employee_dimensions","label":"D365: Employee Dimensions Page (Set Payroll Company & Dimension Values per Employee)"}];
+            return [{"value":"cancel_vacation_requests","label":"Cancel Submitted Vacation Requests"},{"value":"cancel_smart_requests","label":"Cancel Submitted Smart Requests"},{"value":"cancel_general_requests","label":"Cancel Submitted General Requests"},{"value":"cancel_loan_requests","label":"Cancel Submitted Loan Requests"},{"value":"cancel_resignation_requests","label":"Cancel Submitted Resignation Requests"},{"value":"cancel_rejoin_requests","label":"Cancel Submitted Rejoin Requests"},{"value":"cancel_business_trip_requests","label":"Cancel Submitted Business Trip Requests"},{"value":"cancel_salary_increment_requests","label":"Cancel Submitted Salary Increment Requests"},{"value":"add_business_trip_manual_allowance","label":"Business Trip: Add Manual Allowance (Taxi, Parking, etc.)"},{"value":"view_vacation_balance_history","label":"View Vacation Balance History"},{"value":"view_remaining_balance_in_report","label":"Show Remaining Balance in Vacation Report"},{"value":"manage_employee_request_block","label":"Block\/Unblock Employee from All Requests"},{"value":"manage_employee_request_type_block","label":"Block Employee by Specific Request Type"},{"value":"manage_global_request_blocks","label":"Manage Request Type Blocks (Global, All Employees)"},{"value":"manage_department_settings","label":"Access App Settings - Departments Tab"},{"value":"manage_job_title_settings","label":"Access App Settings - Job Titles Tab"},{"value":"manage_location_settings","label":"Access App Settings - Locations Tab"},{"value":"manage_sub_department_settings","label":"Access App Settings - Sub-Departments Tab"},{"value":"payroll_checklist_upload_excel","label":"Payroll Checklist Report: Upload Payroll Excel Button"},{"value":"payroll_checklist_review_import","label":"Payroll Checklist Report: Review Manager File & Import Button"},{"value":"payroll_checklist_export_excel","label":"Payroll Checklist Report: Export Excel Button"},{"value":"direct_rejoin_bypass_approval","label":"Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)"},{"value":"ungenerate_payroll","label":"Payroll: Un-Generate Payroll Button"},{"value":"assign_payroll_supervisor","label":"Payroll: Assign Direct Supervisor for Payroll Button"},{"value":"manage_loan_settings","label":"Access App Settings - Loan Settings Tab"},{"value":"manage_vacation_payroll_settings","label":"Access App Settings - Vacation Payroll Settings Tab"},{"value":"manage_overtime_settings","label":"Access App Settings - Overtime Settings Tab"},{"value":"manage_deduction_settings","label":"Access App Settings - Deduction Settings Tab"},{"value":"manage_salary_increment_settings","label":"Access App Settings - Salary Increment Settings Tab"},{"value":"manage_resignation_settings","label":"Access App Settings - Resignation Settings Tab"},{"value":"manage_vacation_salary_below_min_days","label":"Employee Master: Allow Vacation Salary Payout Below Minimum Days"},{"value":"view_employee_eos_value","label":"Employee Master: View End of Service (EOS) Estimated Value"},{"value":"view_employee_salary_value","label":"Employee Master: View Salary"},{"value":"manage_update_salary_button_visibility","label":"Employee Master: Force Show\/Hide Update Salary Button"},{"value":"view_employee_additional_info","label":"Employee Master: View Additional Information Tab"},{"value":"view_employee_other_income","label":"Employee Master: View & Manage Other Income (Scheduled Bonus\/Income)"},{"value":"access_ctc_report","label":"Reports: CTC (Cost To Company) Report"},{"value":"view_all_employees","label":"View All Employees (Cross-Department\/Company Access)"},{"value":"view_inactive_employees","label":"Employee Master: Show Inactive Employees in All Employees List"},{"value":"view_employee_banking_details","label":"Employee Master: View Banking\/IBAN\/GOSI Details"},{"value":"view_employee_documents","label":"Employee Master: View Uploaded Documents (Passport\/Iqama, etc.)"},{"value":"request_employee_transfer","label":"Employee Master: Request Employee Transfer (Bypass Direct-Supervisor Requirement)"},{"value":"cars_add","label":"Cars: Add New Car"},{"value":"cars_edit","label":"Cars: Edit Car"},{"value":"cars_delete","label":"Cars: Delete Car"},{"value":"locations_add","label":"Locations: Add New Location"},{"value":"locations_edit","label":"Locations: Edit Location"},{"value":"locations_delete","label":"Locations: Delete Location"},{"value":"asset_inventory_add","label":"Asset Inventory: Add New Asset"},{"value":"asset_inventory_edit","label":"Asset Inventory: Edit Asset"},{"value":"asset_inventory_delete","label":"Asset Inventory: Delete Asset"},{"value":"apply_loan_with_active_loan","label":"Loan: Allow Applying for a New Loan While Another Is Pending\/Awaiting"},{"value":"manage_device_monitor","label":"Biometric Devices: View & Manage Devices Page"},{"value":"manage_attendance","label":"Attendance Record: View & Manage Attendance Page"},{"value":"manage_attendance_config","label":"Attendance: View & Manage Attendance Config (Timetables) Page"},{"value":"view_employee_attendance_tab","label":"Attendance: View Employee Profile's Attendance Record Tab"},{"value":"access_all_applied_vac","label":"Access Page: All Applied Vacations"},{"value":"access_all_applied_loan","label":"Access Page: All Applied Loans"},{"value":"access_all_applied_business_trip","label":"Access Page: All Applied Business Trips"},{"value":"access_all_resignations","label":"Access Page: All Resignations"},{"value":"access_all_settlements","label":"Access Page: All Settlements"},{"value":"access_all_payroll_approvals","label":"Access Page: All Payroll Approvals"},{"value":"access_payroll_checklist_report","label":"Access Page: Payroll Checklist Report"},{"value":"access_payroll_status_history","label":"Access Page: Payroll Status History"},{"value":"access_loan_report_details","label":"Access Page: Loan Report Details"},{"value":"access_settlement_status_history","label":"Access Page: Settlement Status History"},{"value":"access_vacation_status_history","label":"Access Page: Vacation Status History"},{"value":"access_business_trip_status_history","label":"Access Page: Business Trip Status History"},{"value":"access_all_applied_salary_increment","label":"Access Page: All Applied Salary Increments"},{"value":"access_salary_increment_status_history","label":"Access Page: Salary Increment Status History"},{"value":"access_edit_employee","label":"Access Page: Edit Employee"},{"value":"access_all_applied_employee_transfers","label":"Access Page: All Employee Transfer Requests"},{"value":"access_import_medical_insurance","label":"Access Page: Import Medical Insurance"},{"value":"access_import_loan_opening_balance","label":"Access Page: Import Loan Opening Balance"},{"value":"access_import_iqama_exp","label":"Access Page: Import Iqama Expiry"},{"value":"access_dashboard","label":"Access Page: Dashboard"},{"value":"access_dashboardgm","label":"Access Page: GM Dashboard"},{"value":"access_add_new_employee","label":"Access Page: Add New Employee"},{"value":"access_reg_employee","label":"Access Page: All Employees"},{"value":"access_emp_temp_contant","label":"Access Page: Temporary Contracts \/ Content Updates"},{"value":"access_employee_audit_gen","label":"Access Page: Yearly EOS Audit"},{"value":"access_employee_salary_report","label":"Access Page: Employee Salary Report"},{"value":"access_generate_payroll","label":"Access Page: Generate Payroll"},{"value":"access_rejoin_approvals","label":"Access Page: Rejoin Approvals"},{"value":"access_add_manual_loan","label":"Access Page: Add Manual Loan"},{"value":"access_all_cars","label":"Access Page: Cars Management"},{"value":"access_view_car","label":"Access Page: Car Details View"},{"value":"access_all_locations","label":"Access Page: Locations Management"},{"value":"access_all_machines","label":"Access Page: Machines Management"},{"value":"access_asset_inventory","label":"Access Page: Asset Inventory"},{"value":"access_all_menu_item","label":"Access Page: Menu Items"},{"value":"access_all_requests","label":"Access Page: Smart Requests"},{"value":"access_all_general_requests","label":"Access Page: General Requests"},{"value":"access_send_announcement","label":"Access Page: Send Announcement"},{"value":"access_vouchers","label":"Access Page: Vouchers"},{"value":"access_all_user_invoices","label":"Access Page: User Invoices"},{"value":"access_all_users","label":"Access Page: System Users"},{"value":"access_file_manager","label":"Access Page: File Manager"},{"value":"access_gallery","label":"Access Page: Gallery"},{"value":"access_language","label":"Access Page: Language Manager"},{"value":"access_log_activity","label":"Access Page: Activity Log (legacy)"},{"value":"access_view_activity_logs","label":"Access Page: Activity Logs"},{"value":"access_manual_vacation","label":"Access Page: Import Vacation Balance"},{"value":"access_employee_evaluation","label":"Access Page: Employee Evaluation"},{"value":"access_all_employee_evaluations","label":"Access Page: All Employee Evaluations"},{"value":"access_reports","label":"Access Page: Reports"},{"value":"access_manage_employee_supervisors","label":"Access Page: Manage Employee Supervisors"},{"value":"access_manage_holidays","label":"Access Page: Manage Holidays"},{"value":"access_vacation_dates_by_inv","label":"Access Page: Vacation Dates Editor"},{"value":"access_diagnose_double_deduction","label":"Access Page: Diagnose Double Deduction"},{"value":"access_fix_double_deduction","label":"Access Page: Fix Double Deduction"},{"value":"manage_own_screen_settings","label":"Screen Settings: Allow User to Edit Own Scale\/Resolution\/Fullscreen"},{"value":"manage_company_settings","label":"Access App Settings - Companies Tab"},{"value":"manage_temp_role_transfer","label":"Access App Settings - Temporary Role Transfer Tab"},{"value":"manage_doc_expiry_alerts","label":"Access App Settings - Document Expiry Alerts Tab (Org Structure)"},{"value":"manage_vacation_blackout_dates","label":"Access App Settings - Vacation Blackout Dates Tab (Block Vacation Requests on Specific Dates)"},{"value":"access_import_excel_dynamic","label":"Tools: Dynamic Excel Import (Import Excel Into Any Table)"},{"value":"manage_memo_templates","label":"Employee Memos: Add \/ Edit \/ Delete Memo Templates"},{"value":"access_employee_memos","label":"Access Page: Send Employee Memo"},{"value":"access_d365_employee_compare","label":"Access Page: D365 Employee Compare"},{"value":"d365_sync_employee","label":"D365: Sync to D365 Button (Employee Header Widget & Payrolls Tab)"},{"value":"d365_register_employee","label":"D365: Register Missing Employees & Bulk Change Company (D365 Employee Check Page)"},{"value":"view_employee_d365_tab","label":"D365: View Employee Profile's D365 Tab"},{"value":"d365_sync_payroll","label":"D365: Sync Payroll to D365 (Generate Payroll Actions & D365 Payroll Sync Page)"},{"value":"d365_employee_dimensions","label":"D365: Employee Dimensions Page (Set Payroll Company & Dimension Values per Employee)"}];
         }
 
         // Purely presentational grouping (icon + ordered keys) for the Special Access
@@ -241,7 +242,7 @@ function __(key, def) {
         // so both stay in sync. Any catalog key not listed in any category here still shows,
         // just bucketed under a trailing "Other" group by buildSpecialAccessPanelData().
         function getSpecialAccessCategories() {
-            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction","access_employee_memos","access_d365_employee_compare","manage_device_monitor","manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_inactive_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility","manage_memo_templates"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings","manage_resignation_settings","manage_own_screen_settings","manage_company_settings","manage_temp_role_transfer","manage_vacation_blackout_dates"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"D365","icon":"fa-cloud","keys":["d365_sync_employee","d365_register_employee","view_employee_d365_tab","d365_sync_payroll","d365_employee_dimensions"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor","access_import_excel_dynamic"]}];
+            return [{"name":"Cancel Submitted Requests","icon":"fa-ban","keys":["cancel_vacation_requests","cancel_smart_requests","cancel_general_requests","cancel_loan_requests","cancel_resignation_requests","cancel_rejoin_requests","cancel_business_trip_requests","cancel_salary_increment_requests"]},{"name":"Page Access","icon":"fa-door-open","keys":["access_all_applied_vac","access_all_applied_loan","access_all_applied_business_trip","access_all_resignations","access_all_settlements","access_all_payroll_approvals","access_payroll_checklist_report","access_payroll_status_history","access_loan_report_details","access_settlement_status_history","access_vacation_status_history","access_business_trip_status_history","access_all_applied_salary_increment","access_salary_increment_status_history","access_edit_employee","access_all_applied_employee_transfers","access_import_medical_insurance","access_import_loan_opening_balance","access_import_iqama_exp","access_dashboard","access_dashboardgm","access_add_new_employee","access_reg_employee","access_emp_temp_contant","access_employee_audit_gen","access_employee_salary_report","access_generate_payroll","access_rejoin_approvals","access_add_manual_loan","access_all_cars","access_view_car","access_all_locations","access_all_machines","access_asset_inventory","access_all_menu_item","access_all_requests","access_all_general_requests","access_send_announcement","access_vouchers","access_all_user_invoices","access_all_users","access_file_manager","access_gallery","access_language","access_log_activity","access_view_activity_logs","access_manual_vacation","access_employee_evaluation","access_all_employee_evaluations","access_reports","access_manage_employee_supervisors","access_manage_holidays","access_vacation_dates_by_inv","access_diagnose_double_deduction","access_fix_double_deduction","access_employee_memos","access_d365_employee_compare","manage_device_monitor","manage_attendance","manage_attendance_config","view_employee_attendance_tab"]},{"name":"Employee Master","icon":"fa-id-badge","keys":["view_all_employees","view_inactive_employees","view_employee_eos_value","view_employee_salary_value","view_employee_additional_info","view_employee_other_income","access_ctc_report","view_employee_banking_details","view_employee_documents","manage_vacation_salary_below_min_days","manage_employee_request_block","manage_employee_request_type_block","request_employee_transfer","manage_update_salary_button_visibility","manage_memo_templates"]},{"name":"Vacation Visibility","icon":"fa-umbrella-beach","keys":["view_vacation_balance_history","view_remaining_balance_in_report"]},{"name":"Payroll Checklist Report","icon":"fa-clipboard-check","keys":["payroll_checklist_upload_excel","payroll_checklist_review_import","payroll_checklist_export_excel"]},{"name":"App Settings Tabs","icon":"fa-cogs","keys":["manage_department_settings","manage_job_title_settings","manage_location_settings","manage_sub_department_settings","manage_global_request_blocks","manage_loan_settings","manage_vacation_payroll_settings","manage_overtime_settings","manage_deduction_settings","manage_salary_increment_settings","manage_resignation_settings","manage_own_screen_settings","manage_company_settings","manage_temp_role_transfer","manage_doc_expiry_alerts","manage_vacation_blackout_dates"]},{"name":"Business Trip","icon":"fa-plane","keys":["add_business_trip_manual_allowance"]},{"name":"Loan","icon":"fa-hand-holding-usd","keys":["apply_loan_with_active_loan"]},{"name":"Cars, Locations & Assets","icon":"fa-warehouse","keys":["cars_add","cars_edit","cars_delete","locations_add","locations_edit","locations_delete","asset_inventory_add","asset_inventory_edit","asset_inventory_delete"]},{"name":"D365","icon":"fa-cloud","keys":["d365_sync_employee","d365_register_employee","view_employee_d365_tab","d365_sync_payroll","d365_employee_dimensions"]},{"name":"Other Special Actions","icon":"fa-star","keys":["direct_rejoin_bypass_approval","ungenerate_payroll","assign_payroll_supervisor","access_import_excel_dynamic"]}];
         }
 
         // Builds the grouped, collapsible-by-category checkbox grid markup shared by the
@@ -1143,6 +1144,7 @@ function __(key, def) {
             { key: 'job_titles', icon: 'mdi-briefcase', label: '' + __('job_titles', 'Job Titles') + '', canAccess: () => canAccessJobTitlesTab },
             { key: 'locations', icon: 'mdi-map-marker', label: '' + __('locations', 'Locations') + '', canAccess: () => canAccessLocationsTab },
             { key: 'companies', icon: 'mdi-office', label: '' + __('companies', 'Companies') + '', canAccess: () => canAccessCompaniesTab },
+            { key: 'doc_expiry_alerts', icon: 'mdi-bell-ring', label: '' + __('doc_expiry_alerts', 'Document Expiry Alerts') + '', canAccess: () => canAccessDocExpiryAlertsTab },
         ];
 
         function renderOrgStructureHub() {
@@ -1168,6 +1170,7 @@ function __(key, def) {
                 else if (key === 'job_titles') renderJobTitlesSettings(subContent);
                 else if (key === 'locations') renderLocationsSettings(subContent);
                 else if (key === 'companies') renderCompaniesSettings(subContent);
+                else if (key === 'doc_expiry_alerts') renderDocExpiryAlertsSettings(subContent);
             }
 
             document.querySelectorAll('#org-structure-sub-nav a').forEach(a => {
@@ -3111,7 +3114,7 @@ function __(key, def) {
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-temp_role_transfer" role="tabpanel">
                     ${srTabHead(meta.icon, __('temp_role_transfer', 'Temporary Role Transfer'),
-                        __('temp_role_transfer_hint', 'Temporarily hand a supervisor/manager\'s role to a replacement employee for a fixed period (e.g. while they are on vacation). Access reverts to the original employee automatically once the end date passes. The HR user who grants this will get an email reminder one day before it expires.'),
+                        __('temp_role_transfer_hint', 'Temporarily hand a supervisor/manager\'s role to a replacement employee for a fixed period (e.g. while they are on vacation). The replacement also gets all of that employee\'s pending approvals (vacation, loan, settlement, payroll, resignation, business trip, salary increment, transfers, smart/general requests) and can approve or reject them; each action is recorded as done on their behalf. Access reverts to the original employee automatically once the end date passes. The HR user who grants this will get an email reminder one day before it expires.'),
                         `<button type="button" id="trt-add-btn" class="sr-btn sr-btn-success sr-btn-sm"><i class="mdi mdi-plus"></i> ${__('grant_new_temp_role', 'Grant New Temporary Role')}</button>`)}
                     <div class="sr-card aca-card">
                         <div class="sr-toolbar">
@@ -4424,6 +4427,310 @@ function __(key, def) {
         function renderLocationsSettings(hostEl) { renderOrgCrud(ORG_CRUD.locations, hostEl); }
         function renderCompaniesSettings(hostEl) { renderOrgCrud(ORG_CRUD.companies, hostEl); }
 
+        // --- Document Expiry Alerts (Org Structure sub-tab) ---
+        // Rules = document type + selected users + "days before" list. The daily run
+        // (zk_sync_import.php guard / Document Expiry "Run alerts now") emails each user one
+        // digest per rule - see includes/doc_expiry_rules_helper.php and
+        // includes/ajaxFile/docExpiryRulesHandler.php.
+        function renderDocExpiryAlertsSettings(hostEl) {
+            const api = (data) => fetch('./includes/ajaxFile/docExpiryRulesHandler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: data instanceof URLSearchParams ? data : new URLSearchParams(data)
+            }).then(r => r.json());
+            const scopeIcon = { employee: 'mdi-account', location: 'mdi-map-marker', car: 'mdi-car' };
+            let options = null;
+            let rules = [];
+
+            hostEl.innerHTML = `
+                ${srTabHead('mdi-bell-ring', __('doc_expiry_alerts', 'Document Expiry Alerts'),
+                    __('doc_expiry_alerts_hint', 'Choose a document type, the users who should be told, and how many days before expiry the email goes out (e.g. 30, 14, 7). Emails are sent once a day as one summary per rule. Only these rules send document expiry emails - a document type with no active rule sends nothing.'),
+                    `<button type="button" id="der-run-btn" class="sr-btn sr-btn-ghost sr-btn-sm"><i class="mdi mdi-send"></i> ${__('send_due_alerts_now', 'Send Due Alerts Now')}</button>
+                     <button type="button" id="der-add-btn" class="sr-btn sr-btn-success sr-btn-sm"><i class="mdi mdi-plus"></i> ${__('add_notification_rule', 'Add Notification Rule')}</button>`)}
+                <div class="sr-card aca-card">
+                    <div id="der-list"><div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div></div>
+                </div>`;
+            const listEl = hostEl.querySelector('#der-list');
+
+            const loadOptions = () => options ? Promise.resolve(options) : api({ action: 'options' }).then(d => {
+                if (!d.success) throw new Error(d.message || __('failed_to_load', 'Failed to load.'));
+                options = d;
+                return d;
+            });
+            const docType = (key) => (options && options.doc_types.find(t => t.key === key)) || { key, label: key, scope: 'employee' };
+
+            function personChips(list) {
+                if (!list.length) return `<span class="sr-cell-sub">${__('none', 'None')}</span>`;
+                const shown = list.slice(0, 3).map(p => `<span class="sr-chip"><i class="mdi mdi-account"></i> ${escapeHtml(p.name)}</span>`).join(' ');
+                return shown + (list.length > 3 ? ` <span class="sr-chip" title="${escapeHtml(list.slice(3).map(p => p.name).join(', '))}">+${list.length - 3}</span>` : '');
+            }
+
+            function loadList() {
+                Promise.all([loadOptions(), api({ action: 'list' })]).then(([, data]) => {
+                    if (!data.success) throw new Error(data.message || __('failed_to_load', 'Failed to load.'));
+                    rules = data.rules || [];
+                    if (!rules.length) {
+                        listEl.innerHTML = `<div class="sr-empty"><i class="mdi mdi-bell-ring"></i>${__('no_doc_expiry_rules', 'No notification rules yet. Add one to start sending document expiry emails.')}</div>`;
+                        return;
+                    }
+                    listEl.innerHTML = `<div class="sr-table-wrap aca-table-wrap"><table class="sr-table aca-table org-table">
+                        <thead><tr>
+                            <th>${__('document_type', 'Document Type')}</th>
+                            <th>${__('days_before_expiry', 'Days Before Expiry')}</th>
+                            <th>${__('notify_users', 'Notify Users')}</th>
+                            <th>${__('options', 'Options')}</th>
+                            <th>${__('tracked_now', 'In Window Now')}</th>
+                            <th>${__('status', 'Status')}</th>
+                            <th class="aca-actions">${__('actions', 'Actions')}</th>
+                        </tr></thead><tbody>
+                        ${rules.map(r => {
+                            const t = docType(r.doc_type);
+                            const opts = [];
+                            if (r.notify_employee) opts.push(`<span class="sr-pill tone-sky"><span class="sr-dot"></span>${__('employee_notified', 'Employee also notified')}</span>`);
+                            if (r.include_expired) opts.push(`<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('weekly_expired_reminder', 'Weekly expired reminder')}</span>`);
+                            return `<tr${r.status ? '' : ' class="is-inactive"'}>
+                                <td><div class="sr-cell-title"><i class="mdi ${scopeIcon[t.scope] || 'mdi-file-document'}"></i> ${escapeHtml(r.doc_label)}</div>${r.notes ? `<span class="sr-cell-sub">${escapeHtml(r.notes)}</span>` : ''}</td>
+                                <td>${r.days.map(d => `<span class="sr-chip sr-mono">${d}d</span>`).join(' ')}</td>
+                                <td>${personChips(r.recipients)}</td>
+                                <td>${opts.join(' ') || '<span class="sr-cell-sub">-</span>'}</td>
+                                <td><span class="sr-pill tone-indigo"><span class="sr-dot"></span>${r.within_window}</span>${r.expired ? ` <span class="sr-pill tone-red" title="${escapeHtml(__('expired', 'Expired'))}"><span class="sr-dot"></span>${r.expired}</span>` : ''}</td>
+                                <td><label class="sr-check"><input type="checkbox" class="der-toggle" data-id="${r.id}" ${r.status ? 'checked' : ''}> ${r.status ? __('active', 'Active') : __('inactive', 'Inactive')}</label></td>
+                                <td class="aca-actions">
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost der-preview" data-id="${r.id}" title="${escapeHtml(__('preview', 'Preview'))}"><i class="mdi mdi-eye"></i></button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost der-edit" data-id="${r.id}" title="${escapeHtml(__('edit', 'Edit'))}"><i class="mdi mdi-pencil"></i></button>
+                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost der-delete" data-id="${r.id}" title="${escapeHtml(__('delete', 'Delete'))}"><i class="mdi mdi-delete"></i></button>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                        </tbody></table></div>`;
+                    listEl.querySelectorAll('.der-edit').forEach(b => b.addEventListener('click', () => openRuleModal(rules.find(r => r.id == b.dataset.id))));
+                    listEl.querySelectorAll('.der-delete').forEach(b => b.addEventListener('click', () => deleteRule(rules.find(r => r.id == b.dataset.id))));
+                    listEl.querySelectorAll('.der-preview').forEach(b => b.addEventListener('click', () => previewRule(rules.find(r => r.id == b.dataset.id))));
+                    listEl.querySelectorAll('.der-toggle').forEach(cb => cb.addEventListener('change', () => {
+                        api({ action: 'toggle', id: cb.dataset.id, status: cb.checked ? 1 : 0 }).then(d => {
+                            acToast(d.success ? 'success' : 'error', d.message);
+                            loadList();
+                        });
+                    }));
+                }).catch(err => {
+                    listEl.innerHTML = `<div class="as-section-body"><div class="sr-notice tone-red ac-error"><i class="mdi mdi-alert-circle-outline"></i><div>${escapeHtml(err.message)}</div></div></div>`;
+                });
+            }
+
+            function openRuleModal(rule) {
+                loadOptions().then(opts => {
+                    const isEdit = !!rule;
+                    const r = rule || { doc_type: '', days: [30, 14, 7], recipients: [], notify_employee: 0, include_expired: 0, status: 1, notes: '' };
+                    const selectedIds = r.recipients.map(p => String(p.id));
+                    Swal.fire({
+                        title: isEdit ? __('edit_notification_rule', 'Edit Notification Rule') : __('add_notification_rule', 'Add Notification Rule'),
+                        html: `
+                            <form class="sr-form" onsubmit="return false">
+                                <div class="sr-fsec">
+                                    <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i> ${__('document', 'Document')}</span></div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <label for="der-doc-type">${__('document_type', 'Document Type')} <span class="text-danger">*</span></label>
+                                            <select id="der-doc-type" class="form-control" style="width:100%;">
+                                                <option value="">${__('select', 'Select')}...</option>
+                                                ${opts.doc_types.map(t => `<option value="${escapeHtml(t.key)}" data-scope="${escapeHtml(t.scope)}" ${t.key === r.doc_type ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
+                                            </select>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <label for="der-days">${__('days_before_expiry', 'Days Before Expiry')} <span class="text-danger">*</span></label>
+                                            <input type="text" id="der-days" class="form-control" value="${escapeHtml(r.days.join(', '))}" placeholder="30, 14, 7" autocomplete="off">
+                                            <div class="mt-1" id="der-day-presets">
+                                                ${[[90, 60, 30], [60, 30, 14, 7], [30, 14, 7], [30, 7, 1]].map(p => `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" data-days="${p.join(', ')}">${p.join(' / ')}</button>`).join(' ')}
+                                            </div>
+                                            <small class="text-muted">${__('days_before_hint', 'One email per value, e.g. "30, 14, 7" sends at 30, 14 and 7 days before the expiry date.')}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="sr-fsec">
+                                    <div class="sr-fsec-head"><span><i class="mdi mdi-account-multiple"></i> ${__('notify_users', 'Notify Users')}</span></div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <label for="der-recipients">${__('users_who_receive_email', 'Users who receive the email')}</label>
+                                            <select id="der-recipients" class="form-control" multiple style="width:100%;">
+                                                ${opts.people.map(p => `<option value="${escapeHtml(p.id)}" data-emp-id="${escapeHtml(p.id)}" data-dept="${escapeHtml(p.dept)}" ${selectedIds.includes(String(p.id)) ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+                                            </select>
+                                        </div>
+                                        <div class="sr-fcol c-12" id="der-emp-wrap">
+                                            <label class="sr-check"><input type="checkbox" id="der-notify-emp" ${r.notify_employee ? 'checked' : ''}> ${__('also_notify_document_owner', 'Also email the employee about their own document')}</label>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <label class="sr-check"><input type="checkbox" id="der-expired" ${r.include_expired ? 'checked' : ''}> ${__('weekly_expired_reminder_label', 'Keep reminding weekly after the document has expired')}</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="sr-fsec">
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-8">
+                                            <label for="der-notes">${__('notes', 'Notes')}</label>
+                                            <input type="text" id="der-notes" class="form-control" maxlength="255" value="${escapeHtml(r.notes || '')}">
+                                        </div>
+                                        <div class="sr-fcol c-4">
+                                            <label>&nbsp;</label>
+                                            <label class="sr-check"><input type="checkbox" id="der-status" ${r.status ? 'checked' : ''}> ${__('active', 'Active')}</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>`,
+                        width: 640,
+                        customClass: { popup: 'sr-addline-popup sr-page' },
+                        showCancelButton: true,
+                        confirmButtonText: `<i class="mdi mdi-check"></i> ${__('save', 'Save')}`,
+                        cancelButtonText: __('cancel'),
+                        allowOutsideClick: false,
+                        showLoaderOnConfirm: true,
+                        didOpen: () => {
+                            const $popup = $(Swal.getPopup());
+                            $('#der-doc-type').select2({ dropdownParent: $popup, width: '100%', minimumResultsForSearch: Infinity });
+                            $('#der-recipients').select2({
+                                dropdownParent: $popup,
+                                width: '100%',
+                                placeholder: __('search_by_name_or_emp_id', 'Search by name or employee ID...'),
+                                matcher: (params, data) => {
+                                    const term = $.trim(params.term || '').toLowerCase();
+                                    if (!term) return data;
+                                    const id = String($(data.element).data('emp-id') || '');
+                                    return (data.text.toLowerCase().includes(term) || id.includes(term)) ? data : null;
+                                },
+                                templateResult: data => {
+                                    if (!data.element) return data.text;
+                                    const dept = $(data.element).data('dept');
+                                    return $('<span>').text(data.text).append(dept ? $('<small class="text-muted">').text(' · ' + dept) : '');
+                                }
+                            });
+                            const syncScope = () => {
+                                const scope = $('#der-doc-type option:selected').data('scope');
+                                $('#der-emp-wrap').toggle(!scope || scope === 'employee');
+                            };
+                            $('#der-doc-type').on('change', syncScope);
+                            syncScope();
+                            $('#der-day-presets').on('click', 'button', function() { $('#der-days').val(this.dataset.days); });
+                        },
+                        preConfirm: () => {
+                            const body = new URLSearchParams({
+                                action: 'save',
+                                id: isEdit ? rule.id : '',
+                                doc_type: $('#der-doc-type').val() || '',
+                                days_before: $('#der-days').val(),
+                                notify_employee: $('#der-notify-emp').is(':checked') && $('#der-emp-wrap').is(':visible') ? 1 : '',
+                                include_expired: $('#der-expired').is(':checked') ? 1 : '',
+                                status: $('#der-status').is(':checked') ? 1 : 0,
+                                notes: $('#der-notes').val()
+                            });
+                            ($('#der-recipients').val() || []).forEach(id => body.append('recipients[]', id));
+                            return api(body).then(d => {
+                                if (!d.success) throw new Error(d.message || __('could_not_save_settings'));
+                                return d;
+                            }).catch(err => { Swal.showValidationMessage(err.message); return false; });
+                        }
+                    }).then(res => {
+                        if (!res.isConfirmed || !res.value) return;
+                        acToast('success', res.value.message);
+                        loadList();
+                    });
+                }).catch(err => Swal.fire(__('error'), err.message, 'error'));
+            }
+
+            function deleteRule(rule) {
+                Swal.fire({
+                    title: __('are_you_sure', 'Are you sure?'),
+                    html: `<div class="sr-form"><div class="sr-notice tone-amber is-compact"><i class="mdi mdi-alert-circle-outline"></i><div><strong>${escapeHtml(rule.doc_label)}</strong><br>${__('delete_doc_rule_confirm', 'This rule and its sent-alert history will be deleted.')}</div></div></div>`,
+                    icon: 'warning',
+                    width: 480,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc2626',
+                    confirmButtonText: `<i class="mdi mdi-delete"></i> ${__('yes_delete_it_button', 'Yes, delete it')}`,
+                    cancelButtonText: __('cancel'),
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => api({ action: 'delete', id: rule.id }).then(d => {
+                        if (!d.success) throw new Error(d.message);
+                        return d;
+                    }).catch(err => { Swal.showValidationMessage(err.message); return false; })
+                }).then(res => {
+                    if (!res.isConfirmed || !res.value) return;
+                    acToast('success', res.value.message);
+                    loadList();
+                });
+            }
+
+            function previewRule(rule) {
+                Swal.fire({ title: __('loading'), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                api({ action: 'preview', id: rule.id }).then(d => {
+                    if (!d.success) throw new Error(d.message);
+                    const items = d.items || [];
+                    const dueCount = items.filter(i => i.due_today).length;
+                    const daysPill = (n) => {
+                        const tone = n < 0 ? 'red' : (n <= 14 ? 'amber' : 'green');
+                        const text = n < 0 ? `${__('expired', 'Expired')} ${Math.abs(n)}d` : (n === 0 ? __('today', 'Today') : `${n}d`);
+                        return `<span class="sr-pill tone-${tone}"><span class="sr-dot"></span>${escapeHtml(text)}</span>`;
+                    };
+                    const table = items.length ? `<div class="sr-table-wrap" style="max-height:420px;overflow:auto"><table class="sr-table">
+                        <thead><tr><th>${__('name', 'Name')}</th><th>${__('document', 'Document')}</th><th>${__('expiry_date', 'Expiry Date')}</th><th>${__('days_left', 'Days Left')}</th><th>${__('email', 'Email')}</th></tr></thead>
+                        <tbody>${items.map(i => `<tr>
+                            <td><div class="sr-cell-title">${escapeHtml(i.name)}</div><span class="sr-cell-sub">${escapeHtml([i.emp_id ? '#' + i.emp_id : '', i.sub].filter(Boolean).join(' · '))}</span></td>
+                            <td>${escapeHtml(i.doc_label)}${i.doc_no ? `<span class="sr-cell-sub sr-mono">${escapeHtml(i.doc_no)}</span>` : ''}</td>
+                            <td class="sr-mono">${escapeHtml(i.expiry)}</td>
+                            <td>${daysPill(i.days_left)}</td>
+                            <td>${i.due_today ? `<span class="sr-pill tone-indigo"><span class="sr-dot"></span>${__('due_today', 'Due today')}</span>` : `<span class="sr-cell-sub">${__('sent_or_later', 'Sent / later')}</span>`}</td>
+                        </tr>`).join('')}</tbody></table></div>`
+                        : `<div class="sr-empty"><i class="mdi mdi-calendar-clock"></i>${__('no_documents_in_window', 'No documents inside this rule\'s window right now.')}</div>`;
+                    Swal.fire({
+                        title: escapeHtml(rule.doc_label),
+                        html: `<div class="sr-form">
+                            <div class="sr-notice tone-sky is-compact"><i class="mdi mdi-bell-ring"></i><div>${items.length} ${__('documents_within', 'document(s) within')} ${Math.max(...rule.days)} ${__('days', 'days')} · <strong>${dueCount}</strong> ${__('due_to_be_emailed', 'due to be emailed')}</div></div>
+                            ${table}</div>`,
+                        width: 900,
+                        customClass: { popup: 'sr-addline-popup sr-page' },
+                        allowOutsideClick: false,
+                        showCancelButton: true,
+                        showConfirmButton: dueCount > 0 && !!rule.status,
+                        confirmButtonText: `<i class="mdi mdi-send"></i> ${__('send_now', 'Send Now')}`,
+                        cancelButtonText: __('close'),
+                        showLoaderOnConfirm: true,
+                        preConfirm: () => api({ action: 'run', id: rule.id }).then(r => {
+                            if (!r.success) throw new Error(r.message);
+                            return r;
+                        }).catch(err => { Swal.showValidationMessage(err.message); return false; })
+                    }).then(res => {
+                        if (!res.isConfirmed || !res.value) return;
+                        acToast('success', res.value.message);
+                        loadList();
+                    });
+                }).catch(err => Swal.fire(__('error'), err.message, 'error'));
+            }
+
+            hostEl.querySelector('#der-add-btn').addEventListener('click', () => openRuleModal(null));
+            hostEl.querySelector('#der-run-btn').addEventListener('click', () => {
+                Swal.fire({
+                    title: __('send_due_alerts_now', 'Send Due Alerts Now'),
+                    text: __('send_due_alerts_confirm', 'Send every alert that is due today for all active rules? Already-sent alerts are not repeated.'),
+                    icon: 'question',
+                    customClass: { popup: 'sr-addline-popup sr-page' },
+                    allowOutsideClick: false,
+                    showCancelButton: true,
+                    confirmButtonText: `<i class="mdi mdi-send"></i> ${__('send', 'Send')}`,
+                    cancelButtonText: __('cancel'),
+                    showLoaderOnConfirm: true,
+                    preConfirm: () => api({ action: 'run' }).then(r => {
+                        if (!r.success) throw new Error(r.message);
+                        return r;
+                    }).catch(err => { Swal.showValidationMessage(err.message); return false; })
+                }).then(res => {
+                    if (!res.isConfirmed || !res.value) return;
+                    acToast('success', res.value.message);
+                    loadList();
+                });
+            });
+
+            loadList();
+        }
+
         function orgPost(cfg, params) {
             return fetch(cfg.url, {
                 method: 'POST',
@@ -5637,7 +5944,7 @@ function __(key, def) {
                 // reach a browser that only has partial access.
                 if (!isFullSettingsAdmin) {
                     groupedSettings = {};
-                    if (canAccessDepartmentsTab || canAccessSubDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab || canAccessCompaniesTab) {
+                    if (canAccessDepartmentsTab || canAccessSubDepartmentsTab || canAccessJobTitlesTab || canAccessLocationsTab || canAccessCompaniesTab || canAccessDocExpiryAlertsTab) {
                         groupedSettings['org_structure'] = [];
                     }
                     if (canAccessRequestBlocksTab) {

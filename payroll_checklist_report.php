@@ -168,7 +168,7 @@ if ($requestInvNo !== '') {
 }
 $isPendingWithMe = false;
 if ($requestInvNo !== '') {
-    $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers WHERE request_inv_no = :inv_no AND request_type_id = :type_id AND approver_id = :approver_id AND status = 'pending'");
+    $pendingStmt = $pdo->prepare("SELECT COUNT(*) FROM request_approvers WHERE request_inv_no = :inv_no AND request_type_id = :type_id AND (approver_id = :approver_id OR " . approverInSql('approver_id') . ") AND status = 'pending'");
     $pendingStmt->execute([
         ':inv_no' => $requestInvNo,
         ':type_id' => $requestTypeId,
@@ -201,7 +201,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
         $managerOwnScopeStmt = $pdo->prepare("SELECT selected_company_ids
             FROM payroll_finance_officer_company_defaults
             WHERE finance_manager_emp_id = :manager_id
-              AND finance_officer_emp_id = :officer_id
+              AND (finance_officer_emp_id = :officer_id OR " . approverInSql('finance_officer_emp_id') . ")
             ORDER BY id DESC
             LIMIT 1");
         $managerOwnScopeStmt->execute([
@@ -217,7 +217,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
                 WHERE request_inv_no = :inv_no
                   AND payroll_month = :month_year
                   AND finance_manager_emp_id = :manager_id
-                  AND finance_officer_emp_id = :officer_id
+                  AND (finance_officer_emp_id = :officer_id OR " . approverInSql('finance_officer_emp_id') . ")
                   AND action_type IN ('setup_assigned', 'setup_updated')
                 ORDER BY id DESC
                 LIMIT 1");
@@ -243,7 +243,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
               AND finance_manager_emp_id = :finance_user_mgr
-              AND finance_officer_emp_id = :finance_user_officer
+              AND (finance_officer_emp_id = :finance_user_officer OR " . approverInSql('finance_officer_emp_id') . ")
               AND is_confirmed = 1
             ORDER BY id DESC
             LIMIT 1");
@@ -263,7 +263,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
               AND finance_manager_emp_id = :finance_user_mgr
-              AND finance_officer_emp_id = :finance_user_officer
+              AND (finance_officer_emp_id = :finance_user_officer OR " . approverInSql('finance_officer_emp_id') . ")
             ORDER BY id DESC
             LIMIT 1");
         $assignedScopeManagerUnconfirmedStmt->execute([
@@ -284,7 +284,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
             FROM payroll_finance_verification
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
-              AND finance_officer_emp_id = :finance_user
+              AND (finance_officer_emp_id = :finance_user OR " . approverInSql('finance_officer_emp_id') . ")
               AND is_confirmed = 1
             ORDER BY id DESC
             LIMIT 1");
@@ -302,7 +302,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
             FROM payroll_finance_verification
             WHERE request_inv_no = :inv_no
               AND payroll_month = :month_year
-              AND finance_officer_emp_id = :finance_user
+              AND (finance_officer_emp_id = :finance_user OR " . approverInSql('finance_officer_emp_id') . ")
             ORDER BY id DESC
             LIMIT 1");
         $assignedScopeOfficerUnconfirmedStmt->execute([
@@ -416,7 +416,7 @@ if ($requestInvNo !== '' && $currentApproverId !== '') {
         FROM request_approvers
         WHERE request_inv_no = :inv_no
           AND request_type_id = :type_id
-          AND approver_id = :approver_id");
+          AND (approver_id = :approver_id OR " . approverInSql('approver_id') . ")");
     $chainApproverStmt->execute([
         ':inv_no' => $requestInvNo,
         ':type_id' => $requestTypeId,
@@ -735,7 +735,7 @@ if ($isAssignedFinanceCompanyVerifier && $requestInvNo !== '') {
         FROM payroll_finance_verification
         WHERE request_inv_no = :inv_no
           AND payroll_month = :month_year
-          AND finance_officer_emp_id = :finance_officer
+          AND (finance_officer_emp_id = :finance_officer OR " . approverInSql('finance_officer_emp_id') . ")
           AND is_confirmed = 1
         ORDER BY id DESC
         LIMIT 1");

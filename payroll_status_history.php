@@ -101,7 +101,7 @@ if (!$canSeeAll) {
     $inChain = false;
 
     if (!$sameDept) {
-        $chainAccessStmt = $conDB->prepare('SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id = ? LIMIT 1');
+        $chainAccessStmt = $conDB->prepare('SELECT 1 FROM request_approvers WHERE request_inv_no = ? AND request_type_id = ? AND approver_id IN (?, ' . (int)$approver_alt_id . ') LIMIT 1');
         if ($chainAccessStmt) {
             $currentEmpId = (string)($empid ?? $_SESSION['empid'] ?? '');
             $chainAccessStmt->bind_param('sis', $requestInvNo, $requestTypeId, $currentEmpId);

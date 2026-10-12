@@ -122,7 +122,7 @@ try {
             $managerOwnScopeStmt = $pdo->prepare("SELECT selected_company_ids
                 FROM payroll_finance_officer_company_defaults
                 WHERE finance_manager_emp_id = :manager_id
-                  AND finance_officer_emp_id = :officer_id
+                  AND (finance_officer_emp_id = :officer_id OR " . approverInSql('finance_officer_emp_id') . ")
                 ORDER BY id DESC
                 LIMIT 1");
             $managerOwnScopeStmt->execute([
@@ -137,7 +137,7 @@ try {
                     WHERE request_inv_no = :inv_no
                       AND payroll_month = :month_year
                       AND finance_manager_emp_id = :manager_id
-                      AND finance_officer_emp_id = :officer_id
+                      AND (finance_officer_emp_id = :officer_id OR " . approverInSql('finance_officer_emp_id') . ")
                       AND action_type IN ('setup_assigned', 'setup_updated')
                     ORDER BY id DESC
                     LIMIT 1");
@@ -156,7 +156,7 @@ try {
                 FROM payroll_finance_verification
                 WHERE request_inv_no = :inv_no
                   AND payroll_month = :month_year
-                  AND finance_manager_emp_id = :finance_user
+                  AND (finance_manager_emp_id = :finance_user OR " . approverInSql('finance_manager_emp_id') . ")
                   AND is_confirmed = 1
                 ORDER BY id DESC
                 LIMIT 1");
@@ -173,7 +173,7 @@ try {
                 FROM payroll_finance_verification
                 WHERE request_inv_no = :inv_no
                   AND payroll_month = :month_year
-                  AND finance_manager_emp_id = :finance_user
+                  AND (finance_manager_emp_id = :finance_user OR " . approverInSql('finance_manager_emp_id') . ")
                 ORDER BY id DESC
                 LIMIT 1");
             $assignedScopeManagerUnconfirmedStmt->execute([
@@ -192,7 +192,7 @@ try {
                 FROM payroll_finance_verification
                 WHERE request_inv_no = :inv_no
                   AND payroll_month = :month_year
-                  AND finance_officer_emp_id = :finance_user
+                  AND (finance_officer_emp_id = :finance_user OR " . approverInSql('finance_officer_emp_id') . ")
                   AND is_confirmed = 1
                 ORDER BY id DESC
                 LIMIT 1");
@@ -209,7 +209,7 @@ try {
                 FROM payroll_finance_verification
                 WHERE request_inv_no = :inv_no
                   AND payroll_month = :month_year
-                  AND finance_officer_emp_id = :finance_user
+                  AND (finance_officer_emp_id = :finance_user OR " . approverInSql('finance_officer_emp_id') . ")
                 ORDER BY id DESC
                 LIMIT 1");
             $assignedScopeOfficerUnconfirmedStmt->execute([

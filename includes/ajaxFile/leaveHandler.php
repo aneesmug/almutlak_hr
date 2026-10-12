@@ -2604,7 +2604,8 @@ elseif ($ajaxType == 'approveVacation') {
             FROM `request_approvers` `ra`
             LEFT JOIN `employees` `e` ON `ra`.`approver_id` = `e`.`emp_id`
             LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `ra`.`approver_id`
-            WHERE `ra`.`request_inv_no` = ? AND `ra`.`approver_id` = ?
+            WHERE `ra`.`request_inv_no` = ? AND (`ra`.`approver_id` = ? OR " . approverInSql('`ra`.`approver_id`') . ")
+            ORDER BY (`ra`.`status` = 'pending') DESC, (`ra`.`approver_id` = " . (int)$current_user_id . ") DESC
             LIMIT 1
         ");
         if ($level_query) {
@@ -2900,7 +2901,8 @@ elseif ($ajaxType == 'rejectVacation') {
             FROM `request_approvers` `ra`
             LEFT JOIN `employees` `e` ON `ra`.`approver_id` = `e`.`emp_id`
             LEFT JOIN `admin_login` `al` ON `al`.`emp_id` = `ra`.`approver_id`
-            WHERE `ra`.`request_inv_no` = ? AND `ra`.`approver_id` = ?
+            WHERE `ra`.`request_inv_no` = ? AND (`ra`.`approver_id` = ? OR " . approverInSql('`ra`.`approver_id`') . ")
+            ORDER BY (`ra`.`status` = 'pending') DESC, (`ra`.`approver_id` = " . (int)$current_user_id . ") DESC
             LIMIT 1
         ");
         if ($level_query) {
@@ -4701,7 +4703,7 @@ elseif ($ajaxType == 'checkAssetReturnClearanceStatus') {
         $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.source, vad.ref_id, vad.asset_name, vad.clearance_dept_id, vad.status
                                          FROM vacation_asset_decisions vad
                                          JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
-                                         WHERE vad.vacation_id = ? AND vad.status IN ('pending', 'needs_assignment') AND vad.approver_id = ?");
+                                         WHERE vad.vacation_id = ? AND vad.status IN ('pending', 'needs_assignment') AND (vad.approver_id = ? OR " . approverInSql('vad.approver_id') . ")");
         $pending_items = [];
         $assignment_items = [];
         if ($stmt) {
@@ -4759,7 +4761,7 @@ elseif ($ajaxType == 'confirmSingleAssetReturn') {
         $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.source, vad.ref_id, vad.asset_name
                                          FROM vacation_asset_decisions vad
                                          JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
-                                         WHERE vad.id = ? AND vad.vacation_id = ? AND vad.status = 'pending' AND vad.approver_id = ? LIMIT 1");
+                                         WHERE vad.id = ? AND vad.vacation_id = ? AND vad.status = 'pending' AND (vad.approver_id = ? OR " . approverInSql('vad.approver_id') . ") LIMIT 1");
         mysqli_stmt_bind_param($stmt, "iii", $decision_id, $vacation_id, $current_user_id);
         mysqli_stmt_execute($stmt);
         $item = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
@@ -4832,7 +4834,7 @@ elseif ($ajaxType == 'assignAssetClearanceHandler') {
         $stmt = mysqli_prepare($conDB, "SELECT vad.id, vad.asset_name, vad.clearance_dept_id
                                          FROM vacation_asset_decisions vad
                                          JOIN request_approvers ra ON ra.id = vad.request_approver_id AND ra.status = 'pending'
-                                         WHERE vad.vacation_id = ? AND vad.status = 'needs_assignment' AND vad.approver_id = ?");
+                                         WHERE vad.vacation_id = ? AND vad.status = 'needs_assignment' AND (vad.approver_id = ? OR " . approverInSql('vad.approver_id') . ")");
         $pending = [];
         if ($stmt) {
             mysqli_stmt_bind_param($stmt, "ii", $vacation_id, $current_user_id);

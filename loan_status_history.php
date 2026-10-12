@@ -50,7 +50,7 @@ if (!$canSeeAll) {
     $sameDept = ($userDeptId !== null) ? ((int)$loan['dept'] === (int)$userDeptId) : false;
     $inChain = false;
     if (!$sameDept) {
-        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id = ? LIMIT 1")) {
+        if ($chk = $conDB->prepare("SELECT 1 FROM request_approvers ra JOIN approval_request_types t ON t.id = ra.request_type_id AND t.type_name = 'loan_request' WHERE ra.request_inv_no = ? AND ra.approver_id IN (?, {$approver_alt_id}) LIMIT 1")) {
             $chk->bind_param('si', $inv_no, $empid);
             if ($chk->execute()) {
                 $resChk = $chk->get_result();

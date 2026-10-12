@@ -168,7 +168,7 @@ $is_any_approver = false;
 $current_approver_level = null;
 
 foreach ($approval_chain as $approver) {
-    if ($approver['approver_id'] == $empid && $approver['status'] == 'pending') {
+    if (in_array((int)$approver['approver_id'], effectiveApproverIds(), true) && $approver['status'] == 'pending') {
         $is_current_approver = true;
         $current_approver_level = $approver['approval_level'];
         break;
@@ -177,7 +177,7 @@ foreach ($approval_chain as $approver) {
 
 // Check if user is any approver in the chain
 foreach ($approval_chain as $approver) {
-    if ($approver['approver_id'] == $empid) {
+    if (in_array((int)$approver['approver_id'], effectiveApproverIds(), true)) {
         $is_any_approver = true;
         break;
     }
@@ -325,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Get current approval level
             $current_level = 0;
             foreach ($approval_chain as $approver) {
-                if ($approver['approver_id'] == $empid && $approver['status'] == 'pending') {
+                if (in_array((int)$approver['approver_id'], effectiveApproverIds(), true) && $approver['status'] == 'pending') {
                     $current_level = $approver['approval_level'];
                     break;
                 }
