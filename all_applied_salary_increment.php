@@ -1016,19 +1016,13 @@ if ($can_see_all_depts) {
 
                     const empInfo = [
                         [__('iqama', 'Iqama'), req.iqama],
-                        [__('iqama_expiry', 'Iqama Expiry'), fmtDate(req.iqama_exp_g)],
                         [__('nationality', 'Nationality'), req.nationality],
-                        [__('job_title', 'Job Title'), req.job_title],
+                        [__('job_title_lable', 'Job Title'), req.job_title],
                         [__('department', 'Department'), req.department_name],
-                        [__('company', 'Company'), req.company_name],
                         [__('location', 'Location'), req.location_name],
-                        [__('employee_type', 'Employee Type'), req.emptype],
-                        [__('cost_center', 'Cost Center'), req.cost_center],
                         [__('joining_date', 'Joining Date'), fmtDate(req.joining_date)],
                         [__('years_of_service', 'Years of Service'), service],
-                        [__('direct_supervisor', 'Direct Supervisor'), req.direct_supervisor_name],
-                        [__('mobile', 'Mobile'), req.mobile],
-                        [__('company_email', 'Company Email'), req.c_email]
+                        [__('direct_supervisor', 'Direct Supervisor'), req.direct_supervisor_name]
                     ];
                     const reqInfo = [
                         [__('request_no', 'Request No'), req.request_inv_no],
