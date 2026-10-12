@@ -1,83 +1,65 @@
 <?php
-
-if(!empty($_FILES)){ 
+/**
+ * Dropzone upload for smart request attachments (attach_smt_request.php).
+ * Responds JSON: {ok:true,file:"..."} or HTTP 4xx with {ok:false,message:"..."}.
+ */
 require_once __DIR__ . '/../../includes/db.php';
-    require_once __DIR__ . '/../FileUploader.php';
-    // Include the database configuration file 
+require_once __DIR__ . '/../FileUploader.php';
+require_once __DIR__ . '/../../includes/session_check.php';
 
-    require_once __DIR__ . '/../../includes/db.php';
-    require_once __DIR__ . '/../../includes/session_check.php';
+header('Content-Type: application/json');
 
-    // File path configuration 
+function smt_att_fail($message, $code = 422)
+{
+    http_response_code($code);
+    echo json_encode(['ok' => false, 'message' => $message]);
+    exit;
+}
 
-    $getinv_no = $_POST['id'];
+if (empty($_FILES['file'])) {
+    smt_att_fail('No file received.', 400);
+}
+if ($_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+    smt_att_fail($_FILES['file']['error'] === UPLOAD_ERR_INI_SIZE || $_FILES['file']['error'] === UPLOAD_ERR_FORM_SIZE
+        ? 'File is larger than the server upload limit.' : 'File upload failed.', 400);
+}
 
-    // $getinv_no = $_GET['id'];
+$getinv_no = trim((string)($_POST['id'] ?? ''));
+if ($getinv_no === '') {
+    smt_att_fail('Request number is missing.', 400);
+}
+$chk = mysqli_prepare($conDB, "SELECT 1 FROM `smart_request` WHERE `inv_no` = ? LIMIT 1");
+mysqli_stmt_bind_param($chk, 's', $getinv_no);
+mysqli_stmt_execute($chk);
+if (!mysqli_fetch_row(mysqli_stmt_get_result($chk))) {
+    smt_att_fail('Request not found: ' . $getinv_no, 404);
+}
 
-    $uploadDir = "./../../assets/assets/smt_attachment/"; 
+$uploadDir = __DIR__ . "/../../assets/smt_attachment/"; // same folder open_request.php reads from
+$file_extension = FileUploader::safeExt($_FILES['file']['name'], 'document');
+if ($file_extension === null) {
+    smt_att_fail('File type not allowed. Allowed: ' . FileUploader::allowedLabel('document') . '.');
+}
 
-    $fileName = basename($_FILES['file']['name']);
+// Random name: phone camera photos all arrive as "image.jpg", so a name derived from the
+// original file name made every new photo overwrite the previous one.
+$filename_po = FileUploader::uniqueName($getinv_no, $file_extension);
 
-    $tmp_name = $_FILES['file']['tmp_name'];
+if (!FileUploader::moveTo($_FILES['file']['tmp_name'], $uploadDir . $filename_po, 'document')) {
+    smt_att_fail(FileUploader::lastError());
+}
 
-    // $rand = rand(0000,9999).time();
+$ins = mysqli_prepare($conDB, "INSERT INTO `smt_attachment` (`inv_no`, `attachment`, `docu_ext`) VALUES (?, ?, ?)");
+mysqli_stmt_bind_param($ins, 'sss', $getinv_no, $filename_po, $file_extension);
+if (!mysqli_stmt_execute($ins)) {
+    @unlink($uploadDir . $filename_po);
+    smt_att_fail('Could not save the attachment record.', 500);
+}
 
-    // $rand = md5(microtime(true));
+ActivityLogger::logUpload('Request', 'upload_smt_attachments.php', $getinv_no,
+    $filename_po,
+    "Uploaded request attachment: {$filename_po}",
+    'smt_attachment',
+    $file_extension);
 
-    $rand = md5($fileName);
-
-    $file_ext = explode('.',$fileName);
-
-	//count taken (if more than one . exist; files like abc.fff.2013.pdf
-
-	$file_ext_count=count($file_ext);
-
-	//minus 1 to make the offset correct
-
-	$cnt=$file_ext_count-1;
-
-	// the variable will have a value pdf as per the sample file name mentioned above.
-
-	$file_extension = (string)FileUploader::safeExt($fileName, 'document');
-
-
-
-    /*$filename_po = $getinv_no."_".date('dmYHis')."_".$rand.".".$file_extension;*/
-
-    $filename_po = $getinv_no."_".$rand.".".$file_extension;
-
-
-
-    $uploadFilePath = $uploadDir.$filename_po; 
-
-     
-
-    // Upload file to server 
-
-    if(FileUploader::moveTo($tmp_name, $uploadFilePath, 'document')){ 
-
-        // Insert file information in the database 
-
-        $sql = "INSERT INTO `smt_attachment` (`inv_no`, `attachment`, `docu_ext`) VALUES ('".$getinv_no."', '".$filename_po."', '".$file_extension."')"; 
-
-        mysqli_query($conDB, $sql);
-        
-        $att_id = mysqli_insert_id($conDB);
-        
-        // Log attachment upload
-        ActivityLogger::logUpload('Request', 'upload_smt_attachments.php', $getinv_no, 
-            $filename_po, 
-            "Uploaded request attachment: {$filename_po}", 
-            'smt_attachment', 
-            $file_extension);
-
-    } else {
-        http_response_code(422);
-        echo FileUploader::lastError();
-    }
-
-} 
-
-
-
-?>
+echo json_encode(['ok' => true, 'file' => $filename_po]);

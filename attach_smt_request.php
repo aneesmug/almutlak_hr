@@ -220,7 +220,7 @@ require_once __DIR__ . '/includes/db.php';
 
 <head>
     <meta charset="utf-8" />
-    <title><?=$site_title ?> - <?=$name_mach ?></title>
+    <title><?=$site_title ?><?= !empty($name_mach) ? ' - ' . htmlspecialchars($name_mach) : '' ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <!--        <meta content="A fully featured admin theme which can be used to build CRM, CMS, etc." name="description" />-->
     <meta content="Anees Afzal" name="author" />
@@ -314,7 +314,7 @@ require_once __DIR__ . '/includes/db.php';
 
                         <div class="col-md-12" id="DataContact">
                             <div class="card-box">
-                                <?=$msg ?>
+                                <?=$msg ?? '' ?>
                                 <div class="row">
                                     <div class="col-12">
                                         <div class="card-box">
@@ -422,31 +422,90 @@ require_once __DIR__ . '/includes/db.php';
         //Disabling autoDiscover
         Dropzone.autoDiscover = false;
         $(function() {
+            var uploadErrors = [];
+            var heicLib = null;
+
+            function isHeic(file) {
+                return /^image\/hei[cf]/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '');
+            }
+            function loadHeicLib() { // 1.3 MB, so only loaded when a HEIC photo is picked
+                if (!heicLib) {
+                    heicLib = $.Deferred(function(d) {
+                        var sc = document.createElement('script');
+                        sc.src = './plugins/heic2any/heic2any.min.js';
+                        sc.onload = function() { d.resolve(window.heic2any); };
+                        sc.onerror = function() { heicLib = null; d.reject(); };
+                        document.head.appendChild(sc);
+                    }).promise();
+                }
+                return heicLib;
+            }
+            function heicToJpeg(file) {
+                return Promise.resolve(loadHeicLib()).then(function(heic2any) {
+                    return heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+                }).then(function(out) {
+                    var blob = Array.isArray(out) ? out[0] : out; // multi-image HEIC: keep the first image
+                    return new File([blob], jpgName(file), { type: 'image/jpeg', lastModified: Date.now() });
+                });
+            }
+            function jpgName(file) {
+                return (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+            }
             var myDropzone = new Dropzone(".dropzone", {
                 url: "./includes/ajaxFile/upload_smt_attachments.php",
                 paramName: "file",
                 maxFilesize: 8,
                 maxFiles: 10,
-                acceptedFiles: "image/png,image/jpeg,image/jpg,image/bmp,application/pdf",
+                acceptedFiles: "image/png,image/jpeg,image/jpg,image/bmp,application/pdf,image/heic,image/heif,.heic,.heif",
                 parallelUploads: 10,
                 autoProcessQueue: false,
+                // camera photos are often 5-12 MB: shrink them in the browser before upload
+                resizeWidth: 1920,
+                resizeHeight: 1920,
+                resizeMethod: 'contain',
+                resizeQuality: 0.85,
+                // iPhone/Android "High Efficiency" photos (HEIC/HEIF) are converted to JPEG in the browser before upload
+                renameFile: function(file) { return isHeic(file) ? jpgName(file) : file.name; },
+                transformFile: function(file, done) {
+                    var dz = this;
+                    var resize = function(f) {
+                        if (f.type && /^image\/(jpeg|png|bmp)/.test(f.type)) dz.resizeImage(f, dz.options.resizeWidth, dz.options.resizeHeight, dz.options.resizeMethod, done);
+                        else done(f);
+                    };
+                    if (!isHeic(file)) return resize(file);
+                    heicToJpeg(file).then(resize).catch(function() {
+                        uploadErrors.push(file.name + ': could not convert this HEIC photo to JPG. Set the camera format to "Most Compatible" or send it as JPG.');
+                        done(file); // server rejects .heic, error shown after the queue finishes
+                    });
+                },
                 init: function() {
-                    this.on('success', function() {
-                        if (this.getQueuedFiles().length == 0 && this.getUploadingFiles().length == 0) {
-                            swal({
-                                title: "Uploaded!",
-                                text: "Your files bas been uploaded successfully.",
-                                type: 'success',
-                                allowOutsideClick: false
-                            }).then(function(isConfirm) {
-                                (isConfirm) ? window.history.back(): ""
-                            });
+                    this.on('success', function(file, resp) {
+                        if (!resp || resp.ok !== true) { // e.g. session expired: login page HTML came back
+                            uploadErrors.push(file.name + ': ' + ((resp && resp.message) || 'Upload not saved. Please log in again and retry.'));
                         }
+                    });
+                    this.on('error', function(file, msg) {
+                        uploadErrors.push(file.name + ': ' + ((msg && msg.message) || msg || 'Upload failed.'));
+                    });
+                    this.on('queuecomplete', function() {
+                        if (uploadErrors.length) {
+                            swal({ title: "Upload problem", html: uploadErrors.map(function(e) { return $('<div>').text(e).html(); }).join('<br>'), type: 'error' });
+                            uploadErrors = [];
+                            return;
+                        }
+                        swal({
+                            title: "Uploaded!",
+                            text: "Your files bas been uploaded successfully.",
+                            type: 'success',
+                            allowOutsideClick: false
+                        }).then(function(isConfirm) {
+                            (isConfirm) ? window.history.back(): ""
+                        });
                     });
                 }
             })
             myDropzone.on('sending', function(file, xhr, formData) {
-                formData.append('id', '<?= $_GET['id'] ?>');
+                formData.append('id', <?= json_encode((string)($_GET['id'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>);
             })
             $('#startUpload').click(function() {
                 myDropzone.processQueue();

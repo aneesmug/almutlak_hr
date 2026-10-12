@@ -1,0 +1,13 @@
+# Added by FileUploader: uploads may never run as scripts
+<FilesMatch "(?i)\.(php\d*|phtml|pht|phps|phar|inc|cgi|pl|py|rb|sh|asp|aspx|jsp|shtml|html?|svgz?|js|hta)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>

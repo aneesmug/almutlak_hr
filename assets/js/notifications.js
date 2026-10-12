@@ -15,15 +15,14 @@
     "use strict";
 
     // --- Enhanced Logging ---
-    // function logDebug(message, data) {
-    //     console.log("DEBUG: " + message, data !== undefined ? data : '');
-    // }
-    // function logWarn(message, data) {
-    //     console.warn("WARN: " + message, data !== undefined ? data : '');
-    // }
-    // function logError(message, error) {
-    //     console.error("ERROR: " + message, error !== undefined ? error : '');
-    // }
+    // Debug output stays silent; warnings/errors go to the console (these are called throughout the file)
+    function logDebug(message, data) {}
+    function logWarn(message, data) {
+        console.warn("WARN: " + message, data !== undefined ? data : '');
+    }
+    function logError(message, error) {
+        console.error("ERROR: " + message, error !== undefined ? error : '');
+    }
     // --- End Enhanced Logging ---
 
     // logDebug("notifications.js loaded successfully.");
