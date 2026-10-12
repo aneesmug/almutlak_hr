@@ -129,22 +129,33 @@ if (!function_exists('doc_expiry_last_alerts')) {
     }
 }
 
-/** Valid email for an emp_id: login email first, then the employee record. */
+/**
+ * First valid email for an emp_id: admin_login.email (system users), then
+ * employees.email, then employees.c_email (normal employees have no login email),
+ * then $fallback. '' when none is a valid address.
+ */
 if (!function_exists('doc_expiry_email_for_emp')) {
     function doc_expiry_email_for_emp($conDB, $empId, $fallback = '') {
-        $email = memo_user_email($conDB, $empId);
-        if ($email === '' && $fallback === '' && $empId !== '') {
+        $empId = trim((string) $empId);
+        $candidates = [];
+        if ($empId !== '') {
+            $candidates[] = memo_user_email($conDB, $empId);
             $stmt = $conDB->prepare("SELECT email, c_email FROM employees WHERE emp_id = ? ORDER BY status DESC LIMIT 1");
             $stmt->bind_param('s', $empId);
             $stmt->execute();
-            $row = $stmt->get_result()->fetch_assoc();
+            $row = $stmt->get_result()->fetch_assoc() ?: [];
             $stmt->close();
-            $fallback = (string) (($row['email'] ?? '') ?: ($row['c_email'] ?? ''));
+            $candidates[] = $row['email'] ?? '';
+            $candidates[] = $row['c_email'] ?? '';
         }
-        if ($email === '') {
-            $email = trim($fallback);
+        $candidates[] = $fallback;
+        foreach ($candidates as $email) {
+            $email = trim((string) $email);
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return $email;
+            }
         }
-        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+        return '';
     }
 }
 

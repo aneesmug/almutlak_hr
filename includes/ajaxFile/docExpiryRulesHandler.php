@@ -53,11 +53,12 @@ switch ($action) {
         foreach ($types as $key => [$label, $labelAr, $scope]) {
             $docTypes[] = ['key' => $key, 'label' => $label, 'label_ar' => $labelAr, 'scope' => $scope];
         }
-        // Active employees who can receive email (login email or employee email).
+        // Active employees who can receive email: admin_login.email, employees.email or employees.c_email
+        // (normal employees have no login email) - same order doc_expiry_email_for_emp() uses.
         $res = mysqli_query($conDB, "SELECT e.emp_id, e.name, d.dep_nme
             FROM employees e
             LEFT JOIN department d ON d.id = e.dept
-            LEFT JOIN admin_login al ON al.emp_id = e.emp_id AND al.status = 1
+            LEFT JOIN admin_login al ON al.emp_id = e.emp_id
             WHERE e.status = 1 AND (COALESCE(al.email, '') <> '' OR COALESCE(e.email, '') <> '' OR COALESCE(e.c_email, '') <> '')
             GROUP BY e.emp_id
             ORDER BY e.name");
