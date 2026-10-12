@@ -169,6 +169,20 @@ function add_edit_attendance($conDB) {
 
     $dateNormalized = date('Y-m-d', strtotime($date));
 
+    // No row yet for this employee/day = a new manual record, which needs the 'add_manual_attendance' key.
+    // Editing an existing row only needs 'manage_attendance' (already checked above).
+    global $empid, $user_role, $user_type, $is_system_admin;
+    $stmt = mysqli_prepare($conDB, "SELECT 1 FROM attendance WHERE emp_id = ? AND DATE(date) = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'is', $empId, $dateNormalized);
+    mysqli_stmt_execute($stmt);
+    $exists = (bool) mysqli_fetch_row(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    if (!$exists && !user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', !empty($is_system_admin))) {
+        http_response_code(403);
+        echo json_encode(['status' => 'error', 'message' => 'You do not have permission to add attendance records.']);
+        return;
+    }
+
     if (attendance_upsert_day($conDB, $empId, $dateNormalized, $timeIn, $timeOut, $state, $note, 'manual')) {
         echo json_encode(['status' => 'success', 'message' => 'Attendance record saved.']);
     } else {

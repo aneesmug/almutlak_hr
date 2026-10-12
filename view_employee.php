@@ -119,6 +119,9 @@ if (mysqli_num_rows($query) == 1) {
 			($is_system_admin ?? false)
 			|| user_has_special_access($conDB, $empid ?? '', 'manage_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 		);
+		// Add Record button (new manual record) needs the separate 'add_manual_attendance' key; editing stays under manage_attendance.
+		$canAddAttendanceRecord = $canManageAttendanceRecord
+			&& user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -3089,7 +3092,7 @@ if (mysqli_num_rows($query) == 1) {
 												<div class="d-flex flex-wrap justify-content-between align-items-start mb-3" style="gap: 1rem;">
 													<div style="min-width: 0;">
 														<h4 class="header-title mb-2"><?= __('attendance_record', 'Attendance Record') ?></h4>
-														<?php if ($canManageAttendanceRecord): ?>
+														<?php if ($canAddAttendanceRecord): ?>
 														<button type="button" class="btn btn-sm btn-success" id="btn-add-attendance-record" style="display:none;"><i class="mdi mdi-plus"></i> <?= __('add_record', 'Add Record') ?></button>
 														<?php endif; ?>
 														<div class="form-check d-inline-block">
@@ -4504,6 +4507,7 @@ if (mysqli_num_rows($query) == 1) {
 			// Safely pass the PHP employee ID to a JavaScript variable.
 			const employeeId = <?= json_encode($emprow['empid']); ?>;
 			const canManageAttendanceRecord = <?= $canManageAttendanceRecord ? 'true' : 'false' ?>;
+			const canAddAttendanceRecord = <?= $canAddAttendanceRecord ? 'true' : 'false' ?>;
 			$(document).ready(function() {
 				// 1. Initialize the DataTable with the correct columns for notes.
 				initializeNotesTable();
@@ -4851,7 +4855,7 @@ if (mysqli_num_rows($query) == 1) {
 							},
 							'print'
 						];
-						if (canManageAttendanceRecord) {
+						if (canAddAttendanceRecord) {
 							btns.push({
 								text: `<i class="mdi mdi-plus"></i> ${__('add_record', 'Add Record')}`,
 								className: 'btn-success',

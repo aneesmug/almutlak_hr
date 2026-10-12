@@ -2576,6 +2576,9 @@ RTL Support
     $recordsHtml .= $recordItem('employee_evaluation_history.php', $emprow['empid'], 'text-purple', 'fa-star', __('evaluations'), $eval_count);
     $recordsHtml .= $recordItem('employee_business_trip_history.php', $emprow['empid'], 'text-info', 'fa-plane', __('business_trip_history', 'Business Trip History'), $business_trip_count);
     $recordsHtml .= $recordItem('employee_salary_increment_history.php', $emprow['empid'], 'text-primary', 'fa-arrow-trend-up', __('salary_increment_history', 'Salary Increment History'), $salary_increment_count);
+    if (attendance_enabled($conDB)) {
+        $recordsHtml .= $recordItem('employee_attendance_history.php', $emprow['empid'], 'text-success', 'fa-fingerprint', __('attendance_history', 'Attendance History'), 0);
+    }
     ?>
 
     <!-- Hidden file input for image cropping -->

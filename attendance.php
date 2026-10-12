@@ -17,6 +17,8 @@ if (!$canManageAttendance) {
     header('Location: dashboard.php');
     exit;
 }
+// "Add Record" (manual entry) is its own Special Access key; editing existing rows stays under manage_attendance.
+$canAddAttendance = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
 
 $tiles = [
     ''           => ['dot-all', __('all', 'All')],
@@ -114,9 +116,11 @@ $tiles = [
                             <h1><?= __('attendance_record', 'Attendance Record') ?></h1>
                             <p><?= __('attendance_subtitle', 'Daily check-in / check-out from the devices and manual entries.') ?></p>
                         </div>
+                        <?php if ($canAddAttendance): ?>
                         <div class="sr-head-actions">
                             <button id="btn-add-attendance" type="button" class="sr-btn sr-btn-primary"><i class="fa fa-plus"></i> <?= __('add_attendance', 'Add Record') ?></button>
                         </div>
+                        <?php endif; ?>
                     </div>
 
                     <div class="sr-tiles att-tiles" id="attTiles">
