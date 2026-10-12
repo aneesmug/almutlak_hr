@@ -190,7 +190,7 @@ if (!defined('ALMUTLAK_CONNLIMIT_DIR')) {
 // show WHO/WHAT is holding connections (ip, page, age) instead of just a
 // count - needed to tell real traffic apart from a leak.
 if (!function_exists('app_acquire_concurrency_slot')) {
-    function app_acquire_concurrency_slot($key, $limit, $publicMessage, $staleSeconds = 30, $waitSeconds = 0) {
+    function app_acquire_concurrency_slot($key, $limit, $publicMessage, $staleSeconds = 30, $waitSeconds = 0, $quiet = false) {
         if (PHP_SAPI === 'cli') {
             return; // cron/CLI scripts not subject to this
         }
@@ -229,6 +229,12 @@ if (!function_exists('app_acquire_concurrency_slot')) {
             flock($fp, LOCK_UN);
             if (microtime(true) >= $deadline) {
                 fclose($fp);
+                if ($quiet) { // background helper (e.g. translation): plain JSON 429, no error-log entry
+                    http_response_code(429);
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => false, 'error' => 'busy']);
+                    exit;
+                }
                 app_render_runtime_error(
                     $publicMessage,
                     "Key '$key' exceeded $limit concurrent slots",
@@ -295,13 +301,27 @@ if (!function_exists('app_acquire_concurrency_slot')) {
 // Per-IP: stop one browser/bot/script alone eating the pool. 6 = what a browser
 // opens in parallel to one host; the whole office shares one public IP, so a
 // burst above that is queued for a few seconds instead of failing outright.
-app_acquire_concurrency_slot(
-    $_SERVER['REMOTE_ADDR'] ?? 'cli',
-    6,
-    'Too many concurrent requests from your connection. Please wait a moment and try again.',
-    30,
-    5
-);
+// Background helpers (translateText.php) define ALMUTLAK_CONNLIMIT_BUCKET to use their own small
+// per-IP bucket instead: the office shares one IP, and many slow translation calls used to fill
+// these 6 slots so real actions (submitting a request) got "Too many concurrent requests".
+if (defined('ALMUTLAK_CONNLIMIT_BUCKET')) {
+    app_acquire_concurrency_slot(
+        ($_SERVER['REMOTE_ADDR'] ?? 'cli') . '|' . ALMUTLAK_CONNLIMIT_BUCKET,
+        3,
+        'Busy, try again.',
+        30,
+        3,
+        true
+    );
+} else {
+    app_acquire_concurrency_slot(
+        $_SERVER['REMOTE_ADDR'] ?? 'cli',
+        6,
+        'Too many concurrent requests from your connection. Please wait a moment and try again.',
+        30,
+        5
+    );
+}
 
 // App-wide: MySQL max_connections is 500 and shared with other processes on
 // the account (ZK sync, other DB clients). Stay well under it (~66%) so our

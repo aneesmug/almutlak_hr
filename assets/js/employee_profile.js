@@ -26,7 +26,9 @@ window.APP_COLORS = {}; // Initialize empty, will be populated by fetch
     xhr.send(null);
 })();
 
-$("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js"));
+if (typeof window.translateName !== 'function' && !document.querySelector('script[src*="assets/js/translation.js"]')) {
+    $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/translation.js?v=20261012"));
+}
 
 // New GUI popups need smart_request.css - load it on pages that do not link it yet.
 window.srEnsureCss = window.srEnsureCss || function () {

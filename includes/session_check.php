@@ -612,6 +612,17 @@ const ASSISTANT_RESTRICTED_PAGES = ['dashbydepart.php', 'filter_employee.php', '
 // Skip access control for AJAX file requests - they return JSON and handle their own auth
 $is_ajax_file = (strpos($_SERVER['PHP_SELF'], '/ajaxFile/') !== false);
 
+// Back to the page that sent the user to log in (set by attach_smt_request.php, the QR upload page).
+// Every login path (password, OTP, remember-me) ends on dashboard.php / profile.php, so it is handled here.
+if (!$is_ajax_file && !empty($_SESSION['login_return_to']) && in_array($current_page, ['dashboard.php', 'profile.php'], true)) {
+    $returnTo = (string) $_SESSION['login_return_to'];
+    unset($_SESSION['login_return_to']);
+    if (preg_match('#^\./attach_smt_request\.php\?id=[A-Za-z0-9%_.-]+$#', $returnTo)) {
+        header('Location: ' . $returnTo);
+        exit();
+    }
+}
+
 // Allow specific endpoints to bypass page access redirects while still enforcing auth
 if (defined('SKIP_PAGE_ACCESS_CONTROL') && SKIP_PAGE_ACCESS_CONTROL === true) {
     $is_ajax_file = true;

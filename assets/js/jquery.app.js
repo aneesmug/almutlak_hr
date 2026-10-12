@@ -112,7 +112,7 @@ loadResource('./plugins/select2/js/select2.min.js', 'js', { async: true, defer: 
 loadResource('./plugins/bootstrap-select/js/bootstrap-select.js', 'js', { async: true, defer: true }, 'head');
 
 loadResource('./assets/js/notifications.js', 'js', { async: true, defer: true }, 'head');
-loadResource('./assets/js/translation.js', 'js', { async: true, defer: true }, 'head');
+if (typeof window.translateName !== 'function') loadResource('./assets/js/translation.js?v=20261012', 'js', { async: true, defer: true }, 'head');
 loadResource('./assets/js/geolocation-capture.js', 'js', { async: true, defer: true }, 'head');
 // "Add New Employee" SweetAlert2 modal (sidebar)
 loadResource('./plugins/bootstrap-inputmask/bootstrap-inputmask.min.js', 'js', { async: true, defer: true }, 'head');

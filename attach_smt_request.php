@@ -1,4 +1,15 @@
 <?php
+require_once __DIR__ . '/includes/session_bootstrap.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// Opened from the request QR code, often on a phone that is not logged in: the upload needs a login,
+// so send the user to log in first and bring them back here afterwards (see session_check.php).
+if (empty($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
+    $_SESSION['login_return_to'] = './attach_smt_request.php?id=' . rawurlencode((string)($_GET['id'] ?? ''));
+    header('Location: ./index.php');
+    exit();
+}
 require_once __DIR__ . '/includes/db.php';
 //     require_once __DIR__ . '/includes/session_check.php';
 //     include("./includes/convertNumbersToWords.php");
@@ -484,8 +495,14 @@ require_once __DIR__ . '/includes/db.php';
                             uploadErrors.push(file.name + ': ' + ((resp && resp.message) || 'Upload not saved. Please log in again and retry.'));
                         }
                     });
-                    this.on('error', function(file, msg) {
-                        uploadErrors.push(file.name + ': ' + ((msg && msg.message) || msg || 'Upload failed.'));
+                    this.on('error', function(file, msg, xhr) {
+                        var text = (msg && msg.message) || msg || 'Upload failed.';
+                        if (typeof text === 'string' && /^\s*</.test(text)) { // HTML page came back (login/session redirect)
+                            text = 'Your login has expired. Please log in again and retry the upload.';
+                        }
+                        uploadErrors.push(file.name + ': ' + text);
+                        // keep the red tooltip on the thumbnail short as well
+                        $(file.previewElement).find('[data-dz-errormessage]').text(text);
                     });
                     this.on('queuecomplete', function() {
                         if (uploadErrors.length) {

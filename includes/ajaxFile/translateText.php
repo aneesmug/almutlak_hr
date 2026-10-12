@@ -268,6 +268,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['text'])) {
     // Direct calls never loaded the DB, so the shared translation_cache table was skipped and
     // every name went to the external API again on each page. Use it.
     if (empty($GLOBALS['conDB'])) {
+        if (!defined('ALMUTLAK_CONNLIMIT_BUCKET')) {
+            define('ALMUTLAK_CONNLIMIT_BUCKET', 'translate'); // own request-slot bucket, see db.php
+        }
         require_once __DIR__ . '/../db.php';
     }
     

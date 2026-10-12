@@ -3,11 +3,22 @@
  * Dropzone upload for smart request attachments (attach_smt_request.php).
  * Responds JSON: {ok:true,file:"..."} or HTTP 4xx with {ok:false,message:"..."}.
  */
+require_once __DIR__ . '/../session_bootstrap.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+header('Content-Type: application/json');
+// Not logged in (phone that scanned the QR code): session_check.php would redirect to a
+// relative ./index.php, which from this folder is a 404 page - answer in JSON instead.
+if (empty($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'message' => 'Your login has expired. Please log in again and retry the upload.']);
+    exit;
+}
+
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../FileUploader.php';
 require_once __DIR__ . '/../../includes/session_check.php';
-
-header('Content-Type: application/json');
 
 function smt_att_fail($message, $code = 422)
 {

@@ -164,10 +164,12 @@ function translateName(text, sourceOrCurrentLang, targetOrCallback, callback) {
 // exhaust the server's per-connection request slots - so the next real action (e.g. submitting
 // a vacation in Arabic) was refused with "Too many concurrent requests". Requests are therefore
 // queued (max 2 in flight) and identical texts share one request.
+// Queue state lives on window: if this file is loaded twice (jquery.app.js + employee_profile.js),
+// a second copy must not reset the in-flight counter and lift the parallel cap.
 var TRANSLATION_MAX_PARALLEL = 2;
-var translationQueue = [];
-var translationInFlight = 0;
-var translationWaiting = {}; // cacheKey -> [callbacks] for requests already queued/in flight
+window.__translationState = window.__translationState || { queue: [], inFlight: 0, waiting: {} };
+var translationQueue = window.__translationState.queue;
+var translationWaiting = window.__translationState.waiting; // cacheKey -> [callbacks] for requests already queued/in flight
 
 function makeTranslationRequest(text, source, target, callback) {
     var cacheKey = getCacheKey(text, source, target);
@@ -181,15 +183,16 @@ function makeTranslationRequest(text, source, target, callback) {
 }
 
 function pumpTranslationQueue() {
-    while (translationInFlight < TRANSLATION_MAX_PARALLEL && translationQueue.length) {
+    var state = window.__translationState;
+    while (state.inFlight < TRANSLATION_MAX_PARALLEL && translationQueue.length) {
         var job = translationQueue.shift();
-        translationInFlight++;
+        state.inFlight++;
         var done = (function (job) {
             var finished = false;
             return function (result) {
                 if (finished) return;
                 finished = true;
-                translationInFlight--;
+                state.inFlight--;
                 var callbacks = translationWaiting[job.cacheKey] || [];
                 delete translationWaiting[job.cacheKey];
                 callbacks.forEach(function (cb) {
