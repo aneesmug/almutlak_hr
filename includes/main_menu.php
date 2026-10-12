@@ -64,6 +64,7 @@ $fixDoubleDeductionLink = 'fix_double_deduction.php';
 $appSettingsLink = 'app_settings.php';
 $tableJsonApiLink = 'table_json_api.php';
 $loanRejectionReport = 'loan_rejection_report.php';
+$loanPayrollReconcileLink = 'loan_payroll_reconcile.php';
 $dbExportLink = 'db_export.php';
 $dbImportRemoteLink = 'db_import_remote.php';
 
@@ -1014,6 +1015,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <ul class="nav-third-level" aria-expanded="false">
                         <?php if ($is_system_admin): ?>
                         <li><a href="<?= $loanRejectionReport ?>" target="_blank"><i class="fa-duotone fa-square-shekel" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('loan_rejection_report', 'Loan Rejection Report') ?></span></a></li>
+                        <li><a href="<?= $loanPayrollReconcileLink ?>" target="_blank"><i class="fa-duotone fa-scale-balanced" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('loan_payroll_reconcile', 'Loan Payroll Reconcile') ?></span></a></li>
                         <?php endif; ?>
                         <?php if ($can_see_diagnose_deduction_tool): ?>
                         <li><a href="<?= $diagnoseDoubleDeductionLink ?>" target="_blank"><i class="fa-duotone fa-magnifying-glass-chart" style="--fa-primary-color:#f87171;--fa-secondary-color:#f87171;--fa-secondary-opacity:.4"></i><span><?=__('diagnose_double_deduction', 'Diagnose Double Deduction') ?></span></a></li>

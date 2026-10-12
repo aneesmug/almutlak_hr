@@ -95,7 +95,21 @@ function dynimp_columns(mysqli $conn, string $table): array
             'required' => $r['Null'] === 'NO' && $r['Default'] === null && stripos($r['Extra'], 'auto_increment') === false && stripos($r['Extra'], 'GENERATED') === false,
         ];
     }
+    // Main request tables (unique request_inv_no / inv_no + auto-increment PK): imported rows get "LEGACY-<id>" when left blank.
+    $autoCol = null;
+    foreach ($cols as $c) if ($c['auto'] && $c['key'] === 'PRI') $autoCol = $c['name'];
+    foreach ($cols as &$c) {
+        $c['legacy_inv'] = $autoCol !== null && $c['key'] === 'UNI' && in_array($c['name'], ['request_inv_no', 'inv_no'], true);
+        if ($c['legacy_inv']) $c['required'] = false;
+    }
+    unset($c);
     return $cols;
+}
+
+function dynimp_auto_pk(array $colsByName): ?string
+{
+    foreach ($colsByName as $n => $c) if ($c['auto'] && $c['key'] === 'PRI') return $n;
+    return null;
 }
 
 /** Convert one spreadsheet cell into a value for a DB column. Returns [value, errorOrNull]. */
@@ -258,18 +272,30 @@ switch ($ajaxType) {
         $mapCols = array_values(array_map(fn($c) => $c['name'], $map));
         $mapIdx  = array_keys($map);
         $tq = $q($table);
+        $legacyCol = null; $legacyTmp = '';
         if ($mode === 'update') {
             $sql = ''; $bindCols = [];
         } else {
-            $ph = implode(', ', array_fill(0, count($mapCols), '?'));
-            $cl = implode(', ', array_map($q, $mapCols));
+            $bindCols = $mapCols;
+            foreach ($colsByName as $n => $c) if ($c['legacy_inv']) $legacyCol = $n;
+            if ($legacyCol !== null) {
+                $legacyTmp = 'LEGACY-TMP-' . substr($token, 0, 10) . '-'; // unique placeholder, replaced by LEGACY-<id> after insert
+                if (!in_array($legacyCol, $bindCols, true)) $bindCols[] = $legacyCol;
+            }
+            $ph = implode(', ', array_fill(0, count($bindCols), '?'));
+            $cl = implode(', ', array_map($q, $bindCols));
             $sql = ($mode === 'insert_ignore' ? "INSERT IGNORE INTO" : "INSERT INTO") . " $tq ($cl) VALUES ($ph)";
             if ($mode === 'upsert') {
-                $upd = array_filter($mapCols, fn($n) => !$colsByName[$n]['auto'] && $colsByName[$n]['key'] !== 'PRI');
-                if ($upd) $sql .= ' ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(fn($n) => $q($n) . ' = VALUES(' . $q($n) . ')', $upd));
+                $upd = array_filter($bindCols, fn($n) => !$colsByName[$n]['auto'] && $colsByName[$n]['key'] !== 'PRI');
+                if ($upd) $sql .= ' ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(function ($n) use ($q, $legacyCol, $legacyTmp) {
+                    if ($n === $legacyCol) return $q($n) . ' = IF(VALUES(' . $q($n) . ") LIKE '" . $legacyTmp . "%', " . $q($n) . ', VALUES(' . $q($n) . '))';
+                    return $q($n) . ' = VALUES(' . $q($n) . ')';
+                }, $upd));
             }
-            $bindCols = $mapCols;
         }
+        $legacyStmt = $legacyCol !== null
+            ? $conDB->prepare("UPDATE $tq SET " . $q($legacyCol) . " = CONCAT('LEGACY-', " . $q(dynimp_auto_pk($colsByName)) . ') WHERE ' . $q(dynimp_auto_pk($colsByName)) . ' = ?')
+            : null;
 
         try {
             $rows = dynimp_read_sheet($path);
@@ -332,11 +358,19 @@ switch ($ajaxType) {
                         }
                     }
                 } elseif (!$rowErr) {
+                    $needLegacy = $legacyCol !== null && (($vals[$legacyCol] ?? null) === null || $vals[$legacyCol] === '');
+                    if ($needLegacy) $vals[$legacyCol] = $legacyTmp . $rowNo;
                     $params = array_map(fn($n) => $vals[$n], $bindCols);
                     try {
                         $stmt->bind_param($types, ...$params);
                         $stmt->execute();
-                        if ($stmt->affected_rows > 0) $affected++;
+                        $ar = $stmt->affected_rows;
+                        if ($needLegacy && $ar === 1 && $stmt->insert_id) { // 1 = new row (2 = upsert updated an existing one)
+                            $newId = (string)$stmt->insert_id;
+                            $legacyStmt->bind_param('s', $newId);
+                            $legacyStmt->execute();
+                        }
+                        if ($ar > 0) $affected++;
                         else $unchanged++;
                     } catch (mysqli_sql_exception $e) {
                         $rowErr = $e->getMessage();

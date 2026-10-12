@@ -405,6 +405,7 @@ if (mysqli_num_rows($query) == 1) {
                 var tags = '';
                 if (c.key === 'PRI') tags += '<span class="di-tag pk">PK</span>'; else if (c.key === 'UNI') tags += '<span class="di-tag">unique</span>';
                 if (c.auto) tags += '<span class="di-tag">auto</span>';
+                if (c.legacy_inv) tags += '<span class="di-tag" title="On insert, blank or unmapped cells are set to LEGACY-&lt;id&gt;">blank = LEGACY-id</span>';
                 if (!c.nullable) tags += '<span class="di-tag">not null</span>';
                 return '<tr data-name="' + esc(c.name.toLowerCase()) + '"><td><input type="checkbox" class="col-chk" value="' + esc(c.name) + '"' + (c.auto ? '' : ' checked') + '></td>' +
                     '<td><strong>' + esc(c.name) + '</strong> ' + (c.required ? '<span class="di-req">*</span>' : '') + '</td><td class="text-muted">' + esc(c.type) + '</td><td>' + tags + '</td></tr>';
