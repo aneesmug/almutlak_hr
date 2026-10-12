@@ -92,6 +92,7 @@ function dynimp_columns(mysqli $conn, string $table): array
             'default'  => $r['Default'],
             'auto'     => stripos($r['Extra'], 'auto_increment') !== false,
             'generated'=> stripos($r['Extra'], 'GENERATED') !== false,
+            'on_update'=> stripos($r['Extra'], 'on update') !== false,
             'required' => $r['Null'] === 'NO' && $r['Default'] === null && stripos($r['Extra'], 'auto_increment') === false && stripos($r['Extra'], 'GENERATED') === false,
         ];
     }
@@ -293,9 +294,14 @@ switch ($ajaxType) {
                 }, $upd));
             }
         }
-        $legacyStmt = $legacyCol !== null
-            ? $conDB->prepare("UPDATE $tq SET " . $q($legacyCol) . " = CONCAT('LEGACY-', " . $q(dynimp_auto_pk($colsByName)) . ') WHERE ' . $q(dynimp_auto_pk($colsByName)) . ' = ?')
-            : null;
+        $legacyStmt = null;
+        if ($legacyCol !== null) {
+            $pk = $q(dynimp_auto_pk($colsByName));
+            $set = [$q($legacyCol) . " = CONCAT('LEGACY-', $pk)"];
+            // keep ON UPDATE CURRENT_TIMESTAMP columns (e.g. last_modified) at their imported value
+            foreach ($colsByName as $n => $c) if ($c['on_update']) $set[] = $q($n) . ' = ' . $q($n);
+            $legacyStmt = $conDB->prepare("UPDATE $tq SET " . implode(', ', $set) . " WHERE $pk = ?");
+        }
 
         try {
             $rows = dynimp_read_sheet($path);
