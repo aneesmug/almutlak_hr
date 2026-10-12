@@ -125,6 +125,9 @@ if (isset($_POST['ajaxType'])) {
         case 'apply_loan':
             apply_for_loan();
             break;
+        case 'check_active_loan':
+            check_active_loan();
+            break;
         case 'approve_loan':
             approve_loan();
             break;
@@ -1175,6 +1178,99 @@ function get_loan_details_for_modification() {
     ]);
 }
 
+/**
+ * Active loans of an employee = still in approval (pending/awaiting) or approved with a
+ * remaining balance. Each row carries a full repayment summary for the "you already have
+ * an active loan" popup (assets/js/loanHandling.js) and the apply_loan guard.
+ */
+function get_active_loans_summary($conDB, $emp_id) {
+    $stmt = $conDB->prepare("SELECT l.id, l.inv_no, l.loan_type, l.status, l.loan_amount, l.approved_amount, l.final_approved_amount,
+            COALESCE(NULLIF(l.total_payable, 0), l.final_approved_amount, l.approved_amount, l.loan_amount, 0) AS total_payable,
+            l.monthly_deduction, l.installments, l.deduction_mode, l.start_date, l.end_date, l.created_at, l.reason,
+            COALESCE(p.total_paid, 0) AS total_paid, COALESCE(p.payments, 0) AS payments, p.last_payment
+        FROM emp_loan l
+        LEFT JOIN (SELECT loan_id, SUM(amount) AS total_paid, COUNT(*) AS payments, MAX(payment_date) AS last_payment
+                   FROM emp_loan_payments GROUP BY loan_id) p ON p.loan_id = l.id
+        WHERE l.emp_id = ? AND l.status IN ('pending', 'awaiting', 'approved')
+        ORDER BY l.id DESC");
+    $stmt->bind_param('s', $emp_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $loans = [];
+    while ($r = $res->fetch_assoc()) {
+        $total = (float)$r['total_payable'];
+        $paid = (float)$r['total_paid'];
+        $remaining = max(0, round($total - $paid, 2));
+        $inApproval = in_array($r['status'], ['pending', 'awaiting'], true);
+        if (!$inApproval && $remaining <= 0.009) {
+            continue; // approved but fully repaid - not active
+        }
+        $monthly = (float)$r['monthly_deduction'];
+        $pendingWith = null;
+        if ($inApproval && !empty($r['inv_no'])) {
+            $pw = $conDB->prepare("SELECT COALESCE(e.name, al.fullname, al.username) AS name
+                FROM request_approvers ra
+                LEFT JOIN employees e ON e.emp_id = ra.approver_id
+                LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+                WHERE ra.request_inv_no = ? AND ra.status = 'pending' ORDER BY ra.approval_level LIMIT 1");
+            $pw->bind_param('s', $r['inv_no']);
+            $pw->execute();
+            $pendingWith = $pw->get_result()->fetch_assoc()['name'] ?? null;
+            $pw->close();
+        }
+        $loans[] = [
+            'id' => (int)$r['id'],
+            'inv_no' => (string)$r['inv_no'],
+            'loan_type' => (string)$r['loan_type'],
+            'status' => (string)$r['status'],
+            'in_approval' => $inApproval,
+            'pending_with' => $pendingWith ? getDisplayName($pendingWith, 'en') : null,
+            'loan_amount' => round((float)$r['loan_amount'], 2),
+            'total_payable' => round($total, 2),
+            'total_paid' => round($paid, 2),
+            'remaining' => $remaining,
+            'paid_percent' => $total > 0 ? min(100, round($paid / $total * 100, 1)) : 0,
+            'monthly_deduction' => round($monthly, 2),
+            'installments' => (int)$r['installments'],
+            'months_left' => $monthly > 0 ? (int)ceil($remaining / $monthly) : null,
+            'payments' => (int)$r['payments'],
+            'last_payment' => $r['last_payment'],
+            'deduction_mode' => (string)$r['deduction_mode'],
+            'start_date' => $r['start_date'],
+            'end_date' => $r['end_date'],
+            'created_at' => $r['created_at'],
+            'reason' => (string)$r['reason'],
+        ];
+    }
+    $stmt->close();
+    return $loans;
+}
+
+/** Whether a new loan may be submitted for $emp_id despite an active loan (HR override). */
+function can_apply_with_active_loan($conDB, $emp_id) {
+    global $current_user_id, $user_type, $user_role, $is_system_admin;
+    require_once __DIR__ . '/../special_access_helper.php';
+    return user_has_special_access($conDB, $current_user_id ?? '', 'apply_loan_with_active_loan', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+        || employee_allows_loan_with_active_loan($conDB, $emp_id);
+}
+
+/** Apply Loan pre-check: blocked + the active loan summaries when a new loan isn't allowed. */
+function check_active_loan() {
+    global $conDB;
+    $emp_id = trim((string)($_POST['emp_id'] ?? ''));
+    if ($emp_id === '') {
+        echo json_encode(['status' => 'error', 'message' => 'Missing employee.']);
+        return;
+    }
+    $loans = get_active_loans_summary($conDB, $emp_id);
+    $override = can_apply_with_active_loan($conDB, $emp_id);
+    echo json_encode([
+        'status' => 'success',
+        'blocked' => !empty($loans) && !$override,
+        'loans' => (!empty($loans) && !$override) ? $loans : [],
+    ]);
+}
+
 function apply_for_loan() {
     global $conDB, $pdo, $current_user_id, $user_type, $user_role, $is_system_admin;
     // Check for required fields
@@ -1289,6 +1385,21 @@ function apply_for_loan() {
         return;
     }
     $pending_check->close();
+
+    // Approved loan still being repaid also blocks a new one (same rule as check_active_loan).
+    if (!$can_force_apply_with_active_loan) {
+        $active_loans = array_values(array_filter(get_active_loans_summary($conDB, $emp_id), fn($l) => !$l['in_approval']));
+        if ($active_loans) {
+            echo json_encode([
+                'status' => 'error',
+                'title' => 'Active Loan',
+                'message' => 'You already have an active loan (' . $active_loans[0]['inv_no'] . ') with ' . number_format($active_loans[0]['remaining'], 2) . ' remaining. Please contact HR to apply for a new loan.',
+                'type' => 'active_loan',
+                'loans' => $active_loans,
+            ]);
+            return;
+        }
+    }
     
     // Validate supervisor assignment FIRST
     $supervisor_check = validate_employee_supervisor($conDB, $emp_id);

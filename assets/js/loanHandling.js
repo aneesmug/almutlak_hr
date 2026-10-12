@@ -31,11 +31,111 @@
 // Include shared AJAX error handling utilities
 $("head").append($("<script type='text/javascript'></script>").attr("src", "./assets/js/ajaxErrorHandling.js"));
 
+
+// --- Active loan guard (Apply Loan) ---
+// The Apply Loan button is always shown. When the employee already has an active loan
+// (in approval, or approved with a remaining balance) and no HR override, the click shows
+// that loan's full summary and asks them to contact HR instead of opening the form.
+// Server rule: ajaxLoan.php get_active_loans_summary() / check_active_loan.
+function srLoanEsc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+function srLoanMoney(v) {
+    return '<i class="icon-saudi_riyal"></i> ' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function srLoanDate(v) {
+    if (!v || String(v).indexOf('0000') === 0) return '-';
+    const d = new Date(String(v).replace(' ', 'T'));
+    return isNaN(d) ? srLoanEsc(v) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function showActiveLoanSummary(loans, emp_id) {
+    const tr = (key, fallback) => {
+        const v = typeof __ === 'function' ? __(key) : '';
+        return v && v !== key ? v : fallback;
+    };
+    const typeLabel = (t) => tr('loan_type_' + t, String(t || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+    const cards = loans.map(l => {
+        const statusPill = l.in_approval
+            ? `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${tr('pending_approval', 'Pending Approval')}</span>`
+            : `<span class="sr-pill tone-green"><span class="sr-dot"></span>${tr('active', 'Active')}</span>`;
+        const kv = [
+            [tr('loan_amount_label', 'Loan Amount'), srLoanMoney(l.loan_amount)],
+            [tr('monthly_deduction', 'Monthly Deduction'), l.monthly_deduction > 0 ? srLoanMoney(l.monthly_deduction) : '-'],
+            [tr('installments', 'Installments'), l.installments ? srLoanEsc(l.installments) : '-'],
+            [tr('months_left', 'Months Left'), l.months_left != null && !l.in_approval ? srLoanEsc(l.months_left) : '-'],
+            [tr('start_date', 'Start Date'), srLoanDate(l.start_date)],
+            [tr('end_date', 'End Date'), srLoanDate(l.end_date)],
+            [tr('payments_made', 'Payments Made'), srLoanEsc(l.payments) + (l.last_payment ? ` <small class="text-muted">(${tr('last_payment', 'last')} ${srLoanDate(l.last_payment)})</small>` : '')],
+            [tr('deduction_mode', 'Deduction Mode'), l.deduction_mode === 'manual' ? tr('manual', 'Manual') : tr('automatic', 'Automatic')],
+            [tr('applied_on', 'Applied On'), srLoanDate(l.created_at)],
+        ];
+        if (l.in_approval && l.pending_with) kv.push([tr('pending_with', 'Pending With'), srLoanEsc(l.pending_with)]);
+        return `
+            <div class="sr-card" style="margin-bottom:12px">
+                <div class="sr-card-head" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                    <div>
+                        <div class="sr-card-title"><i class="fa fa-hand-holding-usd"></i> ${srLoanEsc(typeLabel(l.loan_type))}</div>
+                        <div class="sr-card-sub sr-mono">${srLoanEsc(l.inv_no || '-')}</div>
+                    </div>
+                    ${statusPill}
+                </div>
+                <div class="sr-card-body">
+                    <div class="srh-tiles" style="--srh-cols:3;margin-bottom:10px">
+                        <div class="srh-tile"><span>${tr('total_payable', 'Total Payable')}</span><b style="font-size:16px">${srLoanMoney(l.total_payable)}</b></div>
+                        <div class="srh-tile tone-green"><span>${tr('total_paid', 'Total Paid')}</span><b style="font-size:16px">${srLoanMoney(l.total_paid)}</b></div>
+                        <div class="srh-tile tone-amber"><span>${tr('remaining_balance', 'Remaining Balance')}</span><b style="font-size:16px">${srLoanMoney(l.remaining)}</b></div>
+                    </div>
+                    <div class="srh-progress"><span style="width:${Number(l.paid_percent) || 0}%"></span></div>
+                    <div class="srh-progress-meta"><span>${tr('repaid', 'Repaid')} <b>${Number(l.paid_percent) || 0}%</b></span><span>${tr('remaining_balance', 'Remaining')} <b>${srLoanMoney(l.remaining)}</b></span></div>
+                    <dl class="sr-kv" style="margin-top:12px">
+                        ${kv.map(([k, v]) => `<div class="row-kv"><dt>${srLoanEsc(k)}</dt><dd>${v}</dd></div>`).join('')}
+                    </dl>
+                    ${l.reason ? `<div class="sr-cell-sub" style="margin-top:6px"><b>${tr('reason', 'Reason')}:</b> ${srLoanEsc(l.reason)}</div>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+    return Swal.fire({
+        title: `<i class="fa fa-hand-holding-usd"></i> ${tr('active_loan_found', 'You Have an Active Loan')}`,
+        html: `
+            <div class="text-left">
+                <div class="sr-notice tone-amber" style="margin-bottom:14px">
+                    <i class="fa fa-info-circle"></i>
+                    <div>
+                        <strong>${tr('new_loan_not_allowed_active', 'A new loan cannot be requested while you have an active loan.')}</strong><br>
+                        ${tr('contact_hr_for_new_loan', 'Please contact the HR department to apply for a new loan.')}
+                    </div>
+                </div>
+                ${cards}
+            </div>`,
+        width: 760,
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        allowOutsideClick: false,
+        showCancelButton: !!emp_id,
+        confirmButtonText: tr('ok', 'OK'),
+        cancelButtonText: `<i class="fa fa-history"></i> ${tr('view_loan_history', 'View Loan History')}`,
+    }).then(res => {
+        if (res.dismiss === Swal.DismissReason.cancel && emp_id) {
+            window.open('employee_loan_history.php?emp_id=' + encodeURIComponent(emp_id), '_blank');
+        }
+    });
+}
+
 $(document).on('click', '.applyLoan', async function(e) {
     e.preventDefault();
     const emp_id = $(this).data('emp_id');
     const user_type = $(this).data('user_type');
     if (typeof window.srEnsureCss === 'function') { window.srEnsureCss(); } else if (!document.querySelector('link[href*="smart_request.css"]')) { $('head').append('<link rel="stylesheet" href="assets/css/smart_request.css">'); }
+
+    // Active loan: show its summary + "contact HR" instead of the application form.
+    try {
+        Swal.fire({ title: (typeof __ === 'function' && __('loading')) || 'Loading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const check = await $.ajax({ url: './includes/ajaxFile/ajaxLoan.php', type: 'POST', dataType: 'json', data: { ajaxType: 'check_active_loan', emp_id: emp_id } });
+        Swal.close();
+        if (check && check.blocked && Array.isArray(check.loans) && check.loans.length) {
+            showActiveLoanSummary(check.loans, emp_id);
+            return;
+        }
+    } catch (err) {
+        Swal.close(); // fall through to the form; apply_loan re-checks on the server
+    }
 
     // Build new requirement form without EOS/40% blocks
     Swal.fire({
@@ -437,6 +537,12 @@ $(document).on('click', '.applyLoan', async function(e) {
         if (result.isConfirmed) {
             const response = result.value;
             
+            // Server found an approved loan still being repaid
+            if (response.type === 'active_loan' && Array.isArray(response.loans)) {
+                showActiveLoanSummary(response.loans, emp_id);
+                return;
+            }
+
             // Handle pending request case
             if (response.type === 'pending_request') {
                 const pendingLoan = response.pending_loan;
