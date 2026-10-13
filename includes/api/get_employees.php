@@ -99,7 +99,8 @@ if (!empty($monthStart) && !empty($monthEnd)) {
                             AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
                             AND (
                                 sv.return_date IS NULL
-                                OR sv.return_date > :settlement_month_end3
+                                -- return_date is the last vacation day: ending on month end counts
+                                OR DATE_ADD(sv.return_date, INTERVAL 1 DAY) > :settlement_month_end3
                             )
                         )
                         OR

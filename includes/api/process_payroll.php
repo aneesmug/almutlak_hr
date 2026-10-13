@@ -166,9 +166,12 @@ function hasPaidVacationSettlementForMonth(PDO $pdo, $empId, $monthYear) {
                     AND v.current_status IN ('approved', 'completed')
                     AND v.start_date <= :month_end
                     AND COALESCE(rr.final_approved_date, v.return_date, v.start_date) >= :month_start
+                    -- return_date is the LAST vacation day, rejoin final_approved_date is the
+                    -- first day back. A vacation ending exactly on month end still covers the
+                    -- whole remainder of the month, so compare the day after return_date.
                     AND (
                         COALESCE(rr.final_approved_date, v.return_date) IS NULL
-                        OR COALESCE(rr.final_approved_date, v.return_date) > :month_end3
+                        OR COALESCE(rr.final_approved_date, DATE_ADD(v.return_date, INTERVAL 1 DAY)) > :month_end3
                     )
                 )
                 OR
