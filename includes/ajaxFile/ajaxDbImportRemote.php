@@ -211,6 +211,20 @@ if ($action === 'run_import') {
         $postFields['since'] = $sinceRaw;
     }
 
+    // Paged pull (one table, page_size rows per request) - keeps each live response small
+    // enough to finish inside the live host's time limit on million-row tables.
+    $pageSize = max(0, min(100000, (int) ($_POST['page_size'] ?? 0)));
+    $pageCursor = trim((string) ($_POST['cursor'] ?? ''));
+    $knownTotal = isset($_POST['table_total']) ? (int) $_POST['table_total'] : null;
+    if ($pageSize > 0 && count($tables) === 1) {
+        $postFields['page_size'] = $pageSize;
+        if ($pageCursor !== '') {
+            $postFields['cursor'] = $pageCursor;
+        }
+    } else {
+        $pageSize = 0;
+    }
+
     $result = db_import_remote_curl($baseUrl . '/download_db_export.php', $postFields, 0);
 
     if ($result['error']) {
@@ -257,6 +271,16 @@ if ($action === 'run_import') {
         $tableCounts[$m[1]] = (int) $m[2];
     }
     $totalRecords = array_sum($tableCounts);
+
+    // "-- PAGE: rows=N next=X more=0|1" - only present when the live server supports paging.
+    // An older live download_db_export.php ignores page_size and sends the whole table, so
+    // no marker = treat it as a complete, single-shot export (previous behavior).
+    $paging = null;
+    if ($pageSize > 0 && preg_match('/^-- PAGE: rows=(\d+) next=(-?\d+) more=([01])\s*$/m', $sql, $pm)) {
+        $paging = ['page_rows' => (int) $pm[1], 'next_cursor' => $pm[2], 'has_more' => $pm[3] === '1'];
+        $totalRecords = $paging['page_rows'];
+    }
+    $isLastPage = $paging === null || !$paging['has_more'];
 
     $mysqli = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
     if (!$mysqli) {
@@ -308,6 +332,25 @@ if ($action === 'run_import') {
         exit;
     }
 
+    // Middle page of a paged pull - nothing to verify yet, hand the cursor back.
+    if (!$isLastPage) {
+        mysqli_close($mysqli);
+        echo json_encode([
+            'status' => 'success',
+            'paged' => true,
+            'has_more' => true,
+            'next_cursor' => $paging['next_cursor'],
+            'page_rows' => $paging['page_rows'],
+            'table_counts' => $tableCounts,
+            'next_export_key' => $rotatedExportKey,
+        ]);
+        exit;
+    }
+    // Last page: the live total came from page one, the client passes it back
+    if ($paging !== null && $knownTotal !== null && count($tables) === 1 && !isset($tableCounts[$tables[0]])) {
+        $tableCounts[$tables[0]] = $knownTotal;
+    }
+
     // Verify against the actual local table, not just the SQL that was sent - if a
     // table came back short of what the dump claimed, surface it instead of trusting
     // a blanket "success".
@@ -355,6 +398,9 @@ if ($action === 'run_import') {
         'shortfall_tables' => $shortfallTables,
         'insert_diagnostics' => $insertDiagnostics,
         'next_export_key' => $rotatedExportKey,
+        'paged' => $paging !== null,
+        'has_more' => false,
+        'page_rows' => $paging !== null ? $paging['page_rows'] : null,
     ]);
     exit;
 }

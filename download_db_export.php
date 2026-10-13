@@ -27,11 +27,23 @@ if ($sinceRaw !== '') {
     }
 }
 
+// Paging (used by the remote importer for big tables like zk_attendance): page_size > 0
+// exports at most that many rows of ONE table, starting after `cursor` (last primary key
+// value, or a row offset for tables without a single integer PK), and ends the table with
+// a "-- PAGE: rows=N next=CURSOR more=0|1" marker so the importer can request the next page.
+// Without page_size the whole table is exported as before.
+$pageSize = max(0, min(100000, (int) ($_POST['page_size'] ?? $_GET['page_size'] ?? 0)));
+$cursor = trim((string) ($_POST['cursor'] ?? $_GET['cursor'] ?? ''));
+if ($cursor !== '' && !preg_match('/^-?\d+$/', $cursor)) {
+    $cursor = '';
+}
+
 function db_export_quote_ident(string $name): string {
     return '`' . str_replace('`', '``', $name) . '`';
 }
 
-function db_export_table(PDO $pdo, string $table, string $since): void {
+function db_export_table(PDO $pdo, string $table, string $since, int $pageSize = 0, string $cursor = ''): void {
+    $paged = $pageSize > 0;
     $tIdent = db_export_quote_ident($table);
 
     $colsStmt = $pdo->prepare("SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS
@@ -66,13 +78,19 @@ function db_export_table(PDO $pdo, string $table, string $since): void {
         }
     }
 
-    $countStmt = $pdo->query("SELECT COUNT(*) FROM $tIdent" . $whereSql);
-    $totalRows = (int) $countStmt->fetchColumn();
-    if ($totalRows === 0) {
-        return;
+    // Paged mode counts only on the first page (COUNT(*) on a million-row table on every
+    // page would be wasted work) - the importer remembers the total from page one.
+    if (!$paged || $cursor === '') {
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM $tIdent" . $whereSql);
+        $totalRows = (int) $countStmt->fetchColumn();
+        if ($totalRows === 0) {
+            if ($paged) {
+                echo "-- PAGE: rows=0 next=0 more=0\n";
+            }
+            return;
+        }
+        echo "-- Table: $table ($totalRows rows)\n";
     }
-
-    echo "-- Table: $table ($totalRows rows)\n";
 
     $colIdentList = implode(', ', array_map('db_export_quote_ident', $columns));
     $updateCols = array_diff($columns, $primaryCols);
@@ -95,20 +113,25 @@ function db_export_table(PDO $pdo, string $table, string $since): void {
         : null;
 
     $chunkSize = 500;
-    $offset = 0;
-    $lastPkValue = 0;
+    $offset = ($paged && $singlePk === null && $cursor !== '') ? max(0, (int) $cursor) : 0;
+    $lastPkValue = ($paged && $singlePk !== null && $cursor !== '') ? (int) $cursor : 0;
+    $pageRows = 0;
 
     while (true) {
+        $limit = $paged ? min($chunkSize, $pageSize - $pageRows) : $chunkSize;
+        if ($limit <= 0) {
+            break;
+        }
         if ($singlePk !== null) {
             $pkIdent = db_export_quote_ident($singlePk);
             $sql = "SELECT * FROM $tIdent" . $whereSql
                 . ($whereSql === '' ? ' WHERE ' : ' AND ') . "$pkIdent > :lastPk"
-                . " ORDER BY $pkIdent ASC LIMIT $chunkSize";
+                . " ORDER BY $pkIdent ASC LIMIT $limit";
             $stmt = $pdo->prepare($sql);
             $stmt->bindValue(':lastPk', $lastPkValue, PDO::PARAM_INT);
             $stmt->execute();
         } else {
-            $stmt = $pdo->query("SELECT * FROM $tIdent" . $whereSql . " LIMIT $chunkSize OFFSET $offset");
+            $stmt = $pdo->query("SELECT * FROM $tIdent" . $whereSql . " LIMIT $limit OFFSET $offset");
         }
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -131,13 +154,25 @@ function db_export_table(PDO $pdo, string $table, string $since): void {
 
         echo "$insertVerb $tIdent ($colIdentList) VALUES\n" . implode(",\n", $valueGroups) . "$updateSql;\n";
 
-        $offset += $chunkSize;
+        $fetched = count($rows);
+        $offset += $fetched;
+        $pageRows += $fetched;
         unset($rows, $valueGroups);
 
         if (ob_get_level() > 0) {
             @ob_flush();
         }
         flush();
+
+        if ($fetched < $limit) {
+            break; // table exhausted
+        }
+    }
+
+    if ($paged) {
+        $next = $singlePk !== null ? $lastPkValue : $offset;
+        $more = $pageRows >= $pageSize ? 1 : 0;
+        echo "-- PAGE: rows=$pageRows next=$next more=$more\n";
     }
 
     echo "\n";
@@ -176,8 +211,14 @@ $allTables = $tablesStmt->fetchAll(PDO::FETCH_COLUMN);
 
 $tables = $onlyTables ? array_values(array_intersect($allTables, $onlyTables)) : $allTables;
 
+// Paging only makes sense for a single table (the cursor belongs to one table)
+if ($pageSize > 0 && count($tables) !== 1) {
+    $pageSize = 0;
+    $cursor = '';
+}
+
 foreach ($tables as $table) {
-    db_export_table($pdo, $table, $since);
+    db_export_table($pdo, $table, $since, $pageSize, $cursor);
 }
 
 echo "\nSET FOREIGN_KEY_CHECKS=1;\n";
