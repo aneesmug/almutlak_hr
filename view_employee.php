@@ -779,188 +779,143 @@ if (mysqli_num_rows($query) == 1) {
 				padding: 10px 30px;
 			}
 
-			/* ===== MODERN PROFILE LAYOUT ===== */
+			/* ===== PROFILE TAB (cards: white header + colored icon badge, label icons) ===== */
 			.profile-content-wrapper {
-				background: #f5f7fa;
-				padding: 25px;
-				border-radius: 8px;
+				column-count: 2;
+				column-gap: 18px;
+				padding: 4px 0 0;
+				background: transparent;
 			}
-
 			.profile-section {
-				background: white;
-				border-radius: 8px;
-				margin-bottom: 20px;
+				--ps: #2563eb;
+				background: #fff;
+				border-radius: 16px;
 				overflow: hidden;
-				box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+				border: 1px solid rgba(15, 23, 42, .07);
+				box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06);
+				position: relative;
+				break-inside: avoid;
+				margin: 0 0 18px;
+				display: inline-block;
+				width: 100%;
 			}
+			.profile-section::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, var(--ps), color-mix(in srgb, var(--ps) 40%, white)); }
+			.profile-section.ps-personal { --ps: #2563eb; }
+			.profile-section.ps-employment { --ps: #7c3aed; }
+			.profile-section.ps-contact { --ps: #16a34a; }
+			.profile-section.ps-banking { --ps: #d97706; }
+			.profile-section.ps-d365 { --ps: #0078d4; }
+			.profile-section.ps-insurance { --ps: #dc2626; }
+			.profile-section.ps-car { --ps: #475569; }
+			.profile-section.ps-additional { --ps: #4f46e5; }
+			.profile-section.ps-medical { --ps: #dc2626; }
+			.profile-section.ps-income { --ps: #16a34a; }
+			/* Card header extras (Additional Information tab) */
+			.profile-section-header .psh-sub { font-size: 12px; font-weight: 600; color: #64748b; }
+			.profile-section-header .psh-btn {
+				margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px;
+				border-radius: 10px; border: 0; font-size: 13px; font-weight: 700; color: #fff; cursor: pointer;
+				background: linear-gradient(135deg, var(--ps), color-mix(in srgb, var(--ps) 65%, #0f172a));
+				box-shadow: 0 4px 10px color-mix(in srgb, var(--ps) 25%, transparent);
+			}
+			.profile-section-header .psh-btn:hover { filter: brightness(1.08); }
+			.profile-section .psh-subtitle { display: flex; align-items: center; gap: 8px; margin: 16px 4px 10px; font-size: 13.5px; font-weight: 800; color: #0f172a; }
+			.profile-section .psh-subtitle i { color: var(--ps); }
+			.profile-section .psh-empty { margin: 4px; padding: 22px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 12px; }
+			.profile-section .psh-empty i { margin-inline-end: 6px; color: var(--ps); }
+			.profile-section .sr-table-wrap { border-radius: 12px; overflow: auto; border: 1px solid #eef1f5; }
+			#additionalinfo1 .profile-section { margin-bottom: 18px; }
+
+			/* Vacation balance summary (Vacations tab) */
+			.vac-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+			.vac-sum-tile { --c: #2563eb; display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 18px rgba(15,23,42,.05); position: relative; overflow: hidden; }
+			.vac-sum-tile::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--c); }
+			[dir="rtl"] .vac-sum-tile::before { inset: 0 0 0 auto; }
+			.vac-sum-tile > i { flex: none; width: 46px; height: 46px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, white); }
+			.vac-sum-tile small { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; }
+			.vac-sum-tile b { font-size: 24px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+			.vac-sum-tile b span { font-size: 12px; font-weight: 600; color: #64748b; margin-inline-start: 4px; }
+			.vac-sum-bar { margin-bottom: 20px; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; }
+			.vac-sum-bar-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px; }
+			.vac-sum-bar-track { height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
+			.vac-sum-bar-track span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #f59e0b, #ea580c); }
+			.vac-sum-empty { margin-bottom: 20px; padding: 20px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 14px; }
+			@media (max-width: 767px) { .vac-sum { grid-template-columns: 1fr; } }
+			html.app-dark .vac-sum-tile, html.app-dark .vac-sum-bar { background: #242a35; border-color: #323a48; }
+			html.app-dark .vac-sum-tile b, html.app-dark .profile-section .psh-subtitle { color: #e5e7eb; }
 
 			.profile-section-header {
-				background: linear-gradient(135deg, #4facfe 0%, #00a8ff 100%);
-				color: white;
-				padding: 15px 20px;
-				font-size: 15px;
-				font-weight: 600;
-				display: flex;
-				align-items: center;
-				gap: 10px;
+				display: flex; align-items: center; gap: 12px;
+				padding: 18px 20px 12px;
+				background: transparent; color: #0f172a;
+				font-size: 15.5px; font-weight: 800;
 			}
-
-			.profile-section-header.d365 {
-				background: linear-gradient(135deg, #0078d4 0%, #2b88d8 100%);
+			.profile-section-header .psh-icon {
+				flex: none; width: 42px; height: 42px; border-radius: 12px;
+				display: inline-flex; align-items: center; justify-content: center; font-size: 17px; color: #fff;
+				background: linear-gradient(135deg, var(--ps), color-mix(in srgb, var(--ps) 65%, #0f172a));
+				box-shadow: 0 6px 14px color-mix(in srgb, var(--ps) 30%, transparent);
 			}
+			.profile-section-header a { color: var(--ps) !important; }
 
-			.profile-section-header i {
-				font-size: 18px;
-				opacity: 0.9;
-			}
-
-			.profile-section-body {
-				padding: 0;
-			}
-
-			.profile-grid {
-				display: grid;
-				grid-template-columns: repeat(2, 1fr);
-				gap: 0;
-			}
-
+			.profile-section-body { padding: 0 12px 12px; }
+			.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 			.profile-field {
-				padding: 15px 20px;
-				border-bottom: 1px solid #eef2f7;
-				border-right: 1px solid #eef2f7;
-				display: flex;
-				flex-direction: column;
-				gap: 5px;
-				transition: background 0.2s;
+				display: flex; flex-direction: column; gap: 6px;
+				padding: 11px 12px;
+				border: 0; border-radius: 12px;
+				background: color-mix(in srgb, var(--ps) 4%, white);
+				transition: background .15s ease;
+				min-width: 0;
 			}
-
-			.profile-field:nth-child(2n) {
-				border-right: none;
-			}
-
-			.profile-field:hover {
-				background: #f8fafc;
-			}
+			.profile-field:hover { background: color-mix(in srgb, var(--ps) 9%, white); }
+			.profile-field.full-width { grid-column: 1 / -1; }
 
 			.profile-field-label {
-				font-size: 11px;
-				font-weight: 600;
-				text-transform: uppercase;
-				color: #94a3b8;
-				letter-spacing: 0.5px;
+				display: flex; align-items: center; gap: 8px;
+				font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b;
 			}
-
-			.profile-field-value {
-				font-size: 14px;
-				color: #1e293b;
-				font-weight: 500;
-				word-break: break-word;
+			.profile-field-label > i {
+				flex: none; width: 24px; height: 24px; border-radius: 7px; font-size: 11px;
+				display: inline-flex; align-items: center; justify-content: center;
+				color: var(--ps); background: color-mix(in srgb, var(--ps) 14%, white);
 			}
+			.profile-field-value { font-size: 14px; font-weight: 700; color: #0f172a; word-break: break-word; }
+			.profile-field-label:has(> i) + .profile-field-value { padding-inline-start: 32px; }
 
-			.profile-field-value .copyToClipboard {
-				cursor: pointer;
-				padding: 2px 6px;
-				border-radius: 4px;
-				transition: all 0.2s;
-			}
+			.profile-field-value .copyToClipboard { cursor: pointer; padding: 1px 4px; border-radius: 5px; transition: all .2s; }
+			.profile-field-value .copyToClipboard:hover { background: color-mix(in srgb, var(--ps) 14%, white); color: var(--ps); }
+			.profile-field-value .fa-clipboard { color: #94a3b8; font-size: 12px; margin-inline-start: 6px; cursor: pointer; }
+			.profile-field-value .fa-clipboard:hover { color: var(--ps); }
 
-			.profile-field-value .copyToClipboard:hover {
-				background: #e0e7ff;
-				color: #4f46e5;
-			}
-
-			.profile-field-value .fa-clipboard {
-				color: #94a3b8;
-				font-size: 12px;
-				margin-left: 6px;
-				cursor: pointer;
-				transition: color 0.2s;
-			}
-
-			.profile-field-value .fa-clipboard:hover {
-				color: #4f46e5;
-			}
-
-			/* Full width fields */
-			.profile-field.full-width {
-				grid-column: 1 / -1;
-				border-right: none;
-			}
-
-			/* Date badges */
+			/* Date chips (Gregorian / Hijri) */
 			.date-batch-g, .date-batch-h {
-				display: inline-flex;
-				align-items: center;
-				gap: 4px;
-				padding: 6px 12px;
-				background: white;
-				border: 1px solid #e2e8f0;
-				border-radius: 6px;
-				font-size: 13px;
-				margin-right: 8px;
-				margin-top: 4px;
-				/* color: #334155; */
-				font-weight: 500;
-				transition: all 0.2s ease;
+				display: inline-flex; align-items: center; gap: 5px;
+				padding: 4px 9px; margin: 2px 6px 2px 0;
+				background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+				font-size: 12.5px; font-weight: 700; transition: border-color .15s ease;
 			}
-
-			.date-batch-g:hover, .date-batch-h:hover {
-				border-color: #4facfe;
-				background: #f0f9ff;
-				transform: translateY(-1px);
-				box-shadow: 0 2px 4px rgba(79, 172, 254, 0.1);
-			}
-
-			.date-batch-g::before {
-				content: "📅";
-				font-size: 14px;
-				margin-right: 2px;
-			}
-
-			.date-batch-h::before {
-				content: "🌙";
-				font-size: 14px;
-				margin-right: 2px;
-			}
-
-			.date-batch-g::after {
+			[dir="rtl"] .date-batch-g, [dir="rtl"] .date-batch-h { margin: 2px 0 2px 6px; }
+			.date-batch-g:hover, .date-batch-h:hover { border-color: var(--ps); }
+			.date-batch-g::before { content: "\f073"; font-family: "Font Awesome 7 Pro", "Font Awesome 6 Pro", "Font Awesome 5 Free", "FontAwesome"; font-weight: 900; font-size: 11px; color: var(--ps); margin: 0; }
+			.date-batch-h::before { content: "\f186"; font-family: "Font Awesome 7 Pro", "Font Awesome 6 Pro", "Font Awesome 5 Free", "FontAwesome"; font-weight: 900; font-size: 11px; color: #a16207; margin: 0; }
+			.date-batch-g::after, .date-batch-h::after {
 				content: attr(data-prefix);
-				font-size: 10px;
-				font-weight: 600;
-				text-transform: uppercase;
-				color: #64748b;
-				background: #f1f5f9;
-				padding: 2px 6px;
-				border-radius: 3px;
-				letter-spacing: 0.5px;
-				margin-left: 4px;
+				font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+				color: #64748b; background: #f1f5f9; padding: 1px 5px; border-radius: 4px; margin: 0;
 			}
 
-			.date-batch-h::after {
-				content: attr(data-prefix);
-				font-size: 10px;
-				font-weight: 600;
-				text-transform: uppercase;
-				color: #64748b;
-				background: #f1f5f9;
-				padding: 2px 6px;
-				border-radius: 3px;
-				letter-spacing: 0.5px;
-				margin-left: 4px;
+			html.app-dark .profile-section { background: #242a35; border-color: #323a48; }
+			html.app-dark .profile-section-header, html.app-dark .profile-field-value { color: #e5e7eb; }
+			html.app-dark .profile-field { background: color-mix(in srgb, var(--ps) 8%, #242a35); }
+			html.app-dark .date-batch-g, html.app-dark .date-batch-h { background: #1b1f27; border-color: #323a48; }
+
+			@media (max-width: 1199px) {
+				.profile-content-wrapper { column-count: 1; }
 			}
-
-			@media (max-width: 768px) {
-				.profile-grid {
-					grid-template-columns: 1fr;
-				}
-
-				.profile-field {
-					border-right: none;
-				}
-
-				.profile-content-wrapper {
-					padding: 15px;
-				}
+			@media (max-width: 575px) {
+				.profile-grid { grid-template-columns: 1fr; }
+				.profile-field-label:has(> i) + .profile-field-value { padding-inline-start: 0; }
 			}
 
 			/* Employee Detail Tabs - New GUI (sr-* tokens). Geometry unchanged: wrapping bar,
@@ -1637,43 +1592,43 @@ if (mysqli_num_rows($query) == 1) {
 										<div class="tab-pane active show" id="profile1">
 											<div class="profile-content-wrapper">
 												<!-- Personal Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-personal">
 													<div class="profile-section-header personal">
-														<i class="mdi mdi-account-circle"></i>
+														<span class="psh-icon"><i class="fa fa-user"></i></span>
 														<span><?= __('personal_information', 'Personal Information') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('name_of_employee') ?></div>
+																<div class="profile-field-label"><i class="fa fa-user"></i><?= __('name_of_employee') ?></div>
 																<div class="profile-field-value">
 																	<span class="copyToClipboard"><?= getDisplayName($emprow['name']); ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('iqama_id') ?></div>
+																<div class="profile-field-label"><i class="fa fa-id-card"></i><?= __('iqama_id') ?></div>
 																<div class="profile-field-value">
 																	<span class="copyToClipboard"><?= $emprow['iqama']; ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('id_expiry') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('id_expiry') ?></div>
 																<div class="profile-field-value">
 																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $emprow['iqama_exp']; ?></span>
 																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $DateConv->HijriToGregorian($emprow['iqama_exp'], $format); ?></span>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('passport_no') ?></div>
+																<div class="profile-field-label"><i class="fa fa-passport"></i><?= __('passport_no') ?></div>
 																<div class="profile-field-value">
 																	<span class="copyToClipboard"><?= $emprow['passport_number']; ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('passport_expiry') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('passport_expiry') ?></div>
 																<div class="profile-field-value">
 																	<?php if ($emprow['passport_exp']): ?>
 																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow['passport_exp']; ?></span>
@@ -1684,26 +1639,26 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('date_of_birth') ?></div>
+																<div class="profile-field-label"><i class="fa fa-cake-candles"></i><?= __('date_of_birth') ?></div>
 																<div class="profile-field-value">
 																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["dob"]; ?></span>
 																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["dob"], $format); ?></span>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('age') ?></div>
+																<div class="profile-field-label"><i class="fa fa-hourglass-half"></i><?= __('age') ?></div>
 																<div class="profile-field-value"><?= ($emprow["dob"] <> "") ? $years : "" ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('gender_blood_group') ?></div>
+																<div class="profile-field-label"><i class="fa fa-droplet"></i><?= __('gender_blood_group') ?></div>
 																<div class="profile-field-value"><?= ucfirst(__($emprow["sex"])) . " | " . $emprow['blood_type']; ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('marital_status') ?></div>
+																<div class="profile-field-label"><i class="fa fa-heart"></i><?= __('marital_status') ?></div>
 																<div class="profile-field-value"><?= ucfirst(__($emprow["mar_status"])); ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('tshirt_size') ?></div>
+																<div class="profile-field-label"><i class="fa fa-shirt"></i><?= __('tshirt_size') ?></div>
 																<div class="profile-field-value"><?= ucfirst($emprow['t_shirt_size']); ?></div>
 															</div>
 														</div>
@@ -1711,22 +1666,22 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 												<!-- Employment Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-employment">
 													<div class="profile-section-header employment">
-														<i class="mdi mdi-briefcase"></i>
+														<span class="psh-icon"><i class="fa fa-briefcase"></i></span>
 														<span><?= __('employment', 'Employment Information') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('joining_date') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-check"></i><?= __('joining_date') ?></div>
 																<div class="profile-field-value">
 																	<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $emprow["joining_date"]; ?></span>
 																	<span class="date-batch-h" data-prefix="<?= __('hijri') ?>"><?= $DateConv->GregorianToHijri($emprow["joining_date"], $format); ?></span>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('contract_expiry_label', 'Contract Expiry') ?></div>
+																<div class="profile-field-label"><i class="fa fa-file-contract"></i><?= __('contract_expiry_label', 'Contract Expiry') ?></div>
 																<div class="profile-field-value">
 																	<?php
 																	$expiryIso = computeContractExpiry(
@@ -1749,35 +1704,35 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('department') ?></div>
+																<div class="profile-field-label"><i class="fa fa-sitemap"></i><?= __('department') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('company_label') ?></div>
+																<div class="profile-field-label"><i class="fa fa-building"></i><?= __('company_label') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? ($emprow["compnme_ar"] ?? $emprow["compnme"] ?? __('not_available', 'N/A')) : ($emprow["compnme"] ?? __('not_available', 'N/A')) ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('city_label', 'City') ?></div>
+																<div class="profile-field-label"><i class="fa fa-city"></i><?= __('city_label', 'City') ?></div>
 																<div class="profile-field-value"><?= !empty($emprow["cityname"]) ? (($is_rtl ?? false) ? $emprow["cityname_ar"] : $emprow["cityname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('location_label', 'Location') ?></div>
+																<div class="profile-field-label"><i class="fa fa-map-pin"></i><?= __('location_label', 'Location') ?></div>
 																<div class="profile-field-value"><?= !empty($emprow["locationname"]) ? (($is_rtl ?? false) ? $emprow["locationname_ar"] : $emprow["locationname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('sub_department_label', 'Sub-Department') ?></div>
+																<div class="profile-field-label"><i class="fa fa-diagram-project"></i><?= __('sub_department_label', 'Sub-Department') ?></div>
 																<div class="profile-field-value"><?= !empty($emprow["subdeptname"]) ? (($is_rtl ?? false) ? $emprow["subdeptname_ar"] : $emprow["subdeptname"]) : __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('employee_type') ?? "Employee Type" ?></div>
+																<div class="profile-field-label"><i class="fa fa-id-badge"></i><?= __('employee_type') ?? "Employee Type" ?></div>
 																<div class="profile-field-value"><?= __(strtolower($emprow['emptype'])) ?? __('not_available', 'N/A') ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('actual_job') ?></div>
+																<div class="profile-field-label"><i class="fa fa-user-tie"></i><?= __('actual_job') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false ? $emprow["jobname_ar"] : $emprow["jobname"]) ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('direct_supervisor') ?? "Direct Supervisor" ?></div>
+																<div class="profile-field-label"><i class="fa fa-user-shield"></i><?= __('direct_supervisor') ?? "Direct Supervisor" ?></div>
 																<div class="profile-field-value">
 																	<?php
 																	if (!empty($emprow['supervisor_id'])) {
@@ -1801,23 +1756,23 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('probation_period') ?></div>
+																<div class="profile-field-label"><i class="fa fa-user-clock"></i><?= __('probation_period') ?></div>
 																<div class="profile-field-value"><?= $probationStatus ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></div>
+																<div class="profile-field-label"><i class="fa fa-clock"></i><?= __('eligible_for_overtime', 'Eligible For Overtime') ?></div>
 																<div class="profile-field-value"><?= $overtimeEligibilityText ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></div>
+																<div class="profile-field-label"><i class="fa fa-truck-medical"></i><?= __('allow_emergency_vacation', 'Allow Emergency Vacation') ?></div>
 																<div class="profile-field-value"><?= $allowEmergencyVacationText ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('sponsorship_label') ?></div>
+																<div class="profile-field-label"><i class="fa fa-handshake"></i><?= __('sponsorship_label') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow['sponsor_ar'] : $emprow['sponsor'] ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('contract_period') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-week"></i><?= __('contract_period') ?></div>
 																<div class="profile-field-value"><?= translateContractPeriod($emprow["period"]) ?></div>
 															</div>
 														</div>
@@ -1825,36 +1780,36 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 												<!-- Contact Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-contact">
 													<div class="profile-section-header contact">
-														<i class="mdi mdi-phone"></i>
+														<span class="psh-icon"><i class="fa fa-address-book"></i></span>
 														<span><?= __('contact', 'Contact Information') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field full-width">
-																<div class="profile-field-label"><?= __('email') ?></div>
+																<div class="profile-field-label"><i class="fa fa-envelope"></i><?= __('email') ?></div>
 																<div class="profile-field-value">
 																	<?= ($emprow['c_email']) ? "<b>" . __('personal') . ":</b> <span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i> | <b>" . __('company') . ":</b> <span class='copyToClipboard'>" . $emprow['c_email'] . "</span> <i class='fa fa-clipboard'></i>" : "<span class='copyToClipboard'>" . $emprow['email'] . "</span> <i class='fa fa-clipboard'></i>" ?>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('mobile') ?></div>
+																<div class="profile-field-label"><i class="fa fa-mobile-screen"></i><?= __('mobile') ?></div>
 																<div class="profile-field-value">
 																	<span class="copyToClipboard"><?= $emprow['mobile']; ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('country') ?></div>
+																<div class="profile-field-label"><i class="fa fa-earth-asia"></i><?= __('country') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"]; ?></div>
 															</div>
 															<div class="profile-field full-width">
-																<div class="profile-field-label"><?= __('emergency_contact') ?></div>
+																<div class="profile-field-label"><i class="fa fa-phone-volume"></i><?= __('emergency_contact') ?></div>
 																<div class="profile-field-value"><?= $emprow['emg_name'] . " - " . $emprow["emg_mobile"] ?></div>
 															</div>
 															<div class="profile-field full-width">
-																<div class="profile-field-label"><?= __('address') ?></div>
+																<div class="profile-field-label"><i class="fa fa-location-dot"></i><?= __('address') ?></div>
 																<div class="profile-field-value"><?= getDisplayName(ucfirst($emprow['address'])) ?></div>
 															</div>
 														</div>
@@ -1862,15 +1817,15 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 												<!-- Banking & Salary Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-banking">
 													<div class="profile-section-header banking">
-														<i class="mdi mdi-bank"></i>
+														<span class="psh-icon"><i class="fa fa-building-columns"></i></span>
 														<span><?= __('bank_&_gosi_details', 'Banking & Salary') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('total_salary') ?></div>
+																<div class="profile-field-label"><i class="fa fa-sack-dollar"></i><?= __('total_salary') ?></div>
 																<div class="profile-field-value">
 																	<?php if ($canViewSalary): ?>
 																		<?= number_format($emprow['salary'], 2); ?> <i class="icon-saudi_riyal"></i> -
@@ -1881,22 +1836,22 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('bank_name') ?></div>
+																<div class="profile-field-label"><i class="fa fa-building-columns"></i><?= __('bank_name') ?></div>
 																<div class="profile-field-value"><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></div>
 															</div>
 															<div class="profile-field full-width">
-																<div class="profile-field-label"><?= __('iban') ?></div>
+																<div class="profile-field-label"><i class="fa fa-credit-card"></i><?= __('iban') ?></div>
 																<div class="profile-field-value">
 																	<span class="copyToClipboard"><?= $emprow["iban"] ?></span>
 																	<i class="fa fa-clipboard"></i>
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('gosi_gosi_no') ?></div>
+																<div class="profile-field-label"><i class="fa fa-shield-halved"></i><?= __('gosi_gosi_no') ?></div>
 																<div class="profile-field-value"><?= $emprow["gosi"] . " | " . $emprow["gosi_no"] ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('gosi_expiry') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('gosi_expiry') ?></div>
 																<div class="profile-field-value"><?= $emprow["date_hijri"] . " | " . $emprow["date_greg"] ?></div>
 															</div>
 														</div>
@@ -1906,9 +1861,9 @@ if (mysqli_num_rows($query) == 1) {
 												<?php if (d365_enabled($conDB)): /* Microsoft Dynamics 365 switched off - no D365 section */ ?>
 												<!-- Dynamics 365 Section -->
 												<?php $d365Info = d365_profile_info($conDB, $emprow); $d365St = $d365Info['status']; $d365Companies = payroll_company_list(); ?>
-												<div class="profile-section">
+												<div class="profile-section ps-d365">
 													<div class="profile-section-header d365">
-														<i class="mdi mdi-microsoft"></i>
+														<span class="psh-icon"><i class="fa fa-cloud"></i></span>
 														<span><?= __('d365_details', 'Dynamics 365') ?><?= $d365Info['environment'] !== '' ? ' (' . htmlspecialchars($d365Info['environment']) . ')' : '' ?></span>
 														<?php if (!empty($show_d365_tab)): ?>
 														<a href="javascript:void(0)" onclick="var l=document.getElementById('d365TabLink'); if(l){ l.click(); }" style="margin-left:auto;color:#fff;font-size:13px;font-weight:500;text-decoration:underline"><?= __('open_d365_tab', 'Open D365 tab') ?></a>
@@ -1917,7 +1872,7 @@ if (mysqli_num_rows($query) == 1) {
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('d365_worker_status', 'D365 worker') ?></div>
+																<div class="profile-field-label"><i class="fa fa-user-check"></i><?= __('d365_worker_status', 'D365 worker') ?></div>
 																<div class="profile-field-value">
 																	<?php if ($d365St && ($d365St['status'] ?? '') === 'registered'): ?>
 																		<span class="text-success"><i class="mdi mdi-check-circle"></i> <?= __('d365_registered', 'Registered') ?></span>
@@ -1930,11 +1885,11 @@ if (mysqli_num_rows($query) == 1) {
 																</div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('d365_last_synced', 'Last synced') ?></div>
+																<div class="profile-field-label"><i class="fa fa-rotate"></i><?= __('d365_last_synced', 'Last synced') ?></div>
 																<div class="profile-field-value"><?= !empty($d365St['synced_at']) ? htmlspecialchars($d365St['synced_at']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('d365_employment_company', 'D365 employment company') ?></div>
+																<div class="profile-field-label"><i class="fa fa-briefcase"></i><?= __('d365_employment_company', 'D365 employment company') ?></div>
 																<div class="profile-field-value"><?php $c = $d365Info['employment_company'];
 																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : ''));
 																	if (!empty($can_d365_sync) && $d365St && ($d365St['status'] ?? '') === 'registered'): ?>
@@ -1942,23 +1897,23 @@ if (mysqli_num_rows($query) == 1) {
 																	<?php endif; ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('payroll_company_label', 'Payroll Company (D365)') ?></div>
+																<div class="profile-field-label"><i class="fa fa-money-check-dollar"></i><?= __('payroll_company_label', 'Payroll Company (D365)') ?></div>
 																<div class="profile-field-value"><?php $c = $d365Info['payroll_company'];
 																	echo $c === '' ? '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' : htmlspecialchars($c . (!empty($d365Companies[$c]['name']) ? ' - ' . $d365Companies[$c]['name'] : ''));
 																	if ($d365Info['payroll_auto']): ?> <small class="text-muted">(<?= __('payroll_company_auto_short', 'Auto') ?>)</small><?php endif; ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('cost_center_label', 'Cost Center') ?></div>
+																<div class="profile-field-label"><i class="fa fa-bullseye"></i><?= __('cost_center_label', 'Cost Center') ?></div>
 																<div class="profile-field-value"><?php if ($d365Info['uses_cost_center']): ?><?= htmlspecialchars(cost_center_label($conDB, $emprow['cost_center'] ?? '')) ?><?php else: ?><span class="text-muted"><?= htmlspecialchars(__('cost_center_not_used_short', 'Not used in') . ' ' . $d365Info['payroll_company']) ?></span><?php endif; ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('d365_department', 'D365 Department') ?></div>
+																<div class="profile-field-label"><i class="fa fa-sitemap"></i><?= __('d365_department', 'D365 Department') ?></div>
 																<div class="profile-field-value"><?= $d365Info['department'] !== '' ? htmlspecialchars($d365Info['department']) : '<span class="text-muted">' . __('not_available', 'N/A') . '</span>' ?>
 																	<small class="text-muted">(<?= htmlspecialchars((($is_rtl ?? false) ? $emprow['deptnme_ar'] : $emprow['deptnme']) ?? '') ?>)</small></div>
 															</div>
 															<?php if (!empty($d365St['last_error'])): ?>
 															<div class="profile-field full-width">
-																<div class="profile-field-label"><?= __('d365_last_message', 'Last D365 message') ?></div>
+																<div class="profile-field-label"><i class="fa fa-message"></i><?= __('d365_last_message', 'Last D365 message') ?></div>
 																<div class="profile-field-value text-warning"><?= htmlspecialchars($d365St['last_error']) ?></div>
 															</div>
 															<?php endif; ?>
@@ -1968,19 +1923,19 @@ if (mysqli_num_rows($query) == 1) {
 												<?php endif; ?>
 
 												<!-- Insurance Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-insurance">
 													<div class="profile-section-header insurance">
-														<i class="mdi mdi-shield-check"></i>
+														<span class="psh-icon"><i class="fa fa-shield-heart"></i></span>
 														<span><?= __('insurance', 'Insurance Information') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('insurance_no_class') ?></div>
+																<div class="profile-field-label"><i class="fa fa-notes-medical"></i><?= __('insurance_no_class') ?></div>
 																<div class="profile-field-value"><?= display_or_na($current_medical_insurance['insurance_no'] ?? null) ?> | <?= display_or_na($current_medical_insurance['medical_class'] ?? null) ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('insurance_expiry') ?></div>
+																<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('insurance_expiry') ?></div>
 																<div class="profile-field-value">
 																	<?php if (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00'): ?>
 																		<span class="date-batch-g" data-prefix="<?= __('gregorian') ?>"><?= $current_medical_insurance['medical_expiry']; ?></span>
@@ -1996,19 +1951,19 @@ if (mysqli_num_rows($query) == 1) {
 
 												<?php if (car_get_info($emprow["car_id"])): ?>
 												<!-- Car Information Section -->
-												<div class="profile-section">
+												<div class="profile-section ps-car">
 													<div class="profile-section-header car">
-														<i class="mdi mdi-car"></i>
+														<span class="psh-icon"><i class="fa fa-car"></i></span>
 														<span><?= __('car_details', 'Car Information') ?></span>
 													</div>
 													<div class="profile-section-body">
 														<div class="profile-grid">
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('car_maker') ?></div>
+																<div class="profile-field-label"><i class="fa fa-car"></i><?= __('car_maker') ?></div>
 																<div class="profile-field-value"><?= getDisplayName(car_get_info($emprow["car_id"])['maker_name']) . " (" . car_get_info($emprow["car_id"])['made_year'] . ")" ?></div>
 															</div>
 															<div class="profile-field">
-																<div class="profile-field-label"><?= __('car_model') ?></div>
+																<div class="profile-field-label"><i class="fa fa-car-side"></i><?= __('car_model') ?></div>
 																<div class="profile-field-value"><?= getDisplayName(car_get_info($emprow["car_id"])['model']) ?></div>
 															</div>
 														</div>
@@ -2035,32 +1990,22 @@ if (mysqli_num_rows($query) == 1) {
 											$vac_used = $emprow['used_days'] ?? 0;
 											$vac_available = $emprow['available_balance'] ?? 0;
 											?>
-											<div class="card border-primary border mb-4">
-												<div class="card-header bg-primary text-white font-weight-bold"><?= __('vacation_balance_summary') ?></div>
-												<div class="card-body">
-													<?php if ($vac_total > 0 || $vac_used > 0 || $vac_available > 0): ?>
-														<div class="row text-center">
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('total_vacation_days') ?></h6>
-																<h4><?= number_format($vac_total, 1) ?></h4>
-															</div>
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('used_days') ?></h6>
-																<h4 class="text-warning"><?= number_format($vac_used, 1) ?></h4>
-															</div>
-															<div class="col-md-4">
-																<h6 class="text-muted text-uppercase"><?= __('available_balance') ?></h6>
-																<h4 class="text-success font-weight-bold"><?= number_format($vac_available, 2) ?></h4>
-															</div>
-														</div>
-													<?php else: ?>
-														<div class="alert alert-info mb-0" role="alert">
-															<i class="mdi mdi-information-outline mr-2"></i>
-															<?= __('no_vacation_balance_record_found') ?>
-														</div>
-													<?php endif; ?>
-												</div>
+											<?php $vac_used_pct = $vac_total > 0 ? min(100, max(0, round($vac_used / $vac_total * 100))) : 0; ?>
+											<?php if ($vac_total > 0 || $vac_used > 0 || $vac_available > 0): ?>
+											<div class="vac-sum" title="<?= __('vacation_balance_summary') ?>">
+												<div class="vac-sum-tile" style="--c: #2563eb;"><i class="fa fa-calendar-days"></i><div><small><?= __('total_vacation_days') ?></small><b><?= number_format($vac_total, 1) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
+												<div class="vac-sum-tile" style="--c: #d97706;"><i class="fa fa-plane-departure"></i><div><small><?= __('used_days') ?></small><b><?= number_format($vac_used, 1) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
+												<div class="vac-sum-tile" style="--c: #16a34a;"><i class="fa fa-umbrella-beach"></i><div><small><?= __('available_balance') ?></small><b><?= number_format($vac_available, 2) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
 											</div>
+											<?php if ($vac_total > 0): ?>
+											<div class="vac-sum-bar">
+												<div class="vac-sum-bar-head"><span><i class="fa fa-chart-simple"></i> <?= __('vacation_balance_summary') ?></span><span><?= $vac_used_pct ?>% <?= __('used_days') ?></span></div>
+												<div class="vac-sum-bar-track"><span style="width: <?= $vac_used_pct ?>%;"></span></div>
+											</div>
+											<?php endif; ?>
+											<?php else: ?>
+											<div class="vac-sum-empty"><i class="fa fa-circle-info"></i> <?= __('no_vacation_balance_record_found') ?></div>
+											<?php endif; ?>
 											<div class="table-responsive">
 												<?php if ($isHR || $is_system_admin || $isDeptHr) { ?>
 													<div class="mb-3">
@@ -2674,93 +2619,91 @@ if (mysqli_num_rows($query) == 1) {
 
 										<div class="tab-pane" id="additionalinfo1">
 											<?php if ($canViewAdditionalInfo): ?>
-											<div class="d-flex justify-content-between align-items-center mb-3">
-												<h4 class="header-title m-t-0"><?= __('additional_information', 'Additional Information') ?></h4>
-												<?php if ($canEditAdditionalInfo): ?>
-												<button type="button" class="btn btn-sm btn-primary editAdditionalInfoBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
-													<i class="mdi mdi-pencil"></i> <?= __('edit', 'Edit') ?>
-												</button>
-												<?php endif; ?>
-											</div>
-											<div class="profile-section">
+											<div class="profile-section ps-additional">
+												<div class="profile-section-header">
+													<span class="psh-icon"><i class="fa fa-circle-info"></i></span>
+													<span><?= __('additional_information', 'Additional Information') ?></span>
+													<?php if ($canEditAdditionalInfo): ?>
+													<button type="button" class="psh-btn editAdditionalInfoBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+														<i class="fa fa-pen"></i> <?= __('edit', 'Edit') ?>
+													</button>
+													<?php endif; ?>
+												</div>
 												<div class="profile-section-body">
 													<div class="profile-grid" id="additionalInfoDisplay">
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('salary_grade', 'Salary Grade') ?></div>
+															<div class="profile-field-label"><i class="fa fa-layer-group"></i><?= __('salary_grade', 'Salary Grade') ?></div>
 															<div class="profile-field-value" data-field="salary_grade"><?= !empty($employee_additional_info['salary_grade']) ? __('grade', 'Grade') . ' ' . htmlspecialchars($employee_additional_info['salary_grade']) : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('dependants_count', 'No. of Dependants') ?></div>
+															<div class="profile-field-label"><i class="fa fa-people-roof"></i><?= __('dependants_count', 'No. of Dependants') ?></div>
 															<div class="profile-field-value" data-field="dependants_count"><?= display_or_na($employee_additional_info['dependants_count'] ?? null) ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('ticket_fare', 'Ticket') ?></div>
+															<div class="profile-field-label"><i class="fa fa-plane-departure"></i><?= __('ticket_fare', 'Ticket') ?></div>
 															<div class="profile-field-value" data-field="ticket_fare"><?= isset($employee_additional_info['ticket_fare']) ? number_format((float)$employee_additional_info['ticket_fare'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<?php if ((int)($emprow['country'] ?? 0) !== 191): ?>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('labour_office_expense', 'Labour Office Expenses') ?></div>
+															<div class="profile-field-label"><i class="fa fa-briefcase"></i><?= __('labour_office_expense', 'Labour Office Expenses') ?></div>
 															<div class="profile-field-value" data-field="labour_office_expense"><?= isset($employee_additional_info['labour_office_expense']) ? number_format((float)$employee_additional_info['labour_office_expense'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('iqama_renewal_fee', 'Iqama Renewal Fee') ?></div>
+															<div class="profile-field-label"><i class="fa fa-id-card"></i><?= __('iqama_renewal_fee', 'Iqama Renewal Fee') ?></div>
 															<div class="profile-field-value" data-field="iqama_renewal_fee"><?= isset($employee_additional_info['iqama_renewal_fee']) ? number_format((float)$employee_additional_info['iqama_renewal_fee'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('citizen_local_relation', 'Citizen (Local)') ?></div>
+															<div class="profile-field-label"><i class="fa fa-people-arrows"></i><?= __('citizen_local_relation', 'Citizen (Local)') ?></div>
 															<div class="profile-field-value" data-field="citizen_local_relation"><?= display_or_na($employee_additional_info['citizen_local_relation'] ?? null) ?></div>
 														</div>
 														<?php endif; ?>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('monthly_leave_accrual', 'Monthly Leave Accrual') ?> <small class="text-muted">(<?= __('auto_calculated', 'auto-calculated') ?>)</small></div>
+															<div class="profile-field-label"><i class="fa fa-calendar-plus"></i><?= __('monthly_leave_accrual', 'Monthly Leave Accrual') ?> <small class="text-muted">(<?= __('auto_calculated', 'auto-calculated') ?>)</small></div>
 															<div class="profile-field-value"><?= $monthly_leave_accrual_calculated !== null ? number_format($monthly_leave_accrual_calculated, 2) . ' ' . __('day_s', 'Days') : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('eng_council_fee', 'Saudi Engineering Council Fee') ?></div>
+															<div class="profile-field-label"><i class="fa fa-helmet-safety"></i><?= __('eng_council_fee', 'Saudi Engineering Council Fee') ?></div>
 															<div class="profile-field-value" data-field="eng_council_fee"><?= isset($employee_additional_info['eng_council_fee']) ? number_format((float)$employee_additional_info['eng_council_fee'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 														</div>
 														<div class="profile-field">
-															<div class="profile-field-label"><?= __('eng_council_expiry', 'Saudi Engineering Council Expiry') ?></div>
+															<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('eng_council_expiry', 'Saudi Engineering Council Expiry') ?></div>
 															<div class="profile-field-value" data-field="eng_council_expiry"><?= (!empty($employee_additional_info['eng_council_expiry']) && $employee_additional_info['eng_council_expiry'] !== '0000-00-00') ? format_safe_date($employee_additional_info['eng_council_expiry'], 'd M, Y') : __('not_available') ?></div>
 														</div>
 													</div>
 												</div>
 											</div>
 
-										<div class="d-flex justify-content-between align-items-center mb-3 mt-4">
-											<h4 class="header-title m-t-0"><?= __('medical_insurance', 'Medical Insurance') ?> <small class="text-muted">(<?= __('renews_yearly', 'renews yearly') ?>)</small></h4>
-											<?php if ($canEditAdditionalInfo): ?>
-											<button type="button" class="btn btn-sm btn-primary addMedicalInsuranceBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
-												<i class="mdi mdi-plus"></i> <?= __('add_insurance', 'Add Insurance Details') ?>
-											</button>
-											<?php endif; ?>
-										</div>
-										<div class="profile-section">
+										<div class="profile-section ps-medical">
+											<div class="profile-section-header">
+												<span class="psh-icon"><i class="fa fa-shield-heart"></i></span>
+												<span><?= __('medical_insurance', 'Medical Insurance') ?> <small class="psh-sub">(<?= __('renews_yearly', 'renews yearly') ?>)</small></span>
+												<?php if ($canEditAdditionalInfo): ?>
+												<button type="button" class="psh-btn addMedicalInsuranceBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+													<i class="fa fa-plus"></i> <?= __('add_insurance', 'Add Insurance Details') ?>
+												</button>
+												<?php endif; ?>
+											</div>
 											<div class="profile-section-body">
 												<div class="profile-grid">
 													<div class="profile-field">
-														<div class="profile-field-label"><?= __('insurance_no', 'Insurance No') ?></div>
+														<div class="profile-field-label"><i class="fa fa-notes-medical"></i><?= __('insurance_no', 'Insurance No') ?></div>
 														<div class="profile-field-value"><?= display_or_na($current_medical_insurance['insurance_no'] ?? null) ?></div>
 													</div>
 													<div class="profile-field">
-														<div class="profile-field-label"><?= __('med_insurance', 'Medical Insurance') ?></div>
+														<div class="profile-field-label"><i class="fa fa-sack-dollar"></i><?= __('med_insurance', 'Medical Insurance') ?></div>
 														<div class="profile-field-value"><?= isset($current_medical_insurance['med_insurance']) ? number_format((float)$current_medical_insurance['med_insurance'], 2) . ' <i class="icon-saudi_riyal"></i>' : __('not_available') ?></div>
 													</div>
 													<div class="profile-field">
-														<div class="profile-field-label"><?= __('medical_expiry', 'Medical Expiry') ?></div>
+														<div class="profile-field-label"><i class="fa fa-calendar-xmark"></i><?= __('medical_expiry', 'Medical Expiry') ?></div>
 														<div class="profile-field-value"><?= (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00') ? format_safe_date($current_medical_insurance['medical_expiry'], 'd M, Y') : __('not_available') ?></div>
 													</div>
 													<div class="profile-field">
-														<div class="profile-field-label"><?= __('medical_class', 'Medical Class') ?></div>
+														<div class="profile-field-label"><i class="fa fa-star"></i><?= __('medical_class', 'Medical Class') ?></div>
 														<div class="profile-field-value"><?= display_or_na($current_medical_insurance['medical_class'] ?? null) ?></div>
 													</div>
-												</div>
-											</div>
-										</div>
-
-										<?php if (count($medical_insurance_records) > 1): ?>
-										<h5 class="header-title mt-4"><?= __('insurance_history', 'Insurance History') ?></h5>
-										<table class="table sr-table" style="width: 100%;">
+												<?php if (count($medical_insurance_records) > 1): ?>
+										<h6 class="psh-subtitle"><i class="fa fa-clock-rotate-left"></i> <?= __('insurance_history', 'Insurance History') ?></h6>
+										<div class="sr-table-wrap"><table class="table sr-table" style="width: 100%;">
 											<thead>
 												<tr>
 													<th><?= __('insurance_no', 'Insurance No') ?></th>
@@ -2789,18 +2732,26 @@ if (mysqli_num_rows($query) == 1) {
 												</tr>
 												<?php endforeach; ?>
 											</tbody>
-										</table>
+										</table></div>
 										<?php endif; ?>
+												</div>
+											</div>
+										</div>
+
+										
 										<?php endif; // $canViewAdditionalInfo ?>
 										<?php if ($canViewOtherIncome): ?>
-										<div class="d-flex justify-content-between align-items-center mb-3 mt-4">
-											<h4 class="header-title m-t-0"><?= __('other_income', 'Other Income') ?> <small class="text-muted">(<?= __('scheduled_months', 'scheduled months') ?>)</small></h4>
-											<?php if ($canEditOtherIncome): ?>
-											<button type="button" class="btn btn-sm btn-primary addOtherIncomeBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
-												<i class="mdi mdi-plus"></i> <?= __('add_other_income', 'Add Other Income') ?>
-											</button>
-											<?php endif; ?>
-										</div>
+										<div class="profile-section ps-income">
+											<div class="profile-section-header">
+												<span class="psh-icon"><i class="fa fa-coins"></i></span>
+												<span><?= __('other_income', 'Other Income') ?> <small class="psh-sub">(<?= __('scheduled_months', 'scheduled months') ?>)</small></span>
+												<?php if ($canEditOtherIncome): ?>
+												<button type="button" class="psh-btn addOtherIncomeBtn" data-emp-id="<?= htmlspecialchars($emprow['empid']); ?>">
+													<i class="fa fa-plus"></i> <?= __('add_other_income', 'Add Other Income') ?>
+												</button>
+												<?php endif; ?>
+											</div>
+											<div class="profile-section-body">
 										<?php if (!empty($other_income_records)): ?>
 										<?php $has_inactive_other_income = false; foreach ($other_income_records as $oi_row) { if ((int)$oi_row['status'] !== 1) { $has_inactive_other_income = true; break; } } ?>
 										<?php if ($has_inactive_other_income): ?>
@@ -2809,7 +2760,7 @@ if (mysqli_num_rows($query) == 1) {
 											<label class="form-check-label" for="oiShowInactive"><?= __('show_inactive', 'Show Inactive') ?></label>
 										</div>
 										<?php endif; ?>
-										<table class="table sr-table" style="width: 100%;">
+										<div class="sr-table-wrap"><table class="table sr-table" style="width: 100%;">
 											<thead>
 												<tr>
 													<th><?= __('other_income_title', 'Title') ?></th>
@@ -2846,10 +2797,12 @@ if (mysqli_num_rows($query) == 1) {
 												</tr>
 												<?php endforeach; ?>
 											</tbody>
-										</table>
+										</table></div>
 										<?php else: ?>
-										<p class="text-muted"><?= __('no_other_income_scheduled', 'No scheduled other income records.') ?></p>
+										<p class="psh-empty"><i class="fa fa-inbox"></i> <?= __('no_other_income_scheduled', 'No scheduled other income records.') ?></p>
 										<?php endif; ?>
+											</div>
+										</div>
 										<?php endif; // $canViewOtherIncome ?>
 										</div>
 										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>

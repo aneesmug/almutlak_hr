@@ -210,6 +210,20 @@ usort($allLines, function ($a, $b) {
 $money = function ($v) { return number_format((float)$v, 2); };
 ?>
 <div class="d365tab">
+<style>
+    /* Cards: icon badge in the title + thin accent bar (view_employee.php D365 tab, reports.php D365 report) */
+    .d365tab .sr-card { position: relative; overflow: hidden; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06); }
+    .d365tab .sr-card:has(.d365-ti)::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: linear-gradient(90deg, #0078d4, #50a6f0); }
+    .d365tab .sr-card-title { display: flex; align-items: center; gap: 10px; font-weight: 800; }
+    .d365tab .d365-ti { flex: none; width: 36px; height: 36px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; color: #fff;
+        background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 65%, #0f172a)); box-shadow: 0 5px 12px color-mix(in srgb, var(--c) 28%, transparent); }
+    .d365tab .sr-card-head { gap: 6px 12px; flex-wrap: wrap; padding-top: 18px; }
+    .d365tab .d365-ti i { color: #fff; font-size: 15px; }
+    .d365tab .d365tab-bar { padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .d365tab .d365fin-tile { border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+    .d365tab .sr-kv .row-kv:nth-child(odd) { background: rgba(37, 99, 235, .04); border-radius: 8px; }
+    html.app-dark .d365tab .d365tab-bar, html.app-dark .d365tab .d365fin-tile { background: #242a35; border-color: #323a48; }
+</style>
     <div class="d365tab-bar">
         <div>
             <span class="sr-pill tone-<?= $env === 'sandbox' ? 'sky' : 'red' ?>"><span class="sr-dot"></span>D365 <?= $e(ucfirst($env)) ?></span>
@@ -265,7 +279,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
         ]; ?>
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title">HR app vs D365</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #0078d4;"><i class="fa fa-code-compare"></i></span>HR app vs D365</div>
                 <div class="sr-card-sub">
                     <?php if (!$reportMode): ?>Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365
                     <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"' ?>><i class="mdi mdi-sync"></i> Sync to D365</button><?php else: ?>Employee record in the HR app compared with D365<?php endif; ?>
@@ -299,7 +313,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="d365tab-grid">
             <div class="sr-card">
-                <div class="sr-card-head"><div class="sr-card-title">D365 worker record</div><div class="sr-card-sub">Filled fields only</div></div>
+                <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #2563eb;"><i class="fa fa-id-card"></i></span>D365 worker record</div><div class="sr-card-sub">Filled fields only</div></div>
                 <div class="sr-card-body">
                     <dl class="sr-kv">
                         <?php foreach ($worker as $k => $v):
@@ -313,7 +327,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
             <div>
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title">Employments</div><div class="sr-card-sub"><?= count($employments) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #7c3aed;"><i class="fa fa-briefcase"></i></span>Employments</div><div class="sr-card-sub"><?= count($employments) ?> record(s)</div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
                             <thead><tr><th>Company</th><th>Start</th><th>End</th><th>Dimensions</th></tr></thead>
@@ -333,7 +347,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
                 </div>
 
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title">Position assignments</div><div class="sr-card-sub"><?= count($d['positions']) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #0d9488;"><i class="fa fa-sitemap"></i></span>Position assignments</div><div class="sr-card-sub"><?= count($d['positions']) ?> record(s)</div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
                             <thead><tr><th>Position</th><th>From</th><th>To</th></tr></thead>
@@ -352,7 +366,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
                 </div>
 
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title">Bank accounts</div><div class="sr-card-sub"><?= count($d['banks']) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #16a34a;"><i class="fa fa-building-columns"></i></span>Bank accounts</div><div class="sr-card-sub"><?= count($d['banks']) ?> record(s)</div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
                             <thead><tr><th>Bank</th><th>IBAN</th></tr></thead>
@@ -375,7 +389,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
     <?php if ($worker): ?>
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title">Financial summary</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #d97706;"><i class="fa fa-chart-line"></i></span>Financial summary</div>
                 <div class="sr-card-sub">General journal lines of <?= $e($targetEmp) ?> in D365 (fees, advances, loans, settlements, transfers...) · payroll shown separately below</div>
             </div>
             <div class="sr-card-body">
@@ -400,7 +414,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title">By account</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #475569;"><i class="fa fa-book"></i></span>By account</div>
                 <div class="sr-card-sub">Main accounts the worker's transactions were booked to</div>
             </div>
             <div class="sr-table-wrap">
@@ -425,7 +439,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><i class="mdi mdi-cash-multiple"></i> Payroll in D365</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #0891b2;"><i class="fa fa-money-check-dollar"></i></span>Payroll in D365</div>
                 <div class="sr-card-sub">Payroll synced by the HR app, per month (lines "PAY yyyy-mm <?= $e($targetEmp) ?> ...")</div>
             </div>
             <div class="sr-table-wrap">
@@ -454,7 +468,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title">Transactions</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #db2777;"><i class="fa fa-list-ul"></i></span>Transactions</div>
                 <div class="sr-card-sub">Newest first · amount = debit (+) / credit (-)
                     <span class="d365fin-filter" style="margin-left:8px">
                         <button type="button" class="d365tab-btn is-active" data-fin-type="">All (<?= count($allLines) ?>)</button>
