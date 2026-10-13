@@ -804,6 +804,121 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             }
         }
 
+        /* ===== INFO CARDS v2 (Personal information / Employment details) ===== */
+        .profile-section .section-title {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 18px;
+            gap: 12px;
+        }
+        .profile-section .section-title i {
+            width: 38px; height: 38px; border-radius: 12px; font-size: 17px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff; background: linear-gradient(135deg, #1d6ff2, #13a3b9);
+            box-shadow: 0 6px 14px rgba(29, 111, 242, .25);
+        }
+        .profile-section .section-title::after {
+            content: ""; flex: 1; height: 1px; margin-inline-start: 6px;
+            background: linear-gradient(90deg, rgba(15, 23, 42, .14), transparent);
+        }
+        [dir="rtl"] .profile-section .section-title::after { background: linear-gradient(270deg, rgba(15, 23, 42, .14), transparent); }
+
+        .profile-section .cards-grid { gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+        .profile-section .info-card {
+            position: relative;
+            border: 1px solid rgba(15, 23, 42, .07);
+            border-radius: 16px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06);
+            padding: 0;
+        }
+        .profile-section .info-card::before {
+            content: ""; position: absolute; inset: 0 0 auto 0; height: 4px;
+            background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, white));
+        }
+        .profile-section .info-card:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(15, 23, 42, .05), 0 14px 32px rgba(15, 23, 42, .10); }
+
+        .profile-section .info-card-header {
+            gap: 14px; padding: 20px 20px 14px; background: transparent; border-bottom: 0;
+        }
+        .profile-section .info-card-icon {
+            width: 44px; height: 44px; border-radius: 13px; font-size: 18px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #0f172a));
+            box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 30%, transparent);
+        }
+        .profile-section .info-card-title { font-size: 15.5px; font-weight: 800; }
+
+        .profile-section .info-card-body { padding: 0 12px 12px; }
+        .profile-section .info-row {
+            gap: 14px; padding: 10px 10px; border-bottom: 0; border-radius: 10px;
+            align-items: flex-start;
+            transition: background .15s ease;
+        }
+        .profile-section .info-row:nth-child(odd) { background: color-mix(in srgb, var(--accent) 4%, white); }
+        .profile-section .info-row:hover { background: color-mix(in srgb, var(--accent) 9%, white); }
+        .profile-section .info-label {
+            font-size: 12px; font-weight: 600; color: #64748b; padding-top: 1px;
+        }
+        .profile-section .info-value {
+            min-width: 0; font-size: 13.5px; font-weight: 700; color: #0f172a;
+            text-align: end; overflow-wrap: anywhere; font-variant-numeric: tabular-nums;
+            display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px;
+        }
+        .profile-section .info-label { display: inline-flex; align-items: center; gap: 9px; }
+        .profile-section .info-label > i {
+            flex: none; width: 26px; height: 26px; border-radius: 8px; font-size: 12px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, white);
+        }
+        .profile-section .copy-btn {
+            width: 24px; height: 24px; border-radius: 7px; font-size: 11px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, white); opacity: .55;
+        }
+        .profile-section .info-row:hover .copy-btn { opacity: 1; }
+        .profile-section .status-pill { padding: 3px 12px; }
+
+        /* RTL: let dir="rtl" place label/value naturally (old rules reversed it twice) */
+        [dir="rtl"] .profile-section .info-row { flex-direction: row; }
+        [dir="rtl"] .profile-section .info-label, [dir="rtl"] .profile-section .info-value { text-align: start; }
+        [dir="rtl"] .profile-section .info-value { text-align: end; }
+        .rtl .profile-section .info-label { margin: 0; }
+
+        @media (max-width: 480px) {
+            .profile-section .cards-grid { grid-template-columns: 1fr; }
+            .profile-section .info-row { flex-direction: column !important; gap: 3px; }
+            .profile-section .info-value { justify-content: flex-start; text-align: start !important; }
+        }
+
+        /* ===== MY FILES v2 ===== */
+        .profile-section .documents-card { border-radius: 16px; padding: 20px; border: 1px solid rgba(15, 23, 42, .07); box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06); }
+        .profile-section .docs-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+        .profile-section .docs-head-icon { flex: none; width: 44px; height: 44px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 6px 14px rgba(99, 102, 241, .3); }
+        .profile-section .docs-head-text { flex: 1; min-width: 0; }
+        .profile-section .docs-head-text h5 { margin: 0; font-size: 15.5px; font-weight: 800; color: #0f172a; }
+        .profile-section .docs-head-text small { color: #64748b; font-size: 12px; }
+        .profile-section .docs-count { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: #4338ca; background: rgba(99, 102, 241, .12); }
+        .profile-section .documents-list-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; max-height: 520px; padding: 0; border: 0; background: transparent; }
+        .profile-section .doc-list-item { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+        .profile-section .doc-list-item:hover { border-color: var(--doc); box-shadow: 0 6px 16px rgba(15, 23, 42, .08); transform: translateY(-1px); background: #fff; }
+        .profile-section .doc-list-item.active { border-color: var(--doc); background: color-mix(in srgb, var(--doc) 6%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc) 18%, transparent); }
+        .profile-section .doc-list-item:focus-visible { outline: 2px solid var(--doc); outline-offset: 2px; }
+        .profile-section .doc-item-icon { flex: none; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--doc); background: color-mix(in srgb, var(--doc) 13%, white); margin: 0; }
+        .profile-section .doc-item-info { flex: 1; min-width: 0; }
+        .profile-section .doc-item-name { margin: 0 0 4px; font-size: 14px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .profile-section .doc-item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 11.5px; color: #64748b; }
+        .profile-section .doc-ext { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 6px; font-weight: 800; letter-spacing: .3px; color: var(--doc); background: color-mix(in srgb, var(--doc) 11%, white); }
+        .profile-section .doc-date i { margin-inline-end: 3px; opacity: .8; }
+        .profile-section .doc-item-actions { display: flex; gap: 6px; margin: 0; }
+        .profile-section .doc-act { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border: 1px solid #e8ebf1; background: #fff; color: #475569; cursor: pointer; transition: all .15s ease; }
+        .profile-section .doc-act:hover { color: #fff; background: var(--doc); border-color: var(--doc); }
+        @media (max-width: 480px) { .profile-section .documents-list-container { grid-template-columns: 1fr; } .profile-section .doc-act-view { display: none; } }
+        /* RTL: body dir="rtl" already mirrors the row - cancel the older .rtl reverse/order rules */
+        body.rtl .profile-section .doc-list-item { flex-direction: row; }
+        body.rtl .profile-section .doc-item-icon, body.rtl .profile-section .doc-item-info, body.rtl .profile-section .doc-item-actions { order: 0; margin: 0; }
+        body.rtl .profile-section .doc-item-info { text-align: start; }
+
         /* ===== UTILITY ===== */
         .section-title {
             font-size: 20px;
@@ -2097,11 +2212,11 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('iqama_id_label') ?></span>
+                        <span class="info-label"><i class="fa fa-id-card"></i><?= __('iqama_id_label') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['iqama'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('iqama_id_expiry') ?></span>
+                        <span class="info-label"><i class="fa fa-calendar-xmark"></i><?= __('iqama_id_expiry') ?></span>
                         <span class="info-value">
                             <?php
                             $iqama_h = trim($emprow['iqama_exp'] ?? '');
@@ -2127,11 +2242,11 @@ RTL Support
                         </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('passport_no_label') ?></span>
+                        <span class="info-label"><i class="fa fa-passport"></i><?= __('passport_no_label') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['passport_number'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('passport_expiry') ?></span>
+                        <span class="info-label"><i class="fa fa-calendar-xmark"></i><?= __('passport_expiry') ?></span>
                         <span class="info-value">
                             <?php if (!empty($emprow['passport_exp'])):
                                 $pexp_g = $emprow['passport_exp'];
@@ -2146,7 +2261,7 @@ RTL Support
                         </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('dob_label') ?></span>
+                        <span class="info-label"><i class="fa fa-cake-candles"></i><?= __('dob_label') ?></span>
                         <span class="info-value"><?= $emprow['dob'] ?> (<?= $years ?> <?= __('yrs') ?>)</span>
                     </div>
                     </div>
@@ -2159,27 +2274,27 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('email') ?></span>
+                        <span class="info-label"><i class="fa fa-envelope"></i><?= __('email') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['email'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('mobile') ?></span>
+                        <span class="info-label"><i class="fa fa-mobile-screen"></i><?= __('mobile') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['mobile'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('address') ?></span>
+                        <span class="info-label"><i class="fa fa-location-dot"></i><?= __('address') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['address'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('country') ?></span>
+                        <span class="info-label"><i class="fa fa-earth-asia"></i><?= __('country') ?></span>
                         <span class="info-value"><?= ($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"] ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('emergency_contact') ?></span>
+                        <span class="info-label"><i class="fa fa-user-shield"></i><?= __('emergency_contact') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['emg_name'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('emergency_mobile_no_label') ?></span>
+                        <span class="info-label"><i class="fa fa-phone-volume"></i><?= __('emergency_mobile_no_label') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['emg_mobile'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     </div>
@@ -2192,11 +2307,11 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('joining_date_label') ?></span>
+                        <span class="info-label"><i class="fa fa-calendar-check"></i><?= __('joining_date_label') ?></span>
                         <span class="info-value"><?= $emprow['joining_date'] ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('contract_expiry_label', 'Contract Expiry') ?></span>
+                        <span class="info-label"><i class="fa fa-file-contract"></i><?= __('contract_expiry_label', 'Contract Expiry') ?></span>
                         <span class="info-value">
                             <?php
                             $expiryStr = computeContractExpiry(
@@ -2209,19 +2324,19 @@ RTL Support
                         </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('company_label') ?></span>
+                        <span class="info-label"><i class="fa fa-building"></i><?= __('company_label') ?></span>
                         <span class="info-value"><?= htmlspecialchars((($is_rtl ?? false) ? ($emprow['compnme_ar'] ?? $emprow['compnme']) : $emprow['compnme']) ?? 'N/A') ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('sponsorship_label') ?></span>
+                        <span class="info-label"><i class="fa fa-handshake"></i><?= __('sponsorship_label') ?></span>
                         <span class="info-value"><?= htmlspecialchars($emprow['sponsor']) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('contract_period_label') ?></span>
+                        <span class="info-label"><i class="fa fa-hourglass-half"></i><?= __('contract_period_label') ?></span>
                         <span class="info-value"><?= formatPeriod($emprow["period"]) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('direct_supervisor', 'Direct Supervisor') ?></span>
+                        <span class="info-label"><i class="fa fa-user-tie"></i><?= __('direct_supervisor', 'Direct Supervisor') ?></span>
                         <span class="info-value">
                             <?php
                             if (!empty($emprow['supervisor_id']) && !empty($emprow['supervisor_name'])) {
@@ -2248,11 +2363,11 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('total_salary') ?></span>
+                        <span class="info-label"><i class="fa fa-sack-dollar"></i><?= __('total_salary') ?></span>
                         <span class="info-value"><?= number_format($emprow['salary'], 2) ?> <i class="icon-saudi_riyal"></i></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('basic') ?></span>
+                        <span class="info-label"><i class="fa fa-money-bill"></i><?= __('basic') ?></span>
                         <span class="info-value"><?= number_format($emprow['basic'], 2) ?> <i class="icon-saudi_riyal"></i></span>
                     </div>
                     <?php
@@ -2269,10 +2384,14 @@ RTL Support
                         'guard'     => __('guard_allowance', 'Guard Allowance'),
                     ];
 
+                    $salary_component_icons = [
+                        'housing' => 'fa-house', 'transport' => 'fa-bus', 'food' => 'fa-utensils', 'fuel' => 'fa-gas-pump',
+                        'tel' => 'fa-phone', 'cashier' => 'fa-cash-register', 'misc' => 'fa-shapes', 'other' => 'fa-plus', 'guard' => 'fa-user-shield',
+                    ];
                     foreach ($salary_components as $field => $label) {
                         if (isset($emprow[$field]) && floatval($emprow[$field]) > 0) {
                             echo '<div class="info-row">'
-                                . '<span class="info-label">' . htmlspecialchars($label) . '</span>'
+                                . '<span class="info-label"><i class="fa ' . ($salary_component_icons[$field] ?? 'fa-coins') . '"></i>' . htmlspecialchars($label) . '</span>'
                                 . '<span class="info-value">' . number_format((float)$emprow[$field], 2) . ' <i class="icon-saudi_riyal"></i></span>'
                                 . '</div>';
                         }
@@ -2288,31 +2407,31 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('status') ?></span>
+                        <span class="info-label"><i class="fa fa-circle-info"></i><?= __('status') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['gosi'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('gosi_no') ?></span>
+                        <span class="info-label"><i class="fa fa-shield-halved"></i><?= __('gosi_no') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['gosi_no'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('bank_name_label') ?></span>
+                        <span class="info-label"><i class="fa fa-building-columns"></i><?= __('bank_name_label') ?></span>
                         <span class="info-value"><?= ($is_rtl ?? false) ? $emprow["b_name_ar"] : $emprow["b_name"] ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('iban', 'IBAN') ?></span>
+                        <span class="info-label"><i class="fa fa-credit-card"></i><?= __('iban', 'IBAN') ?></span>
                         <span class="info-value"><?= display_or_na($emprow['iban'] ?? null) ?> <i class="fa fa-copy copy-btn"></i></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('insurance_no', 'Insurance No.') ?></span>
+                        <span class="info-label"><i class="fa fa-notes-medical"></i><?= __('insurance_no', 'Insurance No.') ?></span>
                         <span class="info-value"><?= display_or_na($current_medical_insurance['insurance_no'] ?? null) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('insurance_class', 'Insurance Class') ?></span>
+                        <span class="info-label"><i class="fa fa-layer-group"></i><?= __('insurance_class', 'Insurance Class') ?></span>
                         <span class="info-value"><?= display_or_na($current_medical_class) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('insurance_expiry', 'Insurance Expiry') ?></span>
+                        <span class="info-label"><i class="fa fa-calendar-xmark"></i><?= __('insurance_expiry', 'Insurance Expiry') ?></span>
                         <span class="info-value"><?= (!empty($current_medical_insurance['medical_expiry']) && $current_medical_insurance['medical_expiry'] !== '0000-00-00') ? format_safe_date($current_medical_insurance['medical_expiry'], 'd M, Y') : __('not_available') ?></span>
                     </div>
                     </div>
@@ -2325,7 +2444,7 @@ RTL Support
                     </div>
                     <div class="info-card-body">
                     <div class="info-row">
-                        <span class="info-label"><?= __('status') ?></span>
+                        <span class="info-label"><i class="fa fa-user-check"></i><?= __('status') ?></span>
                         <span class="info-value">
                             <?php if ($emprow['status'] == 1): ?>
                                 <span class="status-pill status-pill-success"><?= __('active') ?></span>
@@ -2335,15 +2454,15 @@ RTL Support
                         </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('salary_payment_type_label') ?></span>
+                        <span class="info-label"><i class="fa fa-money-check-dollar"></i><?= __('salary_payment_type_label') ?></span>
                         <span class="info-value"><?= ($emprow['payment_type'] == 1 ? __('bank_option') : __('cash_option')) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('fly_trips', 'Fly Trips') ?></span>
+                        <span class="info-label"><i class="fa fa-plane-departure"></i><?= __('fly_trips', 'Fly Trips') ?></span>
                         <span class="info-value"><?= (int)($emprow['flystus'] ?? 0) ?></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><?= __('encashed') ?></span>
+                        <span class="info-label"><i class="fa fa-hand-holding-dollar"></i><?= __('encashed') ?></span>
                         <span class="info-value"><?= (int)($emprow['encashstus'] ?? 0) ?></span>
                     </div>
                     <?php
@@ -2374,7 +2493,7 @@ RTL Support
                     $total_assets = $assets_count + $cars_count;
                     ?>
                     <div class="info-row">
-                        <span class="info-label"><?= __('assigned_assets', 'Assigned Assets') ?></span>
+                        <span class="info-label"><i class="fa fa-laptop"></i><?= __('assigned_assets', 'Assigned Assets') ?></span>
                         <span class="info-value">
                             <?php if ($total_assets > 0): ?>
                                 <strong><?= $total_assets ?></strong>
@@ -2385,11 +2504,11 @@ RTL Support
                     </div>
                     <?php if (!empty($emprow['leaving_reason']) || !empty($emprow['end_date'])): ?>
                         <div class="info-row">
-                            <span class="info-label"><?= __('eos_leaving_reason', 'Leaving Reason') ?></span>
+                            <span class="info-label"><i class="fa fa-door-open"></i><?= __('eos_leaving_reason', 'Leaving Reason') ?></span>
                             <span class="info-value"><?= htmlspecialchars(($is_rtl ?? false) ? ($emprow['leaving_reason_ar'] ?? $emprow['leaving_reason']) : ($emprow['leaving_reason'] ?? '')) ?></span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><?= __('eos_end_date', 'End Date') ?></span>
+                            <span class="info-label"><i class="fa fa-calendar-minus"></i><?= __('eos_end_date', 'End Date') ?></span>
                             <span class="info-value"><?= htmlspecialchars($emprow['end_date'] ?? '') ?></span>
                         </div>
                     <?php endif; ?>
@@ -2400,25 +2519,22 @@ RTL Support
 
         <!-- DOCUMENTS SECTION -->
         <div class="profile-section">
-            <h3 class="section-title"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h3>
+            <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('my_files') ?></h3>
+            <?php
+            $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status`='A' ORDER BY `id` DESC ");
+            $doc_count = mysqli_num_rows($queryempdocu);
+            ?>
             <div class="documents-card">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0"><i class="fa fa-file-upload"></i> <?= __('employee_documents') ?></h5>
-                    <span class="badge badge-primary badge-pill">
-                        <?php
-                        $doc_query = mysqli_query($conDB, "SELECT COUNT(*) as total FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'");
-                        $doc_result = mysqli_fetch_assoc($doc_query);
-                        echo $doc_result['total'] ?? 0;
-                        ?>
-                    </span>
+                <div class="docs-head">
+                    <span class="docs-head-icon"><i class="fa fa-file-shield"></i></span>
+                    <div class="docs-head-text">
+                        <h5><?= __('employee_documents') ?></h5>
+                        <small><?= __('click_document_to_preview', 'Click a document to preview it') ?></small>
+                    </div>
+                    <span class="docs-count"><i class="fa fa-paperclip"></i> <?= (int)$doc_count ?></span>
                 </div>
 
-                <?php
-                $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status`='A' ORDER BY `id` DESC ");
-                $doc_count = mysqli_num_rows($queryempdocu);
-
-                if ($doc_count > 0):
-                ?>
+                <?php if ($doc_count > 0): ?>
                     <div class="row">
                         <!-- Documents List Column -->
                         <div class="col-12">
@@ -2443,23 +2559,40 @@ RTL Support
                                         'gif' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
                                     ];
                                     $file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
+                                    // Icon + color by document type (name), falling back to the file extension
+                                    $doc_kind_map = [
+                                        'passport' => ['fa-passport', '#2563eb'], 'iqama' => ['fa-id-card', '#0d9488'], 'national id' => ['fa-id-card', '#0d9488'],
+                                        'visa' => ['fa-stamp', '#7c3aed'], 'contract' => ['fa-file-contract', '#7c3aed'], 'certificate' => ['fa-graduation-cap', '#ca8a04'],
+                                        'degree' => ['fa-graduation-cap', '#ca8a04'], 'licen' => ['fa-id-badge', '#ea580c'], 'medical' => ['fa-notes-medical', '#dc2626'],
+                                        'insurance' => ['fa-notes-medical', '#dc2626'], 'bank' => ['fa-building-columns', '#16a34a'], 'iban' => ['fa-building-columns', '#16a34a'],
+                                        'photo' => ['fa-camera', '#0891b2'], 'cv' => ['fa-file-user', '#4f46e5'], 'resume' => ['fa-file-user', '#4f46e5'],
+                                    ];
+                                    $doc_ext_map = ['pdf' => ['fa-file-pdf', '#dc2626'], 'jpg' => ['fa-file-image', '#0284c7'], 'jpeg' => ['fa-file-image', '#0284c7'],
+                                        'png' => ['fa-file-image', '#0284c7'], 'gif' => ['fa-file-image', '#0284c7'], 'heic' => ['fa-file-image', '#0284c7'],
+                                        'doc' => ['fa-file-word', '#2563eb'], 'docx' => ['fa-file-word', '#2563eb'], 'xls' => ['fa-file-excel', '#16a34a'], 'xlsx' => ['fa-file-excel', '#16a34a']];
+                                    $doc_kind = $doc_ext_map[$docu_ext_get] ?? ['fa-file-lines', '#64748b'];
+                                    foreach ($doc_kind_map as $kw => $kind) {
+                                        if (stripos((string)$docu_typ_get, $kw) !== false) { $doc_kind = $kind; break; }
+                                    }
                                 ?>
                                     <div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
                                         data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
                                         data-doc-ext="<?= $docu_ext_get ?>"
-                                        data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>">
+                                        data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>"
+                                        style="--doc: <?= $doc_kind[1] ?>;" tabindex="0" role="button">
                                         <div class="doc-item-icon">
-                                            <i class="fa <?= $file_info['icon'] ?> text-<?= $file_info['color'] ?>"></i>
+                                            <i class="fa <?= $doc_kind[0] ?>"></i>
                                         </div>
                                         <div class="doc-item-info">
                                             <h6 class="doc-item-name"><?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?></h6>
                                             <small class="doc-item-meta">
-                                                <span class="badge badge-<?= $file_info['color'] ?> badge-sm"><?= strtoupper($docu_ext_get) ?></span>
-                                                <span class="text-muted ml-2"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
+                                                <span class="doc-ext"><i class="fa <?= $file_info['icon'] ?>"></i> <?= strtoupper($docu_ext_get) ?></span>
+                                                <span class="doc-date"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
                                             </small>
                                         </div>
                                         <div class="doc-item-actions">
-                                            <button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
+                                            <span class="doc-act doc-act-view" title="<?= __('view', 'View') ?>"><i class="fa fa-eye"></i></span>
+                                            <button class="doc-act btn-download-doc" title="<?= __('download') ?>" onclick="event.stopPropagation(); window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
                                                 <i class="fa fa-download"></i>
                                             </button>
                                         </div>
@@ -2799,6 +2932,9 @@ RTL Support
             var currentDocPath = '';
 
             // Use delegated event so dynamically added items work too
+            $(document).on('keydown', '.doc-list-item', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
+            });
             $(document).on('click', '.doc-list-item', function() {
                 // Remove active class from all items
                 $('.doc-list-item').removeClass('active');
