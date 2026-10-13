@@ -723,7 +723,7 @@ try {
             // Only add automatic benefits/deductions on initial payroll generation
             if ($autoDeductionEnabled) {
                 // --- LEAVE DEDUCTION LOGIC ---
-                addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary);
+                addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $payableStartDate, floatval($salaryComponents['food_allowance']));
 
                 // --- (NEW) LOAN DEDUCTION LOGIC ---
                 addOrUpdateLoanDeduction($pdo, $empId, $monthYear);
@@ -1028,20 +1028,168 @@ try {
 }
 
 /**
- * Calculates and inserts/updates a deduction for unpaid leave based on approved, deductible vacations.
+ * Returns a set (['Y-m-d' => true]) of dates in $monthYear covered by any APPROVED
+ * leave of this employee - LV-* excuse leaves and VAC-* vacations alike. Pending,
+ * rejected or cancelled requests never excuse a day. return_date is treated as
+ * inclusive (LV-* stores the last leave day there; for VAC-* it's lenient by one day).
  */
-function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary) {
+function getApprovedLeaveDatesForMonth($pdo, $empId, $monthYear) {
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+
+    $stmt = $pdo->prepare("SELECT start_date, COALESCE(return_date, start_date) AS end_date
+        FROM emp_vacation
+        WHERE emp_id = :emp_id
+          AND current_status IN ('approved', 'completed')
+          AND start_date <= :month_end
+          AND COALESCE(return_date, start_date) >= :month_start");
+    $stmt->execute([':emp_id' => $empId, ':month_end' => $monthEnd, ':month_start' => $monthStart]);
+
+    $dates = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $leave) {
+        $from = max(substr((string)$leave['start_date'], 0, 10), $monthStart);
+        $to = min(substr((string)$leave['end_date'], 0, 10), $monthEnd);
+        for ($d = $from; $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+            $dates[$d] = true;
+        }
+    }
+    return $dates;
+}
+
+/**
+ * Returns a set (['Y-m-d' => true]) of dates in $monthYear on which the attendance
+ * device actually synced for this company - at least 20% of the company's busiest
+ * day's headcount punched in. Guards absence detection against sync gaps (device
+ * offline, import not run yet), where every employee would otherwise look absent.
+ * Cached per company/month since it's called once per employee.
+ */
+function getDeviceSyncedDatesForMonth($pdo, $compNo, $monthYear) {
+    static $cache = [];
+    $key = $compNo . '|' . $monthYear;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $stmt = $pdo->prepare("SELECT DATE(a.date) AS d, COUNT(DISTINCT a.emp_id) AS n
+        FROM attendance a
+        JOIN employees e ON e.emp_id = a.emp_id
+        WHERE a.source = 'device' AND DATE_FORMAT(a.date, '%Y-%m') = :month_year AND e.comp_no = :comp_no
+        GROUP BY DATE(a.date)");
+    $stmt->execute([':month_year' => $monthYear, ':comp_no' => $compNo]);
+    $counts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    $dates = [];
+    if (!empty($counts)) {
+        $threshold = max(1, (int) ceil(max($counts) * 0.2));
+        foreach ($counts as $d => $n) {
+            if ((int) $n >= $threshold) {
+                $dates[$d] = true;
+            }
+        }
+    }
+    return $cache[$key] = $dates;
+}
+
+/**
+ * Auto-generates an Absence Deduction ((gross - food)/30 per day) for working days with NO
+ * check-in, gated by the same "auto attendance deduction" setting as Late/Early.
+ * A day is skipped (not deducted) when it is: before $payableStartDate (joining /
+ * vacation return - already deducted separately), today or later, a timetable Day
+ * Off, an active public holiday for the employee's company, has any attendance row
+ * with a check-in (incl. 'Incomplete' = no checkout), or is covered by an APPROVED
+ * excuse leave / vacation (getApprovedLeaveDatesForMonth). Employees with no device
+ * punches at all this month aren't tracked by attendance and get no deduction.
+ */
+function addOrUpdateLeaveDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $payableStartDate = null, $foodAllowance = 0) {
+    global $conDB;
+
     // Remove any previous absence deduction for this employee/month
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Absence Deduction%'");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
 
-    // NEW LOGIC: Do NOT deduct for any approved leave days (any type)
-    // Only deduct for true absences (not covered by any approved leave)
-    // If you have a table of absences, loop through each absent day and check if it is covered by any approved leave
-    // If not covered, then deduct. Otherwise, skip deduction.
-    // If you do not track absences, then do not insert any absence deduction here at all.
-    // (If you want to keep absence deduction for true absences, implement that logic here)
-    // For now, this function will NOT insert any deduction for approved leave days.
+    if ((string) get_setting($conDB, 'deduction_auto_attendance_enabled') !== '1' || !attendance_enabled($pdo)) {
+        return;
+    }
+
+    $stmtTracked = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE emp_id = :emp_id AND DATE_FORMAT(date, '%Y-%m') = :month_year AND source = 'device'");
+    $stmtTracked->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    if ((int) $stmtTracked->fetchColumn() === 0) {
+        return;
+    }
+
+    $stmtEmp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
+    $stmtEmp->execute([':emp_id' => $empId]);
+    $compNo = $stmtEmp->fetchColumn();
+
+    $monthStart = $monthYear . '-01';
+    $monthEnd = date('Y-m-t', strtotime($monthStart));
+    $from = $monthStart;
+    if ($payableStartDate instanceof DateTime && $payableStartDate->format('Y-m-d') > $from) {
+        $from = $payableStartDate->format('Y-m-d');
+    }
+    $to = min($monthEnd, date('Y-m-d', strtotime('-1 day')));
+    if ($from > $to) {
+        return;
+    }
+
+    $stmtPresent = $pdo->prepare("SELECT DISTINCT DATE(date) AS d FROM attendance
+        WHERE emp_id = :emp_id AND DATE_FORMAT(date, '%Y-%m') = :month_year
+          AND time_in IS NOT NULL AND time_in <> ''");
+    $stmtPresent->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+    $presentDates = array_fill_keys($stmtPresent->fetchAll(PDO::FETCH_COLUMN), true);
+
+    $stmtHolidays = $pdo->prepare("SELECT DISTINCT h.start_date, h.end_date FROM emp_holidays h
+        LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
+        WHERE h.is_active = 1 AND h.start_date <= :month_end AND h.end_date >= :month_start
+          AND (hc.company_id = :comp_no OR hc.holiday_id IS NULL)");
+    $stmtHolidays->execute([':month_end' => $monthEnd, ':month_start' => $monthStart, ':comp_no' => (int) $compNo]);
+    $holidayDates = [];
+    foreach ($stmtHolidays->fetchAll(PDO::FETCH_ASSOC) as $h) {
+        for ($d = max($h['start_date'], $monthStart); $d <= min($h['end_date'], $monthEnd); $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+            $holidayDates[$d] = true;
+        }
+    }
+
+    $excusedDates = getApprovedLeaveDatesForMonth($pdo, $empId, $monthYear);
+    $syncedDates = getDeviceSyncedDatesForMonth($pdo, $compNo, $monthYear);
+
+    $absentDays = 0;
+    for ($d = $from; $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+        if (!isset($syncedDates[$d])) {
+            continue; // device didn't sync that day - can't tell absence from missing data
+        }
+        if (isset($presentDates[$d]) || isset($excusedDates[$d]) || isset($holidayDates[$d])) {
+            continue;
+        }
+        $timetable = attendance_resolve_timetable($conDB, (int) $empId, $compNo, $d);
+        if (!empty($timetable['is_off'])) {
+            continue;
+        }
+        $absentDays++;
+    }
+
+    if ($absentDays <= 0) {
+        return;
+    }
+
+    // Same formula as a manual "By Day" deduction in generate_payroll.php:
+    // (gross - food) / 240 hourly rate x (days x 8 hours).
+    $deductibleSalary = max(floatval($totalGrossSalary) - floatval($foodAllowance), 0);
+    $amount = round(($deductibleSalary / 240) * ($absentDays * 8), 2);
+    if ($amount <= 0) {
+        return;
+    }
+
+    $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions
+        (emp_id, deduction, note, month, status, calculation_type, hours, days)
+        VALUES (:emp_id, :deduction, :amount, :month_year, 1, 'daily_deduction', NULL, :days)");
+    $stmtInsert->execute([
+        ':emp_id' => $empId,
+        ':deduction' => 'Absence Deduction (' . $absentDays . ' days)',
+        ':amount' => number_format($amount, 2, '.', ''),
+        ':month_year' => $monthYear,
+        ':days' => $absentDays
+    ]);
 }
 
 /**
@@ -1295,9 +1443,14 @@ function addOrUpdateAttendanceDeduction($pdo, $empId, $monthYear, $totalGrossSal
     $overtimeMonthlyHours = get_setting_num($conDB, 'overtime_monthly_hours', 240) ?: 240;
     $hourlyRate = floatval($totalGrossSalary) / $overtimeMonthlyHours;
 
+    $excusedDates = getApprovedLeaveDatesForMonth($pdo, $empId, $monthYear);
+
     $lateHours = 0.0;
     $earlyHours = 0.0;
     foreach ($days as $day) {
+        if (isset($excusedDates[$day['d']])) {
+            continue; // covered by an approved excuse leave / vacation
+        }
         $state = (string) $day['state'];
         $timetable = attendance_resolve_timetable($conDB, (int) $empId, $compNo, $day['d']);
 
