@@ -115,6 +115,129 @@
                 color: #64748b;
                 letter-spacing: 0.04em;
             }
+
+            /* ===== Payroll details modal (showPayrollDetails) ===== */
+            .pd-popup {
+                --pd-bg: #f6f7fb; --pd-card: #fff; --pd-border: #e6e9f0; --pd-text: #1f2937; --pd-muted: #7b8494;
+                --pd-accent: #4f46e5; --pd-accent-soft: rgba(79, 70, 229, .10);
+                --pd-green: #16a34a; --pd-green-soft: rgba(22, 163, 74, .10);
+                --pd-red: #dc2626; --pd-red-soft: rgba(220, 38, 38, .09);
+                --pd-amber: #d97706; --pd-amber-soft: rgba(217, 119, 6, .12);
+                --pd-sky: #0284c7; --pd-sky-soft: rgba(2, 132, 199, .10);
+                --pd-slate: #475569; --pd-slate-soft: rgba(71, 85, 105, .10);
+                background: var(--pd-bg) !important;
+                border-radius: 18px !important;
+                padding: 0 !important;
+                overflow: hidden;
+            }
+            html.app-dark .pd-popup {
+                --pd-bg: #171b22; --pd-card: #212733; --pd-border: #313949; --pd-text: #e5e7eb; --pd-muted: #98a2b3;
+                --pd-accent: #8b93f8; --pd-accent-soft: rgba(139, 147, 248, .14);
+            }
+            .pd-popup .swal2-html-container { margin: 0 !important; padding: 22px 24px 4px !important; text-align: start; color: var(--pd-text); }
+            .pd { font-size: 13.5px; }
+
+            .pd-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+            .pd-avatar {
+                flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px;
+                display: flex; align-items: center; justify-content: center;
+                background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; font-weight: 700; font-size: 16px;
+            }
+            .pd-head-text { min-width: 0; }
+            .pd-head h5 { margin: 0 0 4px; font-size: 17px; font-weight: 700; color: var(--pd-text); }
+            .pd-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--pd-muted); font-size: 12.5px; font-weight: 500; }
+            .pd-meta span { display: inline-flex; align-items: center; gap: 6px; }
+            .pd-tag { padding: 2px 9px; border-radius: 999px; font-weight: 600; }
+            .pd-tag.tone-green { background: var(--pd-green-soft); color: var(--pd-green); }
+
+            .pd-totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+            .pd-total { background: var(--pd-card); border: 1px solid var(--pd-border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+            .pd-total span { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--pd-muted); text-transform: uppercase; letter-spacing: .3px; }
+            .pd-total span i { font-size: 10px; }
+            .pd-total b { display: block; margin-top: 4px; font-size: 17px; font-weight: 700; color: var(--pd-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .pd-total.tone-green b, .pd-total.tone-green span i { color: var(--pd-green); }
+            .pd-total.tone-red b, .pd-total.tone-red span i { color: var(--pd-red); }
+            .pd-total.is-net { background: linear-gradient(135deg, #4f46e5, #6366f1); border-color: transparent; box-shadow: 0 10px 22px rgba(79, 70, 229, .25); }
+            .pd-total.is-net span, .pd-total.is-net b { color: #fff; }
+            .pd-total.is-net span { opacity: .85; }
+
+            .pd-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 14px; background: var(--pd-card); border: 1px solid var(--pd-border); border-radius: 12px; }
+            .pd-tab {
+                flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+                height: 38px; border: 0; border-radius: 9px; background: transparent; color: var(--pd-muted);
+                font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease;
+            }
+            .pd-tab:hover { color: var(--pd-text); }
+            .pd-tab.active { background: var(--pd-accent-soft); color: var(--pd-accent); }
+            .pd-tab.tone-green.active { background: var(--pd-green-soft); color: var(--pd-green); }
+            .pd-tab.tone-red.active { background: var(--pd-red-soft); color: var(--pd-red); }
+            .pd-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: rgba(100, 116, 139, .16); color: inherit; }
+
+            .pd-paytype {
+                display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+                padding: 10px 14px; margin-bottom: 12px; background: var(--pd-card); border: 1px solid var(--pd-border); border-radius: 14px;
+            }
+            .pd-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--pd-text); }
+            .pd-label i { color: var(--pd-muted); }
+            .pd-seg { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--pd-bg); border: 1px solid var(--pd-border); }
+            .pd-seg .pd-seg-btn {
+                height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; box-shadow: none;
+                color: var(--pd-muted); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+            }
+            .pd-seg .pd-seg-btn:hover { color: var(--pd-text); }
+            .pd-seg .pd-seg-btn.active { background: var(--pd-card); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+            .pd-seg .pd-seg-btn.tone-sky.active { color: var(--pd-sky); }
+            .pd-seg .pd-seg-btn.tone-slate.active { color: var(--pd-slate); }
+            .pd-seg .pd-seg-btn.tone-amber.active { color: var(--pd-amber); }
+
+            .pd-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+            .pd-card { background: var(--pd-card); border: 1px solid var(--pd-border); border-radius: 14px; padding: 6px 16px 10px; }
+            .pd-card-head {
+                display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                padding: 10px 0; margin-bottom: 4px; border-bottom: 1px solid var(--pd-border);
+            }
+            .pd-card-head span { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--pd-text); }
+            .pd-card-head span i { color: var(--pd-accent); }
+            .pd-card-head b { font-weight: 700; color: var(--pd-text); font-variant-numeric: tabular-nums; }
+            .pd-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--pd-border); }
+            .pd-row:last-child { border-bottom: 0; }
+            .pd-row-label { display: inline-flex; align-items: center; gap: 9px; color: var(--pd-text); }
+            .pd-row-label i { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; background: var(--pd-accent-soft); color: var(--pd-accent); }
+            .pd-row-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--pd-text); white-space: nowrap; }
+            .pd-row-value i, .pd-card-head b i, .pd-gross b i { font-size: .85em; margin-inline-end: 3px; opacity: .7; }
+            .pd-empty { padding: 18px 16px; color: var(--pd-muted); text-align: center; }
+            .pd-gross {
+                display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 12px 16px;
+                border-radius: 14px; background: var(--pd-accent-soft); color: var(--pd-accent); font-weight: 700;
+            }
+            .pd-gross span { display: inline-flex; align-items: center; gap: 8px; }
+            .pd-gross b { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+            .pd-btn-sm { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 0; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+            .pd-btn-sm.tone-green { background: var(--pd-green-soft); color: var(--pd-green); }
+            .pd-btn-sm.tone-red { background: var(--pd-red-soft); color: var(--pd-red); }
+            .pd-btn-sm:hover { filter: brightness(.95); }
+            .pd-check { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0 12px; font-size: 12.5px; color: var(--pd-muted); font-weight: 500; cursor: pointer; }
+            .pd-check input { margin-top: 2px; accent-color: var(--pd-accent); }
+            .pd .alert { border-radius: 12px; }
+
+            .pd-actions { gap: 10px; margin: 14px 0 0 !important; padding: 0 24px; }
+            .pd-btn {
+                display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 22px; border-radius: 11px;
+                border: 1px solid var(--pd-border); background: var(--pd-card); color: var(--pd-text); font-weight: 600; font-size: 14px; cursor: pointer;
+            }
+            .pd-btn:hover { background: var(--pd-bg); }
+            .pd-btn-primary { border-color: transparent; background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; box-shadow: 0 8px 18px rgba(79, 70, 229, .28); }
+            .pd-btn-primary:hover { background: linear-gradient(135deg, #4338ca, #4f46e5); }
+            .pd-footer { margin: 16px 0 0 !important; padding: 12px 16px !important; border-top: 1px solid var(--pd-border) !important; background: var(--pd-card); }
+            .pd-footer .payroll-nav-actions { background: transparent; border: 0; box-shadow: none; padding: 0; }
+            .pd-footer .payroll-nav-btn { min-width: 120px; padding: 8px 16px !important; }
+
+            @media (max-width: 767px) {
+                .pd-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .pd-grid-2 { grid-template-columns: 1fr; }
+                .pd-popup .swal2-html-container { padding: 16px 14px 4px !important; }
+            }
             .rounded-left-0{
                 border-radius: 0 0.25rem 0.25rem 0 !important; 
             }
@@ -5924,126 +6047,42 @@ async function showPayrollDetails(empId, empName, month) {
 
 
             // --- Salary Breakdown HTML ---
+            // Only components with an amount are listed; a card with none is dropped and the other one goes full width.
+            const pdMoney = (v) => (parseFloat(v || 0) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const pdHasAmount = (v) => (parseFloat(v || 0) || 0) !== 0;
+            const pdRow = (icon, label, value) => pdHasAmount(value)
+                ? `<div class="pd-row"><span class="pd-row-label"><i class="fas ${icon}"></i>${label}</span>`
+                    + `<span class="pd-row-value"><i class="icon-saudi_riyal"></i>${pdMoney(value)}</span></div>`
+                : '';
+            const pdCard = (icon, title, rows) => {
+                const body = rows.map(r => pdRow(r[0], r[1], payroll[r[2]])).join('');
+                if (!body) return '';
+                const total = rows.reduce((t, r) => t + (parseFloat(payroll[r[2]] || 0) || 0), 0);
+                return `<div class="pd-card"><div class="pd-card-head"><span><i class="fas ${icon}"></i>${title}</span><b><i class="icon-saudi_riyal"></i>${pdMoney(total)}</b></div>${body}</div>`;
+            };
+            const pdCards = [
+                pdCard('fa-wallet', __('basic_components_title'), [
+                    ['fa-wallet', __('basic_salary_label'), 'basic_salary'],
+                    ['fa-home', __('housing_allowance_label'), 'housing_allowance'],
+                    ['fa-car', __('transport_allowance_label'), 'transport_allowance'],
+                    ['fa-utensils', __('food_allowance_label'), 'food_allowance'],
+                ]),
+                pdCard('fa-layer-group', __('additional_components_title'), [
+                    ['fa-shapes', __('miscellaneous_allowance_label'), 'miscellaneous_allowance'],
+                    ['fa-cash-register', __('cashier_allowance_label'), 'cashier_allowance'],
+                    ['fa-gas-pump', __('fuel_allowance_label'), 'fuel_allowance'],
+                    ['fa-phone-alt', __('telephone_allowance_label'), 'telephone_allowance'],
+                    ['fa-shield-alt', __('guard_allowance_label'), 'guard_allowance'],
+                    ['fa-layer-group', __('other_allowance_label'), 'other_allowance'],
+                ]),
+            ].filter(Boolean);
             const salaryBreakdownHtml = `
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body">
-                                <h6 class="card-title border-bottom pb-2 mb-3">${__('basic_components_title')}</h6>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-wallet me-1"></i>${__('basic_salary_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 bg-light rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.basic_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-home me-1"></i>${__('housing_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.housing_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-car me-1"></i>${__('transport_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.transport_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-utensils me-1"></i>${__('food_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.food_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body">
-                                <h6 class="card-title border-bottom pb-2 mb-3">${__('additional_components_title')}</h6>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-shapes me-1"></i>${__('miscellaneous_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.miscellaneous_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-cash-register me-1"></i>${__('cashier_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.cashier_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-gas-pump me-1"></i>${__('fuel_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.fuel_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-phone-alt me-1"></i>${__('telephone_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.telephone_allowance).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-shield-alt me-1"></i>${__('guard_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.guard_allowance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="small text-muted mb-1" style="font-size: 11px;"><i class="fas fa-layer-group me-1"></i>${__('other_allowance_label')}</label>
-                                        <div class="input-group input-group-sm mb-2">
-                                            <span class="input-group-text bg-light border-right-0 rounded-right-0"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light" 
-                                                value="${parseFloat(payroll.other_allowance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-12">
-                        <div class="card border-primary shadow-sm">
-                            <div class="card-body py-2">
-                                <div class="row align-items-center">
-                                    <div class="col-md-8">
-                                        <h6 class="mb-0 text-primary"><i class="fas fa-coins me-1"></i>${__('total_gross_salary_label')}</h6>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text bg-primary text-white py-1 rounded-right-0 border border-primary"><i class="icon-saudi_riyal"></i></span>
-                                            <input type="text" class="form-control bg-light fw-bold" 
-                                                value="${parseFloat(payroll.total_gross_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                ${pdCards.length
+                    ? `<div class="${pdCards.length > 1 ? 'pd-grid-2' : ''}">${pdCards.join('')}</div>`
+                    : `<div class="pd-card pd-empty"><i class="fas fa-info-circle"></i> ${__('no_salary_components', 'No salary components recorded for this employee.')}</div>`}
+                <div class="pd-gross">
+                    <span><i class="fas fa-coins"></i>${__('total_gross_salary_label')}</span>
+                    <b><i class="icon-saudi_riyal"></i>${pdMoney(payroll.total_gross_salary)}</b>
                 </div>
             `;
 
@@ -6113,127 +6152,85 @@ async function showPayrollDetails(empId, empName, month) {
                 </div>
             ` : '';
 
+            const pdInitials = String(empName || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
+            const pdMonthLabel = new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const pdPayType = Number(employee.payment_type || 1);
+            const pdPayBtn = (val, tone, icon, label) =>
+                `<button type="button" class="btn pd-seg-btn tone-${tone}${pdPayType === val ? ' active' : ''}" data-paytype="${val}"><i class="fas ${icon}"></i> ${label}</button>`;
             const modalHtml = `
-                <div class="payroll-details-container">
-                    ${masterDataChangedInfoHtml}
-                    ${feedbackHtml}
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <h5 class="mb-0">${empName}</h5>
-                            <small class="text-muted">${__('employee_id')}: ${empId} | ${new Date(month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</small>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-sm btn-outline-primary active" data-section="salary">
-                                <i class="fas fa-money-bill-wave"></i> ${__('salary_section')}
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-success" data-section="benefits">
-                                <i class="fas fa-gift"></i> ${__('benefits_section')}
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" data-section="deductions">
-                                <i class="fas fa-minus-circle"></i> ${__('deductions_section')}
-                            </button>
+                <div class="payroll-details-container pd">
+                    <div class="pd-head">
+                        <span class="pd-avatar">${escapeHtml(pdInitials)}</span>
+                        <div class="pd-head-text">
+                            <h5>${escapeHtml(empName)}</h5>
+                            <div class="pd-meta">
+                                <span><i class="far fa-id-badge"></i>${escapeHtml(empId)}</span>
+                                <span><i class="far fa-calendar-alt"></i>${escapeHtml(pdMonthLabel)}</span>
+                                ${isReadOnly ? `<span class="pd-tag tone-green"><i class="fas fa-lock"></i>${__('paid', 'Paid')} · ${__('read_only', 'Read only')}</span>` : ''}
+                            </div>
                         </div>
                     </div>
-                    
+
+                    <div class="pd-totals">
+                        <div class="pd-total"><span>${__('total_gross_salary_label')}</span><b>SAR ${pdMoney(payroll.total_gross_salary)}</b></div>
+                        <div class="pd-total tone-green"><span><i class="fas fa-plus"></i>${__('total_benefits_label')}</span><b id="totalBenefitsDisplay">SAR ${pdMoney(payroll.total_benefits)}</b></div>
+                        <div class="pd-total tone-red"><span><i class="fas fa-minus"></i>${__('total_deductions_label')}</span><b id="totalDeductionsDisplay">SAR ${pdMoney(payroll.total_deductions)}</b></div>
+                        <div class="pd-total is-net"><span><i class="fas fa-equals"></i>${__('net_salary_label')}</span><b id="netSalaryDisplay">SAR ${pdMoney(payroll.net_salary)}</b></div>
+                    </div>
+
+                    ${masterDataChangedInfoHtml}
+                    ${feedbackHtml}
+
+                    <div class="pd-tabs" role="tablist">
+                        <button type="button" class="pd-tab active" data-section="salary"><i class="fas fa-money-bill-wave"></i> ${__('salary_section')}</button>
+                        <button type="button" class="pd-tab tone-green" data-section="benefits"><i class="fas fa-gift"></i> ${__('benefits_section')}${benefits.length ? `<span class="pd-count">${benefits.length}</span>` : ''}</button>
+                        <button type="button" class="pd-tab tone-red" data-section="deductions"><i class="fas fa-minus-circle"></i> ${__('deductions_section')}${deductions.length ? `<span class="pd-count">${deductions.length}</span>` : ''}</button>
+                    </div>
+
                     <div class="section-content">
                         <!-- Salary Section (default visible) -->
                         <div class="section-pane active" id="salary-section">
-                            <!-- Payment Type Tabs -->
-                            <div class="card border-0 shadow-sm mb-3">
-                                <div class="card-body py-2">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                        <div class="small text-muted fw-bold">${__('salary_payment_type_label') || 'Payment Type'}</div>
-                                        <div class="btn-group btn-group-sm" id="payment-type-tabs" role="group" aria-label="Payment Type">
-                                            <button type="button" class="btn btn-outline-info${Number(employee.payment_type||1)===1?' active':''}" data-paytype="1">
-                                                <i class="fas fa-university"></i> ${__('bank_option') || 'Bank'}
-                                            </button>
-                                            <button type="button" class="btn btn-outline-secondary${Number(employee.payment_type||1)===2?' active':''}" data-paytype="2">
-                                                <i class="fas fa-money-bill-wave"></i> ${__('cash_option') || 'Cash'}
-                                            </button>
-                                            <button type="button" class="btn btn-outline-warning${Number(employee.payment_type||1)===3?' active':''}" data-paytype="3">
-                                                <i class="fas fa-pause-circle"></i> ${__('hold_option') || 'Hold'}
-                                            </button>
-                                        </div>
-                                    </div>
+                            <div class="pd-paytype">
+                                <span class="pd-label"><i class="fas fa-hand-holding-usd"></i>${__('salary_payment_type_label') || 'Payment Type'}</span>
+                                <div class="pd-seg" id="payment-type-tabs" role="group" aria-label="Payment Type">
+                                    ${pdPayBtn(1, 'sky', 'fa-university', __('bank_option') || 'Bank')}
+                                    ${pdPayBtn(2, 'slate', 'fa-money-bill-wave', __('cash_option') || 'Cash')}
+                                    ${pdPayBtn(3, 'amber', 'fa-pause-circle', __('hold_option') || 'Hold')}
                                 </div>
                             </div>
                             ${salaryBreakdownHtml}
                         </div>
-                        
+
                         <!-- Benefits Section (hidden by default) -->
                         <div class="section-pane d-none" id="benefits-section">
-                            <div class="card border-0 shadow-sm mb-3">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h6 class="mb-0">${__('benefits_section')}</h6>
-                                        <button id="addBenefitBtn" class="btn btn-sm btn-success">
-                                            <i class="fas fa-plus-circle me-1"></i> ${__('add_benefit_button')}
-                                        </button>
-                                    </div>
-                                    <div class="form-check mb-3">
-                                        <input type="checkbox" class="form-check-input" id="autoBenefitEnabledCheckbox" ${Number(payroll.auto_benefit_enabled ?? 1) !== 0 ? 'checked' : ''}>
-                                        <label class="form-check-label small" for="autoBenefitEnabledCheckbox">
-                                            ${__('auto_add_benefit_checkbox_label', 'Auto add Benefit (Vacation working days, Attendance overtime, Scheduled other income) while generating payroll')}
-                                        </label>
-                                    </div>
-                                    <div id="benefits-list">
-                                        ${benefitsHtml}
-                                    </div>
+                            <div class="pd-card">
+                                <div class="pd-card-head">
+                                    <span><i class="fas fa-gift"></i>${__('benefits_section')}</span>
+                                    <button id="addBenefitBtn" type="button" class="pd-btn-sm tone-green"><i class="fas fa-plus"></i> ${__('add_benefit_button')}</button>
+                                </div>
+                                <label class="pd-check">
+                                    <input type="checkbox" id="autoBenefitEnabledCheckbox" ${Number(payroll.auto_benefit_enabled ?? 1) !== 0 ? 'checked' : ''}>
+                                    <span>${__('auto_add_benefit_checkbox_label', 'Auto add Benefit (Vacation working days, Attendance overtime, Scheduled other income) while generating payroll')}</span>
+                                </label>
+                                <div id="benefits-list">
+                                    ${benefitsHtml}
                                 </div>
                             </div>
                         </div>
-                        
+
                         <!-- Deductions Section (hidden by default) -->
                         <div class="section-pane d-none" id="deductions-section">
-                            <div class="card border-0 shadow-sm mb-3">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h6 class="mb-0">${__('deductions_section')}</h6>
-                                        <button id="addDeductionBtn" class="btn btn-sm btn-danger">
-                                            <i class="fas fa-plus-circle me-1"></i> ${__('add_deduction_button')}
-                                        </button>
-                                    </div>
-                                    <div class="form-check mb-3">
-                                        <input type="checkbox" class="form-check-input" id="autoDeductionEnabledCheckbox" ${Number(payroll.auto_deduction_enabled ?? 1) !== 0 ? 'checked' : ''}>
-                                        <label class="form-check-label small" for="autoDeductionEnabledCheckbox">
-                                            ${__('auto_add_deduction_checkbox_label') || 'Auto add Deduction (GOSI, Loan, Attendance, Joining/Vacation return) while generating payroll'}
-                                        </label>
-                                    </div>
-                                    <div id="deductions-list">
-                                        ${deductionsHtml}
-                                    </div>
+                            <div class="pd-card">
+                                <div class="pd-card-head">
+                                    <span><i class="fas fa-minus-circle"></i>${__('deductions_section')}</span>
+                                    <button id="addDeductionBtn" type="button" class="pd-btn-sm tone-red"><i class="fas fa-plus"></i> ${__('add_deduction_button')}</button>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Summary Card -->
-                    <div class="card border-primary shadow-sm mt-3">
-                        <div class="card-body py-2">
-                            <div class="row align-items-center">
-                                <div class="col-md-4">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-info text-white py-1 rounded-right-0 border border-info">${__('total_benefits_label')}</span>
-                                        <span class="input-group-text bg-light border-left-0 border-right-0 rounded-0 "><i class="icon-saudi_riyal"></i></span>
-                                        <input type="text" class="form-control bg-light" id="totalBenefitsDisplay" 
-                                            value="${parseFloat(payroll.total_benefits).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-warning text-dark py-1 rounded-right-0 border border-warning">${__('total_deductions_label')}</span>
-                                        <span class="input-group-text bg-light border-left-0 border-right-0 rounded-0 "><i class="icon-saudi_riyal"></i></span>
-                                        <input type="text" class="form-control bg-light" id="totalDeductionsDisplay" 
-                                            value="${parseFloat(payroll.total_deductions).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-primary text-white py-1 rounded-right-0 border border-primary">${__('net_salary_label')}</span>
-                                        <span class="input-group-text bg-light border-left-0 border-right-0 rounded-0 "><i class="icon-saudi_riyal"></i></span>
-                                        <input type="text" class="form-control bg-light fw-bold" id="netSalaryDisplay" 
-                                            value="${parseFloat(payroll.net_salary).toLocaleString('en-US', { minimumFractionDigits: 2 })}" readonly>
-                                    </div>
+                                <label class="pd-check">
+                                    <input type="checkbox" id="autoDeductionEnabledCheckbox" ${Number(payroll.auto_deduction_enabled ?? 1) !== 0 ? 'checked' : ''}>
+                                    <span>${__('auto_add_deduction_checkbox_label', 'Auto add Deduction (GOSI, Loan, Attendance, Joining/Vacation return) while generating payroll')}</span>
+                                </label>
+                                <div id="deductions-list">
+                                    ${deductionsHtml}
                                 </div>
                             </div>
                         </div>
@@ -6262,14 +6259,21 @@ async function showPayrollDetails(empId, empName, month) {
             Swal.fire({
                 html: modalHtml,
                 footer: modalFooterHtml,
-                width: '900px',
+                width: '960px',
                 showCancelButton: true,
                 showConfirmButton: !isReadOnly,
-                confirmButtonText: __('save_changes_button'),
-                confirmButtonColor: '#6366f1',
+                confirmButtonText: `<i class="fas fa-save"></i> ${__('save_changes_button')}`,
                 cancelButtonText: __('close'),
+                buttonsStyling: false,
+                reverseButtons: true,
                 allowOutsideClick: false,
-                customClass: isReadOnly ? { popup: 'payroll-view-only-popup' } : {},
+                customClass: {
+                    popup: 'pd-popup' + (isReadOnly ? ' payroll-view-only-popup' : ''),
+                    actions: 'pd-actions',
+                    confirmButton: 'pd-btn pd-btn-primary',
+                    cancelButton: 'pd-btn',
+                    footer: 'pd-footer'
+                },
                 didOpen: () => {
                     if (isReadOnly) {
                         const popupEl = Swal.getPopup();
@@ -6324,6 +6328,28 @@ async function showPayrollDetails(empId, empName, month) {
                     addDynamicEventListener(document.getElementById('nextEmployeeBtn'), 'click', () => {
                         navigatePayrollEmployee(navigationState.nextEmployee, employee, month, initialModalState);
                     });
+
+                    // Keyboard: Left/Right arrow = Previous/Next employee (RTL: mirrored).
+                    // Ignored while typing in a field or when another popup has replaced this one.
+                    // Capture phase on window: SweetAlert2 handles keydown on the popup itself and stops
+                    // propagation (stopKeydownPropagation), so a normal document listener never sees it.
+                    const payrollArrowKeyHandler = (e) => {
+                        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+                        const popup = Swal.getPopup();
+                        if (!popup || !popup.classList.contains('pd-popup')) return;
+                        const t = e.target;
+                        if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest('.select2-container'))) return;
+                        const rtl = document.documentElement.dir === 'rtl' || document.body.dir === 'rtl';
+                        const goNext = (e.key === 'ArrowRight') !== rtl;
+                        const btn = document.getElementById(goNext ? 'nextEmployeeBtn' : 'prevEmployeeBtn');
+                        if (!btn || btn.disabled) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        btn.click();
+                    };
+                    window.addEventListener('keydown', payrollArrowKeyHandler, true);
+                    currentEventListeners.push(() => window.removeEventListener('keydown', payrollArrowKeyHandler, true));
 
                     document.querySelectorAll('.mark-feedback-resolved-btn').forEach(btn => {
                         addDynamicEventListener(btn, 'click', async function() {

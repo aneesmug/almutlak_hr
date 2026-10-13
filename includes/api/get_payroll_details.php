@@ -583,7 +583,7 @@ try {
         LEFT JOIN employees re ON re.emp_id = f.resolved_by
         LEFT JOIN admin_login ral ON ral.emp_id = f.resolved_by
         WHERE f.emp_id = :emp_id
-          AND (f.payroll_month = :month_year OR f.status = 'open')
+          AND f.payroll_month = :month_year
         ORDER BY f.created_at DESC");
     $stmtFeedback->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
     $feedbacks = $stmtFeedback->fetchAll(PDO::FETCH_ASSOC);
