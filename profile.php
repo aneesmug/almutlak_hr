@@ -102,42 +102,52 @@ $isBusinessTripBlocked = is_employee_request_blocked($conDB, $empIdForBlockCheck
 
 // Build More Actions HTML for SweetAlert2
 $moreActionsHtml = '';
+// Collected per section, rendered as titled tile groups below (same look as view_employee.php's More Actions)
+$ma = ['requests' => [], 'vacation' => [], 'account' => [], 'exit' => []];
 if ($emprow['status'] == 1) {
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-danger\" onclick=\"window.location.href='./system_guide.php'\"><i class=\"fa fa-book-open-lines\"></i><span>" . __('system_guide') . "</span></a>";
-    $moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
+    $ma['account'][] = "<a href=\"javascript:void(0);\" class=\"menu-item text-purple\" onclick=\"window.location.href='./system_guide.php'\"><i class=\"fa fa-book-open-lines\"></i><span>" . __('system_guide') . "</span></a>";
     // Sequence below mirrors includes/emp_top_info.php's More Actions order
     // (Loan -> Vacation -> Excuse Leave -> Rejoin -> Edit -> Resignation), limited
     // to the items that apply in this self-service context.
     // Always shown (unless loan requests are blocked): with an active loan the click shows
     // the loan summary + "contact HR" instead of the form (assets/js/loanHandling.js).
     if (!$isLoanBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
+        $ma['requests'][] = "<a href=\"javascript:void(0);\" class=\"menu-item apply-loan applyLoan text-warning\" data-emp_id=\"{$emprow['empid']}\" data-user_type=\"" . htmlspecialchars($_SESSION['user_type'] ?? '') . "\"><i class=\"fa fa-money-bill-wave\"></i><span>" . __('apply_loan') . "</span></a>";
     }
     $allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
     $allowVacSalaryBelowMinDays = ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') === '1') ? 1 : 0;
     if (!$isAllVacationBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-allow-vac-salary-below-min=\"{$allowVacSalaryBelowMinDays}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
+        $ma['vacation'][] = "<a href=\"javascript:void(0);\" class=\"menu-item annual-vac applyvacationAtter text-info\" data-empid=\"{$emprow['empid']}\" data-dept=\"{$emprow['dept']}\" data-country=\"{$emprow['country']}\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-allow-vac-salary-below-min=\"{$allowVacSalaryBelowMinDays}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\"><i class=\"fa fa-plane\"></i><span>" . __('apply_annual_vacation') . "</span></a>";
     }
     if (!$isBusinessTripBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
+        $ma['vacation'][] = "<a href=\"javascript:void(0);\" class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('{$emprow['empid']}', '{$emprow['dept']}', '{$emprow['country']}')\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></a>";
     }
     if (!$isExcuseLeaveBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
+        $ma['vacation'][] = "<a href=\"javascript:void(0);\" class=\"menu-item apply-leave applyLeaveRequest text-success\" data-empid=\"{$emprow['empid']}\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></a>";
     }
     if ($activeFlyVacCount > 0 && !$isRejoinBlocked) {
         $badgeText = $activeFlyVacCount > 1 ? " ({$activeFlyVacCount})" : '';
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
+        $ma['vacation'][] = "<a href=\"javascript:void(0);\" class=\"menu-item rejoin submitMultipleRejoinRequest text-warning\" data-emp-id=\"{$emprow['empid']}\" data-emp-name=\"{$emprow['name']}\" data-total-vacations=\"{$activeFlyVacCount}\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoin_request') . "{$badgeText}</span></a>";
     }
-    $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
+    $ma['account'][] = "<a href=\"javascript:void(0);\" class=\"menu-item edit text-primary\" id=\"startUpdateRequest\" data-avatar=\"" . display_or_na($emprow['avatar'] ?? null) . "\" data-empid=\"" . display_or_na($emprow['empid'] ?? null) . "\" data-mobile=\"" . display_or_na($emprow['mobile'] ?? null) . "\" data-email=\"" . display_or_na($emprow['email'] ?? null) . "\" data-address=\"" . display_or_na($emprow['address'] ?? null) . "\" data-passport_number=\"" . display_or_na($emprow['passport_number'] ?? null) . "\" data-passport_exp=\"" . display_or_na($emprow['passport_exp'] ?? null) . "\"><i class=\"fa fa-edit\"></i><span>" . __('update_information') . "</span></a>";
     if (!$isResignationBlocked) {
-        $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
+        $ma['exit'][] = "<a href=\"javascript:void(0);\" class=\"menu-item apply-resignation applyResignation text-danger\" data-emp_id=\"{$emprow['empid']}\" data-emp_name=\"{$emprow['name']}\" data-selected_reason=\"" . htmlspecialchars($selectedResignationReason, ENT_QUOTES, 'UTF-8') . "\" data-selected_reason_text=\"" . htmlspecialchars($selectedResignationReasonText, ENT_QUOTES, 'UTF-8') . "\"><i class=\"fa fa-solid fa-portal-exit\"></i><span>" . __('apply_resignation') . "</span></a>";
     }
 } else {
-    $moreActionsHtml .= '<div style="padding:24px; text-align:center; color: var(--secondary);"><p>' . __('employee_is_inactive') . '</p></div>';
+    $moreActionsHtml .= '<div class="ma-empty"><i class="fa fa-user-lock"></i><p>' . __('employee_is_inactive') . '</p></div>';
 }
-// Add HR and Sign Out button
-$moreActionsHtml .= '<hr style="margin: 0; border-color: var(--light);">';
-$moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a>";
+// One titled tile group per section, e.g. ma_group('fa-file-signature', 'Requests', [...items])
+function ma_group($key, $icon, $title, array $items) {
+    if (!$items) return '';
+    return '<div class="ma-group ma-group-' . $key . '"><div class="ma-group-title"><i class="fa ' . $icon . '"></i>' . htmlspecialchars($title) . '</div>'
+        . '<div class="ma-grid">' . implode('', $items) . '</div></div>';
+}
+$moreActionsHtml .= ma_group('requests', 'fa-file-signature', __('ma_group_requests', 'Requests'), $ma['requests'])
+    . ma_group('vacation', 'fa-umbrella-beach', __('ma_group_vacation', 'Vacation & Travel'), $ma['vacation'])
+    . ma_group('account', 'fa-user-gear', __('ma_group_my_account', 'My Account'), $ma['account'])
+    . ma_group('exit', 'fa-door-open', __('ma_group_exit', 'Exit & Separation'), $ma['exit']);
+// Sign out: full-width row under the groups
+$moreActionsHtml .= "<div class=\"ma-footer\"><a href=\"javascript:void(0);\" class=\"menu-item signout text-secondary\" data-action=\"signout\"><i class=\"fa fa-sign-out\"></i><span>" . __('logout_button') . "</span></a></div>";
 
 // Build "My Pages" menu (same SweetAlert2 menu pattern as More Actions) - lists only the
 // pages this specific employee was granted via app_settings -> Special Access
@@ -149,12 +159,12 @@ $moreActionsHtml .= "<a href=\"javascript:void(0);\" class=\"menu-item signout t
 // need a specific request_inv_no chosen from elsewhere and have no sensible standalone landing
 // state, so a bare link to them would only ever show a "not provided" error.
 $grantedPageLinks = [
-    'access_all_applied_vac' => ['file' => 'all_applied_vac.php', 'icon' => 'fa-plane', 'label' => __('all_applied_vacations', 'All Applied Vacations')],
-    'access_all_applied_loan' => ['file' => 'all_applied_loan.php', 'icon' => 'fa-money-bill-wave', 'label' => __('all_applied_loans', 'All Applied Loans')],
-    'access_all_applied_business_trip' => ['file' => 'all_applied_business_trip.php', 'icon' => 'fa-suitcase', 'label' => __('all_applied_business_trips', 'All Applied Business Trips')],
-    'access_all_resignations' => ['file' => 'all_resignations.php', 'icon' => 'fa-solid fa-portal-exit', 'label' => __('all_resignations', 'All Resignations')],
-    'access_all_settlements' => ['file' => 'all_settlements.php', 'icon' => 'fa-file-invoice-dollar', 'label' => __('all_settlements', 'All Settlements')],
-    'access_all_payroll_approvals' => ['file' => 'all_payroll_approvals.php', 'icon' => 'fa-tasks', 'label' => __('all_payroll_approvals', 'All Payroll Approvals')],
+    'access_all_applied_vac' => ['file' => 'all_applied_vac.php', 'color' => 'info', 'icon' => 'fa-plane', 'label' => __('all_applied_vacations', 'All Applied Vacations')],
+    'access_all_applied_loan' => ['file' => 'all_applied_loan.php', 'color' => 'warning', 'icon' => 'fa-money-bill-wave', 'label' => __('all_applied_loans', 'All Applied Loans')],
+    'access_all_applied_business_trip' => ['file' => 'all_applied_business_trip.php', 'color' => 'teal', 'icon' => 'fa-suitcase', 'label' => __('all_applied_business_trips', 'All Applied Business Trips')],
+    'access_all_resignations' => ['file' => 'all_resignations.php', 'color' => 'danger', 'icon' => 'fa-solid fa-portal-exit', 'label' => __('all_resignations', 'All Resignations')],
+    'access_all_settlements' => ['file' => 'all_settlements.php', 'color' => 'success', 'icon' => 'fa-file-invoice-dollar', 'label' => __('all_settlements', 'All Settlements')],
+    'access_all_payroll_approvals' => ['file' => 'all_payroll_approvals.php', 'color' => 'purple', 'icon' => 'fa-tasks', 'label' => __('all_payroll_approvals', 'All Payroll Approvals')],
 ];
 
 // payroll_checklist_report.php requires ?month=YYYY-MM or it dies with "Valid payroll month
@@ -166,15 +176,23 @@ $latestPayrollMonthRow = $latestPayrollMonthStmt ? mysqli_fetch_assoc($latestPay
 $defaultPayrollChecklistMonth = ($latestPayrollMonthRow['payroll_month'] ?? '') ?: date('Y-m');
 $grantedPageLinks['access_payroll_checklist_report'] = [
     'file' => 'payroll_checklist_report.php?month=' . urlencode($defaultPayrollChecklistMonth),
+    'color' => 'pink',
     'icon' => 'fa-list-check',
     'label' => __('payroll_checklist_report', 'Payroll Checklist Report'),
 ];
 
+$pageTile = function ($file, $color, $icon, $label) {
+    return "<a href=\"./{$file}\" class=\"menu-item text-{$color}\"><i class=\"fa {$icon}\"></i><span>" . htmlspecialchars($label) . "</span></a>";
+};
 $grantedPagesHtml = '';
+// Dashboard (non-employee users) lives in My Pages instead of its own header button
+if ($emprow["user_type"] <> 'employee') {
+    $grantedPagesHtml .= $pageTile('dashboard.php', 'primary', 'fa-gauge-high', __('dashboard'));
+}
 $empIdForPageAccess = $emprow['empid'] ?? $emprow['emp_id'] ?? '';
 foreach ($grantedPageLinks as $accessKey => $pageInfo) {
     if (user_has_special_access($conDB, $empIdForPageAccess, $accessKey, $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
-        $grantedPagesHtml .= "<a href=\"./{$pageInfo['file']}\" class=\"menu-item text-primary\"><i class=\"fa {$pageInfo['icon']}\"></i><span>" . htmlspecialchars($pageInfo['label']) . "</span></a>";
+        $grantedPagesHtml .= $pageTile($pageInfo['file'], $pageInfo['color'] ?? 'primary', $pageInfo['icon'], $pageInfo['label']);
     }
 }
 $hasGrantedPages = ($grantedPagesHtml !== '');
@@ -197,6 +215,7 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+    <link href="assets/css/emp_hero.css?v=<?= @filemtime(__DIR__ . '/assets/css/emp_hero.css') ?>" rel="stylesheet" type="text/css" />
     <!-- Latest compiled and minified CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/css/bootstrap-datepicker.min.css" rel="stylesheet" />
@@ -821,24 +840,48 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
         }
 
         .more-actions-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            color: #fff;
+            height: 40px;
+            padding: 0 16px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 600;
-            transition: all 0.3s ease;
-            display: flex;
+            white-space: nowrap;
+            text-decoration: none !important;
+            transition: background .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
+            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px);
         }
 
+        .more-actions-btn i { font-size: 14px; opacity: .9; }
+
         .more-actions-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.26);
             border-color: rgba(255, 255, 255, 0.5);
+            color: #fff;
+            transform: translateY(-1px);
         }
+
+        .more-actions-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+        /* Main entry point: solid white so it reads first */
+        .more-actions-btn.is-primary {
+            background: #fff;
+            border-color: #fff;
+            color: var(--primary);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+        }
+
+        .more-actions-btn.is-primary:hover { background: #f3f5ff; color: var(--primary); }
+
+        /* Language toggle: pushed to the far end of the row */
+        .more-actions-btn.is-lang { margin-inline-start: auto; background: transparent; }
 
         /* Modal Overlay */
         .modal-overlay {
@@ -972,10 +1015,6 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             }
         }
 
-        [dir="rtl"] .profile-actions-row {
-            flex-direction: row-reverse;
-        }
-
         [dir="rtl"] .profile-quick-stats {
             justify-content: flex-start;
         }
@@ -1060,159 +1099,132 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             background: #ffeeee;
         }
 
-        /* ===== MORE ACTIONS MODAL - PROFESSIONAL ACTION-SHEET DESIGN ===== */
+        /* More Actions / Employee records / My Pages modal - grouped tile grid (same as view_employee.php) */
+        .more-actions-modal {
+            --ma-bg: #f5f6fa; --ma-card: #fff; --ma-border: #e8ebf1; --ma-text: #1f2937; --ma-muted: #8a93a3; --ma-accent: #5b73e8;
+        }
+        html.app-dark .more-actions-modal {
+            --ma-bg: #1b1f27; --ma-card: #242a35; --ma-border: #323a48; --ma-text: #e5e7eb; --ma-muted: #9aa3b2; --ma-accent: #8b9cf4;
+        }
         .more-actions-modal .swal2-popup {
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+            border-radius: 18px;
+            box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
             overflow: hidden;
-            background: #f7f8fa;
-        }
-
-        .more-actions-modal .swal2-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #1f2937;
-            padding: 1.25rem 1.5rem 1rem;
-            margin: 0;
-            text-align: left;
-            background: #fff;
-            border-bottom: 1px solid #eef0f4;
-        }
-
-        .more-actions-modal .swal2-html-container {
-            margin: 0 !important;
+            background: var(--ma-bg);
             padding: 0 !important;
-            overflow: visible;
         }
-
-        /* Menu Items Container */
-        .more-actions-modal .menu-items-container {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        .more-actions-modal .swal2-title {
             margin: 0;
-            padding: 10px 10px 14px;
-            width: 100%;
-            background: #f7f8fa;
-            max-height: 60vh;
-            overflow-y: auto;
+            padding: 0;
+            text-align: start;
+            background: var(--ma-card);
+            border-bottom: 1px solid var(--ma-border);
         }
+        .more-actions-modal .ma-head { padding: 18px 56px 14px 20px; }
+        .more-actions-modal .ma-head h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--ma-text); }
+        .more-actions-modal .ma-head p { margin: 3px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ma-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .more-actions-modal .ma-search { position: relative; margin: 12px 0 0; }
+        .more-actions-modal .ma-search i { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--ma-muted); font-size: 13px; }
+        .more-actions-modal .ma-search input {
+            width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px; font-size: 13.5px; font-weight: 500;
+            border: 1px solid var(--ma-border); background: var(--ma-bg); color: var(--ma-text); outline: 0;
+        }
+        [dir="rtl"] .more-actions-modal .ma-search input { padding: 0 34px 0 12px; }
+        .more-actions-modal .ma-search input:focus { border-color: var(--ma-accent); box-shadow: 0 0 0 3px rgba(91, 115, 232, 0.15); }
+        .more-actions-modal .swal2-html-container { margin: 0 !important; padding: 0 !important; overflow: visible; text-align: start; }
+
+        .more-actions-modal .menu-items-container {
+            padding: 14px 16px 18px;
+            max-height: 62vh;
+            overflow-y: auto;
+            background: var(--ma-bg);
+        }
+        .more-actions-modal .ma-group + .ma-group { margin-top: 16px; }
+        .more-actions-modal .ma-group-title {
+            display: flex; align-items: center; gap: 7px; margin: 0 2px 8px;
+            font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--ma-muted);
+        }
+        .more-actions-modal .ma-group-title i { font-size: 11px; }
+        .more-actions-modal .ma-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        @media (max-width: 520px) { .more-actions-modal .ma-grid { grid-template-columns: 1fr; } }
 
         .more-actions-modal .menu-item {
             display: flex !important;
             align-items: center;
-            gap: 12px;
+            gap: 11px;
+            min-height: 56px;
             padding: 10px 12px !important;
             margin: 0 !important;
             cursor: pointer !important;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
+            border: 1px solid var(--ma-border);
             border-radius: 12px;
+            background: var(--ma-card);
             font-weight: 600;
-            font-size: 14.5px;
             user-select: none;
-            box-sizing: border-box;
-            background-color: #fff;
-            position: relative;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
         }
-
         .more-actions-modal .menu-item:hover {
-            transform: translateX(2px);
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
             border-color: currentColor;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+            transform: translateY(-1px);
         }
-
-        .more-actions-modal .menu-item:active {
-            transform: translateX(2px) scale(0.99);
-        }
-
+        .more-actions-modal .menu-item:active { transform: scale(0.98); }
+        .more-actions-modal .menu-item:focus-visible { outline: 2px solid var(--ma-accent); outline-offset: 2px; }
         .more-actions-modal .menu-item i {
-            font-size: 15px;
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            text-align: center;
             flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 36px; height: 36px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 15px;
             background-color: rgba(108, 117, 125, 0.14);
         }
-
         .more-actions-modal .menu-item span {
-            font-size: 14.5px;
-            white-space: nowrap;
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: start;
-            color: #374151;
+            flex: 1; min-width: 0;
+            font-size: 13.5px; line-height: 1.3;
+            color: var(--ma-text);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
+        .more-actions-modal .menu-item.ma-hidden, .more-actions-modal .ma-group.ma-hidden { display: none !important; }
 
-        .more-actions-modal .menu-item span.menu-item-count {
-            flex: 0 0 auto;
-            width: auto;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 2px 9px;
-            border-radius: 12px;
-            background: rgba(0, 0, 0, 0.06);
-            color: inherit;
-            text-align: center;
-        }
-
-        .more-actions-modal .menu-item::after {
-            content: '\f105';
-            font-family: 'Font Awesome 5 Free', 'FontAwesome';
-            font-weight: 900;
-            font-size: 13px;
-            color: #c7cbd1;
-            flex-shrink: 0;
-            transition: transform 0.2s ease, color 0.2s ease;
-        }
-
-        .more-actions-modal .menu-item:hover::after {
-            transform: translateX(3px);
-            color: currentColor;
-        }
-
-        /* Color Schemes - icon badge tinted to its own action color, label stays neutral */
+        /* Icon badge tinted per action color, label stays neutral */
         .more-actions-modal .menu-item.text-primary { color: var(--primary) !important; }
         .more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, 0.14); }
-
         .more-actions-modal .menu-item.text-warning { color: var(--warning) !important; }
         .more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, 0.16); }
-
         .more-actions-modal .menu-item.text-info { color: var(--info) !important; }
         .more-actions-modal .menu-item.text-info i { background-color: rgba(80, 165, 241, 0.14); }
-
-        .more-actions-modal .menu-item.text-danger { color: var(--danger) !important; }
-        .more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
-
         .more-actions-modal .menu-item.text-success { color: var(--success) !important; }
         .more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, 0.14); }
-
-        .more-actions-modal .menu-item.text-dark { color: var(--dark) !important; }
-        .more-actions-modal .menu-item.text-dark i { background-color: rgba(52, 58, 64, 0.14); }
-
+        .more-actions-modal .menu-item.text-danger { color: var(--danger) !important; }
+        .more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
         .more-actions-modal .menu-item.text-secondary { color: var(--secondary) !important; }
         .more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, 0.14); }
+        .more-actions-modal .menu-item.text-dark { color: var(--ma-text) !important; }
+        .more-actions-modal .menu-item.text-dark i { background-color: rgba(108, 117, 125, 0.16); }
 
+        /* Exit & Separation: quiet red frame so destructive actions stand apart */
+        .more-actions-modal .ma-group-exit .menu-item { border-style: dashed; border-color: rgba(244, 106, 106, 0.45); }
+        .more-actions-modal .ma-group-exit .ma-group-title { color: #e05858; }
+
+        .more-actions-modal .ma-empty, .more-actions-modal .ma-noresult { padding: 28px 12px; text-align: center; color: var(--ma-muted); }
+        .more-actions-modal .ma-empty i, .more-actions-modal .ma-noresult i { font-size: 26px; margin-bottom: 8px; display: block; opacity: .7; }
+        .more-actions-modal .ma-empty p, .more-actions-modal .ma-noresult p { margin: 0; font-size: 13.5px; }
+
+        .more-actions-modal .swal2-close { font-size: 1.5rem; color: var(--ma-muted); width: 36px; height: 36px; top: 10px; }
+        .more-actions-modal .swal2-close:hover { color: #f46a6a; }
+        .more-actions-modal .menu-item span.menu-item-count {
+            flex: 0 0 auto; display: inline-block; min-width: 22px; padding: 2px 8px; border-radius: 12px;
+            font-size: 11px; font-weight: 700; text-align: center; background: rgba(91, 115, 232, 0.14); color: inherit;
+        }
         .more-actions-modal .menu-item.text-purple { color: #6f42c1 !important; }
         .more-actions-modal .menu-item.text-purple i { background-color: rgba(111, 66, 193, 0.14); }
-
-        /* Close Button */
-        .more-actions-modal .swal2-close {
-            font-size: 1.5rem;
-            color: #9aa1ac;
-            width: 36px;
-            height: 36px;
-        }
-
-        .more-actions-modal .swal2-close:hover {
-            color: #f46a6a;
-        }
+        .more-actions-modal .menu-item.text-teal { color: #0d9488 !important; }
+        .more-actions-modal .menu-item.text-teal i { background-color: rgba(13, 148, 136, 0.14); }
+        .more-actions-modal .menu-item.text-pink { color: #db2777 !important; }
+        .more-actions-modal .menu-item.text-pink i { background-color: rgba(219, 39, 119, 0.13); }
+        .more-actions-modal .ma-footer { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--ma-border); }
+        .more-actions-modal .ma-footer .menu-item { min-height: 46px; justify-content: center; }
+        .more-actions-modal .ma-footer .menu-item span { flex: 0 1 auto; }
+        .more-actions-modal a.menu-item { text-decoration: none; }
 
         /* ===== RESIGNATION WIZARD STYLES ===== */
         .resignation-wizard {
@@ -1966,88 +1978,81 @@ RTL Support
 
 <body dir="<?= ($is_rtl ?? false) ? 'rtl' : 'ltr' ?>" class="<?= ($is_rtl ?? false) ? 'rtl' : '' ?>">
     <div class="profile-container">
-        <!-- HEADER SECTION -->
-        <div class="<?= $header_class ?>">
-            <div class="container-custom">
+        <!-- HEADER SECTION (same card as the employee master header - assets/css/emp_hero.css) -->
+        <?php
+        $switch_to_lang = ($current_lang == 'en') ? 'ar' : 'en';
+        $button_text = ($current_lang == 'en') ? 'العربية' : 'English';
+        $query_params = [];
+        if (!empty($_SERVER['QUERY_STRING'])) {
+            parse_str($_SERVER['QUERY_STRING'], $query_params);
+        }
+        $query_params['change_lang'] = $switch_to_lang;
+        $base_path = strtok($_SERVER['REQUEST_URI'], '?');
+        $new_query_string = http_build_query($query_params);
+        $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
+        $ph_dept = ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"];
+        $ph_job = ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"];
+        $ph_balance = $displayBalance < 0
+            ? number_format($displayBalance, 2)
+            : ($displayBalance == floor($displayBalance) ? number_format($displayBalance, 0) : number_format($displayBalance, 2));
+        $ph_has_qr = file_exists("./assets/qrcodes/" . $emprow['eid'] . $emprow['empid'] . ".png");
+        ?>
+        <div class="emp-hero<?= str_replace('profile-header', '', $header_class) ?>">
+            <div class="eh-top">
                 <!-- Avatar (display only - no upload) -->
-                <div>
-                    <?php
-                    // Get avatar display path using centralized helper function
-                    $displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1);
-                    ?>
+                <div class="eh-avatar is-static">
+                    <?php $displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1); ?>
                     <img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
                 </div>
 
-                <div class="profile-header-info">
-                    <h1><?= getDisplayName($emprow['name']) ?></h1>
-                    <p><strong><?= __('employee_id') ?>:</strong> <?= display_or_na($emprow['empid'] ?? null) ?></p>
-                    <p><strong><?= __('department') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"] ?></p>
-                    <p><strong><?= __('actual_job_label') ?>:</strong> <?= ($is_rtl ?? false) ? $emprow["jobname_ar"] : $emprow["jobname"] ?></p>
-                </div>
-
-                <div class="profile-quick-stats">
-                    <div class="stat-item">
-                        <div class="stat-number"><?= $years ?></div>
-                        <div class="stat-label"><?= __('age') ?></div>
+                <div class="eh-identity">
+                    <div class="eh-name-row">
+                        <h1><?= getDisplayName($emprow['name']) ?></h1>
+                        <span class="eh-status"><i class="fa <?= $status_icon ?>"></i> <?= htmlspecialchars($status_label) ?></span>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-number"><?= $displayBalance < 0
-                                                        ? number_format($displayBalance, 2)
-                                                        : ($displayBalance == floor($displayBalance) ? number_format($displayBalance, 0) : number_format($displayBalance, 2))
-                                                    ?></div>
-                        <div class="stat-label"><?= __('vacation_days') ?></div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number"><?= number_format($emprow['salary'], 0) ?></div>
-                        <div class="stat-label"><?= __('salary') ?> (<i class="icon-saudi_riyal"></i>)</div>
+                    <div class="eh-org"><i class="fa fa-building"></i> <?= htmlspecialchars((string)$ph_dept) ?><?php if (!empty($ph_job)): ?><span class="eh-dot">&bull;</span><?= htmlspecialchars($ph_job) ?><?php endif; ?></div>
+                    <div class="eh-chips">
+                        <span class="eh-chip"><i class="fa fa-id-badge"></i><small><?= __('employee_id') ?></small><b><?= display_or_na($emprow['empid'] ?? null) ?></b></span>
+                        <?php if (!empty($emprow['mobile'])): ?>
+                        <span class="eh-chip"><i class="fa fa-phone"></i><small><?= __('mobile') ?></small><b dir="ltr"><?= htmlspecialchars($emprow['mobile']) ?></b></span>
+                        <?php endif; ?>
+                        <?php if (!empty($emprow['email'])): ?>
+                        <span class="eh-chip"><i class="fa fa-envelope"></i><b><?= htmlspecialchars($emprow['email']) ?></b></span>
+                        <?php endif; ?>
                     </div>
                 </div>
 
-                <?php if (file_exists("./assets/qrcodes/" . $emprow['eid'] . $emprow['empid'] . ".png")): ?>
-                    <img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] . ".png" ?>" alt="QR Code" class="qr-code">
+                <?php if ($ph_has_qr): ?>
+                <a class="eh-qr" href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>">
+                    <img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
+                    <span><i class="fa fa-id-card"></i> <?= __('view_employee_card') ?></span>
+                </a>
                 <?php endif; ?>
             </div>
 
-            <!-- LANGUAGE SWITCHER & MORE ACTIONS - BELOW QR CODE -->
-            <?php
-            $switch_to_lang = ($current_lang == 'en') ? 'ar' : 'en';
-            $button_text = ($current_lang == 'en') ? 'العربية' : 'English';
-            $query_params = [];
-            if (!empty($_SERVER['QUERY_STRING'])) {
-                parse_str($_SERVER['QUERY_STRING'], $query_params);
-            }
-            $query_params['change_lang'] = $switch_to_lang;
-            $base_path = strtok($_SERVER['REQUEST_URI'], '?');
-            $new_query_string = http_build_query($query_params);
-            $switch_url = htmlspecialchars($base_path . '?' . $new_query_string);
-            ?>
-            <div class="profile-actions-row">
-                <a href="<?= $switch_url ?>" class="more-actions-btn" style="text-decoration: none;">
-                    <i class="fa fa-language"></i> <?= $button_text ?>
-                </a>
-                <button class="more-actions-btn" id="moreActionsBtn">
-                    <i class="fa fa-ellipsis-v"></i> <?= __('more') ?>
-                </button>
-                <button class="more-actions-btn" id="recordsBtn">
-                    <i class="fa fa-folder-open"></i> <?= __('employee_records') ?>
-                </button>
-            <?php if ($hasGrantedPages) : ?>
-                <button class="more-actions-btn" id="myPagesBtn">
-                    <i class="fa fa-th-large"></i> <?= __('my_pages', 'My Pages') ?>
-                </button>
-            <?php endif; ?>
-            <?php if ($emprow["user_type"] <> 'employee') : ?>
-                <a href="dashboard.php" class="more-actions-btn" style="text-decoration: none;">
-                    <i class="fa fa-airplay"></i> <?= __('dashboard') ?>
-                </a>
-            <?php endif; ?>
-            <?php
-                // Microsoft Dynamics 365 status only - no Sync / Add to D365 buttons on the profile
-                $d365WidgetClass = 'is-inline';
-                $d365WidgetStatusOnly = true;
-                include __DIR__ . '/includes/D365/d365_widget.php';
-            ?>
+            <div class="eh-bottom">
+                <div class="eh-stats">
+                    <?php if ($years !== ''): ?>
+                    <div class="eh-stat"><i class="fa fa-cake-candles"></i><div><b><?= $years ?></b><small><?= __('age') ?></small></div></div>
+                    <?php endif; ?>
+                    <div class="eh-stat"><i class="fa fa-umbrella-beach"></i><div><b><?= $ph_balance ?></b><small><?= __('vacation_days') ?></small></div></div>
+                    <div class="eh-stat"><i class="fa fa-wallet"></i><div><b><?= number_format((float)$emprow['salary'], 0) ?></b><small><?= __('salary') ?> (<i class="icon-saudi_riyal"></i>)</small></div></div>
+                </div>
 
+                <div class="eh-actions">
+                    <?php
+                    // Microsoft Dynamics 365 status only - no Sync / Add to D365 buttons on the profile
+                    $d365WidgetClass = 'is-inline';
+                    $d365WidgetStatusOnly = true;
+                    include __DIR__ . '/includes/D365/d365_widget.php';
+                    ?>
+                    <button type="button" class="eh-btn" id="recordsBtn"><i class="fa fa-folder-open"></i> <?= __('employee_records') ?></button>
+                    <?php if ($hasGrantedPages) : ?>
+                    <button type="button" class="eh-btn" id="myPagesBtn"><i class="fa fa-th-large"></i> <?= __('my_pages', 'My Pages') ?></button>
+                    <?php endif; ?>
+                    <a href="<?= $switch_url ?>" class="eh-btn" title="<?= htmlspecialchars($button_text) ?>"><i class="fa fa-language"></i> <?= $button_text ?></a>
+                    <button type="button" id="moreActionsBtn"><i class="fa fa-grid-2"></i> <?= __('more_actions', 'More Actions') ?></button>
+                </div>
             </div>
         </div>
 
@@ -2610,55 +2615,63 @@ RTL Support
             var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
             var grantedPagesHtml = <?= json_encode($grantedPagesHtml); ?>;
             var recordsHtml = <?= json_encode($recordsHtml); ?>;
-            $('#recordsBtn').click(function() {
-                Swal.fire({
-                    title: '<?= __('employee_records') ?>',
-                    html: '<div class="menu-items-container">' + recordsHtml + '</div>',
+            // Shared tile-sheet popup for More / Employee records / My Pages (styles: .more-actions-modal).
+            // bodyHtml is either grouped (.ma-group) or a flat item list, which gets one plain grid.
+            var maSub = <?= json_encode(trim(($emprow['name'] ?? '') . ' · ' . ($emprow['empid'] ?? ''), ' ·')) ?>;
+            function maEsc(s) { return $('<div>').text(s).html(); }
+            function maSheet(title, bodyHtml, didOpen) {
+                if (bodyHtml.indexOf('ma-group') === -1 && bodyHtml.indexOf('ma-empty') === -1) {
+                    bodyHtml = '<div class="ma-grid">' + bodyHtml + '</div>';
+                }
+                var itemCount = $('<div>').html(bodyHtml).find('.menu-item').length;
+                return Swal.fire({
+                    title: '<div class="ma-head"><div class="ma-title" style="font-size:18px;font-weight:700;color:var(--ma-text);">' + maEsc(title) + '</div>'
+                        + (maSub ? '<p>' + maEsc(maSub) + '</p>' : '')
+                        + (itemCount > 6 ? '<div class="ma-search"><i class="fa fa-search"></i><input type="search" id="maSearch" autocomplete="off" placeholder="' + maEsc(<?= json_encode(__('search_actions', 'Search actions...')) ?>) + '"></div>' : '')
+                        + '</div>',
+                    html: '<div class="menu-items-container">' + bodyHtml
+                        + '<div class="ma-noresult" style="display:none;"><i class="fa fa-magnifying-glass"></i><p>' + maEsc(<?= json_encode(__('no_matching_actions', 'No matching actions')) ?>) + '</p></div></div>',
                     showConfirmButton: false,
                     showCloseButton: true,
-                    customClass: {
-                        container: 'more-actions-modal',
-                        popup: 'swal2-popup',
-                        closeButton: 'swal2-close'
-                    },
-                    width: '450px',
-                    padding: '0',
-                    allowOutsideClick: false
-                });
-            });
-            $('#myPagesBtn').click(function() {
-                Swal.fire({
-                    title: '<?= __('my_pages', 'My Pages') ?>',
-                    html: '<div class="menu-items-container">' + grantedPagesHtml + '</div>',
-                    showConfirmButton: false,
-                    showCloseButton: true,
-                    customClass: {
-                        container: 'more-actions-modal',
-                        popup: 'swal2-popup',
-                        closeButton: 'swal2-close'
-                    },
-                    allowOutsideClick: false,
-                    width: '450px',
-                    padding: '0'
-                });
-            });
-            $('#moreActionsBtn').click(function() {
-                Swal.fire({
-                    title: '<?= __('more_actions') ?>',
-                    html: '<div class="menu-items-container">' + moreActionsHtml + '</div>',
-                    showConfirmButton: false,
-                    showCloseButton: true,
-                    customClass: {
-                        container: 'more-actions-modal',
-                        popup: 'swal2-popup',
-                        closeButton: 'swal2-close'
-                    },
-                    width: '450px',
+                    customClass: { container: 'more-actions-modal', popup: 'swal2-popup', closeButton: 'swal2-close' },
+                    width: '620px',
                     padding: '0',
                     allowOutsideClick: false,
                     didOpen: function() {
-                        // Get modal container and wrap it with jQuery
-                        var modalContainer = $(Swal.getHtmlContainer());
+                        var $c = $(Swal.getHtmlContainer());
+                        // Keyboard: tiles focusable, Enter/Space activates
+                        $c.find('.menu-item').attr('tabindex', '0').on('keydown', function(e) {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+                        });
+                        // Search: hide non-matching tiles / empty groups; Enter opens the first match
+                        var $search = $('#maSearch');
+                        $search.on('input', function() {
+                            var q = $.trim(this.value).toLowerCase();
+                            $c.find('.ma-group .menu-item, .ma-grid > .menu-item').each(function() {
+                                $(this).toggleClass('ma-hidden', q !== '' && $(this).text().toLowerCase().indexOf(q) === -1);
+                            });
+                            $c.find('.ma-group').each(function() {
+                                $(this).toggleClass('ma-hidden', $(this).find('.menu-item:not(.ma-hidden)').length === 0);
+                            });
+                            $c.find('.ma-footer').toggle(q === '');
+                            $c.find('.ma-noresult').toggle($c.find('.ma-grid .menu-item:not(.ma-hidden)').length === 0);
+                        }).on('keydown', function(e) {
+                            if (e.key === 'Enter') { e.preventDefault(); var first = $c.find('.ma-grid .menu-item:not(.ma-hidden)').get(0); if (first) first.click(); }
+                        });
+                        if ($search.length && window.matchMedia('(pointer: fine)').matches) $search.trigger('focus');
+                        if (didOpen) didOpen($c);
+                    }
+                });
+            }
+
+            $('#recordsBtn').click(function() {
+                maSheet(<?= json_encode(__('employee_records')) ?>, recordsHtml);
+            });
+            $('#myPagesBtn').click(function() {
+                maSheet(<?= json_encode(__('my_pages', 'My Pages')) ?>, grantedPagesHtml);
+            });
+            $('#moreActionsBtn').click(function() {
+                maSheet(<?= json_encode(__('more_actions')) ?>, moreActionsHtml, function(modalContainer) {
 
                         // Edit Information
                         modalContainer.find('#startUpdateRequest').on('click', function(e) {
@@ -2735,7 +2748,6 @@ RTL Support
                                 $('.signout').trigger('click');
                             }, 100);
                         });
-                    }
                 });
             });
 

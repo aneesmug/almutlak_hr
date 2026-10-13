@@ -5,6 +5,8 @@
 // $d365WidgetStatusOnly = true to show the status card only (no Sync / Add buttons, e.g. profile.php).
 // Status is shown to everyone; Sync / Add need system admin or the 'd365_sync_employee' special access
 // (enforced again in includes/ajaxFile/d365_employee.php).
+// $d365WidgetButtonsInMenu = true: no Sync / Add button beside the card - the page's More Actions menu
+// has a "Sync to D365" item instead, which fires the 'd365:action-request' event handled below.
 if (!d365_enabled($conDB)) {
 	return; // Microsoft Dynamics 365 switched off in App Settings > D365 Config - no status card
 }
@@ -13,7 +15,7 @@ if (empty($_SESSION['d365_csrf'])) {
 	$_SESSION['d365_csrf'] = bin2hex(random_bytes(16));
 }
 ?>
-<div id="d365Widget" class="d365-widget <?= htmlspecialchars($d365WidgetClass ?? '') ?>" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>" data-can-sync="<?= $d365CanSync ? '1' : '0' ?>">
+<div id="d365Widget" class="d365-widget <?= htmlspecialchars($d365WidgetClass ?? '') ?>" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>" data-can-sync="<?= $d365CanSync ? '1' : '0' ?>" data-buttons-in-menu="<?= !empty($d365WidgetButtonsInMenu) ? '1' : '0' ?>">
 	<span class="d365-pill is-loading"><span class="d365-logo"><i></i><i></i><i></i><i></i></span><span class="d365-txt"><b>Microsoft Dynamics 365</b><small><i class="fa fa-spinner fa-spin"></i> Checking...</small></span></span>
 </div>
 <style>
@@ -53,6 +55,7 @@ if (empty($_SESSION['d365_csrf'])) {
 	var empId = box.getAttribute('data-emp');
 	var csrf = box.getAttribute('data-csrf');
 	var canSync = box.getAttribute('data-can-sync') === '1';
+	var buttonsInMenu = box.getAttribute('data-buttons-in-menu') === '1';
 	var ENDPOINT = './includes/ajaxFile/d365_employee.php';
 	var last = null;
 
@@ -93,6 +96,7 @@ if (empty($_SESSION['d365_csrf'])) {
 	function render(res) {
 		last = res;
 		if (!res || (res.ok === false && !res.status)) {
+			box.setAttribute('data-d365-state', 'unknown');
 			box.innerHTML = pill('bad', 'Status unavailable', res && res.error)
 				+ '<button type="button" class="more-actions-btn" data-act="refresh" title="Retry"><i class="fa fa-redo"></i></button>';
 			return;
@@ -105,12 +109,14 @@ if (empty($_SESSION['d365_csrf'])) {
 				+ (st.synced_at ? '\nLast sync: ' + st.synced_at : '\nNot synced from the app yet')
 				+ (st.last_error ? '\n' + st.last_error : '');
 			var line = (st.legal_entity ? esc(st.legal_entity) + ' · ' : '') + (st.last_error ? 'Sync error' : (st.synced_at ? 'Synced' : 'Registered'));
+			box.setAttribute('data-d365-state', 'registered');
 			box.innerHTML = pill(st.last_error ? 'bad' : 'ok', line, info)
-				+ (canSync ? '<button type="button" class="more-actions-btn" data-act="sync"' + writeAttr + '><i class="fa fa-sync-alt"></i> Sync to D365</button>' : '');
+				+ (canSync && !buttonsInMenu ? '<button type="button" class="more-actions-btn" data-act="sync"' + writeAttr + '><i class="fa fa-sync-alt"></i> Sync to D365</button>' : '');
 		} else {
 			var why = st.status === 'missing' ? 'Not registered in Microsoft Dynamics 365 ' + env : (st.last_error || 'Registration failed');
+			box.setAttribute('data-d365-state', 'missing');
 			box.innerHTML = pill('bad', 'Not registered' + (env ? ' · ' + esc(env) : ''), why)
-				+ (canSync ? '<button type="button" class="more-actions-btn is-warn" data-act="register"' + writeAttr + '><i class="fa fa-plus"></i> Add to D365</button>' : '');
+				+ (canSync && !buttonsInMenu ? '<button type="button" class="more-actions-btn is-warn" data-act="register"' + writeAttr + '><i class="fa fa-plus"></i> Add to D365</button>' : '');
 		}
 	}
 
@@ -270,6 +276,20 @@ if (empty($_SESSION['d365_csrf'])) {
 	// D365 tab "Sync to D365" button uses the same flow
 	document.addEventListener('d365:sync-request', function () { if (canSync) doSync(); });
 	document.addEventListener('d365:register-request', function () { if (canSync) doRegister(); });
+	// More Actions "Sync to D365" item: sync when registered, add when missing
+	document.addEventListener('d365:action-request', function () {
+		if (!canSync) return;
+		var state = box.getAttribute('data-d365-state');
+		if (!state || state === 'unknown') {
+			withSwal(function () { Swal.fire({ icon: 'info', title: 'D365', text: 'Microsoft Dynamics 365 status is not available yet. Please try again in a moment.', customClass: POP }); });
+			return;
+		}
+		if (last && last.can_write === false) {
+			withSwal(function () { Swal.fire({ icon: 'info', title: 'D365', text: 'Writes are off (App Settings > D365 Config > Allow Writes)', customClass: POP }); });
+			return;
+		}
+		if (state === 'missing') doRegister(); else doSync();
+	});
 	// Profile "Dynamics 365" block (view_employee.php) "Change company" button
 	document.addEventListener('d365:transfer-request', function () {
 		if (!canSync) return;

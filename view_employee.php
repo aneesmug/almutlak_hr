@@ -541,143 +541,120 @@ if (mysqli_num_rows($query) == 1) {
 			.summary-cards-row .card-box.tilebox-one {
 				height: 80%;
 			}
-			/* More Actions Modal - Professional Action-Sheet Design */
+			/* More Actions Modal - grouped tile grid (groups built in includes/emp_top_info.php) */
+			.more-actions-modal {
+				--ma-bg: #f5f6fa; --ma-card: #fff; --ma-border: #e8ebf1; --ma-text: #1f2937; --ma-muted: #8a93a3; --ma-accent: #5b73e8;
+			}
+			html.app-dark .more-actions-modal {
+				--ma-bg: #1b1f27; --ma-card: #242a35; --ma-border: #323a48; --ma-text: #e5e7eb; --ma-muted: #9aa3b2; --ma-accent: #8b9cf4;
+			}
 			.more-actions-modal .swal2-popup {
-				border-radius: 16px;
-				box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
+				border-radius: 18px;
+				box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
 				overflow: hidden;
-				background: #f7f8fa;
-			}
-
-			.more-actions-modal .swal2-title {
-				font-size: 1.25rem;
-				font-weight: 700;
-				color: #1f2937;
-				padding: 1.25rem 1.5rem 1rem;
-				margin: 0;
-				text-align: left;
-				background: #fff;
-				border-bottom: 1px solid #eef0f4;
-			}
-
-			.more-actions-modal .swal2-html-container {
-				margin: 0 !important;
+				background: var(--ma-bg);
 				padding: 0 !important;
-				overflow: visible;
 			}
-
-			/* Menu Items Container */
-			.more-actions-modal .menu-items-container {
-				display: flex;
-				flex-direction: column;
-				gap: 6px;
+			.more-actions-modal .swal2-title {
 				margin: 0;
-				padding: 10px 10px 14px;
-				width: 100%;
-				background: #f7f8fa;
-				max-height: 60vh;
-				overflow-y: auto;
+				padding: 0;
+				text-align: start;
+				background: var(--ma-card);
+				border-bottom: 1px solid var(--ma-border);
 			}
+			.more-actions-modal .ma-head { padding: 18px 56px 14px 20px; }
+			.more-actions-modal .ma-head h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--ma-text); }
+			.more-actions-modal .ma-head p { margin: 3px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ma-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+			.more-actions-modal .ma-search { position: relative; margin: 12px 0 0; }
+			.more-actions-modal .ma-search i { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--ma-muted); font-size: 13px; }
+			.more-actions-modal .ma-search input {
+				width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px; font-size: 13.5px; font-weight: 500;
+				border: 1px solid var(--ma-border); background: var(--ma-bg); color: var(--ma-text); outline: 0;
+			}
+			[dir="rtl"] .more-actions-modal .ma-search input { padding: 0 34px 0 12px; }
+			.more-actions-modal .ma-search input:focus { border-color: var(--ma-accent); box-shadow: 0 0 0 3px rgba(91, 115, 232, 0.15); }
+			.more-actions-modal .swal2-html-container { margin: 0 !important; padding: 0 !important; overflow: visible; text-align: start; }
+
+			.more-actions-modal .menu-items-container {
+				padding: 14px 16px 18px;
+				max-height: 62vh;
+				overflow-y: auto;
+				background: var(--ma-bg);
+			}
+			.more-actions-modal .ma-group + .ma-group { margin-top: 16px; }
+			.more-actions-modal .ma-group-title {
+				display: flex; align-items: center; gap: 7px; margin: 0 2px 8px;
+				font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--ma-muted);
+			}
+			.more-actions-modal .ma-group-title i { font-size: 11px; }
+			.more-actions-modal .ma-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+			@media (max-width: 520px) { .more-actions-modal .ma-grid { grid-template-columns: 1fr; } }
 
 			.more-actions-modal .menu-item {
 				display: flex !important;
 				align-items: center;
-				gap: 12px;
+				gap: 11px;
+				min-height: 56px;
 				padding: 10px 12px !important;
 				margin: 0 !important;
 				cursor: pointer !important;
-				transition: all 0.2s ease;
-				border: 1px solid transparent;
+				border: 1px solid var(--ma-border);
 				border-radius: 12px;
+				background: var(--ma-card);
 				font-weight: 600;
-				font-size: 14.5px;
 				user-select: none;
-				box-sizing: border-box;
-				background-color: #fff;
-				position: relative;
-				box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+				transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 			}
-
 			.more-actions-modal .menu-item:hover {
-				transform: translateX(2px);
-				box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 				border-color: currentColor;
+				box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+				transform: translateY(-1px);
 			}
-
-			.more-actions-modal .menu-item:active {
-				transform: translateX(2px) scale(0.99);
-			}
-
+			.more-actions-modal .menu-item:active { transform: scale(0.98); }
+			.more-actions-modal .menu-item:focus-visible { outline: 2px solid var(--ma-accent); outline-offset: 2px; }
 			.more-actions-modal .menu-item i {
-				font-size: 15px;
-				width: 34px;
-				height: 34px;
-				border-radius: 10px;
-				text-align: center;
 				flex-shrink: 0;
-				display: flex;
-				align-items: center;
-				justify-content: center;
+				width: 36px; height: 36px; border-radius: 10px;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 15px;
 				background-color: rgba(108, 117, 125, 0.14);
 			}
-
 			.more-actions-modal .menu-item span {
-				font-size: 14.5px;
-				white-space: nowrap;
-				flex: 1;
-				overflow: hidden;
-				text-overflow: ellipsis;
-				color: #374151;
+				flex: 1; min-width: 0;
+				font-size: 13.5px; line-height: 1.3;
+				color: var(--ma-text);
+				display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 			}
+			.more-actions-modal .menu-item.ma-hidden, .more-actions-modal .ma-group.ma-hidden { display: none !important; }
 
-			.more-actions-modal .menu-item::after {
-				content: '\f105';
-				font-family: 'Font Awesome 5 Free', 'FontAwesome';
-				font-weight: 900;
-				font-size: 13px;
-				color: #c7cbd1;
-				flex-shrink: 0;
-				transition: transform 0.2s ease, color 0.2s ease;
-			}
-
-			.more-actions-modal .menu-item:hover::after {
-				transform: translateX(3px);
-				color: currentColor;
-			}
-
-			/* Color Schemes - icon badge tinted to its own action color, label stays neutral */
+			/* Icon badge tinted per action color, label stays neutral */
 			.more-actions-modal .menu-item.text-primary { color: var(--primary) !important; }
 			.more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, 0.14); }
-
 			.more-actions-modal .menu-item.text-warning { color: var(--warning) !important; }
 			.more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, 0.16); }
-
 			.more-actions-modal .menu-item.text-info { color: var(--info) !important; }
 			.more-actions-modal .menu-item.text-info i { background-color: rgba(80, 165, 241, 0.14); }
-
 			.more-actions-modal .menu-item.text-success { color: var(--success) !important; }
 			.more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, 0.14); }
-
 			.more-actions-modal .menu-item.text-danger { color: var(--danger) !important; }
 			.more-actions-modal .menu-item.text-danger i { background-color: rgba(244, 106, 106, 0.14); }
-
 			.more-actions-modal .menu-item.text-secondary { color: var(--secondary) !important; }
 			.more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, 0.14); }
+			.more-actions-modal .menu-item.text-dark { color: var(--ma-text) !important; }
+			.more-actions-modal .menu-item.text-dark i { background-color: rgba(108, 117, 125, 0.16); }
+			.more-actions-modal .menu-item.text-teal { color: #0d9488 !important; }
+			.more-actions-modal .menu-item.text-teal i { background-color: rgba(13, 148, 136, 0.14); }
 
-			.more-actions-modal .menu-item.text-dark { color: var(--dark) !important; }
-			.more-actions-modal .menu-item.text-dark i { background-color: rgba(52, 58, 64, 0.14); }
+			/* Exit & Separation: quiet red frame so destructive actions stand apart */
+			.more-actions-modal .ma-group-exit .menu-item { border-style: dashed; border-color: rgba(244, 106, 106, 0.45); }
+			.more-actions-modal .ma-group-exit .ma-group-title { color: #e05858; }
 
-			/* Close Button */
-			.more-actions-modal .swal2-close {
-				font-size: 1.5rem;
-				color: #9aa1ac;
-				width: 36px;
-				height: 36px;
-			}
+			.more-actions-modal .ma-empty, .more-actions-modal .ma-noresult { padding: 28px 12px; text-align: center; color: var(--ma-muted); }
+			.more-actions-modal .ma-empty i, .more-actions-modal .ma-noresult i { font-size: 26px; margin-bottom: 8px; display: block; opacity: .7; }
+			.more-actions-modal .ma-empty p, .more-actions-modal .ma-noresult p { margin: 0; font-size: 13.5px; }
 
-			.more-actions-modal .swal2-close:hover {
-				color: #f46a6a;
-			}
+			.more-actions-modal .swal2-close { font-size: 1.5rem; color: var(--ma-muted); width: 36px; height: 36px; top: 10px; }
+			.more-actions-modal .swal2-close:hover { color: #f46a6a; }
 
 			/* Resignation Wizard CSS */
 			.resignation-wizard .resignation-popup {
@@ -4056,10 +4033,17 @@ if (mysqli_num_rows($query) == 1) {
 			$(document).ready(function() {
 
 				var moreActionsHtml = <?= json_encode($moreActionsHtml); ?>;
+				var moreActionsSub = <?= json_encode(trim(($emprow['name'] ?? '') . ' · ' . ($emprow['empid'] ?? ''), ' ·')) ?>;
 				$('#moreActionsBtn').click(function() {
+					var itemCount = ($('<div>').html(moreActionsHtml).find('.menu-item').length);
+					var esc = function(s) { return $('<div>').text(s).html(); };
 					Swal.fire({
-						title: '<?= __('more_actions') ?>',
-						html: '<div class="menu-items-container">' + moreActionsHtml + '</div>',
+						title: '<div class="ma-head"><div class="ma-title" style="font-size:18px;font-weight:700;color:var(--ma-text);">' + esc(<?= json_encode(__('more_actions')) ?>) + '</div>'
+							+ (moreActionsSub ? '<p>' + esc(moreActionsSub) + '</p>' : '')
+							+ (itemCount > 6 ? '<div class="ma-search"><i class="fa fa-search"></i><input type="search" id="maSearch" autocomplete="off" placeholder="' + esc(<?= json_encode(__('search_actions', 'Search actions...')) ?>) + '"></div>' : '')
+							+ '</div>',
+						html: '<div class="menu-items-container">' + moreActionsHtml
+							+ '<div class="ma-noresult" style="display:none;"><i class="fa fa-magnifying-glass"></i><p>' + esc(<?= json_encode(__('no_matching_actions', 'No matching actions')) ?>) + '</p></div></div>',
 						showConfirmButton: false,
 						showCloseButton: true,
 						customClass: {
@@ -4067,12 +4051,46 @@ if (mysqli_num_rows($query) == 1) {
 							popup: 'swal2-popup',
 							closeButton: 'swal2-close'
 						},
-						width: '450px',
+						width: '620px',
 						padding: '0',
 						allowOutsideClick: false,
 						didOpen: function() {
 							// Get modal container and wrap it with jQuery
 							var modalContainer = $(Swal.getHtmlContainer());
+
+							// Keyboard: tiles focusable, Enter/Space activates
+							modalContainer.find('.menu-item').attr('tabindex', '0').on('keydown', function(e) {
+								if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
+							});
+
+							// Search: hides non-matching tiles and empty groups; Enter opens the first match
+							var $search = $('#maSearch');
+							$search.on('input', function() {
+								var q = $.trim(this.value).toLowerCase();
+								modalContainer.find('.menu-item').each(function() {
+									$(this).toggleClass('ma-hidden', q !== '' && $(this).text().toLowerCase().indexOf(q) === -1);
+								});
+								modalContainer.find('.ma-group').each(function() {
+									$(this).toggleClass('ma-hidden', $(this).find('.menu-item:not(.ma-hidden)').length === 0);
+								});
+								modalContainer.find('.ma-noresult').toggle(modalContainer.find('.menu-item:not(.ma-hidden)').length === 0);
+							}).on('keydown', function(e) {
+								if (e.key === 'Enter') { e.preventDefault(); modalContainer.find('.menu-item:not(.ma-hidden)').first().trigger('click'); }
+							});
+							if ($search.length && window.matchMedia('(pointer: fine)').matches) $search.trigger('focus');
+
+							// Sync / Add to D365: label follows the D365 widget's status; the widget runs the flow
+							var $d365Item = modalContainer.find('.d365MenuAction');
+							if ($d365Item.length && $('#d365Widget').attr('data-d365-state') === 'missing') {
+								$d365Item.removeClass('text-teal').addClass('text-warning')
+									.find('i').attr('class', 'fa fa-plus').end()
+									.find('span').text(<?= json_encode(__('add_to_d365', 'Add to D365')) ?>);
+							}
+							$d365Item.on('click', function(e) {
+								e.preventDefault();
+								Swal.close();
+								setTimeout(function() { document.dispatchEvent(new CustomEvent('d365:action-request')); }, 100);
+							});
 
 							// Add Documents
 							modalContainer.find('.addEmpDocuAtter').on('click', function(e) {

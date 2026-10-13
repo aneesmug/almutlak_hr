@@ -97,26 +97,22 @@ if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
 
 // Build More Actions menu HTML organized by categories
 $moreActionsHtml = '';
+// Actions are collected per section, then rendered as titled groups at the end (view_employee.php styles them).
+$ma = ['requests' => [], 'vacation' => [], 'manage' => [], 'exit' => []];
 if ($emprow['status'] == 1 && $user_type === 'archiving') {
 	// Archiving role: document upload only, none of the HR/management actions below.
-	$moreActionsHtml .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
+	$ma['manage'][] = "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 } elseif ($emprow['status'] == 1) {
 	// HR ACTIONS
-	$hr_actions = '';
-
 	// Add Documents (HR or Admin)
 	if ($isDeptHr || $isHR || $is_system_admin) {
-		$hr_actions .= "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
+		$ma['manage'][] = "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 	}
 	
 	// Apply Loan: always shown (unless loan requests are blocked). With an active loan the click
 	// shows the loan summary + "contact HR" instead of the form (assets/js/loanHandling.js).
 	if (!$isLoanBlocked /*&& ($is_system_admin || $isDeptHr || $isHR)*/) {
-		$hr_actions .= "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
-	}
-	
-	if ($hr_actions) {
-		$moreActionsHtml .= $hr_actions;
+		$ma['requests'][] = "<div class=\"menu-item text-warning applyLoan\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-money-bill-trend-up\"></i><span>" . __('apply_loan') . "</span></div>";
 	}
 
 	// Apply Salary Increment (Direct Supervisor only, for employees with > 1 year tenure)
@@ -141,17 +137,17 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 			}
 			if ($deptNameQuery) mysqli_free_result($deptNameQuery);
 		}
-		$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"openSalaryIncrementApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['iqama'] ?? '') . "', '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', '" . htmlspecialchars($deptNameForSalaryIncrement, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['joining_date'] ?? '') . "')\" role=\"button\"><i class=\"fa fa-arrow-trend-up\"></i><span>" . __('apply_salary_increment', 'Apply Salary Increment') . "</span></div>";
+		$ma['requests'][] = "<div class=\"menu-item text-info\" onclick=\"openSalaryIncrementApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['iqama'] ?? '') . "', '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', '" . htmlspecialchars($deptNameForSalaryIncrement, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['joining_date'] ?? '') . "')\" role=\"button\"><i class=\"fa fa-arrow-trend-up\"></i><span>" . __('apply_salary_increment', 'Apply Salary Increment') . "</span></div>";
 	}
 
 	// Request Employee Transfer (Direct Supervisor only, requesting someone who isn't already their report)
 	if ($can_request_employee_transfer) {
-		$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"openEmployeeTransferModal('" . htmlspecialchars((string)$empid, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['empid'], ENT_QUOTES) . "')\" role=\"button\"><i class=\"fa fa-people-arrows\"></i><span>" . __('request_employee_transfer', 'Request Employee Transfer') . "</span></div>";
+		$ma['requests'][] = "<div class=\"menu-item text-primary\" onclick=\"openEmployeeTransferModal('" . htmlspecialchars((string)$empid, ENT_QUOTES) . "', '" . htmlspecialchars($emprow['empid'], ENT_QUOTES) . "')\" role=\"button\"><i class=\"fa fa-people-arrows\"></i><span>" . __('request_employee_transfer', 'Request Employee Transfer') . "</span></div>";
 	}
 
 	// *IT ACTIONS
 	/* if ($isItAssistant || $is_system_admin) {
-		$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"assignAsset('" . htmlspecialchars($emprow['empid']) . "')\" role=\"button\"><i class=\"fa fa-solid fa-project-diagram\"></i><span>" . __('assign_asset') . "</span></div>";
+		$ma['manage'][] = "<div class=\"menu-item text-dark\" onclick=\"assignAsset('" . htmlspecialchars($emprow['empid']) . "')\" role=\"button\"><i class=\"fa fa-solid fa-project-diagram\"></i><span>" . __('assign_asset') . "</span></div>";
 	} */
 	
 	// VACATION & LEAVE ACTIONS
@@ -161,17 +157,17 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 			if ($emprow['apd_status'] != 'approve' && !$isAllVacationBlocked /*&& $emprow["fly"] == 0*/ ) {
 				$allowEmergencyVacation = ((string)($emprow['allow_emergency_vacation'] ?? '0') === '1') ? 1 : 0;
 				$allowVacSalaryBelowMinDays = ((string)($emprow['allow_vacation_salary_below_min_days'] ?? '0') === '1') ? 1 : 0;
-				$moreActionsHtml .= "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-allow-vac-salary-below-min=\"{$allowVacSalaryBelowMinDays}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
+				$ma['vacation'][] = "<div class=\"menu-item text-info applyvacationAtter\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-dept=\"" . htmlspecialchars($emprow['dept']) . "\" data-country=\"" . htmlspecialchars($emprow['country']) . "\" data-balance=\"{$displayBalance}\" data-allow-emergency=\"{$allowEmergencyVacation}\" data-allow-vac-salary-below-min=\"{$allowVacSalaryBelowMinDays}\" data-block-annual=\"" . ($isVacationAnnualBlocked ? 1 : 0) . "\" data-block-emergency=\"" . ($isVacationEmergencyBlocked ? 1 : 0) . "\" data-block-local=\"" . ($isVacationLocalBlocked ? 1 : 0) . "\" data-block-encashed=\"" . ($isVacationEncashedBlocked ? 1 : 0) . "\" role=\"button\"><i class=\"fa fa-user-chart\"></i><span>" . __('apply_annual_vacation') . "</span></div>";
 			}
 			
 			// Business Trip Request
 			if (!$isBusinessTripBlocked) {
-				$moreActionsHtml .= "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
+				$ma['vacation'][] = "<div class=\"menu-item text-warning\" onclick=\"openBusinessTripApplyModal('" . htmlspecialchars($emprow['empid']) . "', '" . htmlspecialchars($emprow['dept']) . "', '" . htmlspecialchars($emprow['country']) . "')\" role=\"button\"><i class=\"fa fa-plane\"></i><span>" . __('apply_business_trip', 'Apply Business Trip') . "</span></div>";
 			}
 
 			// Excuse Leave
 			if (!$isExcuseLeaveBlocked) {
-				$moreActionsHtml .= "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
+				$ma['vacation'][] = "<div class=\"menu-item text-success applyLeaveRequest\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-house-person-leave\"></i><span>" . __('excuse_leave') . "</span></div>";
 			}
 			
 			// Vacation arrival/departure
@@ -188,17 +184,17 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 						|| user_has_special_access($conDB, $empid ?? '', 'direct_rejoin_bypass_approval', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 					)
 				) {
-					$moreActionsHtml .= "<div class=\"menu-item text-dark directRejoinBypass\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-vacid=\"" . htmlspecialchars($lastVac['vacid']) . "\" data-empname=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-bolt\"></i><span>" . __('direct_rejoin', 'Direct Rejoin') . "</span></div>";
+					$ma['vacation'][] = "<div class=\"menu-item text-dark directRejoinBypass\" data-empid=\"" . htmlspecialchars($emprow['empid']) . "\" data-vacid=\"" . htmlspecialchars($lastVac['vacid']) . "\" data-empname=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-bolt\"></i><span>" . __('direct_rejoin', 'Direct Rejoin') . "</span></div>";
 				}
 			} else {
 				if ($emprow['apd_status'] == 'approve' && $user_type != "dept_user") {
-					$moreActionsHtml .= "<div class=\"menu-item text-dark\" onclick=\"window.location.href='add_vac_emp.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-plane-departure\"></i><span>" . __('add_vacation') . "</span></div>";
+					$ma['vacation'][] = "<div class=\"menu-item text-dark\" onclick=\"window.location.href='add_vac_emp.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-plane-departure\"></i><span>" . __('add_vacation') . "</span></div>";
 				}
 			}
 			
 			// Add Manual Vacation (HR/Admin only)
 			/* if ($isHR || $is_system_admin || $isDeptHr) {
-				$moreActionsHtml .= "<div class=\"menu-item text-info\" onclick=\"addManualVacationHistory(" . (int)$emprow['empid'] . ", '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', " . (int)$emprow['country'] . ");\" role=\"button\"><i class=\"fa fa-plus-circle\"></i><span>" . __('add_manual_vacation', 'Add Manual Vacation') . "</span></div>";
+				$ma['vacation'][] = "<div class=\"menu-item text-info\" onclick=\"addManualVacationHistory(" . (int)$emprow['empid'] . ", '" . htmlspecialchars($emprow['name'] ?? '', ENT_QUOTES) . "', " . (int)$emprow['country'] . ");\" role=\"button\"><i class=\"fa fa-plus-circle\"></i><span>" . __('add_manual_vacation', 'Add Manual Vacation') . "</span></div>";
 			} */
 		}
 	}
@@ -207,39 +203,61 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 	if ($is_system_admin || $isDeptHr || $isHR || $can_modify_employee) {
 		// Create Login
 		if ($is_system_admin && empty($emprow['av_dept'])) {
-			$moreActionsHtml .= "<div class=\"menu-item text-dark createUserDeptAjax\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-shield\"></i><span>" . __('create_login') . "</span></div>";
+			$ma['manage'][] = "<div class=\"menu-item text-dark createUserDeptAjax\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-shield\"></i><span>" . __('create_login') . "</span></div>";
 		}
 
 		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant)
 		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
-			$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+			$ma['manage'][] = "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
 		}
 
 		// Add Note (system admin, dept hr, or 'access_edit_employee' special access grant)
 		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
-			$moreActionsHtml .= "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
+			$ma['manage'][] = "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
 		}
 		
 		// Terminate (only on edit page)
 		if ($user_type != "dept_user" && $current_page_name == "edit_employee.php") {
-			$moreActionsHtml .= "<div class=\"menu-item text-danger\" data-toggle=\"modal\" data-target=\".terminat\" role=\"button\"><i class=\"fa fa-user-large-slash\"></i><span>" . __('terminat') . "</span></div>";
+			$ma['exit'][] = "<div class=\"menu-item text-danger\" data-toggle=\"modal\" data-target=\".terminat\" role=\"button\"><i class=\"fa fa-user-large-slash\"></i><span>" . __('terminat') . "</span></div>";
 		}
 		
 		// End of Service
 		if ($is_system_admin || $isDeptHr || $isHR) {
-			$moreActionsHtml .= "<div class=\"menu-item text-secondary\" onclick=\"window.open('emp_end_of_service.php?emp_id=" . htmlspecialchars($emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-solid fa-user-slash\"></i><span>" . __('create_end_of_service') . "</span></div>";
+			$ma['exit'][] = "<div class=\"menu-item text-secondary\" onclick=\"window.open('emp_end_of_service.php?emp_id=" . htmlspecialchars($emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-solid fa-user-slash\"></i><span>" . __('create_end_of_service') . "</span></div>";
 		}
 	}
 	// Apply Resignation
 	if (!$isResignationBlocked) {
-		$moreActionsHtml .= "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
+		$ma['exit'][] = "<div class=\"menu-item text-danger applyResignation\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" data-emp_name=\"" . htmlspecialchars($emprow['name']) . "\" role=\"button\"><i class=\"fa fa-sign-out-alt\"></i><span>" . __('apply_resignation') . "</span></div>";
+	}
+	// Sync / Add to Microsoft Dynamics 365 (view_employee.php only) - runs the D365 widget's flow via
+	// the 'd365:action-request' event; label switches to "Add to D365" when the worker isn't registered.
+	if ($current_page_name === 'view_employee.php' && function_exists('d365_enabled') && d365_enabled($conDB)
+		&& user_has_special_access($conDB, $logged_in_empid ?? ($empid ?? ''), 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+		$ma['manage'][] = "<div class=\"menu-item text-teal d365MenuAction\" role=\"button\"><i class=\"fa fa-sync-alt\"></i><span>" . __('sync_to_d365', 'Sync to D365') . "</span></div>";
 	}
 	// Print Profile (openPrintProfileOptions() lives in view_employee.php)
 	if (basename($_SERVER['PHP_SELF']) === 'view_employee.php') {
-		$moreActionsHtml .= "<div class=\"menu-item text-primary\" onclick=\"Swal.close(); setTimeout(openPrintProfileOptions, 100);\" role=\"button\"><i class=\"fa fa-print\"></i><span>" . __('print_profile', 'Print Profile') . "</span></div>";
+		$ma['manage'][] = "<div class=\"menu-item text-primary\" onclick=\"Swal.close(); setTimeout(openPrintProfileOptions, 100);\" role=\"button\"><i class=\"fa fa-print\"></i><span>" . __('print_profile', 'Print Profile') . "</span></div>";
+	}
+}
+if ($emprow['status'] == 1) {
+	$maTitles = [
+		'requests' => ['fa-file-signature', __('ma_group_requests', 'Requests')],
+		'vacation' => ['fa-umbrella-beach', __('ma_group_vacation', 'Vacation & Travel')],
+		'manage'   => ['fa-id-card', __('ma_group_employee', 'Employee')],
+		'exit'     => ['fa-door-open', __('ma_group_exit', 'Exit & Separation')],
+	];
+	foreach ($ma as $maKey => $maItems) {
+		if (!$maItems) continue;
+		$moreActionsHtml .= '<div class="ma-group ma-group-' . $maKey . '"><div class="ma-group-title"><i class="fa ' . $maTitles[$maKey][0] . '"></i>' . htmlspecialchars($maTitles[$maKey][1]) . '</div>'
+			. '<div class="ma-grid">' . implode('', $maItems) . '</div></div>';
+	}
+	if ($moreActionsHtml === '') {
+		$moreActionsHtml = '<div class="ma-empty"><i class="fa fa-circle-info"></i><p>' . __('no_actions_available', 'No actions available for this employee.') . '</p></div>';
 	}
 } else {
-	$moreActionsHtml = '<div style="padding:24px; text-align:center; color: #6c757d;"><p>' . __('employee_is_inactive') . '</p></div>';
+	$moreActionsHtml = '<div class="ma-empty"><i class="fa fa-user-lock"></i><p>' . __('employee_is_inactive') . '</p></div>';
 }
 
 $current_page_name = basename($_SERVER['PHP_SELF']);
@@ -313,88 +331,77 @@ if ($isEmployee !== true) {
 			}
 		}
 		?>
-		<div class="<?= $header_class ?>">
-			<div class="container-custom">
-				<!-- Avatar -->
-				<label class="empAvatarShow" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" style="margin-bottom: 0; cursor: pointer; position: relative; display: inline-block; line-height: 0;" title="<?= $emp_top_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
-					<?php
-					// Get avatar display path using centralized helper function
-					$displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1);
-					?>
-					<img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar" style="<?= $emp_top_is_online ? 'box-shadow: 0 0 0 4px #28a745;' : '' ?>">
-					<?php if ($emp_top_is_online): ?><span style="position: absolute; bottom: 2px; <?= ($is_rtl ?? false) ? 'left' : 'right' ?>: 2px; width: 20px; height: 20px; border-radius: 50%; background: #28a745; border: 3px solid #fff; z-index: 5; box-shadow: 0 2px 6px rgba(0,0,0,0.25);"></span><?php endif; ?>
+		<?php
+		$eh_join_ts = strtotime(str_replace('/', '-', (string)($emprow['joining_date'] ?? '')));
+		$eh_dept = ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"];
+		$eh_comp = ($is_rtl ?? false) ? ($emprow["compnme_ar"] ?? $emprow["compnme"]) : $emprow["compnme"];
+		$eh_show_actions = !in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"]) && $emprow["status"] == 1;
+		?>
+		<!-- Employee header (styles below, scoped to .emp-hero) -->
+		<div class="emp-hero<?= str_replace('profile-header', '', $header_class) ?>">
+			<div class="eh-top">
+				<!-- Avatar (click = change photo) -->
+				<label class="empAvatarShow eh-avatar<?= $emp_top_is_online ? ' is-online' : '' ?>" for="img-crop" data-id="<?= $emprow['eid'] ?>" data-emp_id="<?= $emprow['empid'] ?>" data-img="<?= $emprow['avatar'] ?>" data-name="<?= $emprow['name'] ?>" title="<?= $emp_top_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
+					<?php $displayImage = getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1); ?>
+					<img src="<?= $displayImage ?>" alt="<?= htmlspecialchars($emprow['name']) ?>" class="profile-avatar">
+					<span class="eh-avatar-edit"><i class="fa fa-camera"></i></span>
+					<?php if ($emp_top_is_online): ?><span class="eh-online"></span><?php endif; ?>
 					<input type="file" name="image" class="image" hidden id="img-crop" accept="image/*">
 				</label>
 
-				<!-- Employee Info -->
-				<div class="profile-header-info">
-					<h1><?= getDisplayName($emprow['name']) ?></h1>
-					<p><i class="fa fa-building"></i> <?= htmlspecialchars(($is_rtl ?? false ? $emprow["deptnme_ar"] : $emprow["deptnme"]) . " - " . (($is_rtl ?? false ? ($emprow["compnme_ar"] ?? $emprow["compnme"]) : $emprow["compnme"]) ?? '')) ?></p>
-					<p><i class="fa fa-passport"></i> <?= __('iqama_id_label') ?>: <?= htmlspecialchars($emprow['iqama']) ?></p>
-					<p><i class="fa fa-phone-laptop"></i> <?= __('mobile') ?>: <?= htmlspecialchars($emprow['mobile']) ?></p>
-					<p><i class="fa fa-globe-asia"></i> <?= __('nationality') ?>: <?= ($is_rtl ?? false ? $emprow["country_name_ar"] : $emprow["country_name"]) ?></p>
-				</div>
-
-				<!-- Quick Stats -->
-				<div class="profile-quick-stats">
-					<div class="stat-item">
-						<div class="stat-number"><?= htmlspecialchars($emprow['empid']) ?></div>
-						<div class="stat-label"><?= __('employee_no') ?></div>
+				<!-- Identity -->
+				<div class="eh-identity">
+					<div class="eh-name-row">
+						<h1><?= getDisplayName($emprow['name']) ?></h1>
+						<span class="eh-status"><i class="fa <?= $status_icon ?>"></i> <?= htmlspecialchars($status_label) ?></span>
 					</div>
-					<div class="stat-item">
-						<div class="stat-number"><?= htmlspecialchars($emprow['vacation_days']) ?></div>
-						<div class="stat-label"><?= __('vacation_days') ?></div>
-					</div>
-					<div class="stat-item">
-						<div class="stat-number">
-							<?php
-							$displayBalance = 0;
-							$empid_for_calc = $emprow['empid'] ?? $emprow['emp_id'];
-							if ($emprow['status'] == 1 && !empty($empid_for_calc)) {
-								$balance_query = mysqli_query($conDB, "SELECT `available_balance` FROM `emp_vacation_balance` WHERE `emp_id` = '" . mysqli_real_escape_string($conDB, $empid_for_calc) . "' ORDER BY `last_updated` DESC LIMIT 1");
-								if ($balance_query && mysqli_num_rows($balance_query) > 0) {
-									$balance_row = mysqli_fetch_assoc($balance_query);
-									$displayBalance = (float)$balance_row['available_balance'];
-									mysqli_free_result($balance_query);
-								}
-							}
-							echo number_format($displayBalance, 2);
-							?>
-						</div>
-						<div class="stat-label"><?= __('balance_vacations') ?></div>
-					</div>
-					<div class="stat-item">
-						<div class="stat-number"><?= date('Y', strtotime(str_replace('/', '-', $emprow['joining_date']))) ?></div>
-						<div class="stat-label"><?= __('joining_date') ?></div>
-					</div>
-				</div>
-
-				<!-- QR Code + Actions stacked vertically -->
-				<div class="qr-actions-block" style="display:flex; flex-direction:column; align-items:center; gap:10px;">
-					<a href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>" style="display:inline-block;">
-						<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
-					</a>
-					<?php if (!in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"])) : ?>
-						<?php if ($emprow["status"] == 1) : ?>
-						<div class="more-actions-wrapper" style="text-align:center; position:relative;">
-							<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) {
-								// Edit Employee: D365 status only - no Sync / Add to D365 buttons
-								$d365WidgetStatusOnly = ($current_page_name === 'edit_employee.php');
-								// no More button there to sit beside - show the card in the normal flow, under the QR code
-								$d365WidgetClass = $d365WidgetStatusOnly ? 'is-inline' : '';
-								include __DIR__ . '/D365/d365_widget.php'; // Microsoft Dynamics 365 status + Sync
-							} ?>
-							<?php if ($current_page_name !== 'edit_employee.php'): // no More actions while editing ?>
-							<button type="button" id="moreActionsBtn" class="more-actions-btn">
-								<i class="fa fa-bars"></i> <?= __('more') ?>
-							</button>
-							<?php endif; ?>
-						</div>
+					<div class="eh-org"><i class="fa fa-building"></i> <?= htmlspecialchars((string)$eh_dept) ?><?php if (!empty($eh_comp)): ?><span class="eh-dot">&bull;</span><?= htmlspecialchars($eh_comp) ?><?php endif; ?></div>
+					<div class="eh-chips">
+						<span class="eh-chip"><i class="fa fa-passport"></i><small><?= __('iqama_id_label') ?></small><b><?= htmlspecialchars((string)$emprow['iqama']) ?></b></span>
+						<?php if (!empty($emprow['mobile'])): ?>
+						<a class="eh-chip" href="tel:<?= htmlspecialchars($emprow['mobile']) ?>"><i class="fa fa-phone"></i><small><?= __('mobile') ?></small><b dir="ltr"><?= htmlspecialchars($emprow['mobile']) ?></b></a>
 						<?php endif; ?>
+						<span class="eh-chip"><i class="fa fa-globe-asia"></i><small><?= __('nationality') ?></small><b><?= htmlspecialchars((string)(($is_rtl ?? false) ? $emprow["country_name_ar"] : $emprow["country_name"])) ?></b></span>
+					</div>
+				</div>
+
+				<!-- QR -> employee card -->
+				<a class="eh-qr" href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>">
+					<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
+					<span><i class="fa fa-id-card"></i> <?= __('view_employee_card') ?></span>
+				</a>
+			</div>
+
+			<div class="eh-bottom">
+				<!-- Quick stats -->
+				<div class="eh-stats">
+					<div class="eh-stat"><i class="fa fa-hashtag"></i><div><b><?= htmlspecialchars($emprow['empid']) ?></b><small><?= __('employee_no') ?></small></div></div>
+					<div class="eh-stat"><i class="fa fa-calendar-days"></i><div><b><?= htmlspecialchars((string)$emprow['vacation_days']) ?></b><small><?= __('vacation_days') ?></small></div></div>
+					<div class="eh-stat"><i class="fa fa-umbrella-beach"></i><div><b><?= number_format($displayBalance, 2) ?></b><small><?= __('balance_vacations') ?></small></div></div>
+					<div class="eh-stat" title="<?= $eh_join_ts ? date('d M Y', $eh_join_ts) : '' ?>"><i class="fa fa-calendar-check"></i><div><b><?= $eh_join_ts ? date('Y', $eh_join_ts) : '-' ?></b><small><?= __('joining_date') ?></small></div></div>
+				</div>
+
+				<?php if ($eh_show_actions): ?>
+				<!-- D365 status + More Actions -->
+				<div class="eh-actions more-actions-wrapper">
+					<?php if (in_array($current_page_name, ['view_employee.php', 'edit_employee.php'], true)) {
+						// Edit Employee: D365 status only - no Sync / Add to D365 buttons
+						$d365WidgetStatusOnly = ($current_page_name === 'edit_employee.php');
+						$d365WidgetClass = 'is-inline';
+						// Sync / Add to D365 lives in the More Actions menu (d365MenuAction), not beside the card
+						$d365WidgetButtonsInMenu = !$d365WidgetStatusOnly;
+						include __DIR__ . '/D365/d365_widget.php'; // Microsoft Dynamics 365 status
+					} ?>
+					<?php if ($current_page_name !== 'edit_employee.php'): // no More actions while editing ?>
+					<button type="button" id="moreActionsBtn" class="more-actions-btn">
+						<i class="fa fa-grid-2"></i> <?= __('more_actions', 'More Actions') ?>
+					</button>
 					<?php endif; ?>
 				</div>
+				<?php endif; ?>
 			</div>
 		</div>
+		<link href="assets/css/emp_hero.css?v=<?= @filemtime(__DIR__ . '/../assets/css/emp_hero.css') ?>" rel="stylesheet" type="text/css">
 
 		<!--/ meta -->
 		<?php /*if (mysqli_num_rows($getquerysocial) >= 1): ?>
