@@ -540,22 +540,72 @@ if(isset($_POST['submit'])){
 				margin-top: 4px;
 			}
 
-			.doc-expiry-table {
-				text-align: left;
-				max-height: 420px;
-				overflow: auto;
+			/* Document expiry modal (Swal popup lives outside .sr-page - literal colors + app-dark overrides) */
+			.swal2-popup.dex-popup { padding: 22px 22px 18px; border-radius: 16px; }
+			.swal2-popup.dex-popup .swal2-title { padding: 0; margin: 0 0 14px; text-align: start; font-size: 19px; font-weight: 700; color: #0f172a; }
+			.swal2-popup.dex-popup .swal2-html-container { margin: 0; padding: 0; text-align: start; overflow: visible; }
+			.dex-title { display: flex; align-items: center; gap: 12px; }
+			.dex-title-icon { width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; flex: 0 0 auto; }
+			.dex-title-icon.tone-red { background: #fef2f2; color: #dc2626; }
+			.dex-title-icon.tone-amber { background: #fffbeb; color: #d97706; }
+			.dex-title-icon.tone-sky { background: #f0f9ff; color: #0284c7; }
+			.dex-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+			.dex-stat { padding: 8px 12px; border-radius: 10px; border: 1px solid #e5e7eb; background: #fff; }
+			.dex-stat-label { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+			.dex-stat-value { display: block; font-size: 18px; font-weight: 700; color: #0f172a; line-height: 1.3; font-variant-numeric: tabular-nums; }
+			.dex-stat.tone-red .dex-stat-value { color: #b91c1c; }
+			.dex-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+			.dex-search { position: relative; flex: 0 1 280px; min-width: 200px; }
+			.dex-search i { position: absolute; inset-inline-start: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px; }
+			.dex-search input { width: 100%; height: 36px; padding-inline: 32px 10px; border: 1px solid #e5e7eb; border-radius: 9px; font-size: 13px; background: #f8fafc; color: #0f172a; outline: 0; }
+			.dex-search input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, .15); background: #fff; }
+			.dex-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+			.dex-chip { border: 1px solid #e5e7eb; background: #fff; color: #475569; border-radius: 999px; padding: 4px 11px; font-size: 12px; font-weight: 600; cursor: pointer; }
+			.dex-chip span { margin-inline-start: 4px; padding: 0 6px; border-radius: 999px; background: #f1f5f9; font-size: 11px; }
+			.dex-chip:hover { border-color: #a5b4fc; }
+			.dex-chip.active { background: #6366f1; border-color: #6366f1; color: #fff; }
+			.dex-chip.active span { background: rgba(255, 255, 255, .25); }
+			.dex-list { max-height: 420px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
+			.dex-row { display: grid; grid-template-columns: minmax(200px, 300px) 1fr auto; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+			.dex-row:last-of-type { border-bottom: 0; }
+			.dex-row:hover { background: #f8fafc; }
+			.dex-emp { display: flex; align-items: center; gap: 10px; min-width: 0; }
+			.dex-avatar { width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: #eef2ff; color: #4f46e5; }
+			.dex-emp-text { display: flex; flex-direction: column; min-width: 0; }
+			.dex-emp-name { font-size: 13.5px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			.dex-emp-sub { font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+			.dex-mono { font-family: "SFMono-Regular", Consolas, monospace; }
+			.dex-docs { display: flex; flex-wrap: wrap; gap: 6px; }
+			.dex-doc { display: inline-flex; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; border-radius: 8px; font-size: 12px; border: 1px solid; }
+			.dex-doc-type { font-weight: 700; }
+			.dex-doc-date { opacity: .85; white-space: nowrap; }
+			.dex-doc-days { padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 11px; white-space: nowrap; }
+			.dex-doc.tone-red { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+			.dex-doc.tone-red .dex-doc-days { background: #dc2626; color: #fff; }
+			.dex-doc.tone-amber { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+			.dex-doc.tone-amber .dex-doc-days { background: #f59e0b; color: #fff; }
+			.dex-doc.tone-sky { background: #f0f9ff; border-color: #bae6fd; color: #0369a1; }
+			.dex-doc.tone-sky .dex-doc-days { background: #0ea5e9; color: #fff; }
+			.dex-view { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: #4f46e5; border: 1px solid #c7d2fe; background: #eef2ff; text-decoration: none !important; white-space: nowrap; }
+			.dex-view:hover { background: #6366f1; border-color: #6366f1; color: #fff; }
+			.dex-view i { font-size: 16px; }
+			.dex-empty { padding: 28px 16px; text-align: center; color: #64748b; font-size: 13px; }
+			.dex-empty i { display: block; font-size: 30px; color: #cbd5e1; margin-bottom: 4px; }
+			@media (max-width: 767px) {
+				.dex-row { grid-template-columns: 1fr auto; }
+				.dex-docs { grid-column: 1 / -1; grid-row: 2; }
+				.dex-view span { display: none; }
 			}
-
-			.doc-expiry-doc-badge {
-				display: inline-block;
-				padding: 3px 8px;
-				border-radius: 12px;
-				font-size: 11px;
-				font-weight: 600;
-				margin: 2px 4px 2px 0;
-				background: #eef2ff;
-				color: #3730a3;
-			}
+			html.app-dark .swal2-popup.dex-popup .swal2-title, html.app-dark .dex-stat-value, html.app-dark .dex-emp-name { color: #f1f5f9; }
+			html.app-dark .dex-stat, html.app-dark .dex-list, html.app-dark .dex-chip { background: #1d2436; border-color: #2a3348; color: #d8dee9; }
+			html.app-dark .dex-search input { background: #161c2a; border-color: #2a3348; color: #f1f5f9; }
+			html.app-dark .dex-row { border-color: #252e44; }
+			html.app-dark .dex-row:hover { background: #252e44; }
+			html.app-dark .dex-chip span { background: #252e44; }
+			html.app-dark .dex-avatar, html.app-dark .dex-view { background: #252b4a; border-color: #4547a0; color: #c7d2fe; }
+			html.app-dark .dex-doc.tone-red { background: #3a1717; border-color: #7a2a2a; color: #fca5a5; }
+			html.app-dark .dex-doc.tone-amber { background: #3a2e12; border-color: #6b5417; color: #fcd34d; }
+			html.app-dark .dex-doc.tone-sky { background: #102c3d; border-color: #1d5673; color: #7dd3fc; }
 
 			/* Dashboard demographic pie charts - always light background regardless of OS theme */
 			.dash-pie-card {
@@ -1396,52 +1446,101 @@ if(isset($_POST['submit'])){
 				return '<?= getDisplayName('Employees with documents within 30 days') ?>';
 			}
 
+			// Urgency tone per document: expired / <=10 days red, <=20 amber, else sky
+			function docExpiryTone(doc) {
+				var days = parseInt(doc.days, 10);
+				if (isNaN(days)) return 'sky';
+				if (days <= 10) return 'red';
+				if (days <= 20) return 'amber';
+				return 'sky';
+			}
+
 			function buildDocExpiryListHtml(level) {
 				var rows = (docExpiryBandData && docExpiryBandData[level]) ? docExpiryBandData[level] : [];
 				if (!rows.length) {
-					return '<div class="text-muted py-3"><?= getDisplayName('No employees found in this range.') ?></div>';
+					return '<div class="dex-empty"><i class="mdi mdi-file-check-outline"></i><?= getDisplayName('No employees found in this range.') ?></div>';
 				}
 
-				var tableRows = rows.map(function(emp) {
+				var docCount = 0, expiredCount = 0, types = {};
+				var cards = rows.map(function(emp) {
 					var docs = Array.isArray(emp.docs) ? emp.docs : [];
 					var docsHtml = docs.map(function(doc) {
-						return '<span class="doc-expiry-doc-badge">'
-							+ escapeDocExpiryHtml(doc.type)
-							+ ' - '
-							+ escapeDocExpiryHtml(doc.expiry)
-							+ ' ('
-							+ escapeDocExpiryHtml(formatDocDays(doc))
-							+ ')</span>';
+						var days = parseInt(doc.days, 10);
+						docCount++;
+						if (!isNaN(days) && days < 0) expiredCount++;
+						types[doc.type] = (types[doc.type] || 0) + 1;
+						return '<span class="dex-doc tone-' + docExpiryTone(doc) + '">'
+							+ '<span class="dex-doc-type">' + escapeDocExpiryHtml(doc.type) + '</span>'
+							+ '<span class="dex-doc-date"><i class="mdi mdi-calendar"></i> ' + escapeDocExpiryHtml(doc.expiry) + '</span>'
+							+ '<span class="dex-doc-days">' + escapeDocExpiryHtml(formatDocDays(doc)) + '</span>'
+							+ '</span>';
 					}).join('');
 
+					var name = String(emp.name || '').trim();
+					var initials = name.split(/\s+/).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase() || '?';
+					var search = (emp.emp_id + ' ' + name + ' ' + (emp.department || '') + ' ' + docs.map(function(d) { return d.type; }).join(' ')).toLowerCase();
 					var viewUrl = 'view_employee.php?emp_id=' + encodeURIComponent(emp.emp_id);
-					var actionHtml = ''
-						+ '<a href="' + viewUrl + '" class="btn btn-sm btn-primary" target="_blank" rel="noopener">'
-						+ '<i class="mdi mdi-account-eye"></i> <?= getDisplayName('View Employee') ?>'
-						+ '</a>';
 
-					return '<tr>'
-						+ '<td>' + escapeDocExpiryHtml(emp.emp_id) + '</td>'
-						+ '<td>' + escapeDocExpiryHtml(emp.name) + '</td>'
-						+ '<td>' + escapeDocExpiryHtml(emp.department || '-') + '</td>'
-						+ '<td>' + docsHtml + '</td>'
-						+ '<td>' + actionHtml + '</td>'
-						+ '</tr>';
+					return '<div class="dex-row" data-search="' + escapeDocExpiryHtml(search) + '" data-types="' + escapeDocExpiryHtml(docs.map(function(d) { return d.type; }).join('|')) + '">'
+						+ '<div class="dex-emp">'
+						+ '<span class="dex-avatar">' + escapeDocExpiryHtml(initials) + '</span>'
+						+ '<div class="dex-emp-text">'
+						+ '<span class="dex-emp-name" title="' + escapeDocExpiryHtml(name) + '">' + escapeDocExpiryHtml(name) + '</span>'
+						+ '<span class="dex-emp-sub"><span class="dex-mono">#' + escapeDocExpiryHtml(emp.emp_id) + '</span> · ' + escapeDocExpiryHtml(emp.department || '-') + '</span>'
+						+ '</div></div>'
+						+ '<div class="dex-docs">' + docsHtml + '</div>'
+						+ '<a href="' + viewUrl + '" class="dex-view" target="_blank" rel="noopener" title="<?= getDisplayName('View Employee') ?>">'
+						+ '<i class="mdi mdi-account-eye"></i><span><?= getDisplayName('View') ?></span></a>'
+						+ '</div>';
 				}).join('');
 
+				var typeChips = '<button type="button" class="dex-chip active" data-type=""><?= getDisplayName('All') ?> <span>' + docCount + '</span></button>'
+					+ Object.keys(types).sort().map(function(t) {
+						return '<button type="button" class="dex-chip" data-type="' + escapeDocExpiryHtml(t) + '">' + escapeDocExpiryHtml(t) + ' <span>' + types[t] + '</span></button>';
+					}).join('');
+
 				return ''
-					+ '<div class="doc-expiry-table">'
-					+ '<table class="table table-sm table-striped table-bordered mb-0">'
-					+ '<thead class="thead-light"><tr>'
-					+ '<th style="width:90px;"><?= getDisplayName('Emp ID') ?></th>'
-					+ '<th style="width:220px;"><?= getDisplayName('Name') ?></th>'
-					+ '<th style="width:180px;"><?= getDisplayName('Department') ?></th>'
-					+ '<th><?= getDisplayName('Documents') ?></th>'
-					+ '<th style="width:140px;"><?= getDisplayName('Action') ?></th>'
-					+ '</tr></thead>'
-					+ '<tbody>' + tableRows + '</tbody>'
-					+ '</table>'
+					+ '<div class="dex-wrap">'
+					+ '<div class="dex-stats">'
+					+ '<div class="dex-stat"><span class="dex-stat-label"><?= getDisplayName('Employees') ?></span><span class="dex-stat-value">' + rows.length + '</span></div>'
+					+ '<div class="dex-stat"><span class="dex-stat-label"><?= getDisplayName('Documents') ?></span><span class="dex-stat-value">' + docCount + '</span></div>'
+					+ '<div class="dex-stat tone-red"><span class="dex-stat-label"><?= getDisplayName('Expired') ?></span><span class="dex-stat-value">' + expiredCount + '</span></div>'
+					+ '</div>'
+					+ '<div class="dex-tools">'
+					+ '<div class="dex-search"><i class="mdi mdi-magnify"></i><input type="search" id="dexSearch" placeholder="<?= getDisplayName('Search name, ID, department...') ?>" autocomplete="off"></div>'
+					+ '<div class="dex-chips">' + typeChips + '</div>'
+					+ '</div>'
+					+ '<div class="dex-list" id="dexList">' + cards
+					+ '<div class="dex-empty" id="dexNoMatch" style="display:none;"><i class="mdi mdi-magnify-close"></i><?= getDisplayName('No matching employees.') ?></div>'
+					+ '</div>'
 					+ '</div>';
+			}
+
+			function wireDocExpiryFilters(popup) {
+				var searchEl = popup.querySelector('#dexSearch');
+				var activeType = '';
+				function apply() {
+					var q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+					var shown = 0;
+					popup.querySelectorAll('.dex-row').forEach(function(row) {
+						var okText = !q || row.getAttribute('data-search').indexOf(q) !== -1;
+						var okType = !activeType || row.getAttribute('data-types').split('|').indexOf(activeType) !== -1;
+						var show = okText && okType;
+						row.style.display = show ? '' : 'none';
+						if (show) shown++;
+					});
+					var none = popup.querySelector('#dexNoMatch');
+					if (none) none.style.display = shown ? 'none' : '';
+				}
+				if (searchEl) searchEl.addEventListener('input', apply);
+				popup.querySelectorAll('.dex-chip').forEach(function(chip) {
+					chip.addEventListener('click', function() {
+						popup.querySelectorAll('.dex-chip').forEach(function(c) { c.classList.remove('active'); });
+						chip.classList.add('active');
+						activeType = chip.getAttribute('data-type') || '';
+						apply();
+					});
+				});
 			}
 
 			$('.updateExpID').click(function() {
@@ -1593,13 +1692,16 @@ if(isset($_POST['submit'])){
 
 			$(document).on('click', '.doc-expiry-card', function () {
 				var level = $(this).data('level');
+				var tone = level === 'danger' ? 'red' : (level === 'warning' ? 'amber' : 'sky');
 				Swal.fire({
-					title: getDocExpiryTitle(level),
+					title: '<span class="dex-title"><span class="dex-title-icon tone-' + tone + '"><i class="mdi mdi-file-clock-outline"></i></span>' + getDocExpiryTitle(level) + '</span>',
 					html: buildDocExpiryListHtml(level),
-					width: '1100px',
+					width: '1000px',
+					customClass: { popup: 'dex-popup' },
 					allowOutsideClick: false,
 					confirmButtonText: __('close') || 'Close',
-					confirmButtonColor: APP_COLORS.primary
+					confirmButtonColor: APP_COLORS.primary,
+					didOpen: function(popup) { wireDocExpiryFilters(popup); }
 				});
 			});
 
