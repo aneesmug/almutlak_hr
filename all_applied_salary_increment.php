@@ -1015,7 +1015,7 @@ if ($can_see_all_depts) {
                     const salaryTotal = salary ? Number(salary.total_salary) : null;
 
                     const empInfo = [
-                        [__('iqama', 'Iqama'), req.iqama],
+                        [__('iqama_id_label', 'Iqama / ID'), req.iqama],
                         [__('nationality', 'Nationality'), req.nationality],
                         [__('job_title_lable', 'Job Title'), req.job_title],
                         [__('department', 'Department'), req.department_name],
@@ -1083,7 +1083,10 @@ if ($can_see_all_depts) {
                             </div>
                         </div>
                         ${req.reason ? SRForm.section('mdi-note-text', __('reason', 'Reason'), `<div class="sr-fcol c-12"><div class="sr-notice tone-slate" style="white-space: pre-line;">${esc(req.reason)}</div></div>`) : ''}
-                        ${SRForm.section('mdi-sitemap', __('approval_chain', 'Approval Chain'), '<div class="sr-fcol c-12">' + chainHtml + '</div>')}
+                        ${SRForm.section('mdi-sitemap', __('approval_chain', 'Approval Chain'), '<div class="sr-fcol c-12">' + chainHtml + '</div>', '<i class="mdi mdi-chevron-down et-timeline-chevron"></i>')
+                            // Collapsed by default; same toggle as other report modals
+                            .replace('<div class="sr-fsec-head">', '<div class="sr-fsec-head et-timeline-toggle" onclick="toggleEtApprovalChain(this)" role="button">')
+                            .replace('<div class="sr-fgrid">', '<div class="sr-fgrid d-none">')}
                     </div></div>`;
 
                     /* ---------- print (compact A4) ---------- */
