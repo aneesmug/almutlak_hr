@@ -1,489 +1,271 @@
 <?php
-	include("./../includes/db.php");
-		
-	$hashcode = $_GET['hashcode'];
-	$verification = $_GET['verification'];
+// Public employee card - opened from the QR code on the employee profile
+// (?hashcode=<emp_id>&verification=<employees.id>). No login: show only contact-card data.
+include("./../includes/db.php");
 
-	// $getquery = mysqli_query($conDB, "SELECT * FROM `employees` WHERE `emp_id`='".$hashcode."' AND `id`='".$verification."' ");
-  $getquery = mysqli_query($conDB, "SELECT 
-  `employees`.*,
-  `department`.`dep_nme` AS `dept`,
-  `ac_jobs`.`job` AS `job_title`,
-  `portfolio`.`description`
-  FROM `employees` 
-  LEFT JOIN `portfolio` ON `portfolio`.`emp_id` = `employees`.`emp_id` 
-  LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
-  LEFT JOIN `ac_jobs` ON `ac_jobs`.`id` = `employees`.`actual_job`
-  WHERE `employees`.`id`='".$verification."' AND `employees`.`emp_id`='".$hashcode."' ");
-	if(mysqli_num_rows($getquery) !== 0){
-		while($rec = mysqli_fetch_assoc($getquery)){
-			$id_get = $rec["id"];
-			$name_get = $rec["name"];
-			$emp_id_get = $rec["emp_id"];
-			$iqama_get = $rec["iqama"];
-			$mobile_get = $rec["mobile"];
-			$dept_get = $rec["dept"];
-      $emptype_get = $rec["emptype"];
-      $actual_job_get = $rec["actual_job"];
-      $job_title_get = $rec["job_title"];
-			$email_get = $rec["c_email"];
-      $avatar_get = $rec["avatar"];
-      $status_get = $rec["status"];
-      $sex_get = $rec["sex"];
-      $description_get = $rec['description'];
-		}
+$hashcode = trim((string)($_GET['hashcode'] ?? ''));
+$verification = (int)($_GET['verification'] ?? 0);
+$h = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
 
-    if(!empty($_GET["action"])) {
-        foreach ($getquery as $valueArray) {
-            require_once "VcardExport.php";
-            $vcardExport = new VcardExport();
-            $vcardExport->contactVcardExportService(array($valueArray));
-            exit;
-        }
+$rec = null;
+if ($hashcode !== '' && $verification > 0) {
+    $stmt = mysqli_prepare($conDB, "SELECT
+            `employees`.*,
+            `department`.`dep_nme` AS `dept`,
+            `ac_jobs`.`job` AS `job_title`,
+            `portfolio`.`description`
+        FROM `employees`
+        LEFT JOIN `portfolio` ON `portfolio`.`emp_id` = `employees`.`emp_id`
+        LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
+        LEFT JOIN `ac_jobs` ON `ac_jobs`.`id` = `employees`.`actual_job`
+        WHERE `employees`.`id` = ? AND `employees`.`emp_id` = ?
+        LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'is', $verification, $hashcode);
+    mysqli_stmt_execute($stmt);
+    $rec = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt)) ?: null;
+    mysqli_stmt_close($stmt);
+}
+
+// "Save contact" -> vCard download
+if ($rec && !empty($_GET['action']) && (int)$rec['status'] === 1) {
+    require_once "VcardExport.php";
+    (new VcardExport())->contactVcardExportService([$rec]);
+    exit;
+}
+
+$logo = get_setting($conDB, 'logo');
+// The 'logo' setting is the white version (made for dark backgrounds) - the badge sits on a white pill,
+// so use the full-colour (dark blue) logo when it exists.
+if (is_file(dirname(__DIR__) . '/assets/logo/logo.png')) {
+    $logo = 'assets/logo/logo.png';
+}
+$favicon = get_setting($conDB, 'favicon');
+$siteTitle = get_setting($conDB, 'site_title') ?: 'Al Mutlak';
+
+if ($rec) {
+    $name = trim((string)$rec['name']);
+    $nameParts = preg_split('/\s+/', $name);
+    $shortName = implode(' ', array_slice($nameParts, 0, 2));
+    $initials = strtoupper(implode('', array_map(function ($w) { return mb_substr($w, 0, 1); }, array_slice($nameParts, 0, 2))));
+    $jobTitle = $rec['job_title'] ?: trim(($rec['dept'] ?? '') . ' ' . ($rec['emptype'] ?? ''));
+    $isActive = (int)$rec['status'] === 1;
+    $isFemale = in_array(strtolower((string)$rec['sex']), ['2', 'female'], true);
+
+    // Avatar: stored path (relative to the system root) if the file exists, else gender default
+    $avatar = '';
+    $avatarRel = ltrim(preg_replace('#^\./#', '', trim((string)$rec['avatar'])), '/');
+    if ($avatarRel !== '' && is_file(dirname(__DIR__) . '/' . $avatarRel)) {
+        $avatar = '../' . $avatarRel;
     }
 
-
+    $socials = [];
+    if ($isActive) {
+        $stmt = mysqli_prepare($conDB, "SELECT `social_list`.`link`, `social_list`.`icon`, `social_list`.`color`, `social`.`s_link`
+            FROM `social` JOIN `social_list` ON `social_list`.`id` = `social`.`social_id`
+            WHERE `social`.`emp_id` = ?");
+        mysqli_stmt_bind_param($stmt, 's', $rec['emp_id']);
+        mysqli_stmt_execute($stmt);
+        $socials = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+        mysqli_stmt_close($stmt);
+    }
+}
+?>
+<?php
+// Decorative barcode from the employee number (stable per employee)
+$barcode = '';
+if ($rec) {
+    $seed = md5('emp-card-' . $rec['emp_id']);
+    $x = 0;
+    for ($i = 0; $i < 32 && $x < 236; $i++) {
+        $w = 1 + (hexdec($seed[$i]) % 3);
+        $gap = 1 + (hexdec($seed[31 - $i]) % 3);
+        $barcode .= '<rect x="' . $x . '" y="0" width="' . $w . '" height="40"/>';
+        $x += $w + $gap;
+    }
+    $barcodeWidth = $x - $gap; // actual drawn width, so the bars can be centred
+}
+$cardNo = $rec ? str_pad((string)$rec['emp_id'], 6, '0', STR_PAD_LEFT) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0b3d91">
+  <title><?= $rec ? $h($shortName) . ' - ' : '' ?><?= $h($siteTitle) ?> ID</title>
+  <link rel="icon" href="<?= $favicon ? '../' . $h(ltrim($favicon, './')) : 'favicon.ico' ?>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../fontawesome-7/css/all.css">
+  <style>
+    :root { --brand: #0b3d91; --brand2: #1d6ff2; --accent: #13a3b9; --ink: #0f172a; --muted: #64748b; --line: #e5e9f0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+      background: #dfe5ee radial-gradient(900px 420px at 50% -80px, #c7d3e6, transparent);
+      display: flex; flex-direction: column; align-items: center; padding: 0 16px 40px;
+    }
 
-  <!-- Page title -->
-  <title><?= $name_get ?> Portfolio</title>
-  <!-- /Page title -->
+    /* Lanyard + clip */
+    .lanyard { width: 34px; height: 64px; background: repeating-linear-gradient(90deg, var(--brand) 0 6px, var(--brand2) 6px 12px); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+    .clip { width: 62px; height: 26px; margin-top: -2px; border-radius: 8px 8px 12px 12px; background: linear-gradient(180deg, #e2e8f0, #94a3b8); box-shadow: 0 3px 6px rgba(0,0,0,.2); position: relative; z-index: 2; }
+    .clip::after { content: ""; position: absolute; left: 50%; bottom: 6px; width: 28px; height: 6px; margin-left: -14px; border-radius: 4px; background: #475569; }
 
-  <!-- CSS Files
-  ========================================================= -->
-  <!-- Google web fonts - Open Sans -->
-  <link href="http://fonts.googleapis.com/css?family=Open+Sans:400,300,700" rel='stylesheet' type='text/css'>
-  <!-- /Google web fonts -->
-  <!-- Bootstrap CSS -->
-  <link href="vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-  <!-- /Bootstrap CSS -->
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="vendor/font-awesome/css/font-awesome.min.css" >
-  <!-- /Font Awesome -->
-  <!-- Nivo Lightbox -->
-  <link href="vendor/nivo-lightbox/nivo-lightbox.css"  rel="stylesheet">
-  <link rel="stylesheet" href="vendor/nivo-lightbox/themes/default/default.css" type="text/css" />
-  <!-- /Nivo Lightbox -->
-  <!-- Animate CSS -->
-  <link href="vendor/animate.css" rel="stylesheet">
-  <!-- /Animate CSS -->
-  <!-- Theme Styles -->
-  <link href="css/styles.css" rel="stylesheet">
-   <link href="css/themes/employee.css" rel="stylesheet"> 
-  <!-- Theme Styles -->
-  <!-- / CSS Files
-  ========================================================= -->
+    /* The badge */
+    .badge { width: 100%; max-width: 340px; margin-top: -8px; background: #fff; border-radius: 22px; overflow: hidden; position: relative;
+      box-shadow: 0 2px 0 rgba(255,255,255,.6) inset, 0 30px 60px rgba(15,23,42,.25), 0 8px 18px rgba(15,23,42,.12); animation: swing 1.1s ease-out both; transform-origin: 50% -70px; }
+    @keyframes swing { 0% { transform: rotate(-6deg); } 40% { transform: rotate(3deg); } 70% { transform: rotate(-1.2deg); } 100% { transform: rotate(0); } }
+    .slot { position: absolute; top: 12px; left: 50%; width: 56px; height: 9px; margin-left: -28px; border-radius: 6px; background: rgba(0,0,0,.25); box-shadow: inset 0 1px 2px rgba(0,0,0,.4); z-index: 3; }
 
+    .band { position: relative; padding: 32px 20px 64px; color: #fff; text-align: center; background: linear-gradient(135deg, var(--brand), var(--brand2) 60%, var(--accent)); overflow: hidden; }
+    .band::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0 2px, transparent 2px 14px); }
+    .band .logo { position: relative; display: inline-flex; background: #fff; border-radius: 14px; padding: 8px 16px; box-shadow: 0 6px 14px rgba(0,0,0,.15); }
+    .band .logo img { height: 46px; display: block; }
+    .band .logo span { font-weight: 900; color: var(--brand); }
+    .band .kind { position: relative; margin-top: 10px; font-size: 10.5px; font-weight: 800; letter-spacing: 3px; opacity: .9; }
+    .badge.inactive .band { background: linear-gradient(135deg, #475569, #64748b); }
 
-  <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
-  <!--[if lt IE 9]>
-    <script src="../../../oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js" tppabs="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
-    <script src="../../../oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js" tppabs="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
-  <![endif]-->
+    .photo { position: relative; z-index: 2; width: 140px; height: 140px; margin: -56px auto 0; border-radius: 50%; overflow: hidden; border: 5px solid #fff; background: linear-gradient(135deg, var(--brand2), var(--accent));
+      box-shadow: 0 10px 22px rgba(15,23,42,.22); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 44px; font-weight: 900; }
+    .photo img { width: 100%; height: 100%; object-fit: cover; }
+    .badge.inactive .photo img { filter: grayscale(1); }
 
-  <!-- Favicon and Touch Icons
-  ========================================================= -->
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-  <link rel="icon" href="favicon.ico" type="image/x-icon">
-  <!-- /Favicon
-  ========================================================= -->
+    .who { padding: 14px 22px 4px; text-align: center; }
+    .who h1 { margin: 0; font-size: 21px; font-weight: 900; letter-spacing: .4px; text-transform: uppercase; line-height: 1.2; }
+    .who .title { margin-top: 5px; font-size: 13.5px; font-weight: 700; color: var(--brand2); }
+
+    .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 14px 18px 4px; }
+    .fact { padding: 9px 11px; border-radius: 12px; background: #f4f7fb; border: 1px solid var(--line); min-width: 0; }
+    .fact.wide { grid-column: 1 / -1; }
+    .fact small { display: flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+    .fact small i { color: var(--brand2); }
+    .fact b { display: block; margin-top: 3px; font-size: 13.5px; font-weight: 800; overflow-wrap: anywhere; }
+
+    .status { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px 18px 0; padding: 9px; border-radius: 12px; font-size: 12px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+    .status.ok { color: #15803d; background: rgba(22,163,74,.1); border: 1px dashed rgba(22,163,74,.45); }
+    .status.off { color: #b91c1c; background: rgba(220,38,38,.08); border: 1px dashed rgba(220,38,38,.4); }
+
+    .strip { margin-top: 14px; padding: 12px 18px 14px; text-align: center; background: repeating-linear-gradient(90deg, #f8fafc 0 10px, #f1f5f9 10px 20px); border-top: 1px solid var(--line); }
+    .strip svg { max-width: 100%; height: 40px; fill: var(--ink); display: block; margin: 0 auto; }
+    .strip .no { margin-top: 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; letter-spacing: 4px; color: var(--muted); }
+    .holo { position: absolute; right: 14px; bottom: 74px; width: 42px; height: 42px; border-radius: 50%; opacity: .55;
+      background: conic-gradient(from 0deg, #f0abfc, #93c5fd, #6ee7b7, #fde68a, #f0abfc); mix-blend-mode: multiply; }
+
+    /* Below the badge */
+    .below { width: 100%; max-width: 340px; margin-top: 20px; }
+    .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .act { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 16px; background: #fff; text-decoration: none; color: var(--ink);
+      font-size: 12px; font-weight: 800; box-shadow: 0 6px 16px rgba(15,23,42,.08); transition: transform .15s ease; }
+    .act i { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 17px; background: var(--c); }
+    .act:hover { transform: translateY(-2px); }
+    .act.is-off { opacity: .4; pointer-events: none; }
+    .save { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 12px; height: 52px; border-radius: 16px; color: #fff; text-decoration: none; font-weight: 900; font-size: 15px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2)); box-shadow: 0 12px 24px rgba(11,61,145,.3); }
+    .panel { margin-top: 12px; padding: 14px 16px; border-radius: 16px; background: #fff; box-shadow: 0 6px 16px rgba(15,23,42,.08); }
+    .panel h3 { margin: 0 0 8px; font-size: 11px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+    .panel .about { font-size: 13.5px; line-height: 1.6; }
+    .panel .about p:first-child { margin-top: 0; } .panel .about p:last-child { margin-bottom: 0; }
+    .socials { display: flex; flex-wrap: wrap; gap: 8px; }
+    .social { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; text-decoration: none; }
+    .foot { margin-top: 18px; text-align: center; font-size: 11.5px; color: var(--muted); }
+    .foot i { color: #16a34a; }
+
+    .nf { padding: 28px 22px 30px; text-align: center; }
+    .nf i { font-size: 40px; color: #dc2626; }
+    .nf h1 { margin: 12px 0 6px; font-size: 19px; font-weight: 900; }
+    .nf p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1120 radial-gradient(900px 420px at 50% -80px, #1e293b, transparent); }
+      .act, .panel { background: #1a2130; color: #e5e7eb; }
+      .panel .about { color: #e5e7eb; }
+    }
+  </style>
 </head>
+<body>
+  <div class="lanyard"></div>
+  <div class="clip"></div>
 
-<body data-spy="scroll" data-target="#side-menu">
-
-<!-- Page Loader
-========================================================= -->
-<div class="loader" id="page-loader"> 
-  <div class="loading-wrapper">
-    <div class="tp-loader spinner"></div>
-    <!-- Edit With Your Name -->
-    <div class="side-menu-name">
-      <strong><?php /*echo implode(' ', array_slice(str_word_count($name_get, 2), 0, 2)); */?></strong>
-      <strong><?=(explode(" ",$name_get)[0])." ".(explode(" ",$name_get)[1]);?></strong>
+<?php if (!$rec): ?>
+  <div class="badge">
+    <span class="slot"></span>
+    <div class="band">
+      <span class="logo"><?php if ($logo): ?><img src="../<?= $h(ltrim($logo, './')) ?>" alt=""><?php else: ?><span><?= $h($siteTitle) ?></span><?php endif; ?></span>
+      <div class="kind">EMPLOYEE ID CARD</div>
     </div>
-    <!-- /Edit With Your Name -->
-    <!-- Edit With Your Job -->
-    <p class="side-menu-job"><?= $dept_get ?> | Department </p>
-    <!-- /Edit With Your Job -->
-  </div>   
-</div>
-<!-- /End of Page loader
-========================================================= -->
-<!-- CONTENT
-========================================================= -->
-<section id="content-body" class="container animated">
-  <div class="row" id="intro">
-
-    <!-- Header Colors -->
-    <div class="col-md-10 col-sm-10  col-md-offset-2 col-sm-offset-1 clearfix top-colors">
-      <div class="top-color top-color1"></div>
-      <div class="top-color top-color2"></div>
-      <div class="top-color top-color3"></div>
-      <div class="top-color top-color1"></div>
-      <div class="top-color top-color2"></div>
+    <div class="nf">
+      <i class="fa-solid fa-id-card-clip"></i>
+      <h1>Card not found</h1>
+      <p>This ID card link is not valid.<br>Please scan the QR code again or contact HR.</p>
     </div>
-    <!-- /Header Colors -->    
-    
-    <!-- Beginning of Content -->
-    <?php if ($status_get == 1): ?>
-    <div class="col-md-10 col-sm-10 col-md-offset-2 col-sm-offset-1 resume-container">
-      
-      <!-- Header Buttons -->
-      <div class="row">
-        <div class="header-buttons col-md-10 col-md-offset-1">
-          <!-- Download Resume Button -->
-          <a href="index.php?action=export&hashcode=<?=$hashcode?>&verification=<?=$verification?>" class="btn btn-default btn-top-resume"><i class="fa fa-download"></i><span class="btn-hide-text">Download my card</span></a>
-        </div>
-      </div>
-      <!-- /Header Buttons -->
-
-      <!-- =============== PROFILE INTRO ====================-->
-      <!-- Company Logo Section -->
-      <div class="row" style="text-align: center; padding: 20px 0; margin-bottom: 30px;">
-        <div class="col-md-10 col-md-offset-1">
-          <img src="./../<?=get_setting($conDB, 'logo')?>" alt="Company Logo" style="max-height: 180px;">
-        </div>
-      </div>
-
-      <div class="profile-intro row">
-        <!-- Left Collum with Avatar pic -->
-        <div class="col-md-4 profile-col">
-          <!-- Avatar pic -->
-          <div class="profile-pic">
-            <div class="profile-border">
-              <!-- Put your picture here ( 308px by 308px for retina display)-->
-              <!-- <img src="img/LogoMocha.png" alt=""> -->
-              <img src="./../<?=$avatar_get ?>" alt="">
-              <!-- /Put your picture here -->
-            </div>          
-          </div>
-           <!-- /Avatar pic -->
-        </div>
-        <!-- /Left columm with avatar pic -->
-  
-        <!-- Right Columm -->
-        <div class="col-md-8">
-          <!-- Welcome Title-->
-          <h1 class="intro-title1">Hi, i'm <span class="color1 bold"><?=(explode(" ",$name_get)[0])." ".(explode(" ",$name_get)[1])?>!</span></h1>
-          <!-- /Welcome Title -->
-          <!-- Job - -->
-          <h2 class="intro-title2"><?=!empty($job_title_get) ? $job_title_get : (!empty($actual_job_get) ? $actual_job_get : $dept_get." ".$emptype_get)?></h2>
-          <!-- /job -->
-          <!-- Description -->
-          <!--<p><strong>Turpis, sit amet iaculis dui consectetur at.</strong> Cras sagittis molestie orci. <strong>Suspendisse ut laoreet mi</strong>. Phasellus eu tortor vehicula, blandit enim eu, auctor massa. Nulla ultricies tortor dolor, sit amet suscipit enim <strong>condimentum id</strong>. Etiam eget iaculis tellus.  Varius sit amet.</p>-->
-          <!-- /Description -->
-        </div>
-        <!-- /Right Collum -->
-      </div>
-      <!-- ============  /PROFILE INTRO ================= -->
-      
-      <!-- ============  TIMELINE ================= -->
-      <div class="timeline-wrap">
-        <div class="timeline-bg">
-
-          <!-- ====>> SECTION: PROFILE INFOS <<====-->
-          <section class="timeline profile-infos">
-
-            <!-- VERTICAL MARGIN (necessary for the timeline effect) -->
-            <div class="line row timeline-margin">
-              <div class="content-wrap">
-                <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-                <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height"></div>
-                <div class="col-md-9 bg1 full-height"></div>
-              </div>
-            </div>
-            <!-- /VERTICAL MARGIN -->
-
-            <!-- SECTION TITLE -->
-            <div class="line row">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs timeline-title full-height">
-              </div>
-              <!-- /Margin Collums -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <!-- Section title -->
-                <h2 class="section-title">Profile</h2>
-                <!-- /Section title -->
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum-->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <!-- / Margin Collum-->
-            </div>
-            <!-- /SECTION TITLE -->
-
-            <!-- SECTION ITEM -->
-            <div class="line row">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <!-- /Margin Collums -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <!-- Subtitle -->
-                  <h3 class="section-item-title-1">Full Name</h3>
-                  <!-- /Subtitle -->
-                  <!-- content -->
-                  <p><?= $name_get ?></p>
-                  <!-- /Content -->
-                </div>
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum-->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <!-- /Margin Collum-->
-            </div>
-            <!-- /SECTION ITEM -->
-            
-            <!-- SECTION ITEM -->
-            <div class="line row">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <!-- /Margin Collums -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <!-- Subtitle -->
-                  <h3 class="section-item-title-1">Mobile</h3>
-                  <!-- /Subtitle -->
-                  <!-- content -->
-                  <p><?= $mobile_get ?></p>
-                  <!-- /Content -->
-                </div>
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum-->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <!-- /Margin Collum-->
-            </div>
-            <!-- /SECTION ITEM -->   
-
-            <!-- SECTION ITEM -->
-            <?php if ($email_get): ?>
-            <div class="line row">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <!-- /Margin Collums -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <!-- Subtitle -->
-                  <h3 class="section-item-title-1">Email</h3>
-                  <!-- /Subtitle -->
-                  <!-- content -->
-                  <p><a href="mailto:<?= $email_get ?>"><?= $email_get ?></a></p>
-                  <!-- /Content -->
-                </div>
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <!-- /Margin Collums -->
-            </div>
-            <?php endif ?> 
-            <?php if ($description_get): ?>
-            <div class="line row">
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <h3 class="section-item-title-1">Introduction</h3>
-                  <?=$description_get?>
-                </div>
-              </div>
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-
-            </div>
-            <?php endif ?>
-            <!-- /SECTION ITEM --> 
-            <?php 
-              $socquery = mysqli_query($conDB, "SELECT `social_list`.*, `social`.* FROM `social_list` LEFT JOIN `social` ON `social`.`social_id` = `social_list`.`id` LEFT JOIN `employees` ON `social`.`emp_id` = `employees`.`emp_id` WHERE `employees`.`id`='".$id_get."' ");
-              if (mysqli_num_rows($socquery) > 1): 
-            ?>
-            <!-- SECTION ITEM -->
-            <div class="line row">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <!-- Subtitle -->
-                  <h3 class="section-item-title-1">Find Me On</h3>
-                  <!-- /Subtitle -->
-                  <!-- content -->
-                  <?php
-                    while($rec = mysqli_fetch_assoc($socquery)){
-                      $mainlink = parse_url($rec['link']);
-                      $social = explode('//',$mainlink['host'])[0];
-                      $link = ucfirst(explode('.',$social)[0]);
-                  ?>
-                      <a href="<?=$rec['link']."".$rec['s_link']?>" class="btn" style="background-color: <?=$rec['color']?>; color: #fff;" target="_blank">
-                          <i class="<?=$rec['icon']?>" aria-hidden="true"></i> <span class="btn-hide-text"><?=$rec['s_link']?></span>
-                      </a>
-                  <?php } ?>
-                  <!-- /Content -->
-                </div>
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-
-              <!-- /Margin Collum -->
-            </div>
-            <?php endif ?>
-            <!-- /SECTION ITEM --> 
-          </section>
-          <!-- ==>> /SECTION: PROFILE INFOS -->     
-
-          <!-- ====>> SECTION: CONTACT <<====-->
-          
-          <!-- ==>> /SECTION: CONTACT -->
-
-          <!-- ====>> SECTION: THANK YOU <<====-->
-          <section class="timeline profile-infos">
-
-            <!-- VERTICAL MARGIN (necessary for the timeline effect) -->
-            <div class="line row timeline-margin timeline-margin-big">
-              <div class="content-wrap">
-                <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-                <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height"></div>
-                <div class="col-md-9 bg1 full-height"></div>
-              </div>
-            </div>
-            <!-- /VERTICAL MARGIN -->
-
-            <!-- SECTION ITEM -->
-            <div class="line row line-thank-you">
-              <!-- Margin Collums (necessary for the timeline effect) -->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <div class="col-md-2 timeline-progress hidden-sm hidden-xs full-height timeline-point "></div>
-              <!-- /Margin Collums -->
-              <!-- Item Content -->
-              <div class="col-md-8 content-wrap bg1">
-                <div class="line-content">
-                  <!-- Subtitle -->
-                  <h3 class="thank-you">Thank You!</h3>
-                  <!-- /Subtitle -->
-                </div>
-              </div>
-              <!-- /Item Content -->
-              <!-- Margin Collum-->
-              <div class="col-md-1 bg1 timeline-space full-height hidden-sm hidden-xs"></div>
-              <!-- / Margin Collum-->
-            </div>
-            <!-- /SECTION ITEM -->            
-          </section>
-          <!-- ==>> /SECTION: PROFILE INFOS -->
-        </div>
-      </div>
-      <!-- ============  /TIMELINE ================= -->
-
-    </div>
-<?php else: ?>
-  <div class="col-md-10 col-sm-10 col-md-offset-2 col-sm-offset-1 resume-container">
-      <div class="profile-intro row">
-        <div class="col-md-4 profile-col">
-          <div class="profile-pic">
-            <div class="profile-border">
-              <img src="./../<?=$avatar_get ?>" alt="">
-            </div>          
-          </div>
-        </div>
-        <div class="col-md-7">
-          <h1 class="intro-title1"><?=($sex_get == "male")? "Mr.":"Mrs." ?>, <span class="color1 bold"><?= implode(' ', array_slice(str_word_count($name_get, 2), 0, 2)); ?></span> not working in Al Mutalak Co.</h1>
-        </div>
-      </div>
-      <div class="timeline-wrap">
-          <section class="profile-infos">
-              <div class="col-md-8">
-                  <h3 class="thank-you">Thank You!</h3>
-              </div>
-          </section>
-      </div>
-    </div>
-<?php endif ?>
-
-  </div> 
-</section>
-<!-- /CONTENT
-========================================================= -->
-
-<!-- Contact Form - Ajax Messages
-========================================================= -->
-<!-- Form Sucess -->
-<div class="form-result modal-wrap" id="contactSuccess">
-  <div class="modal-bg"></div>
-  <div class="modal-content">
-    <h4 class="modal-title"><i class="fa fa-check-circle"></i> Success!</h4>
-    <p>Your message has been sent to us.</p>
   </div>
-</div>
-<!-- /Form Sucess -->
-<!-- form-error -->
-<div class="form-result modal-wrap" id="contactError">
-  <div class="modal-bg"></div>
-  <div class="modal-content">
-    <h4 class="modal-title"><i class="fa fa-times"></i> Error</h4>
-    <p>There was an error sending your message.</p>
+
+<?php else:
+  $mobile = trim((string)$rec['mobile']);
+  $email = trim((string)$rec['c_email']);
+  $tel = preg_replace('/[^\d+]/', '', $mobile);
+  $wa = ltrim($tel, '+');
+  if (strpos($wa, '05') === 0) { $wa = '966' . substr($wa, 1); } // local Saudi mobile -> international for WhatsApp
+?>
+  <div class="badge<?= $isActive ? '' : ' inactive' ?>">
+    <span class="slot"></span>
+    <div class="band">
+      <span class="logo"><?php if ($logo): ?><img src="../<?= $h(ltrim($logo, './')) ?>" alt="<?= $h($siteTitle) ?>"><?php else: ?><span><?= $h($siteTitle) ?></span><?php endif; ?></span>
+      <div class="kind">EMPLOYEE ID CARD</div>
+    </div>
+
+    <div class="photo"><?php if ($avatar): ?><img src="<?= $h($avatar) ?>" alt="<?= $h($shortName) ?>"><?php else: ?><?= $h($initials) ?><?php endif; ?></div>
+
+    <div class="who">
+      <h1><?= $h($name) ?></h1>
+      <?php if ($isActive && $jobTitle): ?><div class="title"><?= $h($jobTitle) ?></div><?php endif; ?>
+    </div>
+
+    <?php if ($isActive): ?>
+    <div class="facts">
+      <div class="fact"><small><i class="fa-solid fa-hashtag"></i> Employee No.</small><b><?= $h($rec['emp_id']) ?></b></div>
+      <div class="fact"><small><i class="fa-solid fa-sitemap"></i> Department</small><b><?= $h($rec['dept'] ?: '-') ?></b></div>
+      <div class="fact wide"><small><i class="fa-solid fa-building"></i> Company</small><b><?= $h($siteTitle) ?></b></div>
+    </div>
+    <div class="status ok"><i class="fa-solid fa-circle-check"></i> Valid employee</div>
+    <span class="holo"></span>
+    <?php else: ?>
+    <div class="status off"><i class="fa-solid fa-ban"></i> No longer employed</div>
+    <?php endif; ?>
+
+    <div class="strip">
+      <svg viewBox="0 0 <?= (int)$barcodeWidth ?> 40" width="<?= (int)$barcodeWidth ?>" height="40" aria-hidden="true"><?= $barcode ?></svg>
+      <div class="no"><?= $h($cardNo) ?></div>
+    </div>
   </div>
-</div>
-<!-- /form-error -->
 
-<!-- Contact Form - Ajax Messages
-========================================================= -->
+  <div class="below">
+    <?php if ($isActive): ?>
+      <div class="acts">
+        <a class="act<?= $tel ? '' : ' is-off' ?>" href="tel:<?= $h($tel) ?>" style="--c: #16a34a;"><i class="fa-solid fa-phone"></i> Call</a>
+        <a class="act<?= $wa ? '' : ' is-off' ?>" href="https://wa.me/<?= $h($wa) ?>" target="_blank" rel="noopener" style="--c: #22c55e;"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+        <a class="act<?= $email ? '' : ' is-off' ?>" href="mailto:<?= $h($email) ?>" style="--c: #2563eb;"><i class="fa-solid fa-envelope"></i> Email</a>
+      </div>
+      <a class="save" href="index.php?action=export&amp;hashcode=<?= urlencode($rec['emp_id']) ?>&amp;verification=<?= (int)$rec['id'] ?>"><i class="fa-solid fa-address-card"></i> Save contact</a>
 
-<!-- Javascript Files
-========================================================= -->
-<!-- jQuery (necessary for plugins) -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js" tppabs=""></script>
-<!-- /jquery -->
-<!-- bootstrap -->
-<script src="vendor/bootstrap/js/bootstrap.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/bootstrap/js/bootstrap.min.js"></script>
-<!-- /bootstrap -->
-<!-- easing -->
-<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery-easing/1.3/jquery.easing.min.js" tppabs=""></script>
-<!-- /easing -->
-<!-- jQuery Mousewheel -->
-<script src="vendor/jquery.mousewheel.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/jquery.mousewheel.min.js"></script>
-<!-- /jQuery Mousewheel -->
-<!-- jQuery Mousewheel Smoothscroll -->
-<script src="vendor/jquery.nicescroll.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/jquery.nicescroll.min.js"></script>
-<script src="vendor/jquery.nicescroll.plus.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/jquery.nicescroll.plus.js"></script>
-<!-- /jQuery Mousewheel Smoothscroll -->
-<!-- Waypoints (for CSS3 animations) -->
-<script src="vendor/waypoints.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/waypoints.min.js"></script>
-<!-- /waypoints -->
-<!-- Modal box-->
-<script src="vendor/nivo-lightbox/nivo-lightbox.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/nivo-lightbox/nivo-lightbox.min.js"></script>
-<!-- /Modal Box -->
-<!-- Carousel-->
-<script src="vendor/jquery.bxslider.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/jquery.bxslider.min.js"></script>
-<!-- /Carousel -->
-<!-- Front-end Validator (for forms) -->
-<script src="vendor/jquery.validate.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/jquery.validate.min.js"></script>
-<!-- /Front-end Validator -->
-<!-- placeholder Support for IE -->
-<script src="vendor/placeholders.jquery.min.js" tppabs="http://www.dotrex.co/vertica/themes/vendor/placeholders.jquery.min.js"></script>
-<!-- /placeholder support -->
-<!-- Cross-browser -->
-<script src="js/cross-browser.js" tppabs="http://www.dotrex.co/vertica/themes/js/cross-browser.js"></script>
-<!-- /Cross-browser -->
-<!-- Configurations -->
-<script src="js/main.js" tppabs="http://www.dotrex.co/vertica/themes/js/main.js"></script>
-<!-- /Configurations -->
+      <?php if (!empty($rec['description'])): ?>
+      <div class="panel"><h3>About</h3><div class="about"><?= $rec['description'] /* portfolio rich text, entered by HR */ ?></div></div>
+      <?php endif; ?>
+      <?php if ($socials): ?>
+      <div class="panel"><h3>Find me on</h3><div class="socials">
+        <?php foreach ($socials as $s): ?>
+          <a class="social" href="<?= $h($s['link'] . $s['s_link']) ?>" target="_blank" rel="noopener" style="background: <?= $h($s['color'] ?: '#475569') ?>;" title="<?= $h($s['s_link']) ?>"><i class="<?= $h($s['icon']) ?>"></i></a>
+        <?php endforeach; ?>
+      </div></div>
+      <?php endif; ?>
+    <?php else: ?>
+      <div class="panel" style="text-align:center;"><div class="about"><?= $isFemale ? 'Ms.' : 'Mr.' ?> <?= $h($shortName) ?> is not currently working at <?= $h($siteTitle) ?>. Thank you.</div></div>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
+
+  <div class="foot"><i class="fa-solid fa-shield-check"></i> Issued by <?= $h($siteTitle) ?> &middot; <?= date('Y') ?></div>
 </body>
 </html>
-<?php } ?>
