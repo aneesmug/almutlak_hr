@@ -92,7 +92,72 @@ function createSettlement($settlementManager, $currentUserId) {
         $requestType = trim($_POST['request_type'] ?? '');
         $empId = intval($_POST['emp_id'] ?? 0);
         $settlementAmount = floatval($_POST['settlement_amount'] ?? 0);
-        
+        $settlementNotes = '';
+
+        // Business trip: amount is recalculated server-side from the trip allowances,
+        // plus HR-entered extra earnings minus deductions after the employee returns.
+        if ($requestType === 'business_trip') {
+            require_once __DIR__ . '/../business_trip_settlement_helper.php';
+            $userTypeLower = strtolower((string)($_SESSION['user_type'] ?? ''));
+            if (empty($GLOBALS['is_system_admin']) && strpos($userTypeLower, 'hr_payroll') === false) {
+                echo json_encode(['success' => false, 'message' => 'Only HR Payroll can create business trip settlements']);
+                return;
+            }
+            $trip = getBusinessTripByInvNo($conDB, $requestInvNo);
+            if (!$trip || (int)$trip['emp_id'] !== $empId) {
+                echo json_encode(['success' => false, 'message' => 'Business trip not found']);
+                return;
+            }
+            $blocker = getBusinessTripSettlementBlocker($trip);
+            if ($blocker !== '') {
+                echo json_encode(['success' => false, 'message' => $blocker]);
+                return;
+            }
+            $breakdown = calculateBusinessTripAllowanceBreakdown($conDB, $trip);
+
+            // Additional payment rows entered by HR: [{type: earning|deduction, description, amount}, ...]
+            $extraEarnings = 0.0;
+            $deductions = 0.0;
+            $lineNotes = [];
+            $lines = json_decode((string)($_POST['lines'] ?? '[]'), true);
+            foreach ((is_array($lines) ? $lines : []) as $line) {
+                $lineAmount = round(floatval($line['amount'] ?? 0), 2);
+                $lineDesc = trim((string)($line['description'] ?? ''));
+                if ($lineAmount <= 0) {
+                    continue;
+                }
+                if ($lineDesc === '') {
+                    echo json_encode(['success' => false, 'message' => 'Each payment row needs a description']);
+                    return;
+                }
+                $isDeduction = (($line['type'] ?? '') === 'deduction');
+                if ($isDeduction) {
+                    $deductions += $lineAmount;
+                } else {
+                    $extraEarnings += $lineAmount;
+                }
+                $lineNotes[] = ($isDeduction ? '- ' : '+ ') . $lineDesc . ': ' . number_format($lineAmount, 2, '.', '');
+            }
+            $settlementAmount = round($breakdown['grand_total'] + $extraEarnings - $deductions, 2);
+            $settlementNotes = sprintf(
+                'Hotel: %.2f | Transportation: %.2f | Daily: %.2f | Ticket fares: %.2f | Other allowances: %.2f | Extra earnings: %.2f | Deductions: %.2f',
+                $breakdown['calc_hotel_total'],
+                $breakdown['calc_transport_total'],
+                $breakdown['calc_daily_allowance_total'],
+                $breakdown['ticket_fares_total'],
+                $breakdown['other_allowance_total'],
+                $extraEarnings,
+                $deductions
+            );
+            if ($lineNotes) {
+                $settlementNotes .= "\n" . implode("\n", $lineNotes);
+            }
+            $hrNote = trim((string)($_POST['notes'] ?? ''));
+            if ($hrNote !== '') {
+                $settlementNotes .= "\n" . $hrNote;
+            }
+        }
+
         if (empty($requestInvNo) || empty($requestType) || $empId <= 0 || $settlementAmount <= 0) {
             error_log("Settlement Handler: Invalid parameters - request_inv_no: '$requestInvNo', request_type: '$requestType', emp_id: $empId, amount: $settlementAmount");
             echo json_encode([
@@ -115,6 +180,24 @@ function createSettlement($settlementManager, $currentUserId) {
         );
         
         if ($result['success']) {
+            if ($settlementNotes !== '') {
+                $notesStmt = $conDB->prepare("UPDATE settlement_records SET notes = ? WHERE request_inv_no = ?");
+                if ($notesStmt) {
+                    $settlementInvNoForNotes = 'SETL-' . $requestInvNo;
+                    $notesStmt->bind_param('ss', $settlementNotes, $settlementInvNoForNotes);
+                    $notesStmt->execute();
+                    $notesStmt->close();
+                }
+            }
+            // Business trip is closed (completed) as soon as its settlement is created.
+            if ($requestType === 'business_trip') {
+                $tripStmt = $conDB->prepare("UPDATE emp_business_trip SET current_status = 'completed' WHERE request_inv_no = ? AND current_status = 'approved'");
+                if ($tripStmt) {
+                    $tripStmt->bind_param('s', $requestInvNo);
+                    $tripStmt->execute();
+                    $tripStmt->close();
+                }
+            }
             error_log("Settlement Handler: Settlement created successfully - approval chain from app_settings applied");
             echo json_encode([
                 'success' => true,
@@ -1803,8 +1886,14 @@ function getSettlementDetails($settlementManager) {
                 $relatedRequestId = (int)mysqli_fetch_assoc($loanQry)['id'];
             }
             if ($loanQry) mysqli_free_result($loanQry);
+        } elseif (strpos($requestType, 'business_trip') !== false) {
+            $tripQry = mysqli_query($conDB, "SELECT id FROM emp_business_trip WHERE request_inv_no = '" . mysqli_real_escape_string($conDB, $originalRequestInvNo) . "' LIMIT 1");
+            if ($tripQry && mysqli_num_rows($tripQry) > 0) {
+                $relatedRequestId = (int)mysqli_fetch_assoc($tripQry)['id'];
+            }
+            if ($tripQry) mysqli_free_result($tripQry);
         }
-        
+
         $settlement['related_request_id'] = $relatedRequestId;
         
         // Calculate total payable from vacation record (same calculation as vacation_report_details.php)

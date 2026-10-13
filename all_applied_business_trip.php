@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/business_trip_settlement_helper.php';
 
 // Restrict access: Employees cannot view this detailed report page,
 // unless explicitly granted via app_settings -> Special Access.
@@ -21,8 +22,6 @@ $can_cancel_business_trip_requests = (
     || user_has_special_access($conDB, $empid ?? '', 'cancel_business_trip_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
 $cancellable_business_trip_statuses = ['pending_approval', 'approved'];
-
-$can_add_business_trip_manual_allowance = user_has_special_access($conDB, $empid ?? '', 'add_business_trip_manual_allowance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
 // --- Get Request Type ID for 'business_trip' ---
 $type_query = mysqli_query($conDB, "SELECT `id` FROM `approval_request_types` WHERE `type_name` = 'business_trip' LIMIT 1");
@@ -172,7 +171,8 @@ if ($total_items > 0) {
         fc.name_ar as from_city_name_ar,
         tc.name_en as to_city_name_en,
         tc.name_ar as to_city_name_ar,
-        (CASE WHEN ba.id IS NOT NULL THEN 1 ELSE 0 END) as has_allowance_record
+        (CASE WHEN ba.id IS NOT NULL THEN 1 ELSE 0 END) as has_allowance_record,
+        (SELECT sr.id FROM settlement_records sr WHERE sr.request_inv_no = CONCAT('SETL-', bt.request_inv_no) LIMIT 1) as settlement_id
     FROM emp_business_trip bt
     JOIN employees e ON bt.emp_id = e.emp_id
     LEFT JOIN request_approvers ra_pending ON ra_pending.request_inv_no = bt.request_inv_no AND ra_pending.request_type_id = ? AND ra_pending.status = 'pending'
@@ -351,8 +351,10 @@ if ($can_see_all_depts) {
                                             $is_approved = (($trip['current_status'] ?? '') === 'approved');
                                             $is_by_air = (($trip['transportation_type'] ?? '') === 'by_air');
                                             $show_travel_email = $is_approved && $is_by_air && empty($trip['travel_email_sent']);
-                                            $show_other_amount = $is_approved && empty($trip['has_allowance_record']);
                                             $show_ticket_fare = $is_approved && $is_by_air && !empty($trip['travel_email_sent']) && $isHRPayrollRole && empty($trip['has_allowance_record']);
+                                            // Settlement: HR Payroll, once approved. Creating it moves the trip to completed.
+                                            $has_settlement = !empty($trip['settlement_id']);
+                                            $show_create_settlement = $is_approved && !$has_settlement && ($isHRPayrollRole || !empty($is_system_admin));
 
                                             $id = (int)$trip['id'];
                                             $name_js = htmlspecialchars((string)$trip['employee_name'], ENT_QUOTES);
@@ -372,7 +374,7 @@ if ($can_see_all_depts) {
                                                 <td class="sr-period">
                                                     <span class="sr-cell-title"><?= sr_h(format_safe_date($trip['trip_start_date'] ?? null, 'd M Y', 'N/A')) ?><i class="mdi mdi-arrow-right"></i><?= sr_h(format_safe_date($trip['trip_end_date'] ?? null, 'd M Y', 'N/A')) ?></span>
                                                 </td>
-                                                <td><div class="sr-wrap-text"><?= sr_h($trip['trip_purpose'] ?? '') ?></div></td>
+                                                <td><div class="sr-wrap-text"><?= nl2br(sr_h(cleanBusinessTripText($trip['trip_purpose'] ?? '')), false) ?></div></td>
                                                 <td>
                                                     <div class="sr-flags">
                                                         <?= sr_pill($status_tone, $status_text . $current_level_display) ?>
@@ -403,20 +405,21 @@ if ($can_see_all_depts) {
                                                                     <div class="dropdown-divider"></div>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="rejectBusinessTripRequest('<?= $inv_js ?>', '<?= $name_js ?>', '<?= $type_js ?>', '<?= $start_js ?>', '<?= $end_js ?>')"><i class="mdi mdi-close text-danger"></i><?= __('reject') ?></a>
                                                                 <?php endif; ?>
-                                                                <?php if ($show_travel_email || $show_other_amount || $show_ticket_fare || $can_add_business_trip_manual_allowance): ?>
+                                                                <?php if ($show_travel_email || $show_ticket_fare): ?>
                                                                     <div class="dropdown-divider"></div>
                                                                 <?php endif; ?>
                                                                 <?php if ($show_travel_email): ?>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="sendTravelEmailBusinessTrip(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-send text-info"></i><?= __('send_travel_email') ?></a>
                                                                 <?php endif; ?>
-                                                                <?php if ($show_other_amount): ?>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openBusinessTripAllowanceModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-cash text-success"></i><?= __('add_other_amount') ?: 'Add Other Amount' ?></a>
-                                                                <?php endif; ?>
                                                                 <?php if ($show_ticket_fare): ?>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="openHRPayrollTicketFareModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-airplane text-primary"></i><?= __('add_ticket_fare_only') ?: 'HR Payroll Ticket Fare' ?></a>
                                                                 <?php endif; ?>
-                                                                <?php if ($can_add_business_trip_manual_allowance): ?>
-                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="openBusinessTripOtherAllowanceModal(<?= $id ?>, '<?= $name_js ?>')"><i class="mdi mdi-receipt text-warning"></i><?= __('add_manual_allowance') ?: 'Add Manual Allowance' ?></a>
+                                                                <?php if ($show_create_settlement): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="createBusinessTripSettlement(<?= $id ?>, '<?= htmlspecialchars(addslashes(getDisplayName(parseName((string)$trip['employee_name']))), ENT_QUOTES) ?>')"><i class="mdi mdi-cash text-success"></i><?= __('create_settlement') ?: 'Create Settlement' ?></a>
+                                                                <?php elseif ($has_settlement): ?>
+                                                                    <div class="dropdown-divider"></div>
+                                                                    <a class="dropdown-item" href="javascript:void(0);" onclick="viewSettlementDetails(<?= (int)$trip['settlement_id'] ?>, 'SETL-<?= $inv_js ?>')"><i class="mdi mdi-file-document text-info"></i><?= __('settlement_report') ?: 'Settlement Report' ?></a>
                                                                 <?php endif; ?>
                                                                 <?php if ($can_cancel_business_trip_requests && in_array($trip['current_status'] ?? '', $cancellable_business_trip_statuses, true)): ?>
                                                                     <div class="dropdown-divider"></div>

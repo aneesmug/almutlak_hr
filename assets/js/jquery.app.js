@@ -9294,6 +9294,8 @@ function viewSettlementDetails(settlementId, settlementInvNo) {
                     actionsHtml += '<a href="./vacation_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_vacation_report') + '</a>';
                 } else if (requestType.includes('loan')) {
                     actionsHtml += '<a href="./loan_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_loan_report') + '</a>';
+                } else if (requestType.includes('business_trip')) {
+                    actionsHtml += '<a href="./business_trip_report_details.php?id=' + requestId + '&emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + (__('business_trip_report') || 'Business Trip Report') + '</a>';
                 } else if (requestType.includes('resignation')) {
                     actionsHtml += '<a href="./eos_pdf.php?emp_id=' + empId + '" target="_blank" class="btn btn-sm btn-info"><i class="fa fa-file-chart-line"></i> ' + __('view_end_of_service_report') + '</a>';
                 } else {

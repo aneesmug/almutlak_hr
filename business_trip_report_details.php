@@ -76,101 +76,17 @@ if (mysqli_num_rows($query) == 1) {
         exit();
     }
 
-    $trip_allowance_days = 0;
-    try {
-        $trip_start = new DateTime((string)($request['trip_start_date'] ?? ''));
-        $trip_end = new DateTime((string)($request['trip_end_date'] ?? ''));
-        if ($trip_end >= $trip_start) {
-            $trip_allowance_days = (int)$trip_start->diff($trip_end)->format('%a') + 1;
-        }
-    } catch (Exception $e) {
-        $trip_allowance_days = 0;
-    }
+    // Allowance math shared with business-trip settlement creation.
+    require_once __DIR__ . '/includes/business_trip_settlement_helper.php';
+    $request['id'] = $trip_id;
+    $request['emp_id'] = $emp_id;
+    extract(calculateBusinessTripAllowanceBreakdown($conDB, $request));
+    $report_grand_total = $grand_total;
 
-    $basic_salary = 0.0;
-    $salary_sql = "SELECT basic FROM emp_salary WHERE emp_id = ? AND status = 1 ORDER BY id DESC LIMIT 1";
-    $stmt_salary = $conDB->prepare($salary_sql);
-    if ($stmt_salary) {
-        $stmt_salary->bind_param("s", $emp_id);
-        $stmt_salary->execute();
-        $salary_result = $stmt_salary->get_result();
-        if ($salary_result && ($salary_row = $salary_result->fetch_assoc())) {
-            $basic_salary = (float)($salary_row['basic'] ?? 0);
-        }
-        $stmt_salary->close();
-    }
-
-    $salary_scales = [
-        ['level' => 1, 'min' => 500, 'max' => 2700, 'hotel' => 125, 'transport' => 50],
-        ['level' => 2, 'min' => 2850, 'max' => 5950, 'hotel' => 200, 'transport' => 75],
-        ['level' => 3, 'min' => 6150, 'max' => 7950, 'hotel' => 350, 'transport' => 100],
-        ['level' => 4, 'min' => 8300, 'max' => 11450, 'hotel' => 450, 'transport' => 150],
-        ['level' => 5, 'min' => 11450, 'max' => 20450, 'hotel' => 650, 'transport' => 200],
-    ];
-
-    $matched_scale = null;
-    foreach ($salary_scales as $scale) {
-        if ($basic_salary >= $scale['min'] && $basic_salary <= $scale['max']) {
-            $matched_scale = $scale;
-            break;
-        }
-    }
-
-    $calc_hotel_daily = (float)($matched_scale['hotel'] ?? 0);
-    $calc_transport_daily = (float)($matched_scale['transport'] ?? 0);
-    // Hotel nights = trip days minus 1 (no overnight stay needed on the last day).
-    $hotel_allowance_days = max(0, $trip_allowance_days - 1);
-    $calc_hotel_total = $calc_hotel_daily * $hotel_allowance_days;
-    $calc_transport_total = $calc_transport_daily * max(0, $trip_allowance_days);
-
-    $week1_days = min(max($trip_allowance_days, 0), 7);
-    $week2_days = min(max($trip_allowance_days - 7, 0), 7);
-    $week3_days = max($trip_allowance_days - 14, 0);
-
-    $week1_daily_rate = ($basic_salary > 0) ? ($basic_salary / 60) : 0;
-    $week2_daily_rate = ($basic_salary > 0) ? ($basic_salary / 90) : 0;
-    $week3_daily_rate = ($basic_salary > 0) ? ($basic_salary / 120) : 0;
-
-    $week1_daily_total = round($week1_daily_rate * $week1_days);
-    $week2_daily_total = round($week2_daily_rate * $week2_days);
-    $week3_daily_total = round($week3_daily_rate * $week3_days);
-    $calc_daily_allowance_total = round($week1_daily_total + $week2_daily_total + $week3_daily_total);
-
-    // 3.5 Fetch allowance summary and line items (if any)
-    $allowance_summary = null;
-    $allowance_items = [];
-
-    $allowance_sql = "SELECT * FROM emp_business_trip_allowances WHERE trip_id = ? LIMIT 1";
-    $stmt_allowance = $conDB->prepare($allowance_sql);
-    if ($stmt_allowance) {
-        $stmt_allowance->bind_param("i", $trip_id);
-        $stmt_allowance->execute();
-        $allowance_result = $stmt_allowance->get_result();
-        $allowance_summary = $allowance_result ? $allowance_result->fetch_assoc() : null;
-        $stmt_allowance->close();
-    }
-
-    if (!empty($allowance_summary['id'])) {
-        $allowance_id = (int)$allowance_summary['id'];
-        $items_sql = "SELECT allowance_type, description, unit_amount, qty, line_total
-                      FROM emp_business_trip_allowance_items
-                      WHERE allowance_id = ?
-                      ORDER BY line_order ASC, id ASC";
-        $stmt_items = $conDB->prepare($items_sql);
-        if ($stmt_items) {
-            $stmt_items->bind_param("i", $allowance_id);
-            $stmt_items->execute();
-            $items_result = $stmt_items->get_result();
-            while ($items_result && ($item_row = $items_result->fetch_assoc())) {
-                $allowance_items[] = $item_row;
-            }
-            $stmt_items->close();
-        }
-    }
-
-    $ticket_fares_total = (float)($allowance_summary['ticket_fares'] ?? 0);
-    $other_allowance_total = (float)($allowance_summary['other_allowance'] ?? 0);
-    $report_grand_total = $ticket_fares_total + $calc_hotel_total + $calc_transport_total + $calc_daily_allowance_total + $other_allowance_total;
+    // Purpose/notes with real line breaks (older rows stored literal "\r\n" text).
+    $bt_text = function ($value) {
+        return nl2br(htmlspecialchars(cleanBusinessTripText($value)), false);
+    };
 
     // 4. Fetch approval chain
     $approval_chain = [];
@@ -474,7 +390,7 @@ if (mysqli_num_rows($query) == 1) {
                                     </div>
                                     <div class="detail-item">
                                         <div class="label"><?= __('purpose') ?></div>
-                                        <div class="value"><?= getDisplayName((string)$request['trip_purpose']) ?></div>
+                                        <div class="value"><?= $bt_text(getDisplayName((string)$request['trip_purpose'])) ?></div>
                                     </div>
                                     <div class="detail-item">
                                         <div class="label"><?= __('transportation') ?></div>
@@ -666,7 +582,7 @@ if (mysqli_num_rows($query) == 1) {
                                     <i class="fa fa-sticky-note"></i> <?= __('additional_notes') ?>
                                 </h5>
                                 <div class="info-box">
-                                    <?= getDisplayName(htmlspecialchars((string)$request['request_notes'])) ?>
+                                    <?= $bt_text(getDisplayName((string)$request['request_notes'])) ?>
                                 </div>
                             </div>
                             <?php endif; ?>

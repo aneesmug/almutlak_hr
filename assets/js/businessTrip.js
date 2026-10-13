@@ -1200,3 +1200,285 @@ function openHRPayrollTicketFareModal(tripId, employeeName) {
         Swal.fire(__('error') || 'Error', __('error_loading_ticket_fare') || 'An error occurred while loading ticket fare details.', 'error');
     });
 }
+
+/**
+ * Create Settlement for a business trip (HR Payroll, approved trips).
+ * Shows the calculated allowances, lets HR add any number of payment rows
+ * (earnings or deductions), then creates the settlement. The server recalculates
+ * the amount and moves the trip to "completed".
+ */
+function createBusinessTripSettlement(tripId, employeeName) {
+    // __() returns the key itself when a translation is missing - fall back to English then.
+    const t = (key, fallback) => {
+        const v = (typeof __ === 'function') ? __(key) : '';
+        return (v && v !== key) ? v : fallback;
+    };
+    const esc = s => $('<div>').text(s == null ? '' : String(s)).html();
+    const money = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sar = v => `<i class="icon-saudi_riyal"></i> ${money(v)}`;
+
+    Swal.fire({
+        title: t('loading', 'Loading...'),
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    $.ajax({
+        url: './includes/ajaxFile/ajaxBusinessTrip.php',
+        type: 'POST',
+        dataType: 'JSON',
+        data: { ajaxType: 'getBusinessTripSettlementDetails', trip_id: tripId }
+    }).done(function(response) {
+        if (response.status !== 'success') {
+            Swal.fire(t('error', 'Error'), response.message || 'Failed to load business trip details.', 'error');
+            return;
+        }
+
+        const d = response.data;
+        const baseTotal = Number(d.grand_total || 0);
+
+        const calcRow = (icon, label, detail, amount) => `
+            <tr>
+                <td><i class="mdi ${icon}" style="color:var(--sr-accent); margin-inline-end:6px;"></i>${esc(label)}${detail ? `<div style="font-size:11px; color:var(--sr-muted);">${detail}</div>` : ''}</td>
+                <td class="num">${sar(amount)}</td>
+            </tr>`;
+
+        // One compact line per payment: # | type | description | amount | remove
+        const lineHtml = () => `
+            <div class="bt-setl-line">
+                <span class="sr-addline-no">#<span class="bt-line-no"></span></span>
+                <select class="form-control bt-line-type">
+                    <option value="earning">${t('earning', 'Earning (+)')}</option>
+                    <option value="deduction">${t('deduction', 'Deduction (−)')}</option>
+                </select>
+                <input type="text" class="form-control bt-line-desc" maxlength="200" placeholder="${esc(t('bt_payment_row_placeholder', 'Description, e.g. Taxi, Parking, Advance paid'))}">
+                <input type="number" min="0" step="0.01" class="form-control bt-line-amount" placeholder="0.00">
+                <button type="button" class="sr-addline-remove bt-line-remove" title="${esc(t('remove', 'Remove'))}"><i class="mdi mdi-close"></i></button>
+            </div>`;
+
+        const noSalary = Number(d.basic_salary || 0) <= 0;
+        const initials = String(employeeName || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        const html = `
+            <style>
+                .bt-setl-hero { display: flex; align-items: center; gap: 16px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); }
+                .bt-setl-who { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 0 1 320px; }
+                .bt-setl-avatar { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+                .bt-setl-name { font-size: 15px; font-weight: 700; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .bt-setl-ref { margin-top: 2px; font-size: 12px; color: var(--sr-muted); font-family: SFMono-Regular, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .bt-setl-stats { flex: 1 1 auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-inline-start: 1px solid var(--sr-border); }
+                .bt-setl-stat { padding: 2px 16px; border-inline-end: 1px solid var(--sr-border); min-width: 0; }
+                .bt-setl-stat:last-child { border-inline-end: 0; }
+                .bt-setl-stat span:first-child { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); white-space: nowrap; }
+                .bt-setl-stat span:first-child i { color: var(--sr-accent); }
+                .bt-setl-stat b { display: block; margin-top: 4px; font-size: 14px; color: var(--sr-text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+                .bt-setl-stat .sr-pill { font-size: 12px; }
+                .bt-setl-wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+                .bt-setl-wrap .sr-fsec { margin-bottom: 0; }
+                .bt-setl-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+                .bt-setl-lines { padding: 10px 12px; max-height: 300px; overflow-y: auto; }
+                .bt-setl-line { display: grid; grid-template-columns: 36px 140px minmax(0, 1fr) 120px 28px; gap: 8px; align-items: center; margin-bottom: 8px; }
+                .bt-setl-line:last-child { margin-bottom: 0; }
+                .bt-setl-line .form-control { height: 36px; }
+                .bt-setl-head { display: grid; grid-template-columns: 36px 140px minmax(0, 1fr) 120px 28px; gap: 8px; padding: 8px 12px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
+                .bt-setl-wrap table.sr-lines td { padding: 9px 12px; }
+                .bt-setl-wrap .sr-addline-summary { margin-top: 0; }
+                @media (max-width: 991px) {
+                    .bt-setl-hero { flex-direction: column; align-items: stretch; }
+                    .bt-setl-who { flex-basis: auto; }
+                    .bt-setl-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 10px; border-inline-start: 0; }
+                    .bt-setl-wrap { grid-template-columns: 1fr; }
+                    .bt-setl-line, .bt-setl-head { grid-template-columns: 30px 110px minmax(0, 1fr) 90px 28px; }
+                }
+            </style>
+            <div class="sr-form" style="text-align:start;">
+                <div class="bt-setl-hero">
+                    <div class="bt-setl-who">
+                        <span class="bt-setl-avatar">${esc(initials)}</span>
+                        <div style="min-width:0;">
+                            <div class="bt-setl-name">${esc(employeeName)}</div>
+                            <div class="bt-setl-ref"><i class="mdi mdi-pound"></i>${esc(d.request_inv_no)}</div>
+                        </div>
+                    </div>
+                    <div class="bt-setl-stats">
+                        <div class="bt-setl-stat">
+                            <span><i class="mdi mdi-calendar"></i> ${t('trip_dates', 'Trip Dates')}</span>
+                            <b>${esc(d.trip_start_date)} → ${esc(d.trip_end_date)}</b>
+                        </div>
+                        <div class="bt-setl-stat">
+                            <span><i class="mdi mdi-calendar-clock"></i> ${t('duration', 'Duration')}</span>
+                            <b>${Number(d.trip_days || 0)} ${t('days', 'Days')}</b>
+                        </div>
+                        <div class="bt-setl-stat">
+                            <span><i class="mdi mdi-cash"></i> ${t('basic_salary', 'Basic Salary')}</span>
+                            <b>${sar(d.basic_salary)}</b>
+                        </div>
+                        <div class="bt-setl-stat">
+                            <span><i class="mdi mdi-chart-bar"></i> ${t('salary_level', 'Salary Level')}</span>
+                            <b>${d.salary_level ? `<span class="sr-pill tone-indigo">${t('level', 'Level')} ${Number(d.salary_level)}</span>` : `<span class="sr-pill tone-amber">${t('out_of_scale', 'Out of scale')}</span>`}</b>
+                        </div>
+                    </div>
+                </div>
+                ${noSalary ? `
+                <div class="sr-notice is-compact tone-amber">
+                    <i class="mdi mdi-alert-outline"></i>
+                    <div>${t('bt_no_salary_warning', 'No active salary record found for this employee, so the calculated allowances are 0. Add the salary first, or enter the payments as rows.')}</div>
+                </div>` : ''}
+
+                <div class="bt-setl-wrap">
+                    <div class="bt-setl-col">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-calculator"></i> ${t('calculated_allowances', 'Calculated Allowances')}</span></div>
+                            <table class="sr-lines">
+                                <tbody>
+                                    ${calcRow('mdi-hotel', t('hotel_allowance', 'Hotel Allowance'), `${money(d.hotel_daily)} × ${Number(d.hotel_nights || 0)} ${t('nights', 'nights')}`, d.hotel_total)}
+                                    ${calcRow('mdi-car', t('transportation_allowance', 'Transportation Allowance'), `${money(d.transport_daily)} × ${Number(d.trip_days || 0)} ${t('days', 'days')}`, d.transport_total)}
+                                    ${calcRow('mdi-calendar-clock', t('daily_allowance', 'Daily Allowance'), '', d.daily_allowance_total)}
+                                    ${calcRow('mdi-airplane', t('ticket_fares', 'Ticket Fares'), '', d.ticket_fares_total)}
+                                    ${calcRow('mdi-receipt', t('other_allowance', 'Other Allowances'), '', d.other_allowance_total)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bt-setl-col">
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head">
+                                <span><i class="mdi mdi-cash-multiple"></i> ${t('additional_payments', 'Additional Payments')}</span>
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm" id="btSetlAddRow"><i class="mdi mdi-plus"></i> ${t('add_row', 'Add Row')}</button>
+                            </div>
+                            <div class="bt-setl-head">
+                                <span>#</span><span>${t('type', 'Type')}</span><span>${t('description', 'Description')} <span class="text-danger">*</span></span><span>${t('amount', 'Amount')} <span class="text-danger">*</span></span><span></span>
+                            </div>
+                            <div class="bt-setl-lines" id="btSetlLines">${lineHtml()}</div>
+                        </div>
+
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-note-text"></i> ${t('notes', 'Notes')}</span></div>
+                            <div style="padding:10px 12px;">
+                                <textarea id="btSetlNotes" class="form-control" rows="2" style="height:auto;" placeholder="${esc(t('bt_settlement_notes_placeholder', 'Optional remarks for the approvers'))}"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sr-addline-summary" style="margin-top:14px;">
+                    <div><span>${t('allowances', 'Allowances')}</span><b>${money(baseTotal)}</b></div>
+                    <div><span>${t('additions', 'Additions')}</span><b id="btSumAdd" style="color:var(--tone-green-fg);">${money(0)}</b></div>
+                    <div><span>${t('deductions', 'Deductions')}</span><b id="btSumDed" style="color:var(--tone-red-fg);">${money(0)}</b></div>
+                    <div class="accent"><span>${t('total_payable', 'Total Payable')}</span><b id="btSumTotal">${money(baseTotal)}</b></div>
+                </div>
+            </div>
+        `;
+
+        const readLines = () => {
+            const lines = [];
+            $('#btSetlLines .bt-setl-line').each(function() {
+                const $l = $(this);
+                lines.push({
+                    el: $l,
+                    type: $l.find('.bt-line-type').val(),
+                    description: $.trim($l.find('.bt-line-desc').val()),
+                    amount: Math.max(0, parseFloat($l.find('.bt-line-amount').val()) || 0)
+                });
+            });
+            return lines;
+        };
+
+        const refresh = () => {
+            let add = 0, ded = 0;
+            const $lines = $('#btSetlLines .bt-setl-line');
+            $lines.each(function(i) { $(this).find('.bt-line-no').text(i + 1); });
+            $lines.find('.bt-line-remove').toggle($lines.length > 1);
+            readLines().forEach(l => {
+                if (l.type === 'deduction') ded += l.amount; else add += l.amount;
+                l.el.find('.bt-line-amount').css('color', l.type === 'deduction' ? 'var(--tone-red-fg)' : 'var(--tone-green-fg)');
+            });
+            const total = Math.round((baseTotal + add - ded) * 100) / 100;
+            $('#btSumAdd').text(money(add));
+            $('#btSumDed').text(money(ded));
+            $('#btSumTotal').text(money(total)).css('color', total > 0 ? '' : 'var(--tone-red-fg)');
+            return total;
+        };
+
+        Swal.fire({
+            title: t('create_settlement', 'Create Settlement'),
+            html,
+            width: '1180px',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            confirmButtonText: '<i class="mdi mdi-check"></i> ' + esc(t('create_settlement', 'Create Settlement')),
+            cancelButtonText: esc(t('cancel', 'Cancel')),
+            showLoaderOnConfirm: true,
+            allowOutsideClick: false,
+            customClass: { popup: 'sr-addline-popup sr-page' },
+            didOpen: () => {
+                const $popup = $(Swal.getPopup());
+                $popup.on('click', '#btSetlAddRow', function() {
+                    $('#btSetlLines').append(lineHtml());
+                    refresh();
+                    $('#btSetlLines .bt-line-desc').last().trigger('focus');
+                });
+                $popup.on('click', '.bt-line-remove', function() {
+                    $(this).closest('.bt-setl-line').remove();
+                    refresh();
+                });
+                $popup.on('input change', '.bt-line-type, .bt-line-desc, .bt-line-amount', function() {
+                    $(this).removeClass('is-invalid');
+                    refresh();
+                });
+                refresh();
+            },
+            preConfirm: () => {
+                const lines = readLines();
+                for (const l of lines) {
+                    if (l.amount > 0 && !l.description) {
+                        l.el.find('.bt-line-desc').addClass('is-invalid').trigger('focus');
+                        Swal.showValidationMessage(t('bt_row_description_required', 'Please enter a description for each payment row.'));
+                        return false;
+                    }
+                    if (l.description && l.amount <= 0) {
+                        l.el.find('.bt-line-amount').addClass('is-invalid').trigger('focus');
+                        Swal.showValidationMessage(t('bt_row_amount_required', 'Please enter an amount for each payment row.'));
+                        return false;
+                    }
+                }
+                const total = refresh();
+                if (total <= 0) {
+                    Swal.showValidationMessage(t('settlement_amount_must_be_positive', 'Total payable must be greater than zero.'));
+                    return false;
+                }
+                return $.ajax({
+                    url: './includes/ajaxFile/settlement_handler.php',
+                    type: 'POST',
+                    dataType: 'JSON',
+                    data: {
+                        action: 'create_settlement',
+                        request_inv_no: d.request_inv_no,
+                        request_type: 'business_trip',
+                        emp_id: d.emp_id,
+                        settlement_amount: total,
+                        lines: JSON.stringify(lines.filter(l => l.amount > 0).map(l => ({ type: l.type, description: l.description, amount: l.amount }))),
+                        notes: $('#btSetlNotes').val()
+                    }
+                }).then(res => {
+                    if (!res.success) throw new Error(res.message || 'Failed to create settlement');
+                    return res;
+                }).catch(err => {
+                    Swal.showValidationMessage((err && (err.message || (err.responseJSON && err.responseJSON.message))) || 'Error creating settlement');
+                });
+            }
+        }).then(result => {
+            if (!result.isConfirmed || !result.value) return;
+            Swal.fire({
+                icon: 'success',
+                title: t('success', 'Success'),
+                html: `<p>${t('settlement_created_successfully', 'Settlement created successfully!')}</p>
+                       <p><strong>${t('settlement_ref', 'Settlement Ref')}:</strong> ${esc(result.value.settlement_inv_no || ('SETL-' + d.request_inv_no))}</p>`,
+                allowOutsideClick: false
+            }).then(() => location.reload());
+        });
+    }).fail(function() {
+        Swal.fire(t('error', 'Error'), 'Failed to load business trip details.', 'error');
+    });
+}

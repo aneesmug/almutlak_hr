@@ -977,7 +977,8 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
 
         // Sanitize inputs
         $trip_type = escape_string($_POST['trip_type'] ?? 'domestic');
-        $trip_purpose = escape_string($_POST['trip_purpose'] ?? '');
+        $trip_purpose = trim((string)($_POST['trip_purpose'] ?? '')); // bound via prepared statement - escaping here stored literal 
+
         $transportation_type = escape_string($_POST['transportation_type'] ?? '');
         $trip_start_date = escape_string($_POST['trip_start_date'] ?? '');
         $trip_end_date = escape_string($_POST['trip_end_date'] ?? '');
@@ -985,7 +986,8 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'submitBusinessTrip') {
         $to_city_id = (int)($_POST['to_city_id'] ?? 0);
         $destination_country = escape_string($_POST['destination_country'] ?? '');
         $visa_required = ((int)($_POST['visa_required'] ?? 0) === 1) ? 1 : 0;
-        $request_notes = escape_string($_POST['request_notes'] ?? '');
+        $request_notes = trim((string)($_POST['request_notes'] ?? '')); // bound via prepared statement - escaping here stored literal 
+
         $first_approver_id = (int)($_POST['first_approver_id'] ?? 0);
 
         // Validate required fields
@@ -2382,6 +2384,61 @@ if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'addBusinessTripOtherAll
         ]);
     } catch (Exception $e) {
         @mysqli_rollback($conDB);
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// Allowance breakdown shown in the "Create Settlement" popup (HR Payroll, after the employee returns).
+if (isset($_POST['ajaxType']) && $_POST['ajaxType'] === 'getBusinessTripSettlementDetails') {
+    try {
+        require_once __DIR__ . '/../business_trip_settlement_helper.php';
+
+        if (empty($is_system_admin) && !isCurrentUserHRPayroll()) {
+            throw new Exception('Only HR Payroll can create business trip settlements.');
+        }
+
+        $trip_id = (int)($_POST['trip_id'] ?? 0);
+        $stmtTrip = mysqli_prepare($conDB, "SELECT * FROM emp_business_trip WHERE id = ? LIMIT 1");
+        if (!$stmtTrip) {
+            throw new Exception('Database error: ' . mysqli_error($conDB));
+        }
+        mysqli_stmt_bind_param($stmtTrip, 'i', $trip_id);
+        mysqli_stmt_execute($stmtTrip);
+        $trip = mysqli_fetch_assoc(mysqli_stmt_get_result($stmtTrip));
+        mysqli_stmt_close($stmtTrip);
+        if (!$trip) {
+            throw new Exception('Business trip not found');
+        }
+
+        $blocker = getBusinessTripSettlementBlocker($trip);
+        if ($blocker !== '') {
+            throw new Exception($blocker);
+        }
+
+        $b = calculateBusinessTripAllowanceBreakdown($conDB, $trip);
+        echo json_encode([
+            'status' => 'success',
+            'data' => [
+                'request_inv_no' => $trip['request_inv_no'],
+                'emp_id' => $trip['emp_id'],
+                'trip_start_date' => $trip['trip_start_date'],
+                'trip_end_date' => $trip['trip_end_date'],
+                'trip_days' => $b['trip_allowance_days'],
+                'basic_salary' => round($b['basic_salary'], 2),
+                'salary_level' => $b['matched_scale']['level'] ?? null,
+                'hotel_daily' => round($b['calc_hotel_daily'], 2),
+                'transport_daily' => round($b['calc_transport_daily'], 2),
+                'hotel_nights' => $b['hotel_allowance_days'],
+                'hotel_total' => round($b['calc_hotel_total'], 2),
+                'transport_total' => round($b['calc_transport_total'], 2),
+                'daily_allowance_total' => round($b['calc_daily_allowance_total'], 2),
+                'ticket_fares_total' => round($b['ticket_fares_total'], 2),
+                'other_allowance_total' => round($b['other_allowance_total'], 2),
+                'grand_total' => round($b['grand_total'], 2)
+            ]
+        ]);
+    } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
     exit;
