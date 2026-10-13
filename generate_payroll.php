@@ -970,17 +970,42 @@
             }
 
             /* ---------- New GUI (sr-* design system) overrides ---------- */
-            .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-            @media (max-width: 991px) { .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-            @media (max-width: 575px) { .sr-page .sr-tiles.pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-            .sr-page .pg-tile { position: relative; cursor: pointer; user-select: none; transition: border-color .15s ease, box-shadow .15s ease, opacity .15s ease; }
-            .sr-page .pg-tile:hover { transform: none; border-color: var(--sr-accent); }
-            .sr-page .pg-tile:focus-visible { outline: 2px solid var(--sr-accent); outline-offset: 2px; }
-            .sr-page .pg-tile.active { border-color: var(--sr-accent); background: var(--sr-accent-soft); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
-            .sr-page .pg-tile.active .pg-tile-icon { color: var(--sr-accent); }
-            .sr-page .pg-tiles.has-filter .pg-tile:not(.active) { opacity: .6; }
+            /* Summary count tiles (click = filter table, click again = clear) */
+            .sr-page .pg-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+            @media (max-width: 1199px) { .sr-page .pg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+            @media (max-width: 575px) { .sr-page .pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            .sr-page .pg-tile {
+                --t-bg: var(--tone-slate-bg); --t-fg: var(--tone-slate-fg); --t-bd: var(--tone-slate-bd);
+                position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px;
+                padding: 16px 16px 20px; border-radius: var(--sr-radius); cursor: pointer; user-select: none;
+                background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow);
+                transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease, opacity .15s ease;
+            }
+            .sr-page .pg-tile.tone-indigo { --t-bg: var(--tone-indigo-bg); --t-fg: var(--tone-indigo-fg); --t-bd: var(--tone-indigo-bd); }
+            .sr-page .pg-tile.tone-amber { --t-bg: var(--tone-amber-bg); --t-fg: var(--tone-amber-fg); --t-bd: var(--tone-amber-bd); }
+            .sr-page .pg-tile.tone-sky { --t-bg: var(--tone-sky-bg); --t-fg: var(--tone-sky-fg); --t-bd: var(--tone-sky-bd); }
+            .sr-page .pg-tile.tone-green { --t-bg: var(--tone-green-bg); --t-fg: var(--tone-green-fg); --t-bd: var(--tone-green-bd); }
+            .sr-page .pg-tile:hover { border-color: var(--t-bd); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
+            .sr-page .pg-tile:focus-visible { outline: 2px solid var(--t-fg); outline-offset: 2px; }
+            .sr-page .pg-tile-ico {
+                flex-shrink: 0; width: 46px; height: 46px; border-radius: 13px;
+                display: flex; align-items: center; justify-content: center;
+                background: var(--t-bg); color: var(--t-fg); font-size: 19px;
+            }
+            .sr-page .pg-tile-body { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+            .sr-page .pg-tile-label { font-size: 12px; font-weight: 600; color: var(--sr-muted); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .sr-page .pg-tile-value { margin-top: 4px; font-size: 26px; font-weight: 800; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+            .sr-page .pg-tile-sub { margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--sr-muted); white-space: nowrap; }
+            .sr-page .pg-tile-bar { position: absolute; inset-inline: 0; bottom: 0; height: 4px; background: var(--t-bg); }
+            .sr-page .pg-tile-bar i { display: block; height: 100%; width: 0; background: var(--t-fg); border-radius: 0 4px 4px 0; transition: width .5s ease; }
+            .sr-page .pg-tile-flag { position: absolute; top: 12px; inset-inline-end: 12px; font-size: 11px; color: var(--t-fg); opacity: 0; transition: opacity .15s ease; }
+            .sr-page .pg-tile:hover .pg-tile-flag { opacity: .45; }
+            .sr-page .pg-tile.active { background: var(--t-bg); border-color: var(--t-fg); box-shadow: 0 0 0 1px var(--t-fg) inset, 0 10px 24px rgba(15, 23, 42, .08); }
+            .sr-page .pg-tile.active .pg-tile-ico { background: var(--t-fg); color: #fff; }
+            .sr-page .pg-tile.active .pg-tile-label, .sr-page .pg-tile.active .pg-tile-value { color: var(--t-fg); }
+            .sr-page .pg-tile.active .pg-tile-flag { opacity: 1; }
+            .sr-page .pg-tiles.has-filter .pg-tile:not(.active) { opacity: .55; }
             .sr-page .pg-tiles.has-filter .pg-tile:not(.active):hover { opacity: 1; }
-            .pg-tile-icon { position: absolute; top: 14px; inset-inline-end: 14px; font-size: 18px; color: var(--sr-border-strong); }
             .sr-page .payroll-toolbar { background: var(--sr-surface-2); border: 1px solid var(--sr-border); border-radius: var(--sr-radius); box-shadow: none; }
             .sr-page .payroll-month-card { background: var(--sr-surface); border-color: var(--sr-border); border-radius: 12px; }
             .sr-page .payroll-month-label { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); }
@@ -1072,32 +1097,28 @@
                         </div>
 
                                         <!-- Payroll Summary (counts filled by updatePayrollSummaryCards) -->
-                                        <div class="sr-tiles pg-tiles">
-                                            <div class="sr-tile pg-tile" data-filter="generated" role="button" tabindex="0" aria-pressed="false">
-                                                <span class="sr-tile-label"><span class="sr-dot dot-indigo"></span><?= __('generated_badge', 'Generated') ?></span>
-                                                <span class="sr-tile-value" id="statGeneratedCount">0</span>
-                                                <i class="fa fa-solid fa-check pg-tile-icon"></i>
+                                        <div class="pg-tiles">
+                                            <?php
+                                            // [filter key, tone, icon, label, count id] - counts/% filled by updatePayrollSummaryCards()
+                                            $pgTiles = [
+                                                ['generated', 'indigo', 'fa-circle-check', __('generated_badge', 'Generated'), 'statGenerated'],
+                                                ['not_generated', 'slate', 'fa-hourglass-half', __('not_generated', 'Un-Generated'), 'statNotGenerated'],
+                                                ['hold', 'amber', 'fa-circle-pause', __('payroll_on_hold', 'On Hold'), 'statHold'],
+                                                ['bank', 'sky', 'fa-building-columns', __('bank_option', 'Bank'), 'statBank'],
+                                                ['cash', 'green', 'fa-money-bill-wave', __('cash_option', 'Cash'), 'statCash'],
+                                            ];
+                                            foreach ($pgTiles as [$pgKey, $pgTone, $pgIcon, $pgLabel, $pgId]): ?>
+                                            <div class="pg-tile tone-<?= $pgTone ?>" data-filter="<?= $pgKey ?>" role="button" tabindex="0" aria-pressed="false" title="<?= htmlspecialchars(__('click_to_filter', 'Click to filter, click again to clear')) ?>">
+                                                <span class="pg-tile-ico"><i class="fa fa-solid <?= $pgIcon ?>"></i></span>
+                                                <div class="pg-tile-body">
+                                                    <span class="pg-tile-label"><?= htmlspecialchars($pgLabel) ?></span>
+                                                    <span class="pg-tile-value" id="<?= $pgId ?>Count">0</span>
+                                                    <span class="pg-tile-sub" id="<?= $pgId ?>Pct">&nbsp;</span>
+                                                </div>
+                                                <i class="fa fa-solid fa-filter pg-tile-flag"></i>
+                                                <span class="pg-tile-bar"><i id="<?= $pgId ?>Bar"></i></span>
                                             </div>
-                                            <div class="sr-tile pg-tile" data-filter="not_generated" role="button" tabindex="0" aria-pressed="false">
-                                                <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('not_generated', 'Un-Generated') ?></span>
-                                                <span class="sr-tile-value" id="statNotGeneratedCount">0</span>
-                                                <i class="fa fa-solid fa-hourglass-half pg-tile-icon"></i>
-                                            </div>
-                                            <div class="sr-tile pg-tile" data-filter="hold" role="button" tabindex="0" aria-pressed="false">
-                                                <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('payroll_on_hold', 'On Hold') ?></span>
-                                                <span class="sr-tile-value" id="statHoldCount">0</span>
-                                                <i class="fa fa-solid fa-pause pg-tile-icon"></i>
-                                            </div>
-                                            <div class="sr-tile pg-tile" data-filter="bank" role="button" tabindex="0" aria-pressed="false">
-                                                <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('bank_option', 'Bank') ?></span>
-                                                <span class="sr-tile-value" id="statBankCount">0</span>
-                                                <i class="fa fa-solid fa-building-columns pg-tile-icon"></i>
-                                            </div>
-                                            <div class="sr-tile pg-tile" data-filter="cash" role="button" tabindex="0" aria-pressed="false">
-                                                <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('cash_option', 'Cash') ?></span>
-                                                <span class="sr-tile-value" id="statCashCount">0</span>
-                                                <i class="fa fa-solid fa-money-bill-wave pg-tile-icon"></i>
-                                            </div>
+                                            <?php endforeach; ?>
                                         </div>
 
                                     <div class="sr-card">
@@ -2584,11 +2605,16 @@ function updatePayrollSummaryCards() {
         else if (paymentType === 2) cashCount++;
     });
 
-    $('#statGeneratedCount').text(generatedCount);
-    $('#statNotGeneratedCount').text(notGeneratedCount);
-    $('#statHoldCount').text(holdCount);
-    $('#statBankCount').text(bankCount);
-    $('#statCashCount').text(cashCount);
+    // Count + share of all employees in scope (text line + bottom bar)
+    const total = scoped.filter(Boolean).length;
+    const ofLabel = __('of', 'of');
+    [['statGenerated', generatedCount], ['statNotGenerated', notGeneratedCount], ['statHold', holdCount],
+     ['statBank', bankCount], ['statCash', cashCount]].forEach(([id, count]) => {
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        $(`#${id}Count`).text(count.toLocaleString('en-US'));
+        $(`#${id}Pct`).text(`${pct}% ${ofLabel} ${total.toLocaleString('en-US')}`);
+        $(`#${id}Bar`).css('width', pct + '%');
+    });
 }
 
 async function updateRegenerateButtonVisibility() {
