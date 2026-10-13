@@ -2,6 +2,7 @@
 require_once("./includes/init.php");
 require_once("./includes/session_check.php");
 require_once("./includes/special_access_helper.php");
+require_once("./includes/emp_doc_kind.php");
 include('./includes/MainClass.php');
 include("./includes/avatar_select.php");
 include("./includes/Hijri_GregorianConvert.php");
@@ -216,6 +217,7 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <link href="assets/css/emp_hero.css?v=<?= @filemtime(__DIR__ . '/assets/css/emp_hero.css') ?>" rel="stylesheet" type="text/css" />
+    <link href="assets/css/emp_docs.css?v=<?= @filemtime(__DIR__ . '/assets/css/emp_docs.css') ?>" rel="stylesheet" type="text/css" />
     <!-- Latest compiled and minified CSS -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.10.0/css/bootstrap-datepicker.min.css" rel="stylesheet" />
@@ -891,33 +893,6 @@ $hasGrantedPages = ($grantedPagesHtml !== '');
             .profile-section .info-value { justify-content: flex-start; text-align: start !important; }
         }
 
-        /* ===== MY FILES v2 ===== */
-        .profile-section .documents-card { border-radius: 16px; padding: 20px; border: 1px solid rgba(15, 23, 42, .07); box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06); }
-        .profile-section .docs-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
-        .profile-section .docs-head-icon { flex: none; width: 44px; height: 44px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 6px 14px rgba(99, 102, 241, .3); }
-        .profile-section .docs-head-text { flex: 1; min-width: 0; }
-        .profile-section .docs-head-text h5 { margin: 0; font-size: 15.5px; font-weight: 800; color: #0f172a; }
-        .profile-section .docs-head-text small { color: #64748b; font-size: 12px; }
-        .profile-section .docs-count { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: #4338ca; background: rgba(99, 102, 241, .12); }
-        .profile-section .documents-list-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; max-height: 520px; padding: 0; border: 0; background: transparent; }
-        .profile-section .doc-list-item { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-        .profile-section .doc-list-item:hover { border-color: var(--doc); box-shadow: 0 6px 16px rgba(15, 23, 42, .08); transform: translateY(-1px); background: #fff; }
-        .profile-section .doc-list-item.active { border-color: var(--doc); background: color-mix(in srgb, var(--doc) 6%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc) 18%, transparent); }
-        .profile-section .doc-list-item:focus-visible { outline: 2px solid var(--doc); outline-offset: 2px; }
-        .profile-section .doc-item-icon { flex: none; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--doc); background: color-mix(in srgb, var(--doc) 13%, white); margin: 0; }
-        .profile-section .doc-item-info { flex: 1; min-width: 0; }
-        .profile-section .doc-item-name { margin: 0 0 4px; font-size: 14px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .profile-section .doc-item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 11.5px; color: #64748b; }
-        .profile-section .doc-ext { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 6px; font-weight: 800; letter-spacing: .3px; color: var(--doc); background: color-mix(in srgb, var(--doc) 11%, white); }
-        .profile-section .doc-date i { margin-inline-end: 3px; opacity: .8; }
-        .profile-section .doc-item-actions { display: flex; gap: 6px; margin: 0; }
-        .profile-section .doc-act { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border: 1px solid #e8ebf1; background: #fff; color: #475569; cursor: pointer; transition: all .15s ease; }
-        .profile-section .doc-act:hover { color: #fff; background: var(--doc); border-color: var(--doc); }
-        @media (max-width: 480px) { .profile-section .documents-list-container { grid-template-columns: 1fr; } .profile-section .doc-act-view { display: none; } }
-        /* RTL: body dir="rtl" already mirrors the row - cancel the older .rtl reverse/order rules */
-        body.rtl .profile-section .doc-list-item { flex-direction: row; }
-        body.rtl .profile-section .doc-item-icon, body.rtl .profile-section .doc-item-info, body.rtl .profile-section .doc-item-actions { order: 0; margin: 0; }
-        body.rtl .profile-section .doc-item-info { text-align: start; }
 
         /* ===== UTILITY ===== */
         .section-title {
@@ -2517,8 +2492,8 @@ RTL Support
             </div>
         </div>
 
-        <!-- DOCUMENTS SECTION -->
-        <div class="profile-section">
+        <!-- DOCUMENTS SECTION (tiles: assets/css/emp_docs.css) -->
+        <div class="profile-section emp-docs">
             <h3 class="section-title"><i class="fa fa-folder-open"></i> <?= __('my_files') ?></h3>
             <?php
             $queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' AND `status`='A' ORDER BY `id` DESC ");
@@ -2559,21 +2534,7 @@ RTL Support
                                         'gif' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
                                     ];
                                     $file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
-                                    // Icon + color by document type (name), falling back to the file extension
-                                    $doc_kind_map = [
-                                        'passport' => ['fa-passport', '#2563eb'], 'iqama' => ['fa-id-card', '#0d9488'], 'national id' => ['fa-id-card', '#0d9488'],
-                                        'visa' => ['fa-stamp', '#7c3aed'], 'contract' => ['fa-file-contract', '#7c3aed'], 'certificate' => ['fa-graduation-cap', '#ca8a04'],
-                                        'degree' => ['fa-graduation-cap', '#ca8a04'], 'licen' => ['fa-id-badge', '#ea580c'], 'medical' => ['fa-notes-medical', '#dc2626'],
-                                        'insurance' => ['fa-notes-medical', '#dc2626'], 'bank' => ['fa-building-columns', '#16a34a'], 'iban' => ['fa-building-columns', '#16a34a'],
-                                        'photo' => ['fa-camera', '#0891b2'], 'cv' => ['fa-file-user', '#4f46e5'], 'resume' => ['fa-file-user', '#4f46e5'],
-                                    ];
-                                    $doc_ext_map = ['pdf' => ['fa-file-pdf', '#dc2626'], 'jpg' => ['fa-file-image', '#0284c7'], 'jpeg' => ['fa-file-image', '#0284c7'],
-                                        'png' => ['fa-file-image', '#0284c7'], 'gif' => ['fa-file-image', '#0284c7'], 'heic' => ['fa-file-image', '#0284c7'],
-                                        'doc' => ['fa-file-word', '#2563eb'], 'docx' => ['fa-file-word', '#2563eb'], 'xls' => ['fa-file-excel', '#16a34a'], 'xlsx' => ['fa-file-excel', '#16a34a']];
-                                    $doc_kind = $doc_ext_map[$docu_ext_get] ?? ['fa-file-lines', '#64748b'];
-                                    foreach ($doc_kind_map as $kw => $kind) {
-                                        if (stripos((string)$docu_typ_get, $kw) !== false) { $doc_kind = $kind; break; }
-                                    }
+                                    $doc_kind = emp_doc_kind($docu_typ_get, $docu_ext_get);
                                 ?>
                                     <div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
                                         data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
@@ -2630,15 +2591,7 @@ RTL Support
                         </div>
                     </div>
                 <?php else: ?>
-                    <div class="alert alert-info" role="alert">
-                        <div class="d-flex align-items-center">
-                            <i class="fa fa-info-circle mr-3" style="font-size: 24px;"></i>
-                            <div>
-                                <h5 class="mb-1"><?= __('no_documents_found') ?></h5>
-                                <p class="mb-0"><?= __('no_documents_have_been_uploaded_yet') ?></p>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="docs-empty"><i class="fa fa-folder-open"></i><b><?= __('no_documents_found') ?></b><?= __('no_documents_have_been_uploaded_yet') ?></div>
                 <?php endif; ?>
             </div>
         </div>

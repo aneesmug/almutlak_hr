@@ -1,0 +1,37 @@
+/* Employee documents tiles (.emp-docs) - shared by profile.php "My files" and view_employee.php Documents tab */
+.emp-docs .documents-card { border-radius: 16px; padding: 20px; border: 1px solid rgba(15, 23, 42, .07); box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .06); }
+.emp-docs .docs-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.emp-docs .docs-head-icon { flex: none; width: 44px; height: 44px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 6px 14px rgba(99, 102, 241, .3); }
+.emp-docs .docs-head-text { flex: 1; min-width: 0; }
+.emp-docs .docs-head-text h5 { margin: 0; font-size: 15.5px; font-weight: 800; color: #0f172a; }
+.emp-docs .docs-head-text small { color: #64748b; font-size: 12px; }
+.emp-docs .docs-count { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: #4338ca; background: rgba(99, 102, 241, .12); }
+.emp-docs .documents-list-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; max-height: 520px; padding: 0; border: 0; background: transparent; }
+.emp-docs .doc-list-item { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.emp-docs .doc-list-item:hover { border-color: var(--doc); box-shadow: 0 6px 16px rgba(15, 23, 42, .08); transform: translateY(-1px); background: #fff; }
+.emp-docs .doc-list-item.active { border-color: var(--doc); background: color-mix(in srgb, var(--doc) 6%, white); box-shadow: 0 0 0 3px color-mix(in srgb, var(--doc) 18%, transparent); }
+.emp-docs .doc-list-item:focus-visible { outline: 2px solid var(--doc); outline-offset: 2px; }
+.emp-docs .doc-item-icon { flex: none; width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--doc); background: color-mix(in srgb, var(--doc) 13%, white); margin: 0; }
+.emp-docs .doc-item-info { flex: 1; min-width: 0; }
+.emp-docs .doc-item-name { margin: 0 0 4px; font-size: 14px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emp-docs .doc-item-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: 11.5px; color: #64748b; }
+.emp-docs .doc-ext { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 6px; font-weight: 800; letter-spacing: .3px; color: var(--doc); background: color-mix(in srgb, var(--doc) 11%, white); }
+.emp-docs .doc-date i { margin-inline-end: 3px; opacity: .8; }
+.emp-docs .doc-item-actions { display: flex; gap: 6px; margin: 0; }
+.emp-docs .doc-act { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border: 1px solid #e8ebf1; background: #fff; color: #475569; cursor: pointer; transition: all .15s ease; }
+.emp-docs .doc-act:hover { color: #fff; background: var(--doc); border-color: var(--doc); }
+@media (max-width: 480px) { .emp-docs .documents-list-container { grid-template-columns: 1fr; } .emp-docs .doc-act-view { display: none; } }
+/* RTL: body dir="rtl" already mirrors the row - cancel the older .rtl reverse/order rules */
+body.rtl .emp-docs .doc-list-item { flex-direction: row; }
+body.rtl .emp-docs .doc-item-icon, body.rtl .emp-docs .doc-item-info, body.rtl .emp-docs .doc-item-actions { order: 0; margin: 0; }
+body.rtl .emp-docs .doc-item-info { text-align: start; }
+
+/* Always show the tile buttons (older global CSS hides them until hover) */
+.emp-docs .doc-item-actions { opacity: 1; }
+.emp-docs .doc-act.doc-act-delete:hover { background: #dc2626; border-color: #dc2626; }
+.emp-docs .docs-head-actions { display: flex; align-items: center; gap: 8px; }
+.emp-docs .docs-upload { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 10px; border: 0; font-size: 13px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #6366f1, #4338ca); box-shadow: 0 4px 10px rgba(99, 102, 241, .25); cursor: pointer; }
+.emp-docs .docs-upload:hover { filter: brightness(1.08); }
+.emp-docs .docs-empty { padding: 30px 12px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 14px; }
+.emp-docs .docs-empty i { display: block; font-size: 30px; margin-bottom: 8px; color: #a5b4fc; }
+.emp-docs .docs-empty b { display: block; color: #0f172a; margin-bottom: 2px; }

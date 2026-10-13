@@ -1408,103 +1408,105 @@ if (mysqli_num_rows($query) == 1) {
 								<?php if (!$canViewSalary): ?>
 								<div class="alert alert-warning"><i class="fa fa-lock"></i> <?= __('salary_hidden_no_access') ?></div>
 								<?php else: ?>
-								<div class="row">
-									<?php foreach ($shownItems as $item): ?>
-										<div class="<?= $colsm ?>">
-											<div class="card-box tilebox-one">
-												<?php
-												$icons = [
-													'basic' => 'fa-money-bill-alt duotone-success',
-													'housing' => 'fa-home duotone-info',
-													'transport' => 'fa-car duotone-danger',
-													'food' => 'fa-money-bill-wheat duotone-info',
-													'misc' => 'fa-diamond-half duotone-dark',
-													'cashier' => 'fa-cash-register duotone-success',
-													'fuel' => 'fa-car-wash duotone-info',
-													'tel' => 'fa-user-headset duotone-info',
-													'other' => 'fa-person-carry duotone-dark',
-													'guard' => 'fa-hands-holding-diamond duotone-success',
-												];
-												$icon = $icons[$item] ?? 'fa-money-bill duotone-secondary';
-												?>
-												<i class="fad <?= $icon ?> float-right"></i>
-												<h6 class="text-muted text-uppercase mt-0"><?= __($item, ucfirst($item)) ?></h6>
-												<h2 class="m-b-20" data-plugin="counterup"><?= $emprow[$item] ?> <i class="icon-saudi_riyal"></i></h2>
-											</div>
+								<?php
+								// Salary information card: total + breakdown with share of total (styles: .sal-card below)
+								$salTotal = (float)((!$salary_get) ? $emprow["salary"] : $salary_get);
+								$salMeta = [
+									'basic' => ['fa-money-bill-wave', '#16a34a'], 'housing' => ['fa-house', '#2563eb'], 'transport' => ['fa-car', '#dc2626'],
+									'food' => ['fa-utensils', '#ea580c'], 'misc' => ['fa-shapes', '#64748b'], 'cashier' => ['fa-cash-register', '#0d9488'],
+									'fuel' => ['fa-gas-pump', '#ca8a04'], 'tel' => ['fa-phone', '#7c3aed'], 'other' => ['fa-plus', '#475569'], 'guard' => ['fa-user-shield', '#0891b2'],
+								];
+								?>
+								<div class="sal-card">
+									<div class="sal-total">
+										<span class="sal-total-icon"><i class="fa fa-sack-dollar"></i></span>
+										<small><?= __('total_salary') ?></small>
+										<b><?= number_format($salTotal, 2) ?> <i class="icon-saudi_riyal"></i></b>
+										<span class="sal-total-sub"><?= __('monthly', 'Monthly') ?> &middot; <?= count($shownItems) ?> <?= __('components', 'components') ?></span>
+										<?php if ($canViewSalary && !empty($last_salary_increment)): ?>
+										<span class="sal-total-chip"><i class="fa fa-arrow-trend-up"></i> +<?= number_format((float)($last_salary_increment['approved_amount'] ?? $last_salary_increment['increment_amount']), 2) ?>
+											<?php if (!empty($last_salary_increment['effective_date'])): ?><small><?= date('M Y', strtotime($last_salary_increment['effective_date'])) ?></small><?php endif; ?></span>
+										<?php endif; ?>
+									</div>
+									<div class="sal-breakdown">
+										<div class="sal-head"><i class="fa fa-chart-pie"></i> <?= __('salary_information', 'Salary Information') ?></div>
+										<?php if ($salTotal > 0 && $shownItems): ?>
+										<div class="sal-bar">
+											<?php foreach ($shownItems as $item): $v = (float)$emprow[$item]; if ($v <= 0) continue; ?>
+												<span style="width: <?= round($v / $salTotal * 100, 2) ?>%; background: <?= ($salMeta[$item] ?? ['', '#64748b'])[1] ?>;" title="<?= htmlspecialchars(__($item, ucfirst($item))) ?>"></span>
+											<?php endforeach; ?>
 										</div>
-									<?php endforeach; ?>
-									<div class="<?= $totalColsm ?>">
-										<div class="card-box tilebox-one">
-											<i class="fad fa-money-bill-trend-up float-right duotone-success"></i>
-											<h6 class="text-muted text-uppercase mt-0"><?= __('total_salary') ?></h6>
-											<h2 class="m-b-20" data-plugin="counterup"><?= (!$salary_get) ? $emprow["salary"] : $salary_get ?> <i class="icon-saudi_riyal"></i></h2>
+										<?php endif; ?>
+										<div class="sal-items">
+											<?php foreach ($shownItems as $item):
+												$v = (float)$emprow[$item];
+												[$ic, $col] = $salMeta[$item] ?? ['fa-money-bill', '#64748b'];
+												$pct = $salTotal > 0 ? round($v / $salTotal * 100) : 0;
+											?>
+											<div class="sal-item" style="--c: <?= $col ?>;">
+												<span class="sal-item-icon"><i class="fa <?= $ic ?>"></i></span>
+												<div class="sal-item-text">
+													<small><?= __($item, ucfirst($item)) ?></small>
+													<b><?= number_format($v, 2) ?> <i class="icon-saudi_riyal"></i></b>
+												</div>
+												<span class="sal-item-pct"><?= $pct ?>%</span>
+											</div>
+											<?php endforeach; ?>
 										</div>
 									</div>
-								</div><!-- end row -->
+								</div>
 								<?php endif; ?>
 
 								<?php
-								$showFlyCard = ($emprow["emp_sup_type"] <> "man_power") && ((int)$emprow['flystus'] > 0);
-								$showEncashedCard = ($emprow["emp_sup_type"] <> "man_power") && ((int)$emprow['encashstus'] > 0);
 								$showLocalVacCard = ($emprow["emp_sup_type"] <> "man_power") && ($local_vacation_count > 0);
 								$showLoanCard = ($canViewSalary && $loan_summary);
-								$showIncrementCard = ($canViewSalary && $last_salary_increment);
 								?>
-								<?php if ($showFlyCard || $showEncashedCard || $showLocalVacCard || $showLoanCard || $showIncrementCard): ?>
-									<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5 summary-cards-row">
-										<?php if ($showFlyCard): ?>
-										<div class="col mb-3 d-flex">
-											<div class="card-box tilebox-one flex-fill">
-												<i class="fad fa-truck-plane float-right duotone-info"></i>
-												<h6 class="text-uppercase mt-0 text-muted"><?= __('flys') ?></h6>
-												<h2 class="m-b-20" data-plugin="counterup"><?= $emprow['flystus'] ?></h2>
-											</div>
-										</div><!-- end col -->
-										<?php endif; ?>
-
-										<?php if ($showEncashedCard): ?>
-										<div class="col mb-3 d-flex">
-											<div class="card-box tilebox-one flex-fill">
-												<i class="fad fa-money-from-bracket float-right duotone-danger"></i>
-												<h6 class="text-uppercase mt-0 text-muted"><?= __('encashed') ?></h6>
-												<h2 class="m-b-20"><span data-plugin="counterup"><?= $emprow['encashstus'] ?></span></h2>
-											</div>
-										</div><!-- end col -->
-										<?php endif; ?>
-
+								<?php if ($showLocalVacCard || $showLoanCard): ?>
+									<div class="sal-extra">
 										<?php if ($showLocalVacCard): ?>
-										<div class="col mb-3 d-flex">
-											<div class="card-box tilebox-one flex-fill">
-												<i class="fad fa-umbrella-beach float-right duotone-dark"></i>
-												<h6 class="text-uppercase mt-0 text-muted"><?= __('local_vacation', 'Local Vacation') ?></h6>
-												<h2 class="m-b-20" data-plugin="counterup"><?= $local_vacation_count ?></h2>
-											</div>
-										</div><!-- end col -->
+										<div class="sal-item" style="--c: #475569;">
+											<span class="sal-item-icon"><i class="fa fa-umbrella-beach"></i></span>
+											<div class="sal-item-text"><small><?= __('local_vacation', 'Local Vacation') ?></small><b><?= (int)$local_vacation_count ?></b></div>
+										</div>
 										<?php endif; ?>
-
 										<?php if ($showLoanCard): ?>
-										<div class="col mb-3 d-flex">
-											<div class="card-box tilebox-one flex-fill">
-												<i class="fad fa-hand-holding-dollar float-right duotone-warning"></i>
-												<h6 class="text-uppercase mt-0 text-muted"><?= __('active_loan_summary', 'Active Loan') ?></h6>
-												<h2 class="m-b-20 text-warning"><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i></h2>
-												<small class="text-muted"><?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?> &middot; <?= __('remaining_balance', 'Remaining Balance') ?></small>
-											</div>
-										</div><!-- end col -->
+										<div class="sal-item" style="--c: #d97706;">
+											<span class="sal-item-icon"><i class="fa fa-hand-holding-dollar"></i></span>
+											<div class="sal-item-text"><small><?= __('active_loan_summary', 'Active Loan') ?> &middot; <?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?></small><b><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i> <em><?= __('remaining_balance', 'Remaining Balance') ?></em></b></div>
+										</div>
 										<?php endif; ?>
-
-										<?php if ($showIncrementCard): ?>
-										<div class="col mb-3 d-flex">
-											<div class="card-box tilebox-one flex-fill">
-												<i class="fad fa-arrow-trend-up float-right duotone-success"></i>
-												<h6 class="text-uppercase mt-0 text-muted"><?= __('last_salary_increment', 'Last Salary Increment') ?></h6>
-												<h2 class="m-b-20 text-success"><?= number_format((float)($last_salary_increment['approved_amount'] ?? $last_salary_increment['increment_amount']), 2) ?> <i class="icon-saudi_riyal"></i></h2>
-												<small class="text-muted"><?= !empty($last_salary_increment['effective_date']) ? date('d M Y', strtotime($last_salary_increment['effective_date'])) : '' ?></small>
-											</div>
-										</div><!-- end col -->
-										<?php endif; ?>
-									</div><!-- end row -->
+									</div>
 								<?php endif; ?>
+								<style>
+									.sal-card { display: grid; grid-template-columns: minmax(240px, 300px) 1fr; gap: 0; margin-bottom: 20px; border-radius: 16px; overflow: hidden; background: #fff; border: 1px solid rgba(15,23,42,.07); box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06); }
+									.sal-total { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 24px; color: #fff; background: linear-gradient(135deg, #16a34a, #0d9488); }
+									.sal-total::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,.1); inset-inline-end: -60px; top: -70px; }
+									.sal-total-icon { width: 44px; height: 44px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(255,255,255,.2); margin-bottom: 8px; }
+									.sal-total small { font-size: 11.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; opacity: .9; }
+									.sal-total b { font-size: 30px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+									.sal-total-sub { font-size: 12px; opacity: .85; }
+									.sal-total-chip { align-self: flex-start; margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.2); }
+									.sal-total-chip small { font-size: 11px; text-transform: none; letter-spacing: 0; }
+									.sal-breakdown { padding: 20px 22px; min-width: 0; }
+									.sal-head { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 800; color: #0f172a; margin-bottom: 12px; }
+									.sal-head i { color: #16a34a; }
+									.sal-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: #eef1f5; margin-bottom: 16px; gap: 2px; }
+									.sal-bar span { display: block; height: 100%; }
+									.sal-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+									.sal-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; border: 1px solid #e8ebf1; background: #fff; }
+									.sal-item-icon { flex: none; width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, white); }
+									.sal-item-text { flex: 1; min-width: 0; }
+									.sal-item-text small { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+									.sal-item-text b { font-size: 17px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+									.sal-item-text b em { font-style: normal; font-size: 11px; font-weight: 600; color: #64748b; margin-inline-start: 4px; }
+									.sal-item-pct { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 800; color: var(--c); background: color-mix(in srgb, var(--c) 11%, white); }
+									.sal-extra { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 20px; }
+									.sal-extra .sal-item { box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 16px rgba(15,23,42,.05); }
+									@media (max-width: 767px) { .sal-card { grid-template-columns: 1fr; } .sal-total b { font-size: 26px; } }
+									html.app-dark .sal-card, html.app-dark .sal-item { background: #242a35; border-color: #323a48; }
+									html.app-dark .sal-head, html.app-dark .sal-item-text b { color: #e5e7eb; }
+									html.app-dark .sal-bar { background: #323a48; }
+								</style>
 
 
 							</div>
@@ -2908,25 +2910,31 @@ if (mysqli_num_rows($query) == 1) {
 										</div>
 
 
-										<div class="tab-pane" id="documents">
-											<div class="card-box">
-												<div class="d-flex justify-content-between align-items-center mb-3">
-													<h4 class="header-title m-t-0"><i class="mdi mdi-file-document-multiple"></i> <?= __('my_files') ?></h4>
-													<div class="d-flex align-items-center">
+										<div class="tab-pane emp-docs" id="documents">
+											<link href="assets/css/emp_docs.css?v=<?= @filemtime(__DIR__ . '/assets/css/emp_docs.css') ?>" rel="stylesheet" type="text/css">
+											<?php
+											require_once __DIR__ . '/includes/emp_doc_kind.php';
+											$queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
+											$doc_count = mysqli_num_rows($queryempdocu);
+											?>
+											<div class="card-box documents-card">
+												<div class="docs-head">
+													<span class="docs-head-icon"><i class="fa fa-file-shield"></i></span>
+													<div class="docs-head-text">
+														<h5><?= __('employee_documents', 'Employee Documents') ?></h5>
+														<small><?= __('click_document_to_preview', 'Click a document to preview it') ?></small>
+													</div>
+													<div class="docs-head-actions">
 													<?php // Upload also here (not only in More Actions) so inactive / EOS employees can still get
 													// documents like the signed EOS report. Same roles as More Actions in emp_top_info.php.
 													if ($isDeptHr || $isHR || $is_system_admin || $user_type === 'archiving'): ?>
-														<button type="button" class="btn btn-sm btn-primary mr-2 addEmpDocuAtter doc-tab-upload" data-id="<?= htmlspecialchars($emprow['eid']) ?>" data-emp_id="<?= htmlspecialchars($emprow['empid']) ?>"><i class="fa fa-solid fa-upload"></i> <?= __('add_documents') ?></button>
+														<button type="button" class="docs-upload addEmpDocuAtter doc-tab-upload" data-id="<?= htmlspecialchars($emprow['eid']) ?>" data-emp_id="<?= htmlspecialchars($emprow['empid']) ?>"><i class="fa fa-solid fa-upload"></i> <?= __('add_documents') ?></button>
 													<?php endif; ?>
-													<span class="badge badge-primary badge-pill"><?php echo mysqli_num_rows(mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "'")); ?></span>
+														<span class="docs-count"><i class="fa fa-paperclip"></i> <?= (int)$doc_count ?></span>
 													</div>
 												</div>
 
-												<?php
-												$queryempdocu = mysqli_query($conDB, "SELECT * FROM `emp_docu` WHERE `emp_id`='" . $emprow['empid'] . "' ORDER BY `id` DESC ");
-												$doc_count = mysqli_num_rows($queryempdocu);
-												if ($doc_count > 0):
-												?>
+												<?php if ($doc_count > 0): ?>
 													<div class="row">
 														<!-- Documents List Column -->
 														<div class="col-12">
@@ -2958,27 +2966,30 @@ if (mysqli_num_rows($query) == 1) {
 																		'txt' => ['icon' => 'fa-file-text', 'color' => 'secondary', 'label' => 'Text'],
 																	];
 																	$file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
+																	$doc_kind = emp_doc_kind($docu_typ_get, $docu_ext_get);
 																?>
 																	<div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
 																		data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
 																		data-doc-ext="<?= $docu_ext_get ?>"
-																		data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>">
+																		data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>"
+																		style="--doc: <?= $doc_kind[1] ?>;" tabindex="0" role="button">
 																		<div class="doc-item-icon">
-																			<i class="fa <?= $file_info['icon'] ?> text-<?= $file_info['color'] ?>"></i>
+																			<i class="fa <?= $doc_kind[0] ?>"></i>
 																		</div>
 																		<div class="doc-item-info">
-																			<h6 class="doc-item-name"><?= getDisplayName($file_info['label']) ?></h6>
+																			<h6 class="doc-item-name"><?= htmlspecialchars(getDisplayName($docu_typ_get ?: $file_info['label'])) ?></h6>
 																			<small class="doc-item-meta">
-																				<span class="badge badge-<?= $file_info['color'] ?> badge-sm"><?= strtoupper($docu_ext_get) ?></span>
-																				<span class="text-muted ml-2"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
+																				<span class="doc-ext"><i class="fa <?= $file_info['icon'] ?>"></i> <?= strtoupper($docu_ext_get) ?></span>
+																				<span class="doc-date"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
 																			</small>
 																		</div>
 																		<div class="doc-item-actions">
-																			<button class="btn btn-sm btn-icon btn-download-doc" title="<?= __('download', 'Download') ?>" onclick="window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
+																			<span class="doc-act doc-act-view" title="<?= __('view', 'View') ?>"><i class="fa fa-eye"></i></span>
+																			<button class="doc-act btn-download-doc" title="<?= __('download', 'Download') ?>" onclick="event.stopPropagation(); window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
 																				<i class="fa fa-download"></i>
 																			</button>
 																			<?php if ($canDeleteEmpDocs): ?>
-																			<button class="btn btn-sm btn-icon btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
+																			<button class="doc-act doc-act-delete btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
 																				<i class="fa fa-trash"></i>
 																			</button>
 																			<?php endif; ?>
@@ -3017,15 +3028,7 @@ if (mysqli_num_rows($query) == 1) {
 														</div>
 													</div>
 												<?php else: ?>
-													<div class="alert alert-info" role="alert">
-														<div class="d-flex align-items-center">
-															<i class="fa fa-info-circle mr-3" style="font-size: 24px;"></i>
-															<div>
-																<h5 class="mb-1"><?= __('no_documents_found') ?></h5>
-																<p class="mb-0"><?= __('no_documents_have_been_uploaded_yet') ?></p>
-															</div>
-														</div>
-													</div>
+													<div class="docs-empty"><i class="fa fa-folder-open"></i><b><?= __('no_documents_found') ?></b><?= __('no_documents_have_been_uploaded_yet') ?></div>
 												<?php endif; ?>
 											</div>
 										</div>
@@ -3961,6 +3964,10 @@ if (mysqli_num_rows($query) == 1) {
 				var currentDocPath = '';
 
 				// Delegated click for dynamic items
+				// Keyboard: Enter / Space on a document tile opens the preview
+				$(document).on('keydown', '.doc-list-item', function(e) {
+					if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
+				});
 				$(document).on('click', '.doc-list-item', function() {
 					$('.doc-list-item').removeClass('active');
 					$(this).addClass('active');
