@@ -2502,6 +2502,7 @@ function __(key, def) {
 
                 html += '<div class="as-user-card">';
                 html += srUserCardHead(name, empId, role, `<span class="sr-count">${badgeCount}</span>`, `
+                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon copy-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('copy_access_to_users', 'Copy access to other users')}"><i class="mdi mdi-content-copy"></i></button>
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>`);
                 html += `<div class="as-user-body">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
@@ -2515,6 +2516,13 @@ function __(key, def) {
                     const empId = String(this.dataset.empId || '');
                     if (!empId) return;
                     openSpecialAccessEditModal(empId);
+                });
+            });
+
+            container.querySelectorAll('.copy-assigned-special-access-user').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const empId = String(this.dataset.empId || '');
+                    if (empId) openCopySpecialAccessModal(empId);
                 });
             });
 
@@ -2560,6 +2568,120 @@ function __(key, def) {
                         }
                     });
                 });
+            });
+        }
+
+        // Bulk "Copy access to..." from an assigned-user card: applies the source user's
+        // special access (and optionally report access) to one or more target users, either
+        // replacing what they had or merging into it, then saves once.
+        function openCopySpecialAccessModal(sourceId) {
+            const findUser = id => (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === id);
+            const isEmployee = u => !!u && String(u.user_type || '').trim().toLowerCase() === 'employee';
+            const source = findUser(sourceId);
+            const sourceName = source ? ((source.name || '').trim() || sourceId) : sourceId;
+            const sourceKeys = normalizeSpecialAccessList(specialAccessMap[sourceId]);
+            const sourceHasReport = Object.prototype.hasOwnProperty.call(reportPermissionMap, sourceId);
+            const catalogMap = new Map(getSpecialAccessCatalog().map(item => [item.value, item.label]));
+
+            let options = '';
+            (specialAccessEligibleUsers || []).forEach(u => {
+                const id = String(u.emp_id || '').trim();
+                if (!id || id === sourceId) return;
+                const n = (u.name || '').trim() || id;
+                const role = (u.user_type || '').trim();
+                options += `<option value="${escapeHtml(id)}">${escapeHtml(n)} (${escapeHtml(id)})${role ? ' - ' + escapeHtml(formatRoleLabel(role)) : ''}</option>`;
+            });
+
+            const visibleKeys = sourceKeys.filter(featureVisible);
+            const preview = visibleKeys.length
+                ? visibleKeys.map(k => `<span class="sae-granted-chip is-static">${escapeHtml(catalogMap.get(k) || k)}</span>`).join('')
+                : `<span class="sae-granted-chip is-none">${__('no_special_access', 'No special access')}</span>`;
+
+            const html = `
+                <div class="text-left sae-copyto">
+                    <div class="sae-copyto-label">${__('permissions_to_copy', 'Permissions to copy')} <span class="badge badge-success">${visibleKeys.length}</span></div>
+                    <div class="as-chip-wrap sae-copyto-preview">${preview}</div>
+                    <label class="sae-copyto-label mt-3" for="sae-copy-targets">${__('copy_to_users', 'Copy to users')}</label>
+                    <select id="sae-copy-targets" multiple style="width:100%">${options}</select>
+                    <div class="sae-copyto-label mt-3">${__('mode', 'Mode')}</div>
+                    <div class="custom-control custom-radio">
+                        <input type="radio" id="sae-copy-mode-replace" name="sae-copy-mode" class="custom-control-input" value="replace" checked>
+                        <label class="custom-control-label" for="sae-copy-mode-replace"><strong>${__('replace', 'Replace')}</strong> - ${__('copy_mode_replace_desc', 'targets get exactly the same access (their current grants are removed)')}</label>
+                    </div>
+                    <div class="custom-control custom-radio">
+                        <input type="radio" id="sae-copy-mode-merge" name="sae-copy-mode" class="custom-control-input" value="merge">
+                        <label class="custom-control-label" for="sae-copy-mode-merge"><strong>${__('merge', 'Merge')}</strong> - ${__('copy_mode_merge_desc', 'add these grants, keep what targets already have')}</label>
+                    </div>
+                    <div class="custom-control custom-checkbox mt-3">
+                        <input type="checkbox" id="sae-copy-report" class="custom-control-input" checked>
+                        <label class="custom-control-label" for="sae-copy-report">${__('include_report_access', 'Include report access')} <small class="text-muted">(${sourceHasReport ? __('custom', 'Custom') : __('all_default', 'All (default)')})</small></label>
+                    </div>
+                </div>`;
+
+            Swal.fire({
+                title: `${__('copy_access_from', 'Copy access from')} ${escapeHtml(sourceName)}`,
+                html,
+                width: 640,
+                showCancelButton: true,
+                confirmButtonText: '' + __('copy', 'Copy') + '',
+                cancelButtonText: '' + __('cancel') + '',
+                focusConfirm: false,
+                didOpen: () => {
+                    $('#sae-copy-targets').select2({
+                        dropdownParent: $(Swal.getPopup()),
+                        width: '100%',
+                        placeholder: __('select_users', 'Select users...'),
+                        closeOnSelect: false
+                    });
+                },
+                preConfirm: () => {
+                    const targets = ($('#sae-copy-targets').val() || []).map(String);
+                    if (!targets.length) {
+                        Swal.showValidationMessage(__('select_at_least_one_user', 'Select at least one user.'));
+                        return false;
+                    }
+                    return {
+                        targets,
+                        merge: (document.querySelector('input[name="sae-copy-mode"]:checked') || {}).value === 'merge',
+                        includeReport: document.getElementById('sae-copy-report').checked
+                    };
+                }
+            }).then(async (result) => {
+                if (!result.isConfirmed) return;
+                const { targets, merge, includeReport } = result.value;
+
+                targets.forEach(tid => {
+                    const current = normalizeSpecialAccessList(specialAccessMap[tid]);
+                    specialAccessMap[tid] = normalizeSpecialAccessList(merge ? [...current, ...sourceKeys] : [...sourceKeys]);
+
+                    // Report access doesn't apply to plain employees (same rule as the edit modal)
+                    if (includeReport && !isEmployee(findUser(tid))) {
+                        if (!sourceHasReport) {
+                            delete reportPermissionMap[tid]; // source sees all -> replace/merge both mean all
+                        } else if (!merge) {
+                            reportPermissionMap[tid] = normalizeReportTypeList(reportPermissionMap[sourceId]);
+                        } else if (Object.prototype.hasOwnProperty.call(reportPermissionMap, tid)) {
+                            reportPermissionMap[tid] = normalizeReportTypeList([...reportPermissionMap[tid], ...reportPermissionMap[sourceId]]);
+                        } // merge into a target already on "All (default)" - stays all
+                    }
+                });
+                updateSpecialAccessHiddenValue();
+                updateReportPermissionHiddenValue();
+                renderAssignedSpecialAccessSummary(specialAccessEligibleUsers);
+
+                Swal.fire({ title: '' + __('saving', 'Saving...') + '', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                try {
+                    await saveSpecialAccessSettings();
+                    await Swal.fire({
+                        icon: 'success',
+                        title: '' + __('updated', 'Updated') + '',
+                        text: `${__('access_copied_to_users', 'Access copied to')} ${targets.length} ${__('users', 'user(s)')}.`,
+                        confirmButtonText: '' + __('ok', 'OK') + ''
+                    });
+                    await refreshSpecialAccessTableWithLoader();
+                } catch (error) {
+                    Swal.fire('' + __('error') + '', error.message, 'error');
+                }
             });
         }
 
@@ -2627,11 +2749,34 @@ function __(key, def) {
                 panelsHtml += `</div>`;
             }
 
+            // "Copy from" candidates: every other user that already has grants or a report override
+            const copySourceIds = [...new Set([
+                ...Object.keys(specialAccessMap || {}).filter(id => (specialAccessMap[id] || []).length > 0),
+                ...Object.keys(reportPermissionMap || {})
+            ])].filter(id => id !== targetEmpId);
+            let copyOptions = `<option value="">${__('copy_access_from_user', 'Copy access from user...')}</option>`;
+            copySourceIds.forEach(id => {
+                const u = (specialAccessEligibleUsers || []).find(x => String(x.emp_id || '').trim() === id);
+                const n = u ? ((u.name || '').trim() || id) : id;
+                const cnt = normalizeSpecialAccessList(specialAccessMap[id]).filter(featureVisible).length;
+                copyOptions += `<option value="${escapeHtml(id)}">${escapeHtml(n)} (${escapeHtml(id)}) - ${cnt}</option>`;
+            });
+
             let gridHtml = '<div class="text-left">';
-            gridHtml += `<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">`;
-            gridHtml += `<p class="text-muted mb-0 mr-2" style="font-size:.85rem;">${__('currently_granted', 'Currently granted')}: <span class="badge badge-${grantedCount ? 'success' : 'light'}" id="swal-special-access-total-badge">${grantedCount}</span></p>`;
-            gridHtml += '<input type="text" class="form-control form-control-sm" id="swal-special-access-search" style="max-width:260px;" placeholder="' + __('search') + '...">';
-            gridHtml += '</div>';
+            gridHtml += `<div class="sae-toolbar">`;
+            gridHtml += `<button type="button" class="sae-granted-toggle" id="swal-special-access-granted-toggle" aria-expanded="false" title="${__('show_granted_permissions', 'Show granted permissions')}">${__('currently_granted', 'Currently granted')}: <span class="badge badge-${grantedCount ? 'success' : 'light'}" id="swal-special-access-total-badge">${grantedCount}</span> <i class="fa fa-chevron-down sae-granted-caret"></i></button>`;
+            gridHtml += `<div class="sae-toolbar-right">`;
+            if (copySourceIds.length) {
+                gridHtml += `<div class="sae-copy">`;
+                gridHtml += `<select id="swal-special-access-copy-from" class="form-control form-control-sm">${copyOptions}</select>`;
+                gridHtml += `<button type="button" class="sr-btn sr-btn-sm" id="swal-special-access-copy-replace" disabled title="${__('copy_replace_hint', 'Replace current selection with this user\'s access')}"><i class="mdi mdi-content-copy"></i> ${__('replace', 'Replace')}</button>`;
+                gridHtml += `<button type="button" class="sr-btn sr-btn-sm" id="swal-special-access-copy-merge" disabled title="${__('copy_merge_hint', 'Add this user\'s access to the current selection')}"><i class="mdi mdi-plus"></i> ${__('merge', 'Merge')}</button>`;
+                gridHtml += `</div>`;
+            }
+            gridHtml += '<input type="text" class="form-control form-control-sm" id="swal-special-access-search" style="max-width:220px;" placeholder="' + __('search') + '...">';
+            gridHtml += '</div></div>';
+            gridHtml += `<div class="sae-copy-note" id="swal-special-access-copy-note" style="display:none;"></div>`;
+            gridHtml += `<div class="sae-granted-summary" id="swal-special-access-granted-summary" style="display:none;"></div>`;
             gridHtml += '<div class="sae-layout">';
             gridHtml += `<div class="sae-sidebar" id="swal-special-access-sidebar">${navHtml}</div>`;
             gridHtml += `<div class="sae-content" id="swal-special-access-content">`;
@@ -2670,6 +2815,68 @@ function __(key, def) {
                         totalBadge.textContent = String(total);
                         totalBadge.classList.toggle('badge-success', total > 0);
                         totalBadge.classList.toggle('badge-light', total === 0);
+                        renderGrantedSummary();
+                    }
+
+                    // "Currently granted" toggle: grouped list of every checked permission (live),
+                    // each chip jumps to its tab, the x unchecks it.
+                    const grantedToggle = popup.querySelector('#swal-special-access-granted-toggle');
+                    const grantedBox = popup.querySelector('#swal-special-access-granted-summary');
+
+                    function renderGrantedSummary() {
+                        if (!grantedBox || grantedBox.style.display === 'none') return;
+                        let html = '';
+                        panels.forEach(p => {
+                            const checked = Array.from(popup.querySelectorAll(`.sae-panel[data-panel-id="${p.id}"] .special-access-checkbox:checked`));
+                            if (!checked.length) return;
+                            html += `<div class="sae-granted-group"><div class="sae-granted-group-label"><i class="fa ${p.icon}"></i> ${escapeHtml(p.name)} <span class="sae-granted-group-count">${checked.length}</span></div><div class="sae-granted-chips">`;
+                            checked.forEach(cb => {
+                                html += `<span class="sae-granted-chip"><a href="javascript:void(0)" class="sae-granted-jump" data-panel="${p.id}" data-key="${escapeHtml(cb.value)}">${escapeHtml(labelByKey.get(cb.value) || cb.value)}</a><button type="button" class="sae-granted-remove" data-key="${escapeHtml(cb.value)}" title="${__('remove')}">&times;</button></span>`;
+                            });
+                            html += `</div></div>`;
+                        });
+                        if (reportAccessApplicable) {
+                            const reportLabels = new Map(getReportTypeCatalog().map(i => [i.value, i.label]));
+                            const reportChips = reportAccessMode === 'default'
+                                ? `<span class="sae-granted-chip is-report"><a href="javascript:void(0)" class="sae-granted-jump" data-panel="report-access">${__('all_default', 'All (default)')}</a></span>`
+                                : (reportAccessValues.filter(featureVisible).map(v => `<span class="sae-granted-chip is-report"><a href="javascript:void(0)" class="sae-granted-jump" data-panel="report-access">${escapeHtml(reportLabels.get(v) || v)}</a></span>`).join('')
+                                    || `<span class="sae-granted-chip is-none">${__('no_reports', 'No reports')}</span>`);
+                            html += `<div class="sae-granted-group"><div class="sae-granted-group-label"><i class="fa fa-chart-bar"></i> ${__('report_access', 'Report Access')}</div><div class="sae-granted-chips">${reportChips}</div></div>`;
+                        }
+                        grantedBox.innerHTML = html || `<div class="sae-granted-empty">${__('no_permissions_granted', 'No permissions granted yet.')}</div>`;
+                    }
+
+                    if (grantedToggle && grantedBox) {
+                        grantedToggle.addEventListener('click', () => {
+                            const open = grantedBox.style.display === 'none';
+                            grantedBox.style.display = open ? '' : 'none';
+                            grantedToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                            grantedToggle.classList.toggle('is-open', open);
+                            renderGrantedSummary();
+                        });
+                        grantedBox.addEventListener('click', (e) => {
+                            const removeBtn = e.target.closest('.sae-granted-remove');
+                            if (removeBtn) {
+                                const cb = popup.querySelector(`.special-access-checkbox[value="${CSS.escape(removeBtn.dataset.key)}"]`);
+                                if (cb) { cb.checked = false; cb.dispatchEvent(new Event('change')); }
+                                return;
+                            }
+                            const jump = e.target.closest('.sae-granted-jump');
+                            if (!jump) return;
+                            const searchEl = popup.querySelector('#swal-special-access-search');
+                            if (searchEl && searchEl.value) { searchEl.value = ''; searchEl.dispatchEvent(new Event('input')); }
+                            showTab(jump.dataset.panel);
+                            if (jump.dataset.key) {
+                                const cb = popup.querySelector(`.special-access-checkbox[value="${CSS.escape(jump.dataset.key)}"]`);
+                                const item = cb ? cb.closest('.special-access-item') : null;
+                                if (item) {
+                                    item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                                    item.classList.remove('sae-flash');
+                                    void item.offsetWidth;
+                                    item.classList.add('sae-flash');
+                                }
+                            }
+                        });
                     }
 
                     function showTab(panelId) {
@@ -2702,6 +2909,7 @@ function __(key, def) {
                     wireReportAccessBlock(popup, 'swal-special-access', (mode, values) => {
                         reportAccessMode = mode;
                         reportAccessValues = values;
+                        renderGrantedSummary();
                     });
 
                     // Searching temporarily reveals every panel (ignoring the active tab) and
@@ -2760,6 +2968,59 @@ function __(key, def) {
                             panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
                             updateTotalBadge();
                         });
+                    }
+
+                    // Copy from another user: loads their grants (and report access) into the
+                    // checkboxes only - nothing is stored until the admin reviews and clicks Save.
+                    const copySelect = popup.querySelector('#swal-special-access-copy-from');
+                    const copyReplaceBtn = popup.querySelector('#swal-special-access-copy-replace');
+                    const copyMergeBtn = popup.querySelector('#swal-special-access-copy-merge');
+                    const copyNote = popup.querySelector('#swal-special-access-copy-note');
+
+                    function applyCopyFrom(sourceId, merge) {
+                        const srcKeys = new Set(normalizeSpecialAccessList(specialAccessMap[sourceId]));
+                        let copied = 0;
+                        popup.querySelectorAll('.special-access-checkbox').forEach(cb => {
+                            const has = srcKeys.has(cb.value);
+                            if (has) copied++;
+                            cb.checked = merge ? (cb.checked || has) : has;
+                        });
+
+                        const srcUser = (specialAccessEligibleUsers || []).find(u => String(u.emp_id || '').trim() === sourceId);
+                        const srcIsEmployee = srcUser && String(srcUser.user_type || '').trim().toLowerCase() === 'employee';
+                        if (reportAccessApplicable && !srcIsEmployee) {
+                            if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, sourceId)) {
+                                // Source is on "All (default)" - replace or merge both end up as all
+                                const resetBtn = popup.querySelector('.report-access-reset-default[data-target="swal-special-access"]');
+                                if (resetBtn) resetBtn.click();
+                            } else if (!(merge && reportAccessMode === 'default')) {
+                                const srcTypes = new Set(normalizeReportTypeList(reportPermissionMap[sourceId]));
+                                const boxes = popup.querySelectorAll('.report-type-checkbox[data-target="swal-special-access"]');
+                                boxes.forEach(b => { b.checked = merge ? (b.checked || srcTypes.has(b.value)) : srcTypes.has(b.value); });
+                                if (boxes.length) boxes[0].dispatchEvent(new Event('change'));
+                            }
+                        }
+
+                        panels.forEach(p => updateSpecialAccessTabCount(popup, p.id));
+                        updateTotalBadge();
+
+                        if (copyNote) {
+                            const srcName = srcUser ? ((srcUser.name || '').trim() || sourceId) : sourceId;
+                            copyNote.innerHTML = `<i class="mdi mdi-check-circle"></i> ${merge ? __('merged_access_from', 'Merged access from') : __('copied_access_from', 'Copied access from')} <strong>${escapeHtml(srcName)}</strong> (${copied}). ${__('review_and_save', 'Review and click Save Changes to apply.')}`;
+                            copyNote.style.display = '';
+                        }
+                    }
+
+                    if (copySelect) {
+                        const $copy = $(copySelect);
+                        $copy.select2({ dropdownParent: $(popup), width: '260px' });
+                        $copy.on('change', () => {
+                            const has = !!$copy.val();
+                            copyReplaceBtn.disabled = !has;
+                            copyMergeBtn.disabled = !has;
+                        });
+                        copyReplaceBtn.addEventListener('click', () => { if ($copy.val()) applyCopyFrom(String($copy.val()), false); });
+                        copyMergeBtn.addEventListener('click', () => { if ($copy.val()) applyCopyFrom(String($copy.val()), true); });
                     }
                 },
                 preConfirm: () => {

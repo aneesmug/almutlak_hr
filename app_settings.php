@@ -32,7 +32,7 @@
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
 <head>
     <meta charset="utf-8" />
-    <title><?=$site_title ?? __('Application Settings'); ?> - <?= __('App Settings') ?></title>
+    <title><?=$site_title ?? __('Application Settings'); ?> - <?= __('Axpp Settings') ?></title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -682,6 +682,46 @@
         .sr-page .sae-panel-title { color: var(--sr-text); }
         .sr-page .sae-search-hit-cat { color: var(--sr-muted); border-color: var(--sr-border); }
         .sr-page .sae-empty-state { color: var(--sr-muted); }
+
+        /* Special Access modal: toolbar, granted summary, copy from/to */
+        .sae-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+        .sae-toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .sae-copy { display: flex; align-items: center; gap: 6px; }
+        .sae-copy .sr-btn[disabled] { opacity: .5; cursor: not-allowed; }
+        .sae-granted-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+            font-size: .85rem; color: #64748b; background: #f8fafc; border: 1px solid #e5e7eb; transition: border-color .15s, background .15s; }
+        .sae-granted-toggle:hover, .sae-granted-toggle.is-open { border-color: #6366f1; color: #4f46e5; background: #eef2ff; }
+        .sae-granted-caret { font-size: 10px; transition: transform .2s; }
+        .sae-granted-toggle.is-open .sae-granted-caret { transform: rotate(180deg); }
+        .sae-granted-summary { max-height: 240px; overflow-y: auto; margin-bottom: 12px; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .sae-granted-group-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .sae-granted-group-label i { color: #6366f1; }
+        .sae-granted-group-count { background: #e2e8f0; color: #334155; border-radius: 999px; padding: 0 7px; font-size: 10.5px; }
+        .sae-granted-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+        .sae-granted-chip { display: inline-flex; align-items: center; border-radius: 7px; font-size: 11.5px; font-weight: 600;
+            background: #eef2ff; color: #4338ca; border: 1px solid #a5b4fc; overflow: hidden; }
+        .sae-granted-chip a { color: inherit; padding: 3px 4px 3px 9px; text-decoration: none; }
+        .sae-granted-chip a:hover { text-decoration: underline; }
+        .sae-granted-chip.is-report { background: #f0f9ff; color: #0369a1; border-color: #7dd3fc; }
+        .sae-granted-chip.is-report a, .sae-granted-chip.is-none { padding-right: 9px; }
+        .sae-granted-chip.is-static { padding: 3px 9px; }
+        .sae-granted-chip.is-none { background: #fef2f2; color: #b91c1c; border-color: #fca5a5; padding: 3px 9px; }
+        .sae-granted-remove { border: 0; background: transparent; color: inherit; opacity: .55; padding: 0 7px 0 3px; font-size: 14px; line-height: 1; cursor: pointer; }
+        .sae-granted-remove:hover { opacity: 1; color: #b91c1c; }
+        .sae-granted-empty { color: #64748b; font-size: .85rem; }
+        .sae-copy-note { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; font-size: .85rem; background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
+        .special-access-item.sae-flash { animation: saeFlash 1.4s ease; border-radius: 6px; }
+        @keyframes saeFlash { 0%, 40% { background: #fef3c7; } 100% { background: transparent; } }
+        .sae-copyto-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 6px; display: block; }
+        .sae-copyto-preview { max-height: 140px; overflow-y: auto; padding: 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
+        .sae-copyto .custom-control { margin-bottom: 4px; font-size: .9rem; }
+        html.app-dark .sae-granted-toggle, html.app-dark .sae-granted-summary, html.app-dark .sae-copyto-preview { background: #1d2436; border-color: #2a3348; color: #d8dee9; }
+        html.app-dark .sae-granted-toggle:hover, html.app-dark .sae-granted-toggle.is-open { background: #252b4a; border-color: #818cf8; color: #c7d2fe; }
+        html.app-dark .sae-granted-group-count { background: #252e44; color: #d8dee9; }
+        html.app-dark .sae-granted-chip { background: #272c52; color: #c7d2fe; border-color: #4547a0; }
+        html.app-dark .sae-granted-chip.is-report { background: #102c3d; color: #7dd3fc; border-color: #1d5673; }
+        html.app-dark .sae-copy-note { background: #12301f; color: #86efac; border-color: #1f6a3c; }
         .sr-page .special-access-cat-count.badge-primary { background: var(--sr-accent); }
         .sr-page .custom-control-input:checked ~ .custom-control-label::before { background-color: var(--sr-accent); border-color: var(--sr-accent); }
 
