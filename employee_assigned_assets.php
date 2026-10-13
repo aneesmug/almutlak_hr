@@ -28,8 +28,37 @@ if (!$emprow) {
     die("Employee not found.");
 }
 
+// Runs one source query; a schema difference (missing table/column on a server) is logged
+// and that source is skipped instead of failing the whole page.
+$fetch_rows = function ($sql, $source) use ($conDB, $emp_id) {
+    try {
+        $stmt = $conDB->prepare($sql);
+        if (!$stmt) {
+            throw new RuntimeException($conDB->error);
+        }
+        $stmt->bind_param("s", $emp_id);
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        return $rows;
+    } catch (Throwable $e) {
+        error_log('[employee_assigned_assets] ' . $source . ' query failed: ' . $e->getMessage());
+        return [];
+    }
+};
+$column_exists = function ($table, $column) use ($conDB) {
+    try {
+        $res = $conDB->query("SHOW COLUMNS FROM `{$table}` LIKE '" . $conDB->real_escape_string($column) . "'");
+        return $res && $res->num_rows > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+};
+
 // Fetch assigned assets from employee_assets table (laptops, mobiles, SIMs, etc.)
-$employee_assets_query = "SELECT 
+// assets.asset_type is not on every install (the asset inventory migration doesn't create it).
+$asset_type_col = $column_exists('assets', 'asset_type') ? 'a.asset_type' : 'NULL';
+$employee_assets_query = "SELECT
                             ea.id,
                             ea.asset_id,
                             ea.serial_number,
@@ -38,16 +67,12 @@ $employee_assets_query = "SELECT
                             ea.return_date,
                             ea.status,
                             a.name as asset_name,
-                            a.asset_type
+                            {$asset_type_col} as asset_type
                           FROM employee_assets ea
                           LEFT JOIN assets a ON ea.asset_id = a.id
                           WHERE ea.emp_id = ?
                           ORDER BY ea.assigned_date DESC";
-
-$stmt = $conDB->prepare($employee_assets_query);
-$stmt->bind_param("s", $emp_id);
-$stmt->execute();
-$employee_assets_result = $stmt->get_result();
+$employee_assets_rows = $fetch_rows($employee_assets_query, 'employee_assets');
 
 // Fetch cars assigned through cars_drv table
 $cars_drv_query = "SELECT 
@@ -71,14 +96,11 @@ $cars_drv_query = "SELECT
                    WHERE cd.car_user = ?
                    ORDER BY cd.rcv_date DESC";
 
-$stmt = $conDB->prepare($cars_drv_query);
-$stmt->bind_param("s", $emp_id);
-$stmt->execute();
-$cars_drv_result = $stmt->get_result();
+$cars_drv_rows = $fetch_rows($cars_drv_query, 'cars_drv');
 
 // Normalise both sources (employee_assets + cars_drv) into one list.
 $items = [];
-while ($asset = $employee_assets_result->fetch_assoc()) {
+foreach ($employee_assets_rows as $asset) {
     $st = (string)($asset['status'] ?? '');
     $tone = 'green';
     if ($st === 'Returned') $tone = 'slate';
@@ -91,7 +113,7 @@ while ($asset = $employee_assets_result->fetch_assoc()) {
         'status' => $st !== '' ? $st : 'Active', 'tone' => $tone,
     ];
 }
-while ($car = $cars_drv_result->fetch_assoc()) {
+foreach ($cars_drv_rows as $car) {
     $active = ($car['status'] == 1) && empty($car['return_date']);
     $items[] = [
         'type' => 'Car', 'type_tone' => 'sky', 'icon' => 'mdi-car',
