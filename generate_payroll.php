@@ -971,7 +971,7 @@
 
             /* ---------- New GUI (sr-* design system) overrides ---------- */
             /* Summary count tiles (click = filter table, click again = clear) */
-            .sr-page .pg-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+            .sr-page .pg-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
             @media (max-width: 1199px) { .sr-page .pg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
             @media (max-width: 575px) { .sr-page .pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
             .sr-page .pg-tile {
@@ -985,6 +985,8 @@
             .sr-page .pg-tile.tone-amber { --t-bg: var(--tone-amber-bg); --t-fg: var(--tone-amber-fg); --t-bd: var(--tone-amber-bd); }
             .sr-page .pg-tile.tone-sky { --t-bg: var(--tone-sky-bg); --t-fg: var(--tone-sky-fg); --t-bd: var(--tone-sky-bd); }
             .sr-page .pg-tile.tone-green { --t-bg: var(--tone-green-bg); --t-fg: var(--tone-green-fg); --t-bd: var(--tone-green-bd); }
+            .sr-page .pg-tile.tone-red { --t-bg: var(--tone-red-bg); --t-fg: var(--tone-red-fg); --t-bd: var(--tone-red-bd); }
+            .sr-page .pg-skip-note { font-size: 11.5px; line-height: 1.35; color: var(--sr-muted); white-space: normal; }
             .sr-page .pg-tile:hover { border-color: var(--t-bd); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
             .sr-page .pg-tile:focus-visible { outline: 2px solid var(--t-fg); outline-offset: 2px; }
             .sr-page .pg-tile-ico {
@@ -1106,6 +1108,8 @@
                                                 ['hold', 'amber', 'fa-circle-pause', __('payroll_on_hold', 'On Hold'), 'statHold'],
                                                 ['bank', 'sky', 'fa-building-columns', __('bank_option', 'Bank'), 'statBank'],
                                                 ['cash', 'green', 'fa-money-bill-wave', __('cash_option', 'Cash'), 'statCash'],
+                                                // Skipped from this month's payroll by vacation rules - shown in the table only, never in exports/printing
+                                                ['vacation', 'red', 'fa-plane-departure', __('on_vacation_skipped', 'On Vacation'), 'statVacation'],
                                             ];
                                             foreach ($pgTiles as [$pgKey, $pgTone, $pgIcon, $pgLabel, $pgId]): ?>
                                             <div class="pg-tile tone-<?= $pgTone ?>" data-filter="<?= $pgKey ?>" role="button" tabindex="0" aria-pressed="false" title="<?= htmlspecialchars(__('click_to_filter', 'Click to filter, click again to clear')) ?>">
@@ -1376,6 +1380,10 @@
 
 let employeeTable; // DataTables instance
 let allEmployeesData = []; // Store raw employee data fetched from API
+// Employees dropped from this month's payroll by the vacation rules (long vacation / paid
+// vacation settlement). Kept OUT of allEmployeesData on purpose so generation, exports,
+// printing and reports never see them - they only live in the table under the "On Vacation" tile.
+let vacationSkippedEmployees = [];
 let allBenefitTypesData = []; // Store raw benefit types data
 
 function isSelectedMonthFullyPaid() {
@@ -1697,6 +1705,8 @@ function shiftPayrollMonth(offset) {
 let summaryTileFilter = '';
 
 function employeeMatchesSummaryTile(employee, tile) {
+    if (tile === 'vacation') return !!employee.vacation_skipped;
+    if (employee.vacation_skipped) return false;
     const paymentType = parseInt(employee.payment_type || 1, 10);
     const payrollStatus = String(employee.payroll_status || '').toLowerCase();
     const isGenerated = payrollStatus === 'generated' || payrollStatus === 'paid';
@@ -1747,6 +1757,12 @@ function registerEmployeeStatusFilter() {
         const employee = rowData || (settings.aoData && settings.aoData[dataIndex] ? settings.aoData[dataIndex]._aData : null);
         if (!employee) {
             return true;
+        }
+
+        // Vacation-skipped rows are visible only while the "On Vacation" tile is active,
+        // and that tile shows nothing else.
+        if (employee.vacation_skipped || summaryTileFilter === 'vacation') {
+            return !!employee.vacation_skipped && summaryTileFilter === 'vacation';
         }
 
         const paymentType = parseInt(employee.payment_type || 1, 10);
@@ -2421,6 +2437,9 @@ function initializeDataTable() {
                 orderable: false,
                 className: 'text-center',
                 render: function(data, type, row) {
+                    if (row.vacation_skipped) {
+                        return `<span class="sr-pill sr-pill-xs tone-red"><i class="fa fa-plane-departure"></i> ${__('on_vacation_skipped', 'On Vacation')}</span>`;
+                    }
                     // Check if payroll is on hold (payment_type = 3)
                     const isPayrollOnHold = row.payment_type === 3 || row.payment_type === '3';
                     if (isPayrollOnHold) {
@@ -2480,6 +2499,10 @@ function initializeDataTable() {
                     const isPayrollPaid = row.payroll_status && (row.payroll_status === 'paid');
                     const isPayrollGenerated = row.payroll_status && (row.payroll_status === 'generated');
                     
+                    if (row.vacation_skipped) {
+                        return renderVacationSkipNote(row);
+                    }
+
                     // Paid payrolls are locked - open the same details modal but read-only
                     // (view-edit-btn's own delegated click handler decides read-only mode
                     // from the fetched payroll's own status, see showPayrollDetails()).
@@ -2526,6 +2549,21 @@ function initializeDataTable() {
     });
 }
 
+// Why a vacation-skipped employee isn't in this month's payroll (shown in place of the Edit button).
+function renderVacationSkipNote(row) {
+    const esc = v => $('<div>').text(v == null ? '' : String(v)).html();
+    const reason = row.skip_reason === 'settlement_paid'
+        ? __('vacation_skip_settlement_paid', 'Vacation salary already paid by settlement')
+        : __('vacation_skip_long_vacation', 'Long vacation - dropped from payroll');
+    const parts = [];
+    if (row.skip_vacation_type) parts.push(esc(row.skip_vacation_type));
+    if (row.skip_vacation_start) {
+        parts.push(`${esc(row.skip_vacation_start)} &rarr; ${esc(row.skip_vacation_return || '?')}`);
+    }
+    if (row.skip_vacation_days) parts.push(`${esc(row.skip_vacation_days)} ${__('days', 'days')}`);
+    return `<div class="pg-skip-note"><strong>${esc(reason)}</strong>${parts.length ? '<br>' + parts.join(' &middot; ') : ''}</div>`;
+}
+
 async function fetchEmployees() {
     const loadingIndicator = $('#loadingIndicator');
     const noDataMessage = $('#noDataMessage');
@@ -2537,7 +2575,7 @@ async function fetchEmployees() {
     $('#payrollActionsToggle').prop('disabled', true);
     try {
         // Ensure this path is correct for your server setup
-        const response = await fetch(`./includes/api/get_employees.php?month=${selectedMonth}`);
+        const response = await fetch(`./includes/api/get_employees.php?month=${selectedMonth}&include_vacation_skipped=1`);
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Server responded with status ${response.status}: ${errorText}`);
@@ -2545,8 +2583,10 @@ async function fetchEmployees() {
         const data = await response.json();
         if (data.status === 'success') {
             allEmployeesData = data.employees;
-            // Clear existing DataTables rows and add new ones
-            employeeTable.clear().rows.add(allEmployeesData).draw();
+            vacationSkippedEmployees = Array.isArray(data.vacation_skipped_employees) ? data.vacation_skipped_employees : [];
+            // Clear existing DataTables rows and add new ones (skipped rows stay hidden
+            // by the status filter unless the "On Vacation" tile is active)
+            employeeTable.clear().rows.add(allEmployeesData.concat(vacationSkippedEmployees)).draw();
             populateCompanyFilter(allEmployeesData);
             addEventListeners(); // Re-attach listeners after data update
             
@@ -2605,6 +2645,9 @@ function updatePayrollSummaryCards() {
         else if (paymentType === 2) cashCount++;
     });
 
+    const vacationCount = (Array.isArray(vacationSkippedEmployees) ? vacationSkippedEmployees : [])
+        .filter(emp => emp && (!selectedCompany || emp.comp_name === selectedCompany)).length;
+
     // Count + share of all employees in scope (text line + bottom bar)
     const total = scoped.filter(Boolean).length;
     const ofLabel = __('of', 'of');
@@ -2615,6 +2658,10 @@ function updatePayrollSummaryCards() {
         $(`#${id}Pct`).text(`${pct}% ${ofLabel} ${total.toLocaleString('en-US')}`);
         $(`#${id}Bar`).css('width', pct + '%');
     });
+    // Not part of the payroll roster, so no "% of" share - just the count.
+    $('#statVacationCount').text(vacationCount.toLocaleString('en-US'));
+    $('#statVacationPct').text(__('not_in_payroll', 'Not in payroll'));
+    $('#statVacationBar').css('width', vacationCount > 0 ? '100%' : '0');
 }
 
 async function updateRegenerateButtonVisibility() {

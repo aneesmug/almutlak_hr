@@ -59,10 +59,14 @@ $params = [
 
 // Must mirror the VACATION PAYROLL DROPOUT CHECK in process_payroll.php so the
 // listing page doesn't show employees that generation will skip anyway.
+// Each skip rule is kept as a bare EXISTS condition + its own params so the same rule can be
+// negated for the normal list and matched for the "On Vacation (skipped)" list below.
 $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
 $dropoutFilter = "";
+$dropoutCond = "";
+$dropoutParams = [];
 if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
-    $dropoutFilter = " AND NOT EXISTS (
+    $dropoutCond = "EXISTS (
             SELECT 1 FROM emp_vacation vd
             WHERE vd.emp_id = e.emp_id
                 AND vd.review = 'A'
@@ -72,9 +76,13 @@ if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
                 AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
                 AND vd.request_inv_no LIKE 'VAC-%'
         )";
-    $params[':dropout_month_end'] = $monthEnd;
-    $params[':dropout_month_start'] = $monthStart;
-    $params[':dropout_days_param'] = $vacationDropoutDays;
+    $dropoutParams = [
+        ':dropout_month_end' => $monthEnd,
+        ':dropout_month_start' => $monthStart,
+        ':dropout_days_param' => $vacationDropoutDays,
+    ];
+    $dropoutFilter = " AND NOT " . $dropoutCond;
+    $params += $dropoutParams;
 }
 
 // Double-check: a PAID vacation settlement (special-case early payout) overlapping this
@@ -83,8 +91,10 @@ if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
 // no matching emp_vacation row anymore. For those orphaned settlements, fall back to the
 // settlement's own payment_date falling inside the payroll month.
 $settlementFilter = "";
+$settlementCond = "";
+$settlementParams = [];
 if (!empty($monthStart) && !empty($monthEnd)) {
-    $settlementFilter = " AND NOT EXISTS (
+    $settlementCond = "EXISTS (
             SELECT 1 FROM settlement_records sr
             LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
             WHERE sr.emp_id = e.emp_id
@@ -110,11 +120,27 @@ if (!empty($monthStart) && !empty($monthEnd)) {
                         )
                 )
         )";
-    $params[':settlement_month_end'] = $monthEnd;
-    $params[':settlement_month_start'] = $monthStart;
-    $params[':settlement_month_end2'] = $monthEnd;
-    $params[':settlement_month_start2'] = $monthStart;
-    $params[':settlement_month_end3'] = $monthEnd;
+    $settlementParams = [
+        ':settlement_month_end' => $monthEnd,
+        ':settlement_month_start' => $monthStart,
+        ':settlement_month_end2' => $monthEnd,
+        ':settlement_month_start2' => $monthStart,
+        ':settlement_month_end3' => $monthEnd,
+    ];
+    $settlementFilter = " AND NOT " . $settlementCond;
+    $params += $settlementParams;
+}
+
+// Native prepares (ATTR_EMULATE_PREPARES = false) can't reuse a named placeholder, so a
+// condition used twice in one statement needs its own copy of the placeholders.
+function suffixSqlParams($sql, array $params, $suffix) {
+    $renamed = [];
+    foreach ($params as $key => $value) {
+        $newKey = $key . '_' . $suffix;
+        $sql = preg_replace('/' . preg_quote($key, '/') . '\b/', $newKey, $sql);
+        $renamed[$newKey] = $value;
+    }
+    return [$sql, $renamed];
 }
 
 if (!$can_see_all_employees && isset($user_dept)) {
@@ -139,7 +165,7 @@ try {
     // Include only non-Fly active vacations overlapping the payroll month.
     // This keeps Local Annual / Emergency requests visible in payroll until rejoining closes them,
     // while excluding employees on Fly annual vacation from payroll generation.
-    $sql = "SELECT
+    $sql = "SELECT /*EXTRA_COLS*/
             e.id, e.name, e.emp_id, CAST(e.salary AS DECIMAL(10,2)) as salary, e.dept, e.payment_type,
             e.joining_date,
             es.basic, es.housing, es.transport, es.food, es.misc, es.cashier, es.fuel, es.tel, es.other, es.guard,
@@ -208,7 +234,10 @@ try {
             e.fly = 0 
             OR (e.fly = 1 AND v.id IS NOT NULL)
             OR (v.is_deductible = 0)
-        )" . $dept_filter . $newHireFilter . $dropoutFilter . $settlementFilter . "
+        )" . $dept_filter . $newHireFilter;
+    $baseSql = $sql;
+    $baseParams = array_diff_key($params, $dropoutParams, $settlementParams);
+    $sql = str_replace('/*EXTRA_COLS*/', '', $baseSql) . $dropoutFilter . $settlementFilter . "
         ORDER BY e.dept, e.name
     ";
 
@@ -231,7 +260,74 @@ try {
     }
     unset($employee); // Break the reference
 
-    echo json_encode(['status' => 'success', 'employees' => $employees]);
+    $response = ['status' => 'success', 'employees' => $employees];
+
+    // Opt-in only (payroll table's "On Vacation" tile): employees the skip rules above
+    // removed from this month's payroll. Returned as a SEPARATE list so every other caller
+    // (exports, printing, reports) keeps getting just the normal payroll roster.
+    if (!empty($_GET['include_vacation_skipped']) && ($dropoutCond !== '' || $settlementCond !== '')) {
+        $skipConds = [];
+        $skipCols = [];
+        $skipParams = $baseParams;
+        foreach (['dropout' => [$dropoutCond, $dropoutParams], 'settlement' => [$settlementCond, $settlementParams]] as $name => [$cond, $condParams]) {
+            if ($cond === '') {
+                $skipCols[] = "0 AS skip_by_{$name},";
+                continue;
+            }
+            [$colSql, $colParams] = suffixSqlParams($cond, $condParams, 'col');
+            [$whereSql, $whereParams] = suffixSqlParams($cond, $condParams, 'whr');
+            $skipCols[] = "{$colSql} AS skip_by_{$name},";
+            $skipConds[] = $whereSql;
+            $skipParams += $colParams + $whereParams;
+        }
+        // The vacation that caused the skip (longest approved VAC-* overlapping the month).
+        $skipCols[] = "(SELECT CONCAT_WS('|', x.request_inv_no, COALESCE(x.vac_type, ''), x.start_date, COALESCE(x.return_date, ''), COALESCE(x.vacdays, 0))
+                FROM emp_vacation x
+                WHERE x.emp_id = e.emp_id
+                    AND x.review = 'A'
+                    AND x.current_status IN ('approved', 'completed')
+                    AND x.request_inv_no LIKE 'VAC-%'
+                    AND x.start_date <= :skip_info_month_end
+                    AND COALESCE(x.return_date, x.start_date) >= :skip_info_month_start
+                ORDER BY COALESCE(x.vacdays, 0) DESC, x.id DESC
+                LIMIT 1) AS skip_vacation_info,";
+        $skipParams[':skip_info_month_end'] = $monthEnd;
+        $skipParams[':skip_info_month_start'] = $monthStart;
+
+        $skipSql = str_replace('/*EXTRA_COLS*/', implode("\n", $skipCols), $baseSql)
+            . " AND (" . implode(' OR ', $skipConds) . ")
+            ORDER BY e.dept, e.name";
+        $skipStmt = $pdo->prepare($skipSql);
+        foreach ($skipParams as $key => $value) {
+            $skipStmt->bindValue($key, $value);
+        }
+        $skipStmt->execute();
+        $skipped = $skipStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($skipped as &$employee) {
+            if (isset($employee['name'])) {
+                $employee['parsed_name'] = getDisplayName(parseName($employee['name']));
+                $employee['name'] = getDisplayName($employee['name']);
+            }
+            $info = !empty($employee['skip_vacation_info']) ? explode('|', $employee['skip_vacation_info']) : [];
+            $employee['skip_vacation_inv_no'] = $info[0] ?? null;
+            $employee['skip_vacation_type'] = $info[1] ?? null;
+            $employee['skip_vacation_start'] = $info[2] ?? null;
+            $employee['skip_vacation_return'] = $info[3] ?? null;
+            $employee['skip_vacation_days'] = isset($info[4]) ? (int) $info[4] : null;
+            unset($employee['skip_vacation_info']);
+            $employee['skip_by_dropout'] = (int) $employee['skip_by_dropout'];
+            $employee['skip_by_settlement'] = (int) $employee['skip_by_settlement'];
+            $employee['skip_reason'] = $employee['skip_by_settlement'] ? 'settlement_paid' : 'vacation_dropout';
+            $employee['vacation_skipped'] = 1;
+        }
+        unset($employee);
+
+        $response['vacation_skipped_employees'] = $skipped;
+        $response['vacation_dropout_days'] = $vacationDropoutDays;
+    }
+
+    echo json_encode($response);
 
 } catch (PDOException $e) {
     error_log('Error fetching employees: ' . $e->getMessage());
