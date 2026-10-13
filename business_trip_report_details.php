@@ -105,7 +105,7 @@ if (mysqli_num_rows($query) == 1) {
         ['level' => 2, 'min' => 2850, 'max' => 5950, 'hotel' => 200, 'transport' => 75],
         ['level' => 3, 'min' => 6150, 'max' => 7950, 'hotel' => 350, 'transport' => 100],
         ['level' => 4, 'min' => 8300, 'max' => 11450, 'hotel' => 450, 'transport' => 150],
-        ['level' => 5, 'min' => 12350, 'max' => 20450, 'hotel' => 650, 'transport' => 200],
+        ['level' => 5, 'min' => 11450, 'max' => 20450, 'hotel' => 650, 'transport' => 200],
     ];
 
     $matched_scale = null;
