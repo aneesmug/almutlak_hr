@@ -808,7 +808,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
         <li class="<?=(strpos($current_page_name, 'employee') !== false ? 'mm-active' : '')?>">
             <a href="javascript:void(0);"><i class="fa-duotone fa-users-gear" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__("employee's") ?></span><span class="float-right fa fa-arrow-right"></span></a>
             <ul class="nav-second-level" aria-expanded="<?= (strpos($current_page_name, 'employee') !== false ? 'true' : 'false') ?>">
-                <?php if (in_array($current_page_name, ['reg_employee.php', 'view_employee.php']) && (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page))): ?>
+                <?php /* reg_employee.php shows its own button next to the search bar */ if ($current_page_name !== 'reg_employee.php' && (in_array($user_role, $can_see_new_employee_page) || in_array($user_type, $can_see_new_employee_page))): ?>
                     <li><a href="<?= $addNewEmployeeLink ?>" id="newEmployeeMenuLink"><i class="fa-duotone fa-user-plus" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('new_employee') ?></span></a></li>
                 <?php endif; ?>
                 <?php if (in_array($user_role, $can_see_all_employees_page) || in_array($user_type, $can_see_all_employees_page)): ?>

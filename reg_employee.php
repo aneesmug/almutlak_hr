@@ -130,7 +130,10 @@ $counts_res = mysqli_query($conDB, "SELECT COUNT(*) AS all_cnt,
 if ($counts_res && ($cr = mysqli_fetch_assoc($counts_res))) {
     $emp_counts = ['all' => (int)$cr['all_cnt'], 'active' => (int)$cr['active_cnt'], 'fly' => (int)$cr['fly_cnt'], 'inactive' => (int)$cr['inactive_cnt']];
 }
-$can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in_array($user_type, $can_see_new_employee_page ?? []);
+// main_menu.php (where $can_see_new_employee_page lives) is included later, so read the role list here
+require_once __DIR__ . '/includes/page_access_helper.php';
+$new_employee_roles = get_page_access_map($conDB)['add_new_employee.php'] ?? [];
+$can_add_employee = in_array($user_role, $new_employee_roles) || in_array($user_type, $new_employee_roles);
 
 ?>
 <!doctype html>
@@ -175,6 +178,25 @@ $can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in
     <style>
         .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         @media (max-width: 767px) { .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* Employee stat tiles: tone-colored icon, count + share of total, progress bar */
+        .emp-tile { --et-fg: var(--tone-indigo-fg); --et-bg: var(--tone-indigo-bg); --et-bar: #6366f1; padding: 16px 18px 14px; }
+        .emp-tile.et-green { --et-fg: var(--tone-green-fg); --et-bg: var(--tone-green-bg); --et-bar: #22c55e; }
+        .emp-tile.et-sky   { --et-fg: var(--tone-sky-fg);   --et-bg: var(--tone-sky-bg);   --et-bar: #0ea5e9; }
+        .emp-tile.et-slate { --et-fg: var(--tone-slate-fg); --et-bg: var(--tone-slate-bg); --et-bar: #94a3b8; }
+        .emp-tile .et-top { display: flex; align-items: center; gap: 10px; }
+        .emp-tile .et-icon {
+            width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--et-bg); color: var(--et-fg); font-size: 16px;
+        }
+        .emp-tile .et-label { font-size: 13px; font-weight: 600; color: var(--sr-muted); }
+        .emp-tile .et-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; }
+        .emp-tile .sr-tile-value { margin-top: 0; font-size: 26px; }
+        .emp-tile .et-pct { font-size: 12px; font-weight: 700; color: var(--et-fg); background: var(--et-bg); padding: 2px 8px; border-radius: 999px; }
+        .emp-tile .et-bar { display: block; height: 5px; margin-top: 12px; border-radius: 999px; background: var(--sr-surface-3); overflow: hidden; }
+        .emp-tile .et-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--et-bar); transition: width .4s; }
+        .emp-tile.active { border-color: var(--et-bar); box-shadow: 0 0 0 1px var(--et-bar) inset, var(--sr-shadow); }
+        .emp-tile.active::after { display: none; }
         #employeesCardsContainer { transition: opacity .15s; }
         .emp-pager { margin-top: 4px; }
     </style>
@@ -213,32 +235,33 @@ $can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in
                             <h1><?= __('all_employees') ?></h1>
                             <p><?= __('all_employees_subtitle', 'Everyone you can access, newest first.') ?></p>
                         </div>
-                        <?php if ($can_add_employee): ?>
-                            <div class="sr-head-actions">
-                                <button type="button" class="sr-btn sr-btn-primary" onclick="openNewEmployeeTypeModal()"><i class="fa fa-user-plus"></i> <?= __('new_employee') ?></button>
-                            </div>
-                        <?php endif; ?>
                     </div>
 
+                    <?php
+                    $emp_tiles = [
+                        ['key' => '',         'tone' => 'indigo', 'icon' => 'fa-users',        'label' => __('all', 'All'),                 'count' => $emp_counts['all']],
+                        ['key' => 'active',   'tone' => 'green',  'icon' => 'fa-check-circle', 'label' => __('active', 'Active'),           'count' => $emp_counts['active']],
+                        ['key' => 'fly',      'tone' => 'sky',    'icon' => 'fa-plane',        'label' => __('on_vacation', 'On vacation'), 'count' => $emp_counts['fly']],
+                    ];
+                    if ($can_view_inactive) {
+                        $emp_tiles[] = ['key' => 'inactive', 'tone' => 'slate', 'icon' => 'fa-user-times', 'label' => __('inactive', 'Inactive'), 'count' => $emp_counts['inactive']];
+                    }
+                    ?>
                     <div class="sr-tiles emp-tiles" id="empTiles">
-                        <button type="button" class="sr-tile<?= $status_filter === '' ? ' active' : '' ?>" data-key="">
-                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
-                            <span class="sr-tile-value"><?= $emp_counts['all'] ?></span>
+                        <?php foreach ($emp_tiles as $t):
+                            $pct = $emp_counts['all'] > 0 ? round($t['count'] / $emp_counts['all'] * 100) : 0; ?>
+                        <button type="button" class="sr-tile emp-tile et-<?= $t['tone'] ?><?= $status_filter === $t['key'] ? ' active' : '' ?>" data-key="<?= $t['key'] ?>">
+                            <span class="et-top">
+                                <span class="et-icon"><i class="fa <?= $t['icon'] ?>"></i></span>
+                                <span class="et-label"><?= $t['label'] ?></span>
+                            </span>
+                            <span class="et-row">
+                                <span class="sr-tile-value"><?= number_format($t['count']) ?></span>
+                                <?php if ($t['key'] !== ''): ?><span class="et-pct"><?= $pct ?>%</span><?php endif; ?>
+                            </span>
+                            <span class="et-bar"><span style="width: <?= $pct ?>%"></span></span>
                         </button>
-                        <button type="button" class="sr-tile<?= $status_filter === 'active' ? ' active' : '' ?>" data-key="active">
-                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('active', 'Active') ?></span>
-                            <span class="sr-tile-value"><?= $emp_counts['active'] ?></span>
-                        </button>
-                        <button type="button" class="sr-tile<?= $status_filter === 'fly' ? ' active' : '' ?>" data-key="fly">
-                            <span class="sr-tile-label"><span class="sr-dot dot-sky"></span><?= __('on_vacation', 'On vacation') ?></span>
-                            <span class="sr-tile-value"><?= $emp_counts['fly'] ?></span>
-                        </button>
-                        <?php if ($can_view_inactive): ?>
-                        <button type="button" class="sr-tile<?= $status_filter === 'inactive' ? ' active' : '' ?>" data-key="inactive">
-                            <span class="sr-tile-label"><span class="sr-dot dot-slate"></span><?= __('inactive', 'Inactive') ?></span>
-                            <span class="sr-tile-value"><?= $emp_counts['inactive'] ?></span>
-                        </button>
-                        <?php endif; ?>
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="sr-card">
@@ -247,6 +270,9 @@ $can_add_employee = in_array($user_role, $can_see_new_employee_page ?? []) || in
                                 <i class="fa fa-search"></i>
                                 <input type="search" id="searchFilter" placeholder="<?= __('search_by_name_id_mobile_iqama_id') ?>..." value="<?= htmlspecialchars($search_term); ?>" autocomplete="off" aria-label="<?= __('search_by_name_id_mobile_iqama_id') ?>">
                             </div>
+                            <?php if ($can_add_employee): ?>
+                                <button type="button" class="sr-btn sr-btn-primary" onclick="openNewEmployeeTypeModal()"><i class="fa fa-user-plus"></i> <?= __('register_employee', 'Register Employee') ?></button>
+                            <?php endif; ?>
                         </div>
                     </div>
 
