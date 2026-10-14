@@ -172,7 +172,7 @@ function __(key, def) {
                         <div class="org-name">
                             <span class="sr-avatar sr-avatar-sm">${escapeHtml(initials)}</span>
                             <div class="org-name-text">
-                                <span class="sr-cell-title">${escapeHtml(name)} ${extraHtml || ''}</span>
+                                <span class="sr-cell-title"><span class="as-user-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span> ${extraHtml || ''}</span>
                                 <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtml(empId)}</span>${role ? ` · ${escapeHtml(formatRoleLabel(role))}` : ''}</span>
                             </div>
                         </div>
@@ -2428,6 +2428,34 @@ function __(key, def) {
             setSpecialAccessPanelLoading(false);
         }
 
+        // Keeps each assigned-user block's category chips on ONE line: chips that wrap to a
+        // second row are hidden and replaced by a "+N" chip (full list is under Show details).
+        function fitSpecialAccessCategoryLines(container) {
+            container.querySelectorAll('.as-cat-line').forEach(line => {
+                line.querySelectorAll('.as-cat-more').forEach(el => el.remove());
+                const chips = Array.from(line.children);
+                chips.forEach(c => { c.style.display = ''; });
+                if (!line.offsetParent || chips.length < 2) return; // hidden tab / nothing to fold
+                const top = chips[0].offsetTop;
+                const wrapped = () => chips.filter(c => c.style.display !== 'none' && c.offsetTop > top);
+                let hidden = wrapped();
+                if (!hidden.length) return;
+                hidden.forEach(c => { c.style.display = 'none'; });
+                const more = document.createElement('span');
+                more.className = 'as-cat-chip as-cat-more';
+                line.appendChild(more);
+                const visible = chips.filter(c => c.style.display !== 'none');
+                let count = hidden.length;
+                more.textContent = '+' + count;
+                // The "+N" chip itself must fit - fold more chips until it does
+                while (more.offsetTop > top && visible.length > 1) {
+                    visible.pop().style.display = 'none';
+                    more.textContent = '+' + (++count);
+                }
+                more.title = chips.filter(c => c.style.display === 'none').map(c => c.textContent.trim()).join(', ');
+            });
+        }
+
         function renderAssignedSpecialAccessSummary(users) {
             const container = document.getElementById('special-access-assigned-users-list');
             if (!container) return;
@@ -2491,6 +2519,29 @@ function __(key, def) {
                 return out + '</div></div>';
             }
 
+            // Compact block summary: one chip per category (icon + name + count) instead of
+            // every permission label - the full grouped list lives in the expandable details.
+            function buildCategorySummary(empId, grantedKeys) {
+                const grantedSet = new Set(grantedKeys.filter(featureVisible));
+                const placed = new Set();
+                let out = '';
+                categories.forEach(cat => {
+                    const keysHere = cat.keys.filter(k => grantedSet.has(k) && !placed.has(k));
+                    keysHere.forEach(k => placed.add(k));
+                    const n = keysHere.length;
+                    if (n) out += `<span class="as-cat-chip"><i class="fa ${cat.icon}"></i>${escapeHtml(cat.name)}<b>${n}</b></span>`;
+                });
+                const leftover = [...grantedSet].filter(k => !placed.has(k)).length;
+                if (leftover) out += `<span class="as-cat-chip"><i class="mdi mdi-dots-horizontal"></i>${__('other', 'Other')}<b>${leftover}</b></span>`;
+                if (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) {
+                    const reports = normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible).length;
+                    out += reports
+                        ? `<span class="as-cat-chip is-report"><i class="fa fa-chart-bar"></i>${__('report_access', 'Report Access')}<b>${reports}</b></span>`
+                        : `<span class="as-cat-chip is-none"><i class="fa fa-chart-bar"></i>${__('no_reports', 'No reports')}</span>`;
+                }
+                return out;
+            }
+
             let html = '';
 
             assignedEmpIds.forEach(empId => {
@@ -2500,16 +2551,45 @@ function __(key, def) {
                 const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
                 const badgeCount = grantedKeys.length + (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId) ? 1 : 0);
 
-                html += '<div class="as-user-card">';
+                html += '<div class="as-user-card as-user-block">';
                 html += srUserCardHead(name, empId, role, `<span class="sr-count">${badgeCount}</span>`, `
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon copy-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('copy_access_to_users', 'Copy access to other users')}"><i class="mdi mdi-content-copy"></i></button>
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
                     <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>`);
-                html += `<div class="as-user-body">${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>`;
+                html += `<div class="as-user-body">
+                            <div class="as-chip-wrap as-cat-line">${buildCategorySummary(empId, grantedKeys)}</div>
+                            <div class="as-user-details" hidden>${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>
+                        </div>
+                        <button type="button" class="as-user-toggle" aria-expanded="false">
+                            <span>${__('show_details', 'Show details')}</span><i class="mdi mdi-chevron-down"></i>
+                        </button>`;
                 html += '</div>';
             });
 
             container.innerHTML = html;
+
+            fitSpecialAccessCategoryLines(container);
+            if (!window.__saCatLineResizeBound) {
+                window.__saCatLineResizeBound = true;
+                let t;
+                window.addEventListener('resize', () => {
+                    clearTimeout(t);
+                    t = setTimeout(() => {
+                        const c = document.getElementById('special-access-assigned-users-list');
+                        if (c) fitSpecialAccessCategoryLines(c);
+                    }, 150);
+                });
+            }
+
+            container.querySelectorAll('.as-user-toggle').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const details = this.closest('.as-user-block').querySelector('.as-user-details');
+                    const open = details.hidden;
+                    details.hidden = !open;
+                    this.setAttribute('aria-expanded', String(open));
+                    this.querySelector('span').textContent = open ? __('hide_details', 'Hide details') : __('show_details', 'Show details');
+                });
+            });
 
             container.querySelectorAll('.edit-assigned-special-access-user').forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -4365,7 +4445,7 @@ function __(key, def) {
                                     <input type="search" id="special-access-assigned-search" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
                                 </div>
                             </div>
-                            <div id="special-access-assigned-users-list" class="as-user-list">
+                            <div id="special-access-assigned-users-list" class="as-user-list as-user-grid">
                                 <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                             </div>
                         </div>

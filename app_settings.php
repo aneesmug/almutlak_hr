@@ -669,6 +669,33 @@
         .as-grant-chip.is-report { background: var(--tone-sky-bg); color: var(--tone-sky-fg); border-color: var(--tone-sky-bd); }
         .as-grant-chip.is-none { background: var(--tone-red-bg); color: var(--tone-red-fg); border-color: var(--tone-red-bd); }
 
+        /* Special Access assigned users as a grid of compact blocks */
+        .as-user-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+        .as-user-block { display: flex; flex-direction: column; }
+        .as-user-block .as-user-head .org-name { min-width: 0; flex: 1; }
+        .as-user-block .org-name-text { min-width: 0; }
+        .as-user-block .as-user-head .sr-cell-title { display: flex; min-width: 0; }
+        .as-user-block .as-user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .as-user-block .as-user-head .sr-cell-title .sr-count { flex: 0 0 auto; }
+        .as-user-block .as-user-head .sr-cell-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+        .as-cat-line { overflow: hidden; }
+        .as-cat-chip { white-space: nowrap; }
+        .as-cat-chip.as-cat-more { padding: 3px 8px; background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); border-color: var(--tone-indigo-bd); cursor: default; }
+        .as-user-block .as-user-body { flex: 1; }
+        .as-cat-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border-radius: 7px; font-size: 11.5px; font-weight: 600;
+            background: var(--sr-surface-2); color: var(--sr-text); border: 1px solid var(--sr-border); }
+        .as-cat-chip > i { font-size: 11px; color: var(--sr-muted); }
+        .as-cat-chip > b { min-width: 18px; padding: 0 5px; border-radius: 5px; text-align: center; font-size: 10.5px; background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); }
+        .as-cat-chip.is-report > b { background: var(--tone-sky-bg); color: var(--tone-sky-fg); }
+        .as-cat-chip.is-none { padding-right: 8px; background: var(--tone-red-bg); color: var(--tone-red-fg); border-color: var(--tone-red-bd); }
+        .as-cat-chip.is-none > i { color: inherit; }
+        .as-user-details { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--sr-border); }
+        .as-user-toggle { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; padding: 6px; border: 0; border-top: 1px solid var(--sr-border);
+            background: transparent; color: var(--sr-accent-strong); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+        .as-user-toggle:hover { background: var(--sr-accent-soft); }
+        .as-user-toggle i { transition: transform .15s; }
+        .as-user-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
+
         /* Special Access edit modal (sae-*) on the sr tokens */
         .sr-page .sae-layout { border-color: var(--sr-border); background: var(--sr-surface); }
         .sr-page .sae-sidebar { background: var(--sr-surface-2); border-color: var(--sr-border); }

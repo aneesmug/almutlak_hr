@@ -174,6 +174,17 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 			if ($emprow["fly"] == 1) {
 				$lastVac = lastVacIdGet($emprow['empid']);
 
+				// Rejoining - submits a rejoin request that goes through the normal
+				// approval chain (direct supervisor). Only for Fly annual/emergency vacations.
+				if ($isHR || $is_system_admin || $isDeptHr) {
+					$lastVacType = strtolower(trim((string)($lastVac['vac_type'] ?? '')));
+					$lastFlyType = strtolower(trim((string)($lastVac['fly_type'] ?? '')));
+					$isFlyRejoinEligible = ($lastVacType === 'fly' && in_array($lastFlyType, ['annual', 'emergency'], true));
+					if ($lastVac && is_array($lastVac) && !empty($lastVac['vacid']) && !empty($lastVac['returndate']) && $isFlyRejoinEligible) {
+						$ma['vacation'][] = "<div class=\"menu-item text-dark\" onclick=\"returnVacationRequest(" . (int)$lastVac['vacid'] . ", '" . htmlspecialchars($lastVac['returndate'], ENT_QUOTES) . "', '" . htmlspecialchars($emprow['empid'], ENT_QUOTES) . "', '" . htmlspecialchars($emprow['name'], ENT_QUOTES) . "')\" role=\"button\"><i class=\"fa fa-plane-arrival\"></i><span>" . __('rejoining', 'Rejoining') . "</span></div>";
+					}
+				}
+
 				// Direct Rejoin (bypass approval chain entirely) - gated by the
 				// 'direct_rejoin_bypass_approval' special access grant, independent
 				// of role, so it can be granted to any specific employee.
