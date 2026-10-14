@@ -1033,6 +1033,19 @@
             .pr-popup .swal2-validation-message { border-radius: 10px; background: var(--tone-red-bg); color: var(--tone-red-fg); }
             .pr-popup .pr-loading-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
             .pr-popup .pr-loading-text { text-align: center; margin-top: 10px; font-size: 12.5px; }
+            .pr-popup .pr-load { margin-top: 14px; text-align: start; }
+            .pr-popup .pr-load-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--sr-text-2); margin-bottom: 6px; }
+            .pr-popup .pr-load-head b { color: var(--sr-text); font-variant-numeric: tabular-nums; }
+            .pr-popup .pr-load-cur { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; color: var(--sr-text); }
+            .pr-popup .pr-load-cur i { color: var(--sr-accent); }
+            .pr-popup .pr-load-bar { height: 8px; border-radius: 99px; background: var(--sr-surface-3); overflow: hidden; }
+            .pr-popup .pr-load-bar span { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--sr-accent); transition: width .3s ease; }
+            .pr-popup .pr-load-list { list-style: none; margin: 10px 0 0; padding: 4px; max-height: 180px; overflow-y: auto; border: 1px solid var(--sr-border); border-radius: 10px; background: var(--sr-surface-2); }
+            .pr-popup .pr-load-list li { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 7px; font-size: 12.5px; color: var(--sr-muted); }
+            .pr-popup .pr-load-list li i { font-size: 15px; }
+            .pr-popup .pr-load-list li.is-active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-weight: 600; }
+            .pr-popup .pr-load-list li.is-done { color: var(--sr-text); }
+            .pr-popup .pr-load-list li.is-done i { color: #16a34a; }
             .pr-popup .pr-kv-wrap { padding: 4px 14px; }
             .pr-popup .pr-paid-warn { margin-bottom: 12px !important; }
             .pr-popup .pr-money { font-weight: 700; color: var(--sr-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -1040,18 +1053,27 @@
 
             .pr-report-popup { padding: 22px 22px 18px !important; }
             .pr-report-popup .swal2-html-container { margin: 0; overflow: visible; }
-            .pr-report-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-            .pr-report-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
-            .pr-report-ico { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-size: 22px; }
-            .pr-report-title h2 { margin: 0; font-size: 19px; font-weight: 800; color: var(--sr-text); }
-            .pr-report-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
-            .pr-report-stats { margin-top: 16px; }
-            .pr-report-stats .sr-stat-value { font-size: 20px; }
-            .pr-report-stats .pr-stat-accent { background: var(--sr-accent-soft); border-color: var(--tone-indigo-bd); }
-            .pr-report-stats .pr-stat-accent::before { background: var(--sr-accent); }
-            .pr-report-stats .pr-stat-accent .sr-stat-value { color: var(--sr-accent-strong); }
-            .pr-report-note { margin: 14px 0 0 !important; }
-            .pr-report-toolbar { margin-top: 16px; padding: 0 0 12px; border-bottom: 1px solid var(--sr-border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+            .pr-report-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 10px 12px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); }
+            .pr-report-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+            .pr-report-ico { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-size: 19px; }
+            .pr-report-title h2 { margin: 0; font-size: 16px; font-weight: 800; line-height: 1.25; color: var(--sr-text); }
+            .pr-report-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+            .pr-kpis { display: flex; flex-wrap: wrap; align-items: stretch; border: 1px solid var(--sr-border); border-radius: 10px; background: var(--sr-surface); overflow: hidden; }
+            .pr-kpi { display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 5px 14px; border-inline-start: 1px solid var(--sr-border); }
+            .pr-kpi:first-child { border-inline-start: 0; }
+            .pr-kpi span { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--sr-muted); white-space: nowrap; }
+            .pr-kpi b { font-size: 16px; font-weight: 800; line-height: 1.2; color: var(--sr-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+            .pr-kpi.is-green span i, .pr-kpi.is-green b { color: #16a34a; }
+            .pr-kpi.is-amber span i, .pr-kpi.is-amber b { color: #d97706; }
+            .pr-kpi.is-total { background: var(--sr-accent-soft); }
+            .pr-kpi.is-total span i, .pr-kpi.is-total b { color: var(--sr-accent-strong); }
+            .pr-kpi .icon-saudi_riyal { font-size: .8em !important; opacity: .75; }
+            @media (max-width: 767px) {
+                .pr-kpis { width: 100%; }
+                .pr-kpi { flex: 1 1 45%; padding: 5px 10px; }
+            }
+            .pr-report-note { margin: 10px 0 0 !important; }
+            .pr-report-toolbar { margin-top: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--sr-border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
             .pr-report-toolbar .sr-btn { height: 36px; }
             .pr-report-toolbar .sr-btn:disabled { opacity: .55; cursor: not-allowed; }
             .pr-report-toolbar .pr-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 11px; font-weight: 700; }
@@ -7152,22 +7174,80 @@ function openPayslipsFile(base, data) {
                             <span class="sr-chip"><i class="mdi mdi-domain"></i> ${escHtml(selectedCompany || __('all_companies_option') || 'All Companies')}</span>
                         </div>
                         <span class="sr-fhint pr-loading-text">${__('please_wait_fetching_data')}</span>
+                        <div class="pr-load">
+                            <div class="pr-load-head">
+                                <span class="pr-load-cur" id="prLoadCur"><i class="mdi mdi-loading mdi-spin"></i> ${escHtml(__('loading_companies', 'Loading companies...'))}</span>
+                                <b id="prLoadPct">0%</b>
+                            </div>
+                            <div class="pr-load-bar"><span id="prLoadBar"></span></div>
+                            <ul class="pr-load-list" id="prLoadList" style="display: none;"></ul>
+                        </div>
                     </div>`,
-                didOpen: () => Swal.showLoading(),
+                showConfirmButton: false,
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
             });
 
-            try {
-                // Fetch the payroll report data for the chosen month and optional company filter
-                const companyParam = selectedCompany ? `&company=${encodeURIComponent(selectedCompany)}` : '';
-                const response = await fetch(`./includes/api/get_payroll_report.php?month=${selectedMonth}${companyParam}`);
+            const fetchReportJson = async (query) => {
+                const response = await fetch(`./includes/api/get_payroll_report.php?month=${encodeURIComponent(selectedMonth)}${query}`);
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`Server responded with status ${response.status}: ${errorText}`);
                 }
-                const data = await response.json();
+                return response.json();
+            };
+            const companyLabel = (c) => c === '__none__' ? __('unassigned_company', 'Unassigned') : c;
+            const setLoadProgress = (done, total, current) => {
+                const pct = total ? Math.round((done / total) * 100) : 0;
+                $('#prLoadBar').css('width', pct + '%');
+                $('#prLoadPct').text(total ? `${done} / ${total} · ${pct}%` : pct + '%');
+                if (current !== undefined) {
+                    $('#prLoadCur').html(`<i class="mdi mdi-loading mdi-spin"></i> ${escHtml(current)}`);
+                }
+            };
+
+            try {
+                // Load company by company so the popup can show which one is in progress.
+                // A single company is just a one-step run of the same loop.
+                let companies = selectedCompany ? [selectedCompany] : null;
+                if (!companies) {
+                    const list = await fetchReportJson('&list_companies=1');
+                    if (list.status !== 'success') {
+                        throw new Error(list.message || 'Failed to load companies');
+                    }
+                    companies = Array.isArray(list.companies) ? list.companies : [];
+                }
+
+                const $list = $('#prLoadList');
+                if (companies.length > 1) {
+                    $list.html(companies.map((c, i) =>
+                        `<li data-i="${i}"><i class="mdi mdi-circle-outline"></i><span>${escHtml(companyLabel(c))}</span></li>`
+                    ).join('')).show();
+                }
+
+                const data = { status: 'success', report: [], vacation_employees: [], bank_file_ready: false };
+                for (let i = 0; i < companies.length; i++) {
+                    const c = companies[i];
+                    setLoadProgress(i, companies.length, companyLabel(c));
+                    const $li = $list.find(`li[data-i="${i}"]`).addClass('is-active');
+                    $li.find('i').attr('class', 'mdi mdi-loading mdi-spin');
+                    if ($li.length) $li[0].scrollIntoView({ block: 'nearest' });
+
+                    const part = await fetchReportJson(`&company=${encodeURIComponent(c)}`);
+                    if (part.status !== 'success') {
+                        data.status = part.status;
+                        data.message = part.message;
+                        break;
+                    }
+                    data.report = data.report.concat(part.report || []);
+                    data.vacation_employees = data.vacation_employees.concat(part.vacation_employees || []);
+                    data.bank_file_ready = !!part.bank_file_ready;
+
+                    $li.removeClass('is-active').addClass('is-done').find('i').attr('class', 'mdi mdi-check-circle');
+                    setLoadProgress(i + 1, companies.length);
+                }
+                $('#prLoadCur').html(`<i class="mdi mdi-check-circle"></i> ${escHtml(__('preparing_report', 'Preparing report...'))}`);
 
                 if (data.status === 'success') {
                 const reportData = data.report;
@@ -7187,13 +7267,13 @@ function openPayslipsFile(base, data) {
                 const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
                 const reportHtml = `
                     <div id="payrollReportModal" class="sr-form pr-report">
+                        <!-- Compact header: title + chips left, inline stat strip right (keeps the popup short) -->
                         <div class="pr-report-head">
                             <div class="pr-report-title">
                                 <span class="pr-report-ico"><i class="mdi mdi-file-chart"></i></span>
                                 <div>
                                     <h2>${__('payroll_report_for_month_title')} ${escHtml(reportMonthLabel)}</h2>
                                     <div class="pr-report-chips">
-                                        <span class="sr-chip"><i class="mdi mdi-calendar"></i> ${escHtml(reportMonthLabel)}</span>
                                         <span class="sr-chip"><i class="mdi mdi-domain"></i> ${escHtml(selectedCompany || __('all_companies_option') || 'All Companies')}</span>
                                         ${allAlreadyPaid
                                             ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('paid_badge')}</span>`
@@ -7201,13 +7281,12 @@ function openPayslipsFile(base, data) {
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <div class="sr-stats pr-report-stats">
-                            <div class="sr-stat"><div class="sr-stat-label">${__('employees', 'Employees')} <i class="mdi mdi-account-multiple"></i></div><div class="sr-stat-value">${reportData.length}</div></div>
-                            <div class="sr-stat is-green"><div class="sr-stat-label">${__('paid_badge')} <i class="mdi mdi-check-circle"></i></div><div class="sr-stat-value">${paidCount}</div></div>
-                            <div class="sr-stat is-amber"><div class="sr-stat-label">${__('pending', 'Pending')} <i class="mdi mdi-alert-outline"></i></div><div class="sr-stat-value">${pendingCount}</div></div>
-                            <div class="sr-stat pr-stat-accent"><div class="sr-stat-label">${__('grand_total_label')} <i class="mdi mdi-cash-multiple"></i></div><div class="sr-stat-value"><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</div></div>
+                            <div class="pr-kpis">
+                                <div class="pr-kpi"><span><i class="mdi mdi-account-multiple"></i> ${__('employees', 'Employees')}</span><b>${reportData.length}</b></div>
+                                <div class="pr-kpi is-green"><span><i class="mdi mdi-check-circle"></i> ${__('paid_badge')}</span><b>${paidCount}</b></div>
+                                <div class="pr-kpi is-amber"><span><i class="mdi mdi-alert-outline"></i> ${__('pending', 'Pending')}</span><b>${pendingCount}</b></div>
+                                <div class="pr-kpi is-total"><span><i class="mdi mdi-cash-multiple"></i> ${__('grand_total_label')}</span><b><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</b></div>
+                            </div>
                         </div>
 
                         <div class="sr-notice tone-amber pr-report-note" id="bankExcelPendingNote" style="display:${showBankExcelButton ? 'none' : 'flex'};">
@@ -7319,7 +7398,7 @@ function openPayslipsFile(base, data) {
                                     }
                                 }
                             ],
-                            pageLength: 10,
+                            pageLength: 5,
                             order: [[1, 'asc']],
                             language: {
                                 info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,

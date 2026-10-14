@@ -69,7 +69,10 @@ if (!$can_see_all_employees && isset($user_dept)) {
 }
 
 // Add company filter if specified
-if (!empty($companyFilter)) {
+// '__none__' = employees with no company (lets the client load "All Companies" company by company)
+if ($companyFilter === '__none__') {
+    $company_filter = " AND c.comp_id IS NULL";
+} elseif (!empty($companyFilter)) {
     $company_filter = " AND c.comp_name = :company_name";
     $params[':company_name'] = $companyFilter;
 }
@@ -204,6 +207,18 @@ try {
     $stmt->execute();
     $reportData = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Light mode: only the companies present in this month's report (skips the
+    // per-employee benefit/deduction lookups). Rows with no company => '__none__'.
+    if (!empty($_GET['list_companies'])) {
+        $companies = [];
+        foreach ($reportData as $row) {
+            $name = trim((string)($row['comp_name'] ?? ''));
+            $companies[$name !== '' ? $name : '__none__'] = true;
+        }
+        echo json_encode(['status' => 'success', 'companies' => array_keys($companies)]);
+        exit;
+    }
+
     $stmtVacationEmployees = $pdo->prepare("SELECT DISTINCT
             e.emp_id,
             e.name AS employee_name,
@@ -240,7 +255,7 @@ try {
     if (!$can_see_all_employees && isset($user_dept)) {
         $vacationParams[':user_dept'] = $user_dept;
     }
-    if (!empty($companyFilter)) {
+    if (!empty($companyFilter) && $companyFilter !== '__none__') {
         $vacationParams[':company_name'] = $companyFilter;
     }
 
