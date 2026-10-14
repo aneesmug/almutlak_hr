@@ -591,6 +591,47 @@ try {
 
     $loanOptions = payroll_loan_options($pdo, $empId, $monthYear);
 
+    // Active public holidays of last month and this payroll month (for the employee's
+    // company) - offered in the "Add Benefit" type list so HR can pay a holiday manually.
+    // Amount = full monthly gross / 30 x holiday days. A holiday already paid to this
+    // employee (manual row or auto "Vacation Holiday Salary" row, both keyed "HID: x)")
+    // comes back flagged so the option is disabled.
+    $holidayOptions = [];
+    $holidayRangeStart = date('Y-m-01', strtotime($monthYear . '-01 -1 month'));
+    $holidayRangeEnd = date('Y-m-t', strtotime($monthYear . '-01'));
+    $stmtHolidaySalary = $pdo->prepare("SELECT basic + housing + transport + food + misc + cashier + fuel + tel + other + guard
+        FROM emp_salary WHERE emp_id = :emp_id AND status = 1 ORDER BY id DESC LIMIT 1");
+    $stmtHolidaySalary->execute([':emp_id' => $empId]);
+    $holidayDailyRate = ((float) $stmtHolidaySalary->fetchColumn()) / 30;
+    $stmtHolidayList = $pdo->prepare("SELECT DISTINCT h.id, h.holiday_name, h.start_date, h.end_date
+        FROM emp_holidays h
+        LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
+        LEFT JOIN companies hcc ON hcc.id = hc.company_id
+        WHERE h.is_active = 1 AND h.start_date <= :range_end AND h.end_date >= :range_start
+            AND (hcc.comp_id = :comp_no OR hc.holiday_id IS NULL)
+        ORDER BY h.start_date");
+    $stmtHolidayList->execute([':range_start' => $holidayRangeStart, ':range_end' => $holidayRangeEnd, ':comp_no' => $employee['comp_no']]);
+    $stmtHolidayAdded = $pdo->prepare("SELECT month FROM payroll_benefits WHERE emp_id = :emp_id AND benefit LIKE :pattern LIMIT 1");
+    foreach ($stmtHolidayList->fetchAll(PDO::FETCH_ASSOC) as $h) {
+        $from = max(substr($h['start_date'], 0, 10), $holidayRangeStart);
+        $to = min(substr($h['end_date'], 0, 10), $holidayRangeEnd);
+        $days = (int) ((strtotime($to) - strtotime($from)) / 86400) + 1;
+        if ($days <= 0) {
+            continue;
+        }
+        $stmtHolidayAdded->execute([':emp_id' => $empId, ':pattern' => '%HID: ' . (int) $h['id'] . ')%']);
+        $addedMonth = $stmtHolidayAdded->fetchColumn();
+        $holidayOptions[] = [
+            'id' => (int) $h['id'],
+            'name' => $h['holiday_name'],
+            'start_date' => $from,
+            'end_date' => $to,
+            'days' => $days,
+            'amount' => round($holidayDailyRate * $days, 2),
+            'added_month' => $addedMonth ?: null,
+        ];
+    }
+
     echo json_encode([
         'status' => 'success',
         'loans' => $loanOptions,
@@ -599,6 +640,7 @@ try {
         'benefits' => $benefits,
         'deductions' => $deductions,
         'benefit_types' => $benefitTypes,
+        'holiday_options' => $holidayOptions,
         'feedbacks' => $feedbacks,
         'skip_auto_gosi_due_to_vacation' => $skipAutoGosiDueToVacation,
         'master_data_changed_since_generation' => $masterDataChangedSinceGeneration,

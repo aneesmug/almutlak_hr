@@ -229,6 +229,9 @@
             .pd-btn:hover { background: var(--pd-bg); }
             .pd-btn-primary { border-color: transparent; background: linear-gradient(135deg, #4f46e5, #6366f1); color: #fff; box-shadow: 0 8px 18px rgba(79, 70, 229, .28); }
             .pd-btn-primary:hover { background: linear-gradient(135deg, #4338ca, #4f46e5); }
+            .pd-btn-generate { border-color: transparent; background: linear-gradient(135deg, #059669, #10b981); color: #fff; box-shadow: 0 8px 18px rgba(5, 150, 105, .25); }
+            .pd-btn-generate:hover { background: linear-gradient(135deg, #047857, #059669); }
+            .pd-save-only { display: flex; justify-content: flex-end; margin-top: 14px; }
             .pd-footer { margin: 16px 0 0 !important; padding: 12px 16px !important; border-top: 1px solid var(--pd-border) !important; background: var(--pd-card); }
             .pd-footer .payroll-nav-actions { background: transparent; border: 0; box-shadow: none; padding: 0; }
             .pd-footer .payroll-nav-btn { min-width: 120px; padding: 8px 16px !important; }
@@ -1032,6 +1035,24 @@
             .pr-popup .pr-req { color: #dc2626; }
             .pr-popup .swal2-validation-message { border-radius: 10px; background: var(--tone-red-bg); color: var(--tone-red-fg); }
             .pr-popup .pr-loading-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+            .pr-popup .pr-progress-emp { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); text-align: start; }
+            .pr-popup .pr-progress-emp .sr-avatar { flex: 0 0 40px; width: 40px; height: 40px; font-size: 14px; }
+            .pr-popup .pr-progress-emp .sr-person-name { display: block; white-space: normal; }
+            .pr-popup .pr-run-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; }
+            @media (max-width: 575px) { .pr-popup .pr-run-stats { grid-template-columns: 1fr; } }
+            .pr-popup .pr-run-stats .sr-stat { text-align: start; }
+            .pr-popup .pr-run-stats .sr-stat-value { font-size: 22px; }
+            .pr-popup .pr-skipped { margin-top: 14px; text-align: start; }
+            .pr-popup .pr-skipped-body { padding: 10px 10px 4px; }
+            .pr-popup .pr-skipped-search { max-width: none; margin-bottom: 6px; }
+            .pr-popup .pr-skipped table.sr-table tbody tr { cursor: default; }
+            .pr-popup .pr-reason { white-space: normal; line-height: 1.35; text-align: start; }
+            .pr-popup .pr-skip-reason { margin-top: 12px !important; text-align: start; }
+            .pr-popup .pr-steps { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: start; }
+            .pr-popup .pr-steps li { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--sr-muted); background: var(--sr-surface); border: 1px dashed var(--sr-border); }
+            .pr-popup .pr-steps li i { font-size: 16px; }
+            .pr-popup .pr-steps li.is-done { color: var(--tone-green-fg); background: var(--tone-green-bg); border: 1px solid var(--tone-green-bd); }
+            .pr-popup .pr-steps li.is-active { color: var(--sr-accent-strong); background: var(--sr-accent-soft); border: 1px solid var(--tone-indigo-bd); }
             .pr-popup .pr-loading-text { text-align: center; margin-top: 10px; font-size: 12.5px; }
             .pr-popup .pr-load { margin-top: 14px; text-align: start; }
             .pr-popup .pr-load-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--sr-text-2); margin-bottom: 6px; }
@@ -1959,11 +1980,16 @@ function collectPayrollModalData(employee) {
         const amountInput = row.querySelector('.benefit-amount');
         const noteInput = row.querySelector('.benefit-note');
         const benefitId = benefitTypeSelect?.dataset.benefitId || benefitNameInput?.dataset.benefitId || null;
-        const benefitTypeId = benefitTypeSelect ? benefitTypeSelect.value : null;
+        const selectedOption = benefitTypeSelect ? benefitTypeSelect.options[benefitTypeSelect.selectedIndex] : null;
+        const holidayLabel = selectedOption?.dataset.holidayLabel || '';
+        // Holiday options are not benefit_types rows - saved as a fixed benefit, no type_id.
+        const benefitTypeId = benefitTypeSelect && !holidayLabel ? benefitTypeSelect.value : null;
         let benefitName = '';
 
-        if (benefitTypeSelect) {
-            benefitName = benefitTypeSelect.options[benefitTypeSelect.selectedIndex]?.text || '';
+        if (holidayLabel) {
+            benefitName = holidayLabel;
+        } else if (benefitTypeSelect) {
+            benefitName = selectedOption?.text || '';
         } else if (benefitNameInput) {
             benefitName = benefitNameInput.value.trim();
         }
@@ -2188,6 +2214,9 @@ const buildDeductionsHtml = (deductions, payrollData, gosiPercentage) => {
                     </select>` : ''}
                 </div>
                 <small class="d-block mt-1 deduction-loan-info" style="${isLoan ? '' : 'display: none;'}"></small>
+                ${deductionName.startsWith('GOSI New Joiner ')
+                    ? `<small class="d-block text-info mt-1"><i class="fas fa-user-plus"></i> ${__('deduction_reason_new_joiner_gosi', "GOSI for last month's days paid here as New Joiner Salary")}</small>`
+                    : ''}
             `;
         }
         const periodSlotClass = isCalculated ? 'deduction-period-slot' : 'deduction-period-slot deduction-period-input-empty';
@@ -2294,6 +2323,36 @@ function validateLoanDeductions() {
     return error;
 }
 
+// Public holidays (last month + payroll month, active, employee's company) offered in the
+// "Add Benefit" type list. Saved as "Holiday Salary: <name> <dates>, N days (HID: x)" - the
+// HID key lets the server flag a holiday already paid (manually or by the auto vacation
+// holiday row) so it can't be picked twice.
+function buildHolidayBenefitOptionsHtml(holidayOptions) {
+    if (!Array.isArray(holidayOptions) || holidayOptions.length === 0) {
+        return '';
+    }
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const fmt = (d, withYear) => {
+        const [y, m, day] = String(d).split('-');
+        return `${parseInt(day, 10)} ${monthNames[parseInt(m, 10) - 1]}${withYear ? ' ' + y : ''}`;
+    };
+    const options = holidayOptions.map(h => {
+        const days = parseInt(h.days, 10) || 0;
+        const when = h.start_date === h.end_date ? fmt(h.start_date, true) : `${fmt(h.start_date, false)} - ${fmt(h.end_date, true)}`;
+        const daysText = `${days} ${days === 1 ? 'day' : 'days'}`;
+        const amount = parseFloat(h.amount || 0).toFixed(2);
+        const key = ` (HID: ${parseInt(h.id, 10)})`;
+        const label = (`Holiday Salary: ${String(h.name || '').slice(0, 40)} ${when}, ${daysText}`).slice(0, 100 - key.length) + key;
+        const info = `${h.name} · ${when} · ${daysText} × (gross / 30) = ${amount}`;
+        const addedNote = h.added_month ? ` — ${__('holiday_benefit_already_added') || 'already added'} (${h.added_month})` : '';
+        return `<option value="holiday-${parseInt(h.id, 10)}" data-calculation="holiday" data-amount="${amount}"
+                    data-holiday-label="${escapeHtmlText(label)}" data-info="${escapeHtmlText(info)}" ${h.added_month ? 'disabled' : ''}>
+                    ${escapeHtmlText(`${h.name} (${when}, ${daysText}) — ${amount}`)}${escapeHtmlText(addedNote)}
+                </option>`;
+    }).join('');
+    return `<optgroup label="${escapeHtmlText(__('public_holidays_group') || 'Public Holidays')}">${options}</optgroup>`;
+}
+
 function buildBenefitsHtml(benefits, benefitTypes) {
     if (!benefits || benefits.length === 0) {
         return `<div id="no-benefits-alert" class="alert alert-info py-2 mb-0 small">${__('no_benefits_recorded_for_month')}</div>`;
@@ -2323,6 +2382,14 @@ function buildBenefitsHtml(benefits, benefitTypes) {
         } else if (benefitName.includes('Loan Installment')) {
             displayName = 'Loan Installment Deduction';
             benefitLabel = `<small class="text-danger d-block mt-1"><i class="fas fa-hand-holding-usd"></i> Deducted from active loan</small>`;
+        } else if (benefitName.startsWith('Rejoin Salary ')) {
+            benefitLabel = `<small class="text-info d-block mt-1"><i class="fas fa-plane-arrival"></i> ${__('benefit_reason_rejoin_salary', "Back from vacation after last month's salary was paid - these days were not in that payroll")}</small>`;
+        } else if (benefitName.startsWith('Vacation Holiday Salary: ')) {
+            benefitLabel = `<small class="text-info d-block mt-1"><i class="fas fa-calendar-day"></i> ${__('benefit_reason_vacation_holiday', 'Public holiday during vacation, not paid in payroll or settlement')}</small>`;
+        } else if (benefitName.startsWith('New Joiner Salary ')) {
+            benefitLabel = `<small class="text-info d-block mt-1"><i class="fas fa-user-plus"></i> ${__('benefit_reason_new_joiner', "Joined last month but was not in that month's paid payroll - the days worked are paid here")}</small>`;
+        } else if (benefitName.startsWith('Holiday Salary: ')) {
+            benefitLabel = `<small class="text-success d-block mt-1"><i class="fas fa-calendar-day"></i> ${__('benefit_reason_manual_holiday', 'Public holiday added manually')}</small>`;
         }
         
         // For vacation benefits, always show as readonly text
@@ -3593,13 +3660,7 @@ async function generatePayroll() {
     }
 
     // Show a loading indicator while processing
-    Swal.fire({
-        title: __('generating_payroll_title'),
-        html: __('please_wait_generating_payroll'),
-        didOpen: () => Swal.showLoading(),
-        allowOutsideClick: false,
-        allowEscapeKey: false
-    });
+    showPayrollRunLoading(__('generating_payroll_title'), payrollMonth, selectedEmployees.length);
 
     try {
         // Send the request to the server to process the payroll
@@ -3616,40 +3677,9 @@ async function generatePayroll() {
         });
         const result = await response.json();
 
-        // If the server responds with 'warning', show a warning message (some employees skipped)
-        if (result.status === 'warning') {
-            const skippedEmployees = getSkippedEmployeesForDisplay(result.skipped_employees || []);
-            const skippedEmployeesHtml = buildSkippedEmployeesHtml(skippedEmployees);
-            Swal.fire({
-                icon: 'warning',
-                title: __('processing_completed_with_warnings') || 'Processing Completed with Warnings',
-                html: `${(result.message || '').replace(/\n/g, '<br>')}${skippedEmployeesHtml}`,
-                confirmButtonColor: '#ffc107',
-                confirmButtonText: __('ok'),
-                allowOutsideClick: false,
-                width: '85%',
-                didOpen: () => {
-                    initSkippedEmployeesTable(skippedEmployees);
-                }
-            });
-            fetchEmployees(); // Refresh employee list to update status
-        }
-        // If the server responds with 'success', show a success message
-        else if (result.status === 'success') {
-            const skippedEmployees = getSkippedEmployeesForDisplay(result.skipped_employees || []);
-            const skippedEmployeesHtml = buildSkippedEmployeesHtml(skippedEmployees);
-            Swal.fire({
-                icon: 'success',
-                title: __('payroll_generated_success_title'),
-                html: `${(result.message || '').replace(/\n/g, '<br>')}${skippedEmployeesHtml}`,
-                confirmButtonColor: '#6366f1',
-                confirmButtonText: __('ok'),
-                allowOutsideClick: false,
-                width: skippedEmployees.length > 0 ? '85%' : undefined,
-                didOpen: () => {
-                    initSkippedEmployeesTable(skippedEmployees);
-                }
-            });
+        // 'success' or 'warning' (some employees skipped) - one result popup for both
+        if (result.status === 'warning' || result.status === 'success') {
+            showPayrollRunResult(__('payroll_generated_success_title'), result, payrollMonth, selectedEmployees.length);
             await fetchEmployees(); // Refresh employee list to update status and action visibility
         } else {
             // If the server responds with an error (e.g., previous month unpaid), throw an error
@@ -5380,26 +5410,77 @@ const buildSkippedEmployeesHtml = (skippedEmployees = []) => {
     const tableId = 'skippedEmployeesTable';
     const title = `${__('employees_skipped_list') || 'Skipped Employees'}`;
     return `
-        <hr>
-        <div style="text-align:left;">
-            <strong class="text-warning">${title} (${skippedEmployees.length})</strong>
-            <div class="table-responsive" style="margin-top:10px;">
-                <table id="${tableId}" class="table table-sm table-striped" style="width:100%;">
-                    <thead>
-                        <tr>
-                            <th>${__('emp_id')}</th>
-                            <th>${__('name')}</th>
-                            <th>${__('department') || 'Department'}</th>
-                            <th>${__('company_label') || 'Company'}</th>
-                            <th>${__('sponsor') || 'Sponsor'}</th>
-                            <th>${__('reason') || 'Reason'}</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+        <div class="sr-fsec mb-0 pr-skipped">
+            <div class="sr-fsec-head">
+                <span><i class="mdi mdi-alert-outline"></i> ${title}</span>
+                <span class="sr-chip">${skippedEmployees.length}</span>
+            </div>
+            <div class="pr-skipped-body">
+                <div class="sr-search pr-skipped-search">
+                    <i class="mdi mdi-magnify"></i>
+                    <input type="text" id="${tableId}Search" placeholder="${__('search')}..." autocomplete="off">
+                </div>
+                <div class="sr-table-wrap">
+                    <table id="${tableId}" class="sr-table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th>${__('employee', 'Employee')}</th>
+                                <th>${__('company_label') || 'Company'}</th>
+                                <th>${__('reason') || 'Reason'}</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>`;
 };
+
+// Loading popup for bulk Generate / Regenerate.
+function showPayrollRunLoading(title, month, employeeCount) {
+    const monthLabel = month ? new Date(month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' }) : '';
+    Swal.fire({
+        title: title,
+        html: `<div class="sr-form">
+                <div class="pr-loading-chips">
+                    ${monthLabel ? `<span class="sr-chip"><i class="mdi mdi-calendar"></i> ${escapeHtmlText(monthLabel)}</span>` : ''}
+                    <span class="sr-chip"><i class="mdi mdi-account-multiple"></i> ${employeeCount} ${__('employees', 'Employees')}</span>
+                </div>
+                <span class="sr-fhint pr-loading-text">${__('please_wait', 'Please wait...')}</span>
+            </div>`,
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
+    });
+}
+
+// Result popup for bulk Generate / Regenerate: month, Selected / Processed / Skipped tiles and
+// the skipped employees (with reasons) as a searchable table.
+function showPayrollRunResult(title, result, month, requestedCount) {
+    const skipped = getSkippedEmployeesForDisplay(result.skipped_employees || []);
+    const processed = Number(result.processed_count ?? Math.max(0, requestedCount - skipped.length));
+    const monthLabel = month ? new Date(month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' }) : '';
+    return Swal.fire({
+        icon: skipped.length ? 'warning' : 'success',
+        title: skipped.length ? (__('processing_completed_with_warnings') || 'Processing Completed with Warnings') : title,
+        html: `<div class="sr-form">
+                ${monthLabel ? `<div class="pr-loading-chips"><span class="sr-chip"><i class="mdi mdi-calendar"></i> ${escapeHtmlText(monthLabel)}</span></div>` : ''}
+                <div class="sr-stats pr-run-stats">
+                    <div class="sr-stat"><div class="sr-stat-label">${__('selected', 'Selected')} <i class="mdi mdi-account-multiple"></i></div><div class="sr-stat-value">${requestedCount}</div></div>
+                    <div class="sr-stat is-green"><div class="sr-stat-label">${__('processed', 'Processed')} <i class="mdi mdi-check-circle"></i></div><div class="sr-stat-value">${processed}</div></div>
+                    <div class="sr-stat ${skipped.length ? 'is-amber' : ''}"><div class="sr-stat-label">${__('skipped', 'Skipped')} <i class="mdi mdi-alert-outline"></i></div><div class="sr-stat-value">${skipped.length}</div></div>
+                </div>
+                ${buildSkippedEmployeesHtml(skipped)}
+            </div>`,
+        confirmButtonColor: '#6366f1',
+        confirmButtonText: __('ok'),
+        allowOutsideClick: false,
+        width: skipped.length ? '860px' : '520px',
+        customClass: { popup: 'sr-addline-popup sr-page pr-popup' },
+        didOpen: () => initSkippedEmployeesTable(skipped)
+    });
+}
 
 const initSkippedEmployeesTable = (skippedEmployees = []) => {
     if (!Array.isArray(skippedEmployees) || skippedEmployees.length === 0) {
@@ -5414,29 +5495,52 @@ const initSkippedEmployeesTable = (skippedEmployees = []) => {
         $('#skippedEmployeesTable').DataTable().destroy();
     }
 
-    $('#skippedEmployeesTable').DataTable({
+    const table = $('#skippedEmployeesTable').DataTable({
         data: skippedEmployees,
+        dom: 'rtp',
         columns: [
-            { data: 'emp_id' },
-            { data: 'name', defaultContent: '-' },
-            { data: 'department_name', defaultContent: '-' },
-            { data: 'comp_name', defaultContent: '-' },
-            { data: 'sponsor', defaultContent: '-' },
+            {
+                data: 'name',
+                render: function(data, type, row) {
+                    if (type !== 'display') return `${row.emp_id} ${data || ''} ${row.department_name || ''}`;
+                    const initials = String(data || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+                    return `<div class="sr-person">
+                            <span class="sr-avatar">${escapeHtmlText(initials)}</span>
+                            <div>
+                                <span class="sr-person-name">${escapeHtmlText(data || '-')}</span>
+                                <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtmlText(row.emp_id)}</span>${row.department_name ? ` · ${escapeHtmlText(row.department_name)}` : ''}</span>
+                            </div>
+                        </div>`;
+                }
+            },
+            {
+                data: 'comp_name',
+                render: (data, type, row) => {
+                    if (type !== 'display') return `${data || ''} ${row.sponsor || ''}`;
+                    return `<span class="sr-cell-title">${escapeHtmlText(data || '-')}</span>${row.sponsor ? `<span class="sr-cell-sub">${escapeHtmlText(row.sponsor)}</span>` : ''}`;
+                }
+            },
             {
                 data: null,
-                render: function(data) {
+                render: function(data, type) {
                     const reason = String(data.reason || '').trim();
                     const blockedMonth = String(data.blocked_month_label || '').trim();
-                    return blockedMonth ? `${reason} - ${blockedMonth}` : reason;
+                    const text = blockedMonth ? `${reason} - ${blockedMonth}` : reason;
+                    if (type !== 'display') return text;
+                    return `<span class="sr-pill tone-amber pr-reason"><span class="sr-dot"></span>${escapeHtmlText(text)}</span>`;
                 }
             }
         ],
-        paging: true,
-        searching: true,
-        info: false,
-        lengthChange: false,
+        pageLength: 5,
         ordering: true,
-        destroy: true
+        destroy: true,
+        language: {
+            paginate: { next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+            zeroRecords: `<div class="sr-empty">${__('no_matching_records_found')}</div>`
+        }
+    });
+    $('#skippedEmployeesTableSearch').on('input', function() {
+        table.search(this.value).draw();
     });
 };
 
@@ -5643,13 +5747,7 @@ async function regeneratePayroll() {
     if (!confirmation.isConfirmed) return;
 
     // Show a loading indicator while processing
-    Swal.fire({
-        title: __('regenerating_payroll_title') || 'Regenerating Payroll',
-        html: __('please_wait_regenerating_payroll') || 'Please wait while payroll is being regenerated...',
-        didOpen: () => Swal.showLoading(),
-        allowOutsideClick: false,
-        allowEscapeKey: false
-    });
+    showPayrollRunLoading(__('regenerating_payroll_title') || 'Regenerating Payroll', payrollMonth, allEmployeeIds.length);
 
     try {
         // Send the request to the server to regenerate payroll
@@ -5666,40 +5764,9 @@ async function regeneratePayroll() {
         });
         const result = await response.json();
 
-        // If the server responds with 'warning', show a warning message (some employees skipped)
-        if (result.status === 'warning') {
-            const skippedEmployees = getSkippedEmployeesForDisplay(result.skipped_employees || []);
-            const skippedEmployeesHtml = buildSkippedEmployeesHtml(skippedEmployees);
-            Swal.fire({
-                icon: 'warning',
-                title: __('processing_completed_with_warnings') || 'Processing Completed with Warnings',
-                html: `${(result.message || '').replace(/\n/g, '<br>')}${skippedEmployeesHtml}`,
-                confirmButtonColor: '#ffc107',
-                confirmButtonText: __('ok'),
-                allowOutsideClick: false,
-                width: '85%',
-                didOpen: () => {
-                    initSkippedEmployeesTable(skippedEmployees);
-                }
-            });
-            fetchEmployees(); // Refresh employee list to update status
-        }
-        // If the server responds with 'success', show a success message
-        else if (result.status === 'success') {
-            const skippedEmployees = getSkippedEmployeesForDisplay(result.skipped_employees || []);
-            const skippedEmployeesHtml = buildSkippedEmployeesHtml(skippedEmployees);
-            Swal.fire({
-                icon: 'success',
-                title: __('payroll_regenerated_success_title') || 'Payroll Regenerated Successfully',
-                html: `${(result.message || '').replace(/\n/g, '<br>')}${skippedEmployeesHtml}`,
-                confirmButtonColor: '#6366f1',
-                confirmButtonText: __('ok'),
-                allowOutsideClick: false,
-                width: skippedEmployees.length > 0 ? '85%' : undefined,
-                didOpen: () => {
-                    initSkippedEmployeesTable(skippedEmployees);
-                }
-            });
+        // 'success' or 'warning' (some employees skipped) - one result popup for both
+        if (result.status === 'warning' || result.status === 'success') {
+            showPayrollRunResult(__('payroll_regenerated_success_title') || 'Payroll Regenerated Successfully', result, payrollMonth, allEmployeeIds.length);
             await fetchEmployees(); // Refresh employee list to update status and action visibility
         } else {
             // If the server responds with an error, throw an error
@@ -6045,14 +6112,43 @@ function updateNetSalaryDisplay(grossSalary) {
     netSalaryDisplay.textContent = formatCurrency(netSalary);
 }
 
-async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions, paymentType, autoBenefitEnabled, autoDeductionEnabled) {
+// Loading popup for the payroll details modal actions: employee card + step list.
+// steps = [label, ...], active = index of the running step (earlier ones show as done).
+function showPayrollProgress(title, empId, empName, month, steps, active) {
+    const initials = String(empName || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+    const monthLabel = month ? new Date(month + '-01').toLocaleString('default', { month: 'long', year: 'numeric' }) : '';
+    const stepsHtml = steps.length > 1 ? `
+        <ol class="pr-steps">
+            ${steps.map((label, i) => {
+                const state = i < active ? 'is-done' : (i === active ? 'is-active' : '');
+                const icon = i < active ? 'mdi-check-circle' : (i === active ? 'mdi-loading mdi-spin' : 'mdi-checkbox-blank-circle-outline');
+                return `<li class="${state}"><i class="mdi ${icon}"></i>${escapeHtmlText(label)}</li>`;
+            }).join('')}
+        </ol>` : '';
     Swal.fire({
-        title: __('saving_changes_title'),
-        html: __('please_wait_fetching_data'),
+        title: title,
+        html: `<div class="sr-form">
+                <div class="pr-progress-emp">
+                    <span class="sr-avatar">${escapeHtmlText(initials)}</span>
+                    <div>
+                        <span class="sr-person-name">${escapeHtmlText(empName || empId)}</span>
+                        <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtmlText(empId)}</span>${monthLabel ? ` · <i class="mdi mdi-calendar"></i> ${escapeHtmlText(monthLabel)}` : ''}</span>
+                    </div>
+                </div>
+                ${stepsHtml}
+                <span class="sr-fhint pr-loading-text">${__('please_wait', 'Please wait...')}</span>
+            </div>`,
         didOpen: () => Swal.showLoading(),
         allowOutsideClick: false,
         allowEscapeKey: false,
+        customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
     });
+}
+
+// Returns true when saved. silent = no success popup (used by Generate, which shows its own result).
+async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductions, paymentType, autoBenefitEnabled, autoDeductionEnabled, silent = false, empName = '', progressSteps = null) {
+    const steps = progressSteps || [__('saving_changes_title')];
+    showPayrollProgress(__('saving_changes_title'), empId, empName, month, steps, 0);
 
     try {
         const response = await fetch('./includes/api/update_payroll.php', {
@@ -6087,22 +6183,108 @@ async function savePayrollChanges(empId, month, updatedBenefits, updatedDeductio
                 console.warn('Payment type update failed:', ptErr);
             }
 
-            Swal.fire({
-                icon: 'success',
-                title: __('changes_saved_success_title'),
-                text: result.message,
-                confirmButtonColor: '#6366f1',
-                confirmButtonText: __('ok'),
-                allowOutsideClick: false,
-            });
+            if (!silent) {
+                await Swal.fire({
+                    icon: 'success',
+                    title: __('changes_saved_success_title'),
+                    html: `<span class="sr-fhint pr-loading-text">${escapeHtmlText(empName ? `${empName} (#${empId})` : result.message)}</span>`,
+                    confirmButtonColor: '#6366f1',
+                    confirmButtonText: __('ok'),
+                    allowOutsideClick: false,
+                    timer: 1500,
+                    timerProgressBar: true,
+                    customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
+                });
+            }
             fetchEmployees(); // Refresh employee list to ensure payroll status is updated
+            return true;
         } else {
             throw new Error(result.message || 'Failed to save changes');
         }
     } catch (error) {
         console.error('Error:', error);
         showError(__('error_saving_changes_title'), error.message);
+        return false;
     }
+}
+
+// "Generate" in the payroll details modal: save the modal's edits, (re)generate payroll for
+// this one employee (same process_payroll.php run as the bulk Generate/Regenerate - manual
+// benefits/deductions are kept), then reopen the modal with the recalculated figures.
+async function generatePayrollForEmployee(empId, empName, month, modalData) {
+    const steps = [__('saving_changes_title'), __('generating_payroll_title')];
+    const saved = await savePayrollChanges(empId, month, modalData.updatedBenefits, modalData.updatedDeductions,
+        modalData.paymentType, modalData.autoBenefitEnabled, modalData.autoDeductionEnabled, true, empName, steps);
+    if (!saved) return;
+
+    showPayrollProgress(__('generating_payroll_title'), empId, empName, month, steps, 1);
+
+    try {
+        const response = await fetch('./includes/api/process_payroll.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_ids: [empId], month: month, is_regenerate: true }),
+        });
+        const result = await response.json();
+
+        if (result.status !== 'success' && result.status !== 'warning') {
+            throw new Error(result.message || 'An unexpected error occurred.');
+        }
+
+        const skipped = getSkippedEmployeesForDisplay(result.skipped_employees || [])
+            .filter(s => String(s.emp_id) === String(empId));
+        await fetchEmployees();
+
+        if (skipped.length) {
+            // Not generated (on vacation, hold, previous month unpaid, ...) - say why, then reopen.
+            const s = skipped[0];
+            const reason = s.blocked_month_label ? `${s.reason} - ${s.blocked_month_label}` : s.reason;
+            const initials = String(empName || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+            await Swal.fire({
+                icon: 'warning',
+                title: __('payroll_not_generated_title', 'Payroll Not Generated'),
+                html: `<div class="sr-form">
+                        <div class="pr-progress-emp">
+                            <span class="sr-avatar">${escapeHtmlText(initials)}</span>
+                            <div>
+                                <span class="sr-person-name">${escapeHtmlText(empName || empId)}</span>
+                                <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtmlText(empId)}</span></span>
+                            </div>
+                        </div>
+                        <div class="sr-notice tone-amber pr-skip-reason">
+                            <i class="mdi mdi-alert-outline"></i>
+                            <div><b>${__('reason') || 'Reason'}:</b> ${escapeHtmlText(reason)}</div>
+                        </div>
+                    </div>`,
+                confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
+                allowOutsideClick: false,
+                customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
+            });
+        } else {
+            await Swal.fire({
+                icon: 'success',
+                title: __('payroll_generated_success_title'),
+                html: `<span class="sr-fhint pr-loading-text">${escapeHtmlText(`${empName} (#${empId})`)}</span>`,
+                confirmButtonColor: '#6366f1',
+                confirmButtonText: __('ok'),
+                allowOutsideClick: false,
+                timer: 1500,
+                timerProgressBar: true,
+                customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
+            });
+        }
+        showPayrollDetails(empId, empName, month);
+    } catch (error) {
+        console.error('Error:', error);
+        showError(__('error_generating_payroll_title'), error.message);
+    }
+}
+
+function escapeHtmlText(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // --- (UPDATED) showPayrollDetails Function ---
@@ -6112,13 +6294,7 @@ async function showPayrollDetails(empId, empName, month) {
     currentEventListeners.forEach(cleanup => cleanup());
     currentEventListeners = [];
 
-    Swal.fire({
-        title: `${__('loading_payroll_for_employee')} ${empName} (${empId})...`,
-        html: __('please_wait_fetching_data'),
-        didOpen: () => Swal.showLoading(),
-        allowOutsideClick: false,
-        allowEscapeKey: false
-    });
+    showPayrollProgress(__('loading_payroll_title', 'Loading Payroll'), empId, empName, month, [], 0);
 
     try {
         const response = await fetch(`./includes/api/get_payroll_details.php?emp_id=${empId}&month=${month}&_=${Date.now()}`);
@@ -6131,6 +6307,9 @@ async function showPayrollDetails(empId, empName, month) {
             // been paid, so the modal opens read-only with no Save Changes button and no
             // editable fields - once paid, last month's payroll can no longer be changed.
             const isReadOnly = String(payroll.status || '').toLowerCase() === 'paid';
+            // A payroll row exists for this month (generated/updated) - the save button
+            // becomes "Save & Generate". 'not_generated' is only a preview from salary master.
+            const isPayrollGenerated = ['generated', 'updated'].includes(String(payroll.status || '').toLowerCase());
             const employee = data.employee;
             const benefits = data.benefits;
             let deductions = data.deductions;
@@ -6143,6 +6322,7 @@ async function showPayrollDetails(empId, empName, month) {
             const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
 
             const benefitTypes = Array.isArray(data.benefit_types) ? data.benefit_types : [];
+            const holidayOptions = Array.isArray(data.holiday_options) ? data.holiday_options : [];
             // Your warning for missing benefit types remains
             if (benefitTypes.length === 0) { console.warn('No benefit types received from server'); }
 
@@ -6431,6 +6611,11 @@ async function showPayrollDetails(empId, empName, month) {
                     </div>
                     ${joiningDeductionInfoHtml}
                     ${gosiHandledInVacationInfoHtml}
+                    ${isPayrollGenerated && !isReadOnly ? `
+                    <label class="pd-check pd-save-only">
+                        <input type="checkbox" id="pdSaveOnlyCheckbox">
+                        <span>${__('save_only_checkbox_label', 'Save only (do not regenerate payroll)')}</span>
+                    </label>` : ''}
                 </div>
             `;
 
@@ -6456,7 +6641,11 @@ async function showPayrollDetails(empId, empName, month) {
                 width: '960px',
                 showCancelButton: true,
                 showConfirmButton: !isReadOnly,
-                confirmButtonText: `<i class="fas fa-save"></i> ${__('save_changes_button')}`,
+                // Already generated -> one "Save & Generate" button: save this modal's edits,
+                // regenerate payroll for this employee only, reopen with the new figures.
+                confirmButtonText: isPayrollGenerated
+                    ? `<i class="fas fa-sync-alt"></i> ${__('save_and_generate_button', 'Save & Generate')}`
+                    : `<i class="fas fa-save"></i> ${__('save_changes_button')}`,
                 cancelButtonText: __('close'),
                 buttonsStyling: false,
                 reverseButtons: true,
@@ -6464,7 +6653,7 @@ async function showPayrollDetails(empId, empName, month) {
                 customClass: {
                     popup: 'pd-popup' + (isReadOnly ? ' payroll-view-only-popup' : ''),
                     actions: 'pd-actions',
-                    confirmButton: 'pd-btn pd-btn-primary',
+                    confirmButton: 'pd-btn ' + (isPayrollGenerated ? 'pd-btn-generate' : 'pd-btn-primary'),
                     cancelButton: 'pd-btn',
                     footer: 'pd-footer'
                 },
@@ -6484,6 +6673,20 @@ async function showPayrollDetails(empId, empName, month) {
                             el.style.display = 'none';
                         });
                     }
+                    // "Save only" ticked -> button turns back into a plain "Save Changes".
+                    const saveOnlyBox = document.getElementById('pdSaveOnlyCheckbox');
+                    if (saveOnlyBox) {
+                        saveOnlyBox.addEventListener('change', () => {
+                            const btn = Swal.getConfirmButton();
+                            if (!btn) return;
+                            btn.innerHTML = saveOnlyBox.checked
+                                ? `<i class="fas fa-save"></i> ${__('save_changes_button')}`
+                                : `<i class="fas fa-sync-alt"></i> ${__('save_and_generate_button', 'Save & Generate')}`;
+                            btn.classList.toggle('pd-btn-generate', !saveOnlyBox.checked);
+                            btn.classList.toggle('pd-btn-primary', saveOnlyBox.checked);
+                        });
+                    }
+
                     const originalGrossSalary = parseFloat(payroll.total_gross_salary);
                     const updateDynamicNetSalary = () => updateNetSalaryDisplay(originalGrossSalary);
                     const initialModalState = collectPayrollModalData(employee);
@@ -6670,6 +6873,20 @@ async function showPayrollDetails(empId, empName, month) {
                         const row = select.closest('.benefit-row');
                         const hoursContainer = row.find('.benefit-hours-slot').first();
                         const amountInput = row.find('.benefit-amount');
+                        row.find('.holiday-benefit-info').remove();
+
+                        // Public holiday picked from the list: amount = gross / 30 x days (from the
+                        // server), still editable so HR can adjust before saving.
+                        if (calculationType === 'holiday') {
+                            hoursContainer.empty();
+                            amountInput.prop('readonly', false);
+                            if (recalculate) {
+                                amountInput.val(parseFloat(selectedOption.data('amount') || 0).toFixed(2));
+                            }
+                            select.after(`<small class="text-success d-block mt-1 holiday-benefit-info"><i class="fas fa-calendar-day"></i> ${escapeHtmlText(selectedOption.data('info') || '')}</small>`);
+                            updateDynamicNetSalary();
+                            return;
+                        }
                         const isCalculated = ['overtime_basic', 'overtime_total', 'by_hours'].includes(calculationType);
 
                         if (isCalculated) {
@@ -6814,6 +7031,7 @@ async function showPayrollDetails(empId, empName, month) {
                                             ${type.name}
                                         </option>
                                     `).join('')}
+                                    ${buildHolidayBenefitOptionsHtml(holidayOptions)}
                                 </select>
                             </div>
                             <div class="col-6 col-md-3 benefit-hours-slot"></div>
@@ -7078,12 +7296,19 @@ async function showPayrollDetails(empId, empName, month) {
                         Swal.showValidationMessage(loanError);
                         return false;
                     }
-                    return collectPayrollModalData(employee);
+                    const saveOnlyBox = document.getElementById('pdSaveOnlyCheckbox');
+                    return { ...collectPayrollModalData(employee), saveOnly: !!(saveOnlyBox && saveOnlyBox.checked) };
                 }
-            }).then((result) => {
+            }).then(async (result) => {
                 addEventListeners();
-                if (result.isConfirmed) {
-                    savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions, result.value.paymentType, result.value.autoBenefitEnabled, result.value.autoDeductionEnabled);
+                if (!result.isConfirmed) return;
+                if (isPayrollGenerated && !result.value.saveOnly) {
+                    await generatePayrollForEmployee(empId, empName, month, result.value);
+                } else {
+                    const saved = await savePayrollChanges(empId, month, result.value.updatedBenefits, result.value.updatedDeductions, result.value.paymentType, result.value.autoBenefitEnabled, result.value.autoDeductionEnabled, false, empName);
+                    if (saved) {
+                        showPayrollDetails(empId, empName, month); // reopen so HR can continue
+                    }
                 }
             });
         } else {
