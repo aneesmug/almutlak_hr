@@ -38,18 +38,22 @@ if (mysqli_num_rows($query) == 1) {
             }
             
             // Parse date range (format: "startdate - enddate")
+            // Single-day pick sends one date only: treat as start = end
             $dates = explode(' - ', $date_range);
+            if (count($dates) === 1) {
+                $dates[] = $dates[0];
+            }
             if (count($dates) !== 2) {
                 die(json_encode(['status' => 'error', 'message' => 'Invalid date range format']));
             }
-            
+
             $start_date = trim($dates[0]);
             $end_date = trim($dates[1]);
-            
+
             // Validate dates
             $start = DateTime::createFromFormat('m/d/Y', $start_date);
             $end = DateTime::createFromFormat('m/d/Y', $end_date);
-            
+
             if (!$start || !$end) {
                 die(json_encode(['status' => 'error', 'message' => 'Invalid date format']));
             }
@@ -160,17 +164,20 @@ if (mysqli_num_rows($query) == 1) {
             
             // Parse date range
             $dates = explode(' - ', $date_range);
+            if (count($dates) === 1) {
+                $dates[] = $dates[0];
+            }
             if (count($dates) !== 2) {
                 die(json_encode(['status' => 'error', 'message' => 'Invalid date range format']));
             }
-            
+
             $start_date = trim($dates[0]);
             $end_date = trim($dates[1]);
-            
+
             // Validate dates
             $start = DateTime::createFromFormat('m/d/Y', $start_date);
             $end = DateTime::createFromFormat('m/d/Y', $end_date);
-            
+
             if (!$start || !$end || $start > $end) {
                 die(json_encode(['status' => 'error', 'message' => 'Invalid dates']));
             }
@@ -806,8 +813,9 @@ if (mysqli_num_rows($query) == 1) {
                 $('#addHolidayBtn').on('click', function() { openHolidayForm(null); });
 
                 $('#holidays_table').on('click', '.js-edit', function() { editHoliday($(this).data('id')); })
-                    .on('click', '.js-archive', function() { archiveHoliday($(this).data('id'), $(this).data('name')); })
                     .on('click', '.js-restore', function() { restoreHoliday($(this).data('id'), $(this).data('name')); });
+                // Row ⋮ menu is moved to <body> while open (sr_table_scroll.js), so delegate from document
+                $(document).on('click', '.js-archive', function() { archiveHoliday($(this).data('id'), $(this).data('name')); });
             });
 
             /* ---------- add / edit popup ---------- */
@@ -840,8 +848,9 @@ if (mysqli_num_rows($query) == 1) {
             function updateDays() {
                 const parts = String($('#hRange').val() || '').split(' - ');
                 let n = 0;
-                if (parts.length === 2) {
-                    const s = moment(parts[0], DATE_FMT), e = moment(parts[1], DATE_FMT);
+                if (parts[0]) {
+                    // Single-day pick yields one date only
+                    const s = moment(parts[0], DATE_FMT), e = moment(parts[1] || parts[0], DATE_FMT);
                     if (s.isValid() && e.isValid()) n = e.diff(s, 'days') + 1;
                 }
                 $('#hDays').text(n);
@@ -857,7 +866,7 @@ if (mysqli_num_rows($query) == 1) {
                     format: 'm/d/Y',
                     defaultDate: [s.toDate(), e.toDate()],
                     onChange: function(dates) {
-                        if (dates.length === 2) { $input.removeClass('is-invalid'); updateDays(); }
+                        if (dates.length) { $input.removeClass('is-invalid'); updateDays(); }
                     }
                 });
                 updateDays();

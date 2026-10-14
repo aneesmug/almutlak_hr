@@ -20,6 +20,7 @@ header('Content-Type: application/json');
 // Include the database connection file. Adjust the path as needed for your project structure.
 require_once(__DIR__ . "/../../includes/db.php");
 require_once(__DIR__ . "/../../includes/session_check.php");
+require_once(__DIR__ . "/../../includes/payroll_approval_helpers.php");
 
 // This endpoint marks payroll records as paid and previously had no auth check at
 // all. Restrict to system admin / HR Payroll.
@@ -50,11 +51,23 @@ if ($status !== 'paid') {
     exit();
 }
 
+// Date HR actually transferred the salaries - required, real Y-m-d, not in the future.
+$paidDate = trim((string) ($input['paid_date'] ?? ''));
+$paidDateObj = DateTime::createFromFormat('!Y-m-d', $paidDate);
+if (!$paidDateObj || $paidDateObj->format('Y-m-d') !== $paidDate || $paidDate > date('Y-m-d')) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => __('payroll_paid_date_required', 'Please select a valid salary paid date (not in the future).')]);
+    exit();
+}
+
 // --- 2. Database Operation ---
 
 try {
     // Establish a database connection using the function from your db.php file
     $pdo = getDbConnection();
+
+    // Outside the transaction - ALTER TABLE would implicitly commit it.
+    ensurePayrollPaidDateColumn($pdo);
 
     // Begin a transaction.
     $pdo->beginTransaction();
@@ -62,15 +75,26 @@ try {
     // Create the correct number of '?' placeholders for the SQL IN clause.
     $placeholders = implode(',', array_fill(0, count($payrollIds), '?'));
 
+    // A salary can't be paid before its payroll month starts.
+    $stmtMonths = $pdo->prepare("SELECT MIN(month_year) FROM payrolls WHERE id IN ($placeholders)");
+    $stmtMonths->execute($payrollIds);
+    $earliestMonth = (string) $stmtMonths->fetchColumn();
+    if ($earliestMonth !== '' && $paidDate < $earliestMonth . '-01') {
+        $pdo->rollBack();
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => __('payroll_paid_date_before_month', 'Paid date cannot be before the payroll month starts.')]);
+        exit();
+    }
+
     // Prepare the SQL statement to update the 'status' column in the 'payrolls' table.
     $stmt = $pdo->prepare("
         UPDATE payrolls
-        SET status = ?
+        SET status = ?, paid_date = ?
         WHERE id IN ($placeholders) AND (status = 'generated' OR status = 'updated')
     ");
 
-    // Combine the status and the array of payroll IDs into a single parameters array for execution.
-    $params = array_merge([$status], $payrollIds);
+    // Combine the status, paid date and the array of payroll IDs into a single parameters array for execution.
+    $params = array_merge([$status, $paidDate], $payrollIds);
 
     // Execute the prepared statement with the combined parameters
     $stmt->execute($params);

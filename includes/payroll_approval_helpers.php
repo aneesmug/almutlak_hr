@@ -1,5 +1,25 @@
 <?php
 
+if (!function_exists('ensurePayrollPaidDateColumn')) {
+    /**
+     * Self-heals payrolls.paid_date - the date HR actually transferred the salaries,
+     * picked in the "Mark as Paid" popup. Used to decide which returning employees
+     * missed that payroll (back to work on/after this date).
+     */
+    function ensurePayrollPaidDateColumn(PDO $pdo): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $exists = $pdo->query("SHOW COLUMNS FROM payrolls LIKE 'paid_date'")->fetch();
+        if (!$exists) {
+            $pdo->exec("ALTER TABLE payrolls ADD COLUMN paid_date DATE NULL DEFAULT NULL AFTER status");
+        }
+        $done = true;
+    }
+}
+
 if (!function_exists('ensurePayrollApprovalTable')) {
     function ensurePayrollApprovalTable(PDO $pdo): void
     {

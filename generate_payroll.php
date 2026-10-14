@@ -1022,6 +1022,54 @@
             .sr-page .payroll-month-today-btn:hover { border-color: var(--sr-accent); color: var(--sr-accent-strong); }
             .sr-page #payrollActionsToggle { background: var(--sr-accent); border-color: var(--sr-accent); color: #fff; border-radius: 10px; }
             .sr-page #payrollActionsToggle:hover:not(:disabled) { background: var(--sr-accent-strong); }
+
+            /* ---- Payroll Report popups (Select Month / Generating / Report / Mark as Paid) ---- */
+            .pr-popup .swal2-title { font-size: 20px; font-weight: 800; color: var(--sr-text); }
+            .pr-popup .swal2-html-container { margin: 12px 18px 0; }
+            .pr-popup .swal2-actions .swal2-styled { border-radius: 10px; font-weight: 600; padding: 9px 20px; display: inline-flex; align-items: center; gap: 6px; }
+            .pr-popup .pr-flabel { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: var(--sr-text-2); }
+            .pr-popup .pr-flabel i { color: var(--sr-accent); font-size: 14px; }
+            .pr-popup .pr-req { color: #dc2626; }
+            .pr-popup .swal2-validation-message { border-radius: 10px; background: var(--tone-red-bg); color: var(--tone-red-fg); }
+            .pr-popup .pr-loading-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+            .pr-popup .pr-loading-text { text-align: center; margin-top: 10px; font-size: 12.5px; }
+            .pr-popup .pr-kv-wrap { padding: 4px 14px; }
+            .pr-popup .pr-paid-warn { margin-bottom: 12px !important; }
+            .pr-popup .pr-money { font-weight: 700; color: var(--sr-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+            .pr-popup .pr-money .icon-saudi_riyal, .pr-popup .sr-stat-value .icon-saudi_riyal, .pr-popup .pr-total .icon-saudi_riyal { font-size: .8em !important; opacity: .75; }
+
+            .pr-report-popup { padding: 22px 22px 18px !important; }
+            .pr-report-popup .swal2-html-container { margin: 0; overflow: visible; }
+            .pr-report-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+            .pr-report-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+            .pr-report-ico { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-size: 22px; }
+            .pr-report-title h2 { margin: 0; font-size: 19px; font-weight: 800; color: var(--sr-text); }
+            .pr-report-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+            .pr-report-stats { margin-top: 16px; }
+            .pr-report-stats .sr-stat-value { font-size: 20px; }
+            .pr-report-stats .pr-stat-accent { background: var(--sr-accent-soft); border-color: var(--tone-indigo-bd); }
+            .pr-report-stats .pr-stat-accent::before { background: var(--sr-accent); }
+            .pr-report-stats .pr-stat-accent .sr-stat-value { color: var(--sr-accent-strong); }
+            .pr-report-note { margin: 14px 0 0 !important; }
+            .pr-report-toolbar { margin-top: 16px; padding: 0 0 12px; border-bottom: 1px solid var(--sr-border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+            .pr-report-toolbar .sr-btn { height: 36px; }
+            .pr-report-toolbar .sr-btn:disabled { opacity: .55; cursor: not-allowed; }
+            .pr-report-toolbar .pr-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 11px; font-weight: 700; }
+            .pr-report-toolbar .pr-ico-red { color: #dc2626; }
+            .pr-report-toolbar .pr-ico-green { color: #16a34a; }
+            .pr-report .sr-table-wrap { padding: 0; }
+            .pr-report table.sr-table th.pr-col-check, .pr-report table.sr-table td.pr-col-check { width: 44px; text-align: center; }
+            .pr-report table.sr-table tbody tr.is-selected td { background: var(--sr-accent-soft) !important; }
+            .pr-report table.sr-table tfoot th { padding: 12px 14px !important; border: 0 !important; border-top: 2px solid var(--sr-border) !important; font-size: 13px; font-weight: 700; color: var(--sr-text); background: var(--sr-surface-2) !important; }
+            .pr-report table.sr-table tfoot .pr-total { color: var(--sr-accent-strong); font-size: 15px; white-space: nowrap; }
+            .pr-report .pr-paid-ico { color: #16a34a; font-size: 18px; }
+            .pr-report .sr-avatar { flex: 0 0 34px; }
+            .pr-report .dataTables_wrapper { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+            .pr-report .dataTables_wrapper > table { flex: 0 0 100%; }
+            @media (max-width: 767px) {
+                .pr-report-toolbar .sr-search { max-width: none; flex-basis: 100%; }
+                .pr-report-toolbar .sr-toolbar-right { width: 100%; }
+            }
             .sr-page .pg-edit-generated { background: var(--tone-amber-bg); border-color: var(--tone-amber-bd); color: var(--tone-amber-fg) !important; }
             .sr-page .pg-dt-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 12px; }
             .sr-page .pg-dt-top .dataTables_length, .sr-page .pg-dt-top .dataTables_filter { margin: 0; padding: 0; float: none; }
@@ -5730,31 +5778,35 @@ async function generatePayrollReport() {
     Swal.fire({
         title: __('select_report_month_title'),
         html: `
-            <div class="text-left mb-4">
-                <label for="reportMonthSelect" class="block text-gray-700 text-sm font-bold mb-2">
-                    ${__('choose_month_for_report_label')}
-                </label>
-                <select id="reportMonthSelect" class="custom-select shadow px-3">
-                    <option value="">${__('select_month') || 'Select Month'}</option>
-                    <!-- Options will be loaded dynamically -->
-                </select>
-            </div>
-            <div class="text-left mb-4">
-                <label for="reportCompanySelect" class="block text-gray-700 text-sm font-bold mb-2">
-                    ${__('company_filter_label') || 'Select Company (Optional)'}
-                </label>
-                <select id="reportCompanySelect" class="custom-select shadow px-3">
-                    <option value="">All Companies</option>
-                    <!-- Options will be loaded dynamically -->
-                </select>
+            <div class="sr-form">
+                <div class="sr-fsec mb-0">
+                    <div class="sr-fsec-head"><span><i class="mdi mdi-file-chart"></i> ${__('payroll_report', 'Payroll Report')}</span></div>
+                    <div class="sr-fgrid">
+                        <div class="sr-fcol c-12">
+                            <label for="reportMonthSelect" class="pr-flabel"><i class="mdi mdi-calendar"></i> ${__('choose_month_for_report_label')} <span class="pr-req">*</span></label>
+                            <select id="reportMonthSelect" class="form-control">
+                                <option value="">${__('select_month') || 'Select Month'}</option>
+                            </select>
+                        </div>
+                        <div class="sr-fcol c-12">
+                            <label for="reportCompanySelect" class="pr-flabel"><i class="mdi mdi-domain"></i> ${__('company_filter_label') || 'Select Company (Optional)'}</label>
+                            <select id="reportCompanySelect" class="form-control">
+                                <option value="">${__('all_companies_option') || 'All Companies'}</option>
+                            </select>
+                            <span class="sr-fhint">${__('report_company_filter_hint', 'Leave empty to include all companies of the selected month.')}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         `,
         focusConfirm: false,
         showCancelButton: true,
-        confirmButtonText: __('generate_report'),
+        confirmButtonText: `<i class="mdi mdi-file-chart"></i> ${__('generate_report')}`,
         cancelButtonText: __('close'),
         confirmButtonColor: '#6366f1',
+        cancelButtonColor: '#64748b',
         allowOutsideClick: false,
+        customClass: { popup: 'sr-addline-popup sr-page pr-popup' },
         // Pre-confirmation logic: validate if a month is selected
         preConfirm: () => {
             const selectedMonth = $('#reportMonthSelect').val();
@@ -7090,13 +7142,21 @@ function openPayslipsFile(base, data) {
         
         // --- New helper function to encapsulate report fetching and display ---
         async function fetchAndDisplayPayrollReport(selectedMonth, selectedCompany = '') {
-            const companyText = selectedCompany ? ` - ${selectedCompany}` : '';
+            const reportMonthLabel = new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' });
+            const escHtml = (s) => $('<div>').text(s == null ? '' : String(s)).html();
             Swal.fire({
                 title: __('generating_report_title'),
-                html: `${__('fetching_payroll_data_for_month')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}${companyText}. ${__('please_wait_fetching_data')}`,
+                html: `<div class="sr-form">
+                        <div class="pr-loading-chips">
+                            <span class="sr-chip"><i class="mdi mdi-calendar"></i> ${escHtml(reportMonthLabel)}</span>
+                            <span class="sr-chip"><i class="mdi mdi-domain"></i> ${escHtml(selectedCompany || __('all_companies_option') || 'All Companies')}</span>
+                        </div>
+                        <span class="sr-fhint pr-loading-text">${__('please_wait_fetching_data')}</span>
+                    </div>`,
                 didOpen: () => Swal.showLoading(),
                 allowOutsideClick: false,
-                allowEscapeKey: false
+                allowEscapeKey: false,
+                customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
             });
 
             try {
@@ -7118,66 +7178,132 @@ function openPayslipsFile(base, data) {
                     Swal.fire({ icon: 'info', title: __('no_payroll_data_info_title'), text: __('no_generated_payrolls_for_month_info') });
                     return;
                 }
-                let grandTotalNet = reportData.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0);
-                const allAlreadyPaid = reportData.length > 0 && reportData.every(p => p.status === 'paid');
+                const fmtMoney = (v) => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const grandTotalNet = reportData.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0);
+                const paidRows = reportData.filter(p => p.status === 'paid');
+                const paidCount = paidRows.length;
+                const pendingCount = reportData.length - paidCount;
+                const allAlreadyPaid = pendingCount === 0;
+                const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
                 const reportHtml = `
-                    <div id="payrollReportModal" class="text-left">
-                        <h2 class="text-2xl font-bold mb-4 text-center">${__('payroll_report_for_month_title')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
-                        <div class="mb-4 text-center">
-                            <div class="btn-group flex-wrap" role="group">
-                                <button id="markAsPaidBtn" class="btn btn-custom" style="display:${allAlreadyPaid ? 'none' : 'inline-block'};"><i class="fas fa-check-circle"></i> ${__('mark_as_paid_button')}</button>
-                                <button id="exportPdfBtn" class="btn btn-danger"><i class="fas fa-file-pdf"></i> ${__('pdf_button')}</button>
-                                <button id="exportExcelBtn" class="btn btn-success" style="display:${showBankExcelButton ? 'inline-block' : 'none'};"><i class="fas fa-file-excel"></i> ${__('bank_excel_button')}</button>
-                                <button id="exportDetailedExcelBtn" class="btn btn-info"><i class="fas fa-file-excel"></i> Detailed Excel</button>
-                                <button id="printReportBtn" class="btn btn-secondary"><i class="fas fa-print"></i> Print</button>
-                            </div>
-                            <div id="bankExcelPendingNote" class="mt-2 text-muted" style="display:${showBankExcelButton ? 'none' : 'block'}; font-size: 13px; font-weight: 600;">
-                                Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.
+                    <div id="payrollReportModal" class="sr-form pr-report">
+                        <div class="pr-report-head">
+                            <div class="pr-report-title">
+                                <span class="pr-report-ico"><i class="mdi mdi-file-chart"></i></span>
+                                <div>
+                                    <h2>${__('payroll_report_for_month_title')} ${escHtml(reportMonthLabel)}</h2>
+                                    <div class="pr-report-chips">
+                                        <span class="sr-chip"><i class="mdi mdi-calendar"></i> ${escHtml(reportMonthLabel)}</span>
+                                        <span class="sr-chip"><i class="mdi mdi-domain"></i> ${escHtml(selectedCompany || __('all_companies_option') || 'All Companies')}</span>
+                                        ${allAlreadyPaid
+                                            ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('paid_badge')}</span>`
+                                            : `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('pending', 'Pending')}</span>`}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <table class="table table-bordered" id="payrollgentbl" style="width:100%;">
-                            <thead>
-                                <tr>
-                                    <th><input type="checkbox" id="reportSelectAll"/></th>
-                                    <th>${__('emp_id')}</th>
-                                    <th>${__('name')}</th>
-                                    <th class="text-right">${__('net_salary_label') || 'Net Payable Salary'}</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                            <tfoot>
-                                <tr>
-                                    <th colspan="3" class="text-right">${__('grand_total_label')}</th>
-                                    <th class="text-right"><i class="icon-saudi_riyal"></i> ${grandTotalNet.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</th>
-                                </tr>
-                            </tfoot>
-                        </table>
+
+                        <div class="sr-stats pr-report-stats">
+                            <div class="sr-stat"><div class="sr-stat-label">${__('employees', 'Employees')} <i class="mdi mdi-account-multiple"></i></div><div class="sr-stat-value">${reportData.length}</div></div>
+                            <div class="sr-stat is-green"><div class="sr-stat-label">${__('paid_badge')} <i class="mdi mdi-check-circle"></i></div><div class="sr-stat-value">${paidCount}</div></div>
+                            <div class="sr-stat is-amber"><div class="sr-stat-label">${__('pending', 'Pending')} <i class="mdi mdi-alert-outline"></i></div><div class="sr-stat-value">${pendingCount}</div></div>
+                            <div class="sr-stat pr-stat-accent"><div class="sr-stat-label">${__('grand_total_label')} <i class="mdi mdi-cash-multiple"></i></div><div class="sr-stat-value"><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</div></div>
+                        </div>
+
+                        <div class="sr-notice tone-amber pr-report-note" id="bankExcelPendingNote" style="display:${showBankExcelButton ? 'none' : 'flex'};">
+                            <i class="mdi mdi-information-outline"></i>
+                            <div>${__('bank_excel_pending_note', 'Payroll approval is still pending. Bank EXCEL will be available immediately after final GM approval.')}</div>
+                        </div>
+
+                        <div class="sr-toolbar pr-report-toolbar">
+                            <div class="sr-search">
+                                <i class="mdi mdi-magnify"></i>
+                                <input type="text" id="payrollReportSearch" placeholder="${__('search')}..." autocomplete="off">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <button type="button" id="markAsPaidBtn" class="sr-btn sr-btn-success" style="display:${allAlreadyPaid ? 'none' : 'inline-flex'};" disabled>
+                                    <i class="mdi mdi-check-all"></i> ${__('mark_as_paid_button')} <span class="pr-count" id="markAsPaidCount">0</span>
+                                </button>
+                                <button type="button" id="exportPdfBtn" class="sr-btn"><i class="mdi mdi-file-pdf-box pr-ico-red"></i> ${__('pdf_button')}</button>
+                                <button type="button" id="exportExcelBtn" class="sr-btn" style="display:${showBankExcelButton ? 'inline-flex' : 'none'};"><i class="mdi mdi-bank pr-ico-green"></i> ${__('bank_excel_button')}</button>
+                                <button type="button" id="exportDetailedExcelBtn" class="sr-btn"><i class="mdi mdi-file-excel pr-ico-green"></i> ${__('detailed_excel_button', 'Detailed Excel')}</button>
+                                <button type="button" id="printReportBtn" class="sr-btn"><i class="mdi mdi-printer"></i> ${__('print', 'Print')}</button>
+                            </div>
+                        </div>
+
+                        <div class="sr-table-wrap">
+                            <table class="sr-table" id="payrollgentbl" style="width:100%;">
+                                <thead>
+                                    <tr>
+                                        <th class="pr-col-check">${allAlreadyPaid ? '' : `<label class="sr-check" title="${__('select_all', 'Select all')}"><input type="checkbox" id="reportSelectAll"></label>`}</th>
+                                        <th>${__('employee', 'Employee')}</th>
+                                        <th>${__('status', 'Status')}</th>
+                                        <th class="text-right">${__('net_salary_label') || 'Net Payable Salary'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="3" class="text-right">${__('grand_total_label')}</th>
+                                        <th class="text-right pr-total"><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>`;
 
                 Swal.fire({
                     html: reportHtml,
-                    width: '90%',
+                    width: '1100px',
                     showConfirmButton: false,
                     showCancelButton: true,
                     cancelButtonText: __('close'),
+                    cancelButtonColor: '#64748b',
                     allowOutsideClick: false,
+                    customClass: { popup: 'sr-addline-popup sr-page pr-popup pr-report-popup' },
                     didOpen: () => {
                         const table = $('#payrollgentbl').DataTable({
                             data: reportData,
+                            dom: 'rtip',
                             columns: [
                                 {
                                     data: 'payroll_id',
                                     orderable: false,
-                                    className: 'text-center',
+                                    className: 'text-center pr-col-check',
                                     render: function(data, type, row) {
                                         if (row.status === 'paid') {
-                                            return `<span class="badge badge-success"><i class="fa fa-check-circle"></i> ${__('paid_badge')}</span>`;
+                                            return `<i class="mdi mdi-check-circle pr-paid-ico" title="${__('paid_badge')}"></i>`;
                                         }
-                                        return `<input type="checkbox" class="report-checkbox" data-payroll-id="${row.payroll_id}">`;
+                                        return `<label class="sr-check"><input type="checkbox" class="report-checkbox" data-payroll-id="${escHtml(row.payroll_id)}"></label>`;
                                     }
                                 },
-                                { data: 'emp_id' },
-                                { data: 'employee_name' },
+                                {
+                                    data: 'employee_name',
+                                    render: (d, type, row) => {
+                                        if (type !== 'display') {
+                                            return `${row.emp_id} ${d || ''}`;
+                                        }
+                                        return `<div class="sr-person">
+                                                <span class="sr-avatar">${escHtml(initials(d))}</span>
+                                                <div>
+                                                    <span class="sr-person-name">${escHtml(d)}</span>
+                                                    <span class="sr-cell-sub"><span class="sr-mono">#${escHtml(row.emp_id)}</span>${row.comp_name ? ` · ${escHtml(row.comp_name)}` : ''}</span>
+                                                </div>
+                                            </div>`;
+                                    }
+                                },
+                                {
+                                    data: 'status',
+                                    render: (d, type) => {
+                                        const isPaid = d === 'paid';
+                                        if (type !== 'display') {
+                                            return isPaid ? __('paid_badge') : __('pending', 'Pending');
+                                        }
+                                        return isPaid
+                                            ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('paid_badge')}</span>`
+                                            : `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('pending', 'Pending')}</span>`;
+                                    }
+                                },
                                 {
                                     data: 'net_salary',
                                     className: 'text-right',
@@ -7186,54 +7312,86 @@ function openPayslipsFile(base, data) {
                                         if (type === 'sort' || type === 'type') {
                                             return numericValue;
                                         }
-                                        return `<i class="icon-saudi_riyal"></i> ${numericValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                        if (type !== 'display') {
+                                            return fmtMoney(numericValue);
+                                        }
+                                        return `<span class="pr-money"><i class="icon-saudi_riyal"></i> ${fmtMoney(numericValue)}</span>`;
                                     }
                                 }
                             ],
                             pageLength: 10,
-                            lengthMenu: [[-1, 10, 25, 50, 100], [__('all'), 10, 25, 50, 100]],
                             order: [[1, 'asc']],
                             language: {
-                                search: `<span>${__('search')}:</span> _INPUT_`,
-                                searchPlaceholder: `${__('search')}...`,
-                                lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
                                 info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
                                 infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
                                 infoFiltered: `(${__('filtered_from')} _MAX_ ${__('total_entries')})`,
                                 paginate: {
                                     first: __('first'),
                                     last: __('last'),
-                                    next: __('next'),
-                                    previous: __('previous')
+                                    next: '<i class="mdi mdi-chevron-right"></i>',
+                                    previous: '<i class="mdi mdi-chevron-left"></i>'
                                 },
-                                emptyTable: __('no_data_available_in_table'),
-                                zeroRecords: __('no_matching_records_found'),
-                                processing: `<div class="spinner-border text-primary" role="status"><span class="visually-hidden">${__('loading')}...</span></div>`
+                                emptyTable: `<div class="sr-empty">${__('no_data_available_in_table')}</div>`,
+                                zeroRecords: `<div class="sr-empty">${__('no_matching_records_found')}</div>`
                             },
                             buttons: [
                                 {
                                     extend: 'print',
-                                    title: `${__('payroll_report_for_month_title')} ${new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}`,
-                                    exportOptions: { columns: [1, 2, 3] },
+                                    title: `${__('payroll_report_for_month_title')} ${reportMonthLabel}`,
+                                    exportOptions: { columns: [1, 2, 3], orthogonal: 'print' },
                                     footer: true
                                 }
                             ]
                         });
 
+                        // Own search box drives the table (dom 'rtip' hides the default one)
+                        $('#payrollReportSearch').on('input', function() {
+                            table.search(this.value).draw();
+                        });
+
+                        const $allBoxes = () => table.rows().nodes().to$().find('.report-checkbox');
+                        const refreshSelection = () => {
+                            const $boxes = $allBoxes();
+                            const checked = $boxes.filter(':checked').length;
+                            $('#markAsPaidCount').text(checked);
+                            $('#markAsPaidBtn').prop('disabled', checked === 0);
+                            $('#reportSelectAll')
+                                .prop('checked', checked > 0 && checked === $boxes.length)
+                                .prop('indeterminate', checked > 0 && checked < $boxes.length);
+                            table.rows().nodes().to$().each(function() {
+                                $(this).toggleClass('is-selected', $(this).find('.report-checkbox').is(':checked'));
+                            });
+                        };
+
+                        // Clicking anywhere on an unpaid row toggles its checkbox
+                        $('#payrollgentbl tbody').on('click', 'tr', function(e) {
+                            const $box = $(this).find('.report-checkbox');
+                            if (!$box.length) return;
+                            if (!$(e.target).is('.report-checkbox, label.sr-check')) {
+                                $box.prop('checked', !$box.prop('checked'));
+                            }
+                            refreshSelection();
+                        });
+
                         $('#markAsPaidBtn').on('click', async () => {
-                            const selectedPayrollIds = table.rows().nodes().to$().find('.report-checkbox:checked').map(function() {
+                            const $checked = $allBoxes().filter(':checked');
+                            const selectedPayrollIds = $checked.map(function() {
                                 return $(this).data('payroll-id');
                             }).get();
-                            
+                            const selectedIdSet = new Set(selectedPayrollIds.map(String));
+                            const selectedTotal = reportData
+                                .filter(p => selectedIdSet.has(String(p.payroll_id)))
+                                .reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0);
+
                             await updatePayrollStatus(selectedPayrollIds, 'paid', () => {
                                 Swal.close();
                                 fetchEmployees();
-                            });
+                            }, { monthLabel: reportMonthLabel, company: selectedCompany, total: selectedTotal });
                         });
-                        
+
                         $('#reportSelectAll').on('change', function() {
-                            const isChecked = $(this).prop('checked');
-                            table.rows().nodes().to$().find('.report-checkbox').prop('checked', isChecked);
+                            $allBoxes().prop('checked', $(this).prop('checked'));
+                            refreshSelection();
                         });
 
                         $('#exportPdfBtn').on('click', () => exportPdfReport(reportData, selectedMonth));
@@ -8399,41 +8557,93 @@ function openPayslipsFile(base, data) {
             }
         }
 
-        async function updatePayrollStatus(payrollIds, status, successCallback = null) {
+        async function updatePayrollStatus(payrollIds, status, successCallback = null, meta = {}) {
             if (!payrollIds || payrollIds.length === 0) {
                 showWarning(__('no_records_selected_warning_title'), __('please_select_one_record_to_update_warning'));
                 return;
             }
+            const esc = (s) => $('<div>').text(s == null ? '' : String(s)).html();
+            const summaryRows = [
+                [__('records', 'Records'), `<b>${payrollIds.length}</b>`],
+                meta.monthLabel ? [__('payroll_month', 'Payroll Month'), esc(meta.monthLabel)] : null,
+                meta.company !== undefined ? [__('company', 'Company'), esc(meta.company || __('all_companies_option') || 'All Companies')] : null,
+                typeof meta.total === 'number'
+                    ? [__('total_net_salary', 'Total Net Salary'), `<span class="pr-money"><i class="icon-saudi_riyal"></i> ${meta.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`]
+                    : null
+            ].filter(Boolean);
+
+            // Salary paid date: employees returning from vacation on/after this date missed
+            // this payroll and get their days as Rejoin Salary in the next payroll.
+            let paidDatePicker = null;
             const confirmation = await Swal.fire({
                 title: __('mark_records_as_status_q_title').replace('{0}', payrollIds.length).replace('{1}', __(status)),
-                text: __('action_cannot_be_undone'),
-                icon: 'warning',
+                html: `
+                    <div class="sr-form">
+                        <div class="sr-notice tone-amber pr-paid-warn">
+                            <i class="mdi mdi-alert-outline"></i>
+                            <div>${__('action_cannot_be_undone')}</div>
+                        </div>
+                        <div class="sr-fsec">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-cash-multiple"></i> ${__('payment_summary', 'Payment Summary')}</span></div>
+                            <div class="pr-kv-wrap">
+                                <dl class="sr-kv">
+                                    ${summaryRows.map(([k, v]) => `<div class="row-kv"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}
+                                </dl>
+                            </div>
+                        </div>
+                        <div class="sr-fsec mb-0">
+                            <div class="sr-fsec-head"><span><i class="mdi mdi-calendar-check"></i> ${__('salary_paid_date', 'Salary Paid Date')}</span></div>
+                            <div class="sr-fgrid">
+                                <div class="sr-fcol c-12">
+                                    <label for="swal_payroll_paid_date" class="pr-flabel">${__('salary_paid_date', 'Salary Paid Date')} <span class="pr-req">*</span></label>
+                                    <input type="text" id="swal_payroll_paid_date" class="form-control" autocomplete="off" placeholder="YYYY-MM-DD">
+                                    <span class="sr-fhint">${__('salary_paid_date_hint', 'Employees who return from vacation on or after this date will get those days in the next payroll.')}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`,
                 showCancelButton: true,
-                confirmButtonColor: '#28a745',
-                confirmButtonText: __('yes_mark_as_status_button').replace('{0}', __(status)),
+                confirmButtonColor: '#16a34a',
+                confirmButtonText: `<i class="mdi mdi-check-all"></i> ${__('yes_mark_as_status_button').replace('{0}', __(status))}`,
                 allowOutsideClick: false,
-                cancelButtonColor: '#d33',
-                cancelButtonText: __('cancel')
+                cancelButtonColor: '#64748b',
+                cancelButtonText: __('cancel'),
+                customClass: { popup: 'sr-addline-popup sr-page pr-popup' },
+                didOpen: () => {
+                    paidDatePicker = AppDate.single('#swal_payroll_paid_date', { maxDate: 'today', defaultDate: 'today' });
+                },
+                preConfirm: () => {
+                    const value = ($('#swal_payroll_paid_date').val() || '').trim();
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                        Swal.showValidationMessage(__('payroll_paid_date_required', 'Please select a valid salary paid date (not in the future).'));
+                        return false;
+                    }
+                    return value;
+                },
+                willClose: () => { if (paidDatePicker && paidDatePicker.destroy) paidDatePicker.destroy(); }
             });
 
             if (!confirmation.isConfirmed) return;
+            const paidDate = confirmation.value;
 
-            Swal.fire({ title: __('updating_status_title'), didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            Swal.fire({ title: __('updating_status_title'), didOpen: () => Swal.showLoading(), allowOutsideClick: false, customClass: { popup: 'sr-addline-popup sr-page pr-popup' } });
 
             try {
                 const response = await fetch('./includes/api/update_payroll_status.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ payroll_ids: payrollIds, status: status }),
+                    body: JSON.stringify({ payroll_ids: payrollIds, status: status, paid_date: paidDate }),
                 });
                 const result = await response.json();
                 if (result.status === 'success') {
                     Swal.fire({ 
                         icon: 'success', 
-                        title: __('status_updated_success_title'), 
-                        text: result.message, 
-                        allowOutsideClick: false, 
-                        confirmButtonText: __('ok') 
+                        title: __('status_updated_success_title'),
+                        text: result.message,
+                        allowOutsideClick: false,
+                        confirmButtonText: __('ok'),
+                        confirmButtonColor: '#6366f1',
+                        customClass: { popup: 'sr-addline-popup sr-page pr-popup' }
                     }).then(() => successCallback && successCallback());
                 } else {
                     throw new Error(result.message);
