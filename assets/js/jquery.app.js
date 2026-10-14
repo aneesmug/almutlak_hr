@@ -8766,127 +8766,144 @@ function dateofbirth(selector){
 // SALARY UPDATE FUNCTION
 // ========================================
 function updateEmployeeSalary(empId, currentSalaryData, isAutoTriggered = false) {
+    if (window.srEnsureCss) srEnsureCss();
+    // Basic is always shown; other components only when non-zero. Zero components are
+    // offered in the "Add salary component" picker and leave it once added.
+    const SAL_COMPONENTS = [
+        { key: 'basic',     label: __('basic') || 'Basic', required: true },
+        { key: 'housing',   label: __('housing') || 'Housing' },
+        { key: 'transport', label: __('transport') || 'Transport' },
+        { key: 'food',      label: __('food') || 'Food' },
+        { key: 'misc',      label: __('misc') || 'Misc' },
+        { key: 'cashier',   label: __('cashier') || 'Cashier' },
+        { key: 'fuel',      label: __('fuel') || 'Fuel' },
+        { key: 'tel',       label: __('tel') || 'Tel' },
+        { key: 'other',     label: __('others') || 'Others' },
+        { key: 'guard',     label: __('guard') || 'Guard' }
+    ];
+    const salVal = (k) => parseFloat(currentSalaryData[k]) || 0;
+    const salField = (c, value) => `
+        <div class="sr-fcol c-4 sal-upd-field" data-key="${c.key}">
+            <label for="swal-${c.key}">
+                <span>${c.label}${c.required ? ' <span class="text-danger">*</span>' : ''}</span>
+                ${c.required ? '' : `<a href="javascript:void(0);" class="sal-upd-remove" data-key="${c.key}" title="${__('remove', 'Remove')}"><i class="fa fa-times"></i></a>`}
+            </label>
+            <input type="text" id="swal-${c.key}" class="form-control salary-input numeric-only" inputmode="decimal" autocomplete="off" value="${value}">
+        </div>`;
+    const currentTotal = SAL_COMPONENTS.reduce((t, c) => t + salVal(c.key), 0);
+    const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const shownFields = SAL_COMPONENTS.filter(c => c.required || salVal(c.key) !== 0).map(c => salField(c, salVal(c.key))).join('');
+
     Swal.fire({
-        title: __('update_employee_salary') || 'Update Employee Salary',
+        title: '<i class="mdi mdi-cash-multiple"></i> ' + (__('update_employee_salary') || 'Update Employee Salary'),
         html: `
-            <div class="row" style="text-align: left;">
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-basic">${__('basic') || 'Basic'} <span class="text-danger">*</span></label>
-                        <input type="text" id="swal-basic" class="form-control salary-input numeric-only" value="${currentSalaryData.basic || 0}">
+            <style>
+                .sal-upd-field label { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+                .sal-upd-remove { color: var(--sr-muted); font-size: 12px; padding: 0 2px; line-height: 1; }
+                .sal-upd-remove:hover { color: #dc2626; }
+                .sal-upd-add { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 0 14px 14px; }
+                .sal-upd-add select.form-control { flex: 0 1 260px; }
+                .sal-upd-total { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--tone-green-bd); background: var(--tone-green-bg); }
+                .sal-upd-total small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--sr-muted); }
+                .sal-upd-total .sut-new { font-size: 24px; font-weight: 700; color: var(--tone-green-fg); line-height: 1.2; }
+                .sal-upd-total .sut-old { font-size: 14px; font-weight: 600; color: var(--sr-text-2); }
+                .sal-upd-total .sut-side { display: flex; align-items: center; gap: 10px; }
+            </style>
+            <div class="sr-form">
+                <div class="sr-fsec">
+                    <div class="sr-fsec-head"><span><i class="mdi mdi-cash-multiple"></i> ${__('salary_components', 'Salary Components')}</span></div>
+                    <div class="sr-fgrid" id="salUpdFields">${shownFields}</div>
+                    <div class="sal-upd-add" id="salUpdAddWrap">
+                        <select id="salUpdAddSelect" class="form-control"></select>
+                        <button type="button" class="sr-btn sr-btn-sm" id="salUpdAddBtn"><i class="mdi mdi-plus-circle-outline"></i> ${__('add_salary_component', 'Add salary component')}</button>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-housing">${__('housing') || 'Housing'}</label>
-                        <input type="text" id="swal-housing" class="form-control salary-input numeric-only" value="${currentSalaryData.housing || 0}">
+                <div class="sal-upd-total">
+                    <div>
+                        <small><i class="mdi mdi-calculator"></i> ${__('total_salary') || 'Total Salary'}</small>
+                        <div class="sut-new"><span id="swal-total-text">0.00</span> <i class="icon-saudi_riyal"></i></div>
+                    </div>
+                    <div class="sut-side">
+                        <div style="text-align:end;">
+                            <small>${__('current_salary', 'Current')}</small>
+                            <div class="sut-old">${fmt(currentTotal)} <i class="icon-saudi_riyal"></i></div>
+                        </div>
+                        <span id="swal-total-diff" class="sr-pill tone-slate"><span class="sr-dot"></span>0.00</span>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-transport">${__('transport') || 'Transport'}</label>
-                        <input type="text" id="swal-transport" class="form-control salary-input numeric-only" value="${currentSalaryData.transport || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-food">${__('food') || 'Food'}</label>
-                        <input type="text" id="swal-food" class="form-control salary-input numeric-only" value="${currentSalaryData.food || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-misc">${__('misc') || 'Misc'}</label>
-                        <input type="text" id="swal-misc" class="form-control salary-input numeric-only" value="${currentSalaryData.misc || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-cashier">${__('cashier') || 'Cashier'}</label>
-                        <input type="text" id="swal-cashier" class="form-control salary-input numeric-only" value="${currentSalaryData.cashier || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-fuel">${__('fuel') || 'Fuel'}</label>
-                        <input type="text" id="swal-fuel" class="form-control salary-input numeric-only" value="${currentSalaryData.fuel || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-tel">${__('tel') || 'Tel'}</label>
-                        <input type="text" id="swal-tel" class="form-control salary-input numeric-only" value="${currentSalaryData.tel || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-other">${__('others') || 'Others'}</label>
-                        <input type="text" id="swal-other" class="form-control salary-input numeric-only" value="${currentSalaryData.other || 0}">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="swal-guard">${__('guard') || 'Guard'}</label>
-                        <input type="text" id="swal-guard" class="form-control salary-input numeric-only" value="${currentSalaryData.guard || 0}">
-                    </div>
-                </div>
-                <div class="col-md-12">
-                    <div class="form-group">
-                        <label for="swal-total" class="font-weight-bold">${__('total_salary') || 'Total Salary'}</label>
-                        <input type="text" id="swal-total" class="form-control font-weight-bold" readonly style="background-color: #e9ecef; font-size: 18px;">
-                    </div>
-                </div>
+                <input type="hidden" id="swal-total" value="0">
             </div>
         `,
-        width: '700px',
+        customClass: { popup: 'sr-addline-popup sr-page' },
+        width: '720px',
         showCancelButton: !isAutoTriggered,
-        confirmButtonColor: APP_COLORS.primary,
-        cancelButtonColor: APP_COLORS.danger_dark,
-        confirmButtonText: __('yes_update') || 'Yes, Update',
-        cancelButtonText: __('cancel') || 'Cancel',
+        confirmButtonColor: APP_COLORS.success,
+        cancelButtonColor: APP_COLORS.secondary,
+        confirmButtonText: '<i class="fa fa-check"></i> ' + (__('yes_update') || 'Yes, Update'),
+        cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
         allowOutsideClick: false,
         allowEscapeKey: !isAutoTriggered,
         didOpen: function() {
-            // Calculate total function
+            const $fields = $('#salUpdFields');
+
             function calculateTotal() {
-                const total = 
-                    (parseFloat($('#swal-basic').val()) || 0) +
-                    (parseFloat($('#swal-housing').val()) || 0) +
-                    (parseFloat($('#swal-transport').val()) || 0) +
-                    (parseFloat($('#swal-food').val()) || 0) +
-                    (parseFloat($('#swal-misc').val()) || 0) +
-                    (parseFloat($('#swal-cashier').val()) || 0) +
-                    (parseFloat($('#swal-fuel').val()) || 0) +
-                    (parseFloat($('#swal-tel').val()) || 0) +
-                    (parseFloat($('#swal-other').val()) || 0) +
-                    (parseFloat($('#swal-guard').val()) || 0);
+                const total = SAL_COMPONENTS.reduce((t, c) => t + (parseFloat($('#swal-' + c.key).val()) || 0), 0);
                 $('#swal-total').val(total.toFixed(2));
+                $('#swal-total-text').text(fmt(total));
+                const diff = Math.round((total - currentTotal) * 100) / 100;
+                const tone = diff > 0 ? 'green' : (diff < 0 ? 'red' : 'slate');
+                $('#swal-total-diff')
+                    .attr('class', 'sr-pill tone-' + tone)
+                    .html('<span class="sr-dot"></span>' + (diff > 0 ? '+' : '') + fmt(diff));
             }
-            
-            // Initial calculation
-            calculateTotal();
-            // Restrict salary inputs to numeric only
-            setupInputValidations();
-            
-            // Auto-update on input change
-            $('.salary-input').on('input change', calculateTotal);
-            
-            // Handle Enter key to move to next field
-            $('.salary-input').on('keypress', function(e) {
+
+            // Picker lists only components not on the form yet; hidden once all are added.
+            function refreshPicker() {
+                const missing = SAL_COMPONENTS.filter(c => !$('#swal-' + c.key).length);
+                const $sel = $('#salUpdAddSelect').empty()
+                    .append($('<option>').val('').text(__('select_component', 'Select component...')));
+                missing.forEach(c => $sel.append($('<option>').val(c.key).text(c.label)));
+                $('#salUpdAddWrap').toggle(missing.length > 0);
+            }
+
+            function addComponent(key) {
+                const c = SAL_COMPONENTS.find(x => x.key === key);
+                if (!c || $('#swal-' + key).length) return;
+                $fields.append(salField(c, ''));
+                refreshPicker();
+                calculateTotal();
+                $('#swal-' + key).focus();
+            }
+
+            $('#salUpdAddBtn').on('click', function() { addComponent($('#salUpdAddSelect').val()); });
+            $('#salUpdAddSelect').on('change', function() { addComponent($(this).val()); });
+
+            // Removing a component sets it to 0 and puts it back in the picker.
+            $fields.on('click', '.sal-upd-remove', function() {
+                $(this).closest('.sal-upd-field').remove();
+                refreshPicker();
+                calculateTotal();
+            });
+
+            $fields.on('input change', '.salary-input', calculateTotal);
+
+            // Enter moves to the next field; on the last one it submits.
+            $fields.on('keypress', '.salary-input', function(e) {
                 if (e.which === 13) {
                     e.preventDefault();
-                    const inputs = $('.salary-input');
+                    const inputs = $fields.find('.salary-input');
                     const index = inputs.index(this);
                     if (index < inputs.length - 1) {
                         inputs.eq(index + 1).focus().select();
                     } else {
-                        // Last field - trigger confirm
                         Swal.clickConfirm();
                     }
                 }
             });
-            
-            // Focus first input
+
+            refreshPicker();
+            calculateTotal();
+            setupInputValidations();
             $('#swal-basic').focus().select();
         },
         preConfirm: function() {

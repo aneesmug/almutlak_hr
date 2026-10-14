@@ -1414,20 +1414,13 @@ if (mysqli_num_rows($query) == 1) {
 
 								<?php
 								$showLocalVacCard = ($emprow["emp_sup_type"] <> "man_power") && ($local_vacation_count > 0);
-								$showLoanCard = ($canViewSalary && $loan_summary);
 								?>
-								<?php if ($showLocalVacCard || $showLoanCard): ?>
+								<?php if ($showLocalVacCard): ?>
 									<div class="sal-extra">
 										<?php if ($showLocalVacCard): ?>
 										<div class="sal-item" style="--c: #475569;">
 											<span class="sal-item-icon"><i class="fa fa-umbrella-beach"></i></span>
 											<div class="sal-item-text"><small><?= __('local_vacation', 'Local Vacation') ?></small><b><?= (int)$local_vacation_count ?></b></div>
-										</div>
-										<?php endif; ?>
-										<?php if ($showLoanCard): ?>
-										<div class="sal-item" style="--c: #d97706;">
-											<span class="sal-item-icon"><i class="fa fa-hand-holding-dollar"></i></span>
-											<div class="sal-item-text"><small><?= __('active_loan_summary', 'Active Loan') ?> &middot; <?= ucfirst(str_replace('_', ' ', __($loan_summary['loan_type']))) ?></small><b><?= number_format($loan_summary['remaining_balance'], 2) ?> <i class="icon-saudi_riyal"></i> <em><?= __('remaining_balance', 'Remaining Balance') ?></em></b></div>
 										</div>
 										<?php endif; ?>
 									</div>
@@ -3422,6 +3415,10 @@ if (mysqli_num_rows($query) == 1) {
 			// Allows 3-day adjustment window if employee selected wrong date
 			// ============================================================================
 
+			function rjEsc(v) {
+				return $('<div>').text(v == null ? '' : String(v)).html();
+			}
+
 			function submitRejoinRequest(vacationId, returndate, empId, empName) {
 				// First, check if there's an active rejoin request
 				$.ajax({
@@ -3436,38 +3433,32 @@ if (mysqli_num_rows($query) == 1) {
 					success: function(checkResponse) {
 						// If there's an active request, show warning immediately
 						if(checkResponse.type === 'warning' && checkResponse.active_request) {
+							const ar = checkResponse.active_request;
+							const arStatus = String(ar.status || '').toLowerCase();
+							const arTone = arStatus === 'approved' ? 'green' : (arStatus === 'rejected' ? 'red' : 'amber');
 							Swal.fire({
-								icon: 'warning',
-								title: checkResponse.title || __('active_rejoin_request_exists', 'Active Request Exists'),
+								title: '<i class="fa fa-plane-arrival"></i> ' + rjEsc(checkResponse.title || __('active_rejoin_request_exists', 'Active Request Exists')),
 								html: `
-									<div style="background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
-										<div style="margin-bottom: 10px;">
-											<strong>${__('request_number', 'Request Number')}:</strong> 
-											<span style="color: #d32f2f;">${checkResponse.active_request.request_inv_no}</span>
+									<div class="sr-form">
+										<div class="sr-notice tone-amber" style="margin-bottom:12px;">
+											<i class="mdi mdi-information-outline"></i>
+											<div>${rjEsc(checkResponse.message || __('rejoin_request_already_active', 'A rejoin request for this vacation is already in progress.'))}</div>
 										</div>
-										<div style="margin-bottom: 10px;">
-											<strong>${__('status', 'Status')}:</strong> 
-											<span style="color: #d32f2f; font-weight: bold;">${checkResponse.active_request.status.toUpperCase()}</span>
-										</div>
-										<div style="margin-bottom: 10px;">
-											<strong>${__('requested_rejoin_date', 'Requested Rejoin Date')}:</strong> 
-											<span>${checkResponse.active_request.requested_rejoin_date}</span>
-										</div>
-										<div style="margin-bottom: 10px;">
-											<strong>${__('submitted_at', 'Submitted At')}:</strong> 
-											<span>${checkResponse.active_request.requested_at}</span>
-										</div>
-										<hr style="margin: 10px 0;">
-										<div style="margin-bottom: 10px;">
-											<strong>${__('associated_vacation', 'Associated Vacation')}:</strong> 
-											<span>${checkResponse.active_request.vacation_inv_no}</span>
-										</div>
-										<div>
-											<strong>${__('vacation_type', 'Vacation Type')}:</strong> 
-											<span>${checkResponse.active_request.vac_type}</span>
+										<div class="sr-fsec mb-0">
+											<div class="sr-fsec-head"><span><i class="mdi mdi-calendar-check"></i> ${__('rejoin_request', 'Rejoin Request')}</span></div>
+											<dl class="sr-kv">
+												<div class="row-kv"><dt>${__('request_number', 'Request Number')}</dt><dd class="sr-mono">${rjEsc(ar.request_inv_no)}</dd></div>
+												<div class="row-kv"><dt>${__('status', 'Status')}</dt><dd><span class="sr-pill tone-${arTone}"><span class="sr-dot"></span>${rjEsc(arStatus.toUpperCase())}</span></dd></div>
+												<div class="row-kv"><dt>${__('requested_rejoin_date', 'Requested Rejoin Date')}</dt><dd>${rjEsc(ar.requested_rejoin_date)}</dd></div>
+												<div class="row-kv"><dt>${__('submitted_at', 'Submitted At')}</dt><dd>${rjEsc(ar.requested_at)}</dd></div>
+												<div class="row-kv"><dt>${__('associated_vacation', 'Associated Vacation')}</dt><dd class="sr-mono">${rjEsc(ar.vacation_inv_no)}</dd></div>
+												<div class="row-kv"><dt>${__('vacation_type', 'Vacation Type')}</dt><dd>${rjEsc(ar.vac_type)}</dd></div>
+											</dl>
 										</div>
 									</div>
 								`,
+								customClass: { popup: 'sr-addline-popup sr-page' },
+								width: '560px',
 								allowOutsideClick: false,
 								confirmButtonColor: APP_COLORS.primary,
 								confirmButtonText: __('ok', 'OK')
@@ -3495,42 +3486,71 @@ if (mysqli_num_rows($query) == 1) {
 				const parsedDate = new Date(returndate);
 				const formattedDate = parsedDate.toISOString().split('T')[0];
 				const displayDate = parsedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-				
+				// Allowed rejoin window: planned return date +/- 7 days
+				const minRejoin = new Date(parsedDate);
+				minRejoin.setDate(minRejoin.getDate() - 7);
+				const maxRejoin = new Date(parsedDate);
+				maxRejoin.setDate(maxRejoin.getDate() + 7);
+				const minDisplay = minRejoin.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+				const maxDisplay = maxRejoin.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+				const initials = String(empName || '').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+
 				Swal.fire({
-					title: __('rejoin_request_title', 'Submit Rejoin Request'),
+					title: '<i class="fa fa-plane-arrival"></i> ' + __('rejoin_request_title', 'Submit Rejoin Request'),
 					html: `
-						<div class="text-left">
-							<p class="text-muted mb-3">${__('rejoin_request_subtitle', 'Your rejoin request will be sent to your direct supervisor for approval')}</p>
-							<div class="form-group">
-								<label for="rejoinDate" class="form-label font-weight-bold">${__('rejoin_date_label', 'Actual Rejoin Date')} <span class="text-danger">*</span></label>
-								<input type="text" id="rejoinDate" class="form-control" placeholder="${__('select_date', 'Select date...')}" value="${formattedDate}">
-								<small class="text-muted d-block mt-2">
-									<i class="fa fa-info-circle"></i> ${__('planned_return_text', 'Planned Return')}:<br>
-									<strong>${displayDate}</strong>
-								</small>
+						<div class="sr-form">
+							<div class="sr-fsec">
+								<div class="sr-fsec-head"><span><i class="mdi mdi-airplane-landing"></i> ${__('vacation_details', 'Vacation Details')}</span></div>
+								<div class="sr-person" style="margin-bottom:8px;">
+									<span class="sr-avatar">${rjEsc(initials)}</span>
+									<div>
+										<div class="sr-cell-title">${rjEsc(empName)}</div>
+										<div class="sr-cell-sub sr-mono">#${rjEsc(empId)}</div>
+									</div>
+								</div>
+								<dl class="sr-kv">
+									<div class="row-kv"><dt>${__('planned_return_text', 'Planned Return')}</dt><dd>${rjEsc(displayDate)}</dd></div>
+									<div class="row-kv"><dt>${__('earliest_allowed_rejoin', 'Earliest Allowed Rejoin')}</dt><dd>${rjEsc(minDisplay)}</dd></div>
+									<div class="row-kv"><dt>${__('latest_allowed_rejoin', 'Latest Allowed Rejoin')}</dt><dd>${rjEsc(maxDisplay)}</dd></div>
+								</dl>
 							</div>
-							<div class="form-group">
-								<label for="rejoinReason" class="form-label font-weight-bold">${__('rejoin_reason_label', 'Reason for Date Change (if applicable)')}</label>
-								<textarea id="rejoinReason" class="form-control" rows="3" placeholder="${__('optional_text', 'Optional')}"></textarea>
+
+							<div class="sr-notice tone-sky" style="margin-bottom:12px;">
+								<i class="mdi mdi-information-outline"></i>
+								<div>${__('rejoin_request_subtitle', 'Your rejoin request will be sent to your direct supervisor for approval')}</div>
+							</div>
+
+							<div class="sr-fsec mb-0">
+								<div class="sr-fsec-head"><span><i class="mdi mdi-calendar-check"></i> ${__('rejoin_date_label', 'Actual Rejoin Date')}</span></div>
+								<div class="sr-fgrid">
+									<div class="sr-fcol c-12">
+										<label for="rejoinDate">${__('rejoin_date_label', 'Actual Rejoin Date')} <span class="text-danger">*</span></label>
+										<input type="text" id="rejoinDate" class="form-control" placeholder="${__('select_date', 'Select date...')}" value="${formattedDate}" autocomplete="off">
+										<span class="sr-fhint">${__('rejoin_date_window_hint', 'Within 7 days before or after the planned return date')}</span>
+									</div>
+									<div class="sr-fcol c-12">
+										<label for="rejoinReason">${__('rejoin_reason_label', 'Reason for Date Change (if applicable)')}</label>
+										<textarea id="rejoinReason" class="form-control" rows="3" placeholder="${__('optional_text', 'Optional')}"></textarea>
+									</div>
+								</div>
 							</div>
 						</div>
 					`,
-					width: '500px',
+					customClass: { popup: 'sr-addline-popup sr-page' },
+					width: '600px',
 					showCancelButton: true,
-					confirmButtonText: __('submit_request_button', 'Submit Request'),
-					cancelButtonText: __('cancel', 'Cancel'),
-					confirmButtonColor: APP_COLORS.primary,
-					cancelButtonColor: APP_COLORS.danger,
+					confirmButtonText: '<i class="fa fa-paper-plane"></i> ' + __('submit_request_button', 'Submit Request'),
+					cancelButtonText: '<i class="fa fa-times"></i> ' + __('cancel', 'Cancel'),
+					confirmButtonColor: APP_COLORS.success,
+					cancelButtonColor: APP_COLORS.secondary,
 					allowOutsideClick: false,
 					didOpen: () => {
-						// Days before the planned return, or more than 7 days after it, are blocked
+						// Dates more than 7 days before or after the planned return are blocked
 						// (same rule preConfirm enforces below).
-						const rejoinMax = new Date(parsedDate);
-						rejoinMax.setDate(rejoinMax.getDate() + 7);
 						AppDate.single('#rejoinDate', {
 							defaultDate: formattedDate,
-							minDate: formattedDate,
-							maxDate: AppDate.format(rejoinMax)
+							minDate: AppDate.format(minRejoin),
+							maxDate: AppDate.format(maxRejoin)
 						});
 					},
 					preConfirm: () => {
@@ -3542,16 +3562,13 @@ if (mysqli_num_rows($query) == 1) {
 							return false;
 						}
 
-						// Verify date is within valid range (not more than 3 days after planned return)
-						const planned = new Date(returndate);
+						// Verify date is within planned return +/- 7 days
 						const rejoin = new Date(rejoinDate);
-						const maxDate = new Date(planned);
-						maxDate.setDate(maxDate.getDate() + 7);
 
-						if (rejoin > maxDate) {
+						if (rejoin < minRejoin || rejoin > maxRejoin) {
 							Swal.showValidationMessage(
-								__('rejoin_date_range_validation', 
-									'Rejoin date cannot be more than 7 days after the planned return date. ' +
+								__('rejoin_date_range_validation_pm7',
+									'Rejoin date must be within 7 days before or after the planned return date. ' +
 									'Please contact HR for special cases.')
 							);
 							return false;
@@ -3572,6 +3589,7 @@ if (mysqli_num_rows($query) == 1) {
 					title: __('processing_title', 'Processing...'),
 					html: __('please_wait_text', 'Please wait while we process your request'),
 					didOpen: () => Swal.showLoading(),
+					customClass: { popup: 'sr-addline-popup sr-page' },
 					allowOutsideClick: false,
 					allowEscapeKey: false
 				});
@@ -3593,8 +3611,9 @@ if (mysqli_num_rows($query) == 1) {
 								title: response.title || __('success_title', 'Success'),
 								text: response.message || __('rejoin_request_submitted_text', 'Your rejoin request has been submitted for approval'),
 								icon: 'success',
-								confirmButtonText: __('ok', 'OK'),
-								allowOutsideClick: false
+								customClass: { popup: 'sr-addline-popup sr-page' },
+								allowOutsideClick: false,
+								confirmButtonText: __('ok', 'OK')
 							}).then(() => {
 								location.reload();
 							});
@@ -3603,6 +3622,8 @@ if (mysqli_num_rows($query) == 1) {
 								title: response.title || __('error_title', 'Error'),
 								text: response.message || __('unexpected_error_text', 'An unexpected error occurred'),
 								icon: 'error',
+								customClass: { popup: 'sr-addline-popup sr-page' },
+								allowOutsideClick: false,
 								confirmButtonText: __('ok', 'OK')
 							});
 						}
@@ -3612,6 +3633,8 @@ if (mysqli_num_rows($query) == 1) {
 							title: __('error_title', 'Error'),
 							text: __('request_failed_text', 'Request failed') + ': ' + textStatus,
 							icon: 'error',
+							customClass: { popup: 'sr-addline-popup sr-page' },
+							allowOutsideClick: false,
 							confirmButtonText: __('ok', 'OK')
 						});
 					}

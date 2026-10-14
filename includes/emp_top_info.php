@@ -443,53 +443,41 @@ if ($isEmployee !== true) {
 	</div>
 <?php endif*/ ?>
 
-		<div class="row">
-			<div class="col-sm-6">
-				<button action="action" onclick="window.history.go(-1); return false;" type="button" class="btn-sm btn btn-danger waves-effect float-left btn-rounded"><i class="fa fa-angle-double-left "></i> <?= __('goto_back') ?></button>
+		<!-- Page action bar (new GUI) - self-contained styles: several pages including this file don't load smart_request.css -->
+		<style>
+			.emp-actbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; }
+			.emp-actbar-group { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+			.emp-actbar .eab-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; border: 1px solid #d4d9e3; background: #fff; color: #334155; cursor: pointer; text-decoration: none !important; white-space: nowrap; box-shadow: 0 1px 2px rgba(15,23,42,.04); transition: background .15s, border-color .15s, color .15s, box-shadow .15s; }
+			.emp-actbar .eab-btn i { font-size: 15px; line-height: 1; }
+			.emp-actbar .eab-btn:hover { border-color: #6366f1; color: #4f46e5; }
+			.emp-actbar .eab-btn:focus-visible { outline: 0; box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+			.emp-actbar .eab-btn-primary { background: #6366f1; border-color: #6366f1; color: #fff !important; }
+			.emp-actbar .eab-btn-primary:hover { background: #4f46e5; border-color: #4f46e5; }
+			.emp-actbar .eab-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff !important; }
+			.emp-actbar .eab-btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+			html.app-dark .emp-actbar .eab-btn { background: var(--ad-surface, #161c2a); border-color: var(--ad-border, #2a3348); color: var(--ad-text, #d8dee9); box-shadow: none; }
+			html.app-dark .emp-actbar .eab-btn:hover { border-color: #818cf8; color: #a5b4fc; }
+			html.app-dark .emp-actbar .eab-btn-primary { background: #6366f1; border-color: #6366f1; color: #fff !important; }
+			html.app-dark .emp-actbar .eab-btn-danger { background: #dc2626; border-color: #dc2626; color: #fff !important; }
+			@media (max-width: 575px) { .emp-actbar .eab-btn { flex: 1 1 auto; } }
+		</style>
+		<div class="emp-actbar">
+			<div class="emp-actbar-group">
+				<button type="button" class="eab-btn" onclick="window.history.go(-1); return false;"><i class="mdi mdi-arrow-left"></i> <?= __('goto_back') ?></button>
 			</div>
-			<div class="col-sm-6">
-				<div class="btn-group float-right" role="group" aria-label="Edit Button">
-					<?php if ($emprow["status"] == 1): ?>
-
-						<?php if ($current_page_name <> "add_emp_slry.php") {
-							if ($user_type <> "dept_user") {
-								if ($emprow['seid'] == "") { ?>
-									<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="btn-sm btn btn-danger waves-effect btn-rounded">
-										Add Details
-									</a>
-									<?php } else {
-									if ($current_page_name <> "add_emp_slry.php") { ?>
-						<?php }
-								}
-							}
-						} ?>
-						<?php /* if ($emprow['empsocialcount'] < 9 || $is_system_admin): ?>
-							<a href="javascript:void(0);" class="btn-sm btn btn-info waves-effect btn-rounded addSocial" data-emp_id="<?= $emprow['empid'] ?>">
-								Add Social Media <i class="mdi mdi-link-variant"></i>
-							</a>
-						<?php endif ?>
-						<?php if (!$emprow['description'] || $is_system_admin): ?>
-							<a href="javascript:void(0);" class="btn-sm btn btn-dark waves-effect btn-rounded addPortfolio" data-emp_id="<?= $emprow['empid'] ?>">
-								Add Portfolio Dedails <i class="mdi mdi mdi-account-card-details"></i>
-							</a>
-						<?php endif */ ?>
-					<?php if (($is_system_admin || $isHR || $isDeptHr) && $showUpdateSalaryBtn): ?>
-						<?php if ($current_page_name <> "add_emp_slry.php"): ?>
-							<a href="javascript:void(0);" class="btn-sm btn btn-secondary waves-effect btn-rounded updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>">
-								<?= __('update_salary') ?> <i class="mdi mdi-inbox-arrow-up"></i>
-							</a>
-						<?php endif ?>
+			<div class="emp-actbar-group">
+				<?php if ($emprow["status"] == 1): ?>
+					<?php if ($current_page_name <> "add_emp_slry.php" && $user_type <> "dept_user" && $emprow['seid'] == ""): ?>
+						<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="eab-btn eab-btn-danger"><i class="mdi mdi-plus-circle-outline"></i> Add Details</a>
 					<?php endif ?>
-					<?php else: ?>
-						<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="btn-sm btn btn-danger waves-effect btn-rounded">
-							<?= __('print_end_of_service') ?> <i class="mdi mdi-printer"></i>
-						</a>
+					<?php if (($is_system_admin || $isHR || $isDeptHr) && $showUpdateSalaryBtn && $current_page_name <> "add_emp_slry.php"): ?>
+						<a href="javascript:void(0);" class="eab-btn eab-btn-primary updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>"><i class="mdi mdi-cash-multiple"></i> <?= __('update_salary') ?></a>
 					<?php endif ?>
-				</div>
+				<?php else: ?>
+					<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="eab-btn eab-btn-danger"><i class="mdi mdi-printer"></i> <?= __('print_end_of_service') ?></a>
+				<?php endif ?>
 			</div>
 		</div>
-
-		<br>
 	</div>
 </div>
 
