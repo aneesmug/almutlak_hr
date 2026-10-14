@@ -46,7 +46,93 @@ try {
     $supervisor_where = $is_all_visibility ? "1 = 1" : "(e.supervisor_id = :supervisor_id OR " . approverInSql('e.supervisor_id') . ")";
     $params = $is_all_visibility ? [] : [':supervisor_id' => $supervisor_id];
     $count_params = $params;
-    
+
+    // "All Requests" card - every rejoin request of every employee, any status (read-only reference).
+    // Granted via App Settings > Special Access > 'view_all_rejoin_requests' (administrators always have it).
+    if (($_POST['status'] ?? '') === 'all') {
+        require_once __DIR__ . '/special_access_helper.php';
+        if (!user_has_special_access($conDB, $supervisor_id, 'view_all_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+            throw new Exception('Unauthorized');
+        }
+
+        $draw = intval($_POST['draw'] ?? 1);
+        $start = max(0, intval($_POST['start'] ?? 0));
+        $length = intval($_POST['length'] ?? 10);
+        $length = ($length < 1 || $length > 500) ? 10 : $length;
+        $search = trim((string)($_POST['search']['value'] ?? ''));
+
+        $from = "
+            FROM rejoin_requests rr
+            JOIN employees e ON rr.emp_id = e.emp_id
+            LEFT JOIN emp_vacation v ON rr.vacation_id = v.id
+            LEFT JOIN employees ab ON ab.emp_id = rr.approved_by_emp_id
+        ";
+        $where = '';
+        $search_params = [];
+        if ($search !== '') {
+            $where = " WHERE (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3 OR rr.status LIKE :search4)";
+            for ($i = 1; $i <= 4; $i++) {
+                $search_params[':search' . $i] = '%' . $search . '%';
+            }
+        }
+
+        $total_records = (int)$pdo->query("SELECT COUNT(*) FROM rejoin_requests rr JOIN employees e ON rr.emp_id = e.emp_id")->fetchColumn();
+        $filtered_records = $total_records;
+        if ($search !== '') {
+            $stmt = $pdo->prepare("SELECT COUNT(*) $from $where");
+            $stmt->execute($search_params);
+            $filtered_records = (int)$stmt->fetchColumn();
+        }
+
+        // Keep in sync with the #allRequestsTable columns in rejoin_approvals.php
+        $sort_columns = ['e.name', 'rr.emp_id', 'v.return_date', 'rr.requested_rejoin_date', 'rr.final_approved_date', 'rr.status', 'rr.requested_at', 'rr.approved_at', 'ab.name'];
+        $order_sql = 'rr.requested_at DESC';
+        if (!empty($_POST['order'])) {
+            $col = intval($_POST['order'][0]['column'] ?? -1);
+            $dir = strtoupper($_POST['order'][0]['dir'] ?? 'DESC') === 'ASC' ? 'ASC' : 'DESC';
+            if (isset($sort_columns[$col])) {
+                $order_sql = $sort_columns[$col] . ' ' . $dir . ', rr.id DESC';
+            }
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT
+                rr.id AS rejoin_request_id,
+                rr.emp_id,
+                rr.requested_rejoin_date,
+                rr.requested_reason,
+                rr.requested_at,
+                rr.status,
+                rr.final_approved_date,
+                rr.approved_at,
+                rr.approval_note,
+                rr.rejection_reason,
+                rr.approved_by_emp_id,
+                ab.name AS approved_by_name,
+                e.name AS emp_name,
+                v.return_date,
+                v.vac_type
+            $from
+            $where
+            ORDER BY $order_sql
+            LIMIT :start, :length
+        ");
+        foreach ($search_params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue(':start', $start, PDO::PARAM_INT);
+        $stmt->bindValue(':length', $length, PDO::PARAM_INT);
+        $stmt->execute();
+
+        echo json_encode([
+            'draw' => $draw,
+            'recordsTotal' => $total_records,
+            'recordsFiltered' => $filtered_records,
+            'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        ]);
+        exit;
+    }
+
     // Check if this is a DataTables request
     $is_datatables = !empty($_POST['draw']);
     

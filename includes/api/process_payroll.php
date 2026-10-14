@@ -527,6 +527,8 @@ try {
         $joiningDeductionDays = 0;
         $vacationReturnDate = null;
         $vacationReturnDeductionDays = 0;
+        $vacationReturnExcusedDays = 0;   // approved leave days inside a late-return gap
+        $vacationReturnLateFrom = null;   // planned return date, when attendance showed a later one
 
         $joiningDateValue = $employeeStatus['joining_date'] ?? null;
         if (!empty($joiningDateValue)) {
@@ -566,7 +568,8 @@ try {
                         // a paid settlement (already compensated for those days, so must still be
                         // deducted regardless of length). A short vacation under the threshold
                         // with no settlement must not touch payroll at all: full month's pay.
-                        $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                        $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
+                                    rr.final_approved_date
                                 FROM emp_vacation v
                                 LEFT JOIN (
                                         SELECT rr1.vacation_id, rr1.final_approved_date
@@ -587,6 +590,10 @@ try {
                                     AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
                                     AND (
                                         COALESCE(v.vacdays, 0) >= :dropout_days_threshold
+                                        -- Emergency Fly vacation: abroad and unpaid (no vacation
+                                        -- salary in payroll or settlement), so the days before the
+                                        -- return are deducted whatever its length.
+                                        OR (LOWER(COALESCE(v.vac_type, '')) = 'fly' AND LOWER(COALESCE(v.fly_type, '')) = 'emergency')
                                         OR EXISTS (
                                             SELECT 1 FROM settlement_records sr
                                             WHERE sr.request_inv_no = CONCAT('SETL-', v.request_inv_no)
@@ -609,6 +616,7 @@ try {
             if ($vacationReturn && !empty($vacationReturn['effective_return_date'])) {
                 $effectiveReturnDate = new DateTime($vacationReturn['effective_return_date']);
                 $effectiveReturnDate->setTime(0, 0, 0);
+                $returnHasRejoin = !empty($vacationReturn['final_approved_date']);
 
                 // Chain forward through back-to-back vacation records (e.g. an Emergency
                 // vacation starting the day after an Annual vacation's return_date) - a
@@ -616,7 +624,8 @@ try {
                 // month and silently drops any immediately-following one, undercounting
                 // the unpaid span. Keep extending the effective return date as long as
                 // the next vacation starts on/right after the previous one's own return.
-                $stmtVacationChainNext = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                $stmtVacationChainNext = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
+                            rr.final_approved_date
                         FROM emp_vacation v
                         LEFT JOIN (
                                 SELECT rr1.vacation_id, rr1.final_approved_date
@@ -656,7 +665,55 @@ try {
                         break; // guard against a non-advancing chain
                     }
                     $effectiveReturnDate = $chainedReturnDate;
+                    $returnHasRejoin = !empty($chainedVacation['final_approved_date']);
                     $chainGuard++;
+                }
+
+                // No approved rejoin -> return_date is only the PLANNED return. When the
+                // employee punches on the device, the real return is the first check-in on/after
+                // it (4933: return_date Oct 5, first punch Oct 12 -> Oct 1-11 deducted). Only
+                // trusted when the company's device synced during the gap; approved LV-* leave
+                // in the gap (e.g. sick leave) is not deducted. No check-in yet = keep planned.
+                if (!$returnHasRejoin && $effectiveReturnDate <= $monthEndDate) {
+                    $plannedReturn = $effectiveReturnDate->format('Y-m-d');
+                    $stmtFirstPunch = $pdo->prepare("SELECT MIN(DATE(date)) FROM attendance
+                        WHERE emp_id = :emp_id AND time_in IS NOT NULL AND time_in <> ''
+                            AND date >= :from_date AND date < DATE_ADD(:to_date, INTERVAL 1 DAY)");
+                    $stmtFirstPunch->execute([':emp_id' => $empId, ':from_date' => $plannedReturn, ':to_date' => $monthEndDate->format('Y-m-d')]);
+                    $firstPunch = $stmtFirstPunch->fetchColumn() ?: null;
+                    if ($firstPunch !== null && $firstPunch > $plannedReturn) {
+                        $stmtReturnComp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
+                        $stmtReturnComp->execute([':emp_id' => $empId]);
+                        $gapEnd = date('Y-m-d', strtotime($firstPunch . ' -1 day'));
+                        $deviceWorkedInGap = false;
+                        foreach (array_keys(getDeviceSyncedDatesForMonth($pdo, $stmtReturnComp->fetchColumn(), $monthYear)) as $syncedDay) {
+                            if ($syncedDay >= $plannedReturn && $syncedDay <= $gapEnd) {
+                                $deviceWorkedInGap = true;
+                                break;
+                            }
+                        }
+                        if ($deviceWorkedInGap) {
+                            $stmtGapLeave = $pdo->prepare("SELECT start_date, COALESCE(return_date, start_date) AS end_date
+                                FROM emp_vacation
+                                WHERE emp_id = :emp_id AND request_inv_no LIKE 'LV-%'
+                                    AND current_status IN ('approved', 'completed')
+                                    AND start_date <= :gap_end AND COALESCE(return_date, start_date) >= :gap_start");
+                            $stmtGapLeave->execute([':emp_id' => $empId, ':gap_end' => $gapEnd, ':gap_start' => $plannedReturn]);
+                            $excusedDates = [];
+                            foreach ($stmtGapLeave->fetchAll(PDO::FETCH_ASSOC) as $leave) {
+                                $to = min(substr((string) $leave['end_date'], 0, 10), $gapEnd);
+                                for ($d = max(substr((string) $leave['start_date'], 0, 10), $plannedReturn); $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+                                    if ((int) date('j', strtotime($d)) <= 30) {
+                                        $excusedDates[$d] = true;
+                                    }
+                                }
+                            }
+                            $vacationReturnExcusedDays = count($excusedDates);
+                            $vacationReturnLateFrom = $plannedReturn;
+                            $effectiveReturnDate = new DateTime($firstPunch);
+                            $effectiveReturnDate->setTime(0, 0, 0);
+                        }
+                    }
                 }
 
                 if ($effectiveReturnDate > $payableStartDate) {
@@ -687,7 +744,7 @@ try {
         // instead of silently shrinking every salary component, so HR can see
         // exactly how many days are being deducted.
         if ($vacationReturnDate instanceof DateTime) {
-            $vacationReturnDeductionDays = max(0, ((int)$vacationReturnDate->format('d')) - 1);
+            $vacationReturnDeductionDays = max(0, min(30, (int)$vacationReturnDate->format('d') - 1) - $vacationReturnExcusedDays);
             $prorationFactor = 1.0;
         }
 
@@ -714,7 +771,8 @@ try {
 
         if ($autoDeductionEnabled) {
             addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
-            addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays);
+            addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays,
+                $vacationReturnDate, $vacationReturnLateFrom);
         }
 
         if ($autoBenefitEnabled) {
@@ -1245,7 +1303,8 @@ function addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSa
  * the days before the rejoin date, so HR can see exactly how many days were
  * deducted rather than a silently shrunk gross salary.
  */
-function addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays) {
+function addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays,
+        $returnDate = null, $lateFrom = null) {
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions
         WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Vacation Return Deduction%'");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
@@ -1263,7 +1322,12 @@ function addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGros
     // Fixed amount, not the "daily_deduction" calc type - the day-based type follows the
     // gross-minus-food rule the admin configured for manual day deductions, which doesn't
     // apply here. Day count is recorded in the label instead so HR can see it.
+    // e.g. "Vacation Return Deduction (10 days) back 12 Oct by attendance, planned 5 Oct"
     $label = 'Vacation Return Deduction (' . $days . ' days)';
+    if ($returnDate instanceof DateTime) {
+        $label .= ' back ' . $returnDate->format('j M')
+            . ($lateFrom ? ' by attendance, planned ' . date('j M', strtotime($lateFrom)) : '');
+    }
     $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions
         (emp_id, deduction, note, month, status, calculation_type, hours, days)
         VALUES (:emp_id, :deduction, :amount, :month_year, 1, 'fixed', NULL, NULL)");

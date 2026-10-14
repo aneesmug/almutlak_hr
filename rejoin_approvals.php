@@ -16,6 +16,10 @@ $can_cancel_rejoin_requests = (
     || user_has_special_access($conDB, $supervisor_emp_id ?? '', 'cancel_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
 
+// "All Requests" card (every employee, any status) - read-only reference view,
+// granted per user via App Settings > Special Access > 'view_all_rejoin_requests'.
+$can_view_all_rejoin_requests = user_has_special_access($conDB, $supervisor_emp_id ?? '', 'view_all_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
 // HR Payroll, HR Senior BP, and Administrator can pick ANY rejoin adjustment date
 // (including back dates) - everyone else stays limited to the +/-3 day window.
 $rejoin_elevated_roles = ['hr_payroll', 'hr_senior_bp', 'administrator'];
@@ -43,6 +47,8 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <?php endif; ?>
     <style>
         .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .sr-page .sr-tiles.rj-tiles.rj-tiles-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles.rj-tiles-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .rj-pane { display: none; }
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
@@ -50,6 +56,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     </style>
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
     <script> window.isRejoinElevated = <?= $is_rejoin_elevated ? 'true' : 'false' ?>;</script>
+    <script> window.canViewAllRejoinRequests = <?= $can_view_all_rejoin_requests ? 'true' : 'false' ?>;</script>
     <script> window.canCancelRejoinRequests = <?= $can_cancel_rejoin_requests ? 'true' : 'false' ?>;</script>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
@@ -78,7 +85,13 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                         </div>
                     </div>
 
-                    <div class="sr-tiles rj-tiles" id="rjTiles">
+                    <div class="sr-tiles rj-tiles<?= $can_view_all_rejoin_requests ? ' rj-tiles-4' : '' ?>" id="rjTiles">
+                        <?php if ($can_view_all_rejoin_requests): ?>
+                        <button type="button" class="sr-tile" data-pane="all">
+                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all_requests', 'All Requests') ?></span>
+                            <span class="sr-tile-value" id="all-count">&ndash;</span>
+                        </button>
+                        <?php endif; ?>
                         <button type="button" class="sr-tile active" data-pane="pending">
                             <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('pending_requests', 'Pending') ?></span>
                             <span class="sr-tile-value" id="pending-count">&ndash;</span>
@@ -101,6 +114,29 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             </div>
                         </div>
 
+                        <?php if ($can_view_all_rejoin_requests): ?>
+                        <div class="rj-pane" id="all">
+                            <div class="sr-table-wrap">
+                                <table id="allRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee_name', 'Employee') ?></th>
+                                            <th>ID</th>
+                                            <th><?= __('planned_return_date', 'Planned return') ?></th>
+                                            <th><?= __('requested_rejoin_date', 'Requested rejoin') ?></th>
+                                            <th><?= __('final_rejoin_date', 'Final rejoin') ?></th>
+                                            <th><?= __('status', 'Status') ?></th>
+                                            <th><?= __('submitted_date', 'Submitted') ?></th>
+                                            <th><?= __('action_date', 'Action date') ?></th>
+                                            <th><?= __('action_by', 'Action by') ?></th>
+                                            <th><?= __('note', 'Note') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <?php endif; ?>
                         <div class="rj-pane active" id="pending">
                             <div class="sr-table-wrap">
                                 <table id="pendingRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
@@ -182,9 +218,18 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
             local: <?= json_encode(__('local_vacation', 'Local vacation')) ?>,
             daysLate: <?= json_encode(__('days_after_plan', 'd after plan')) ?>,
             daysEarly: <?= json_encode(__('days_before_plan', 'd before plan')) ?>,
-            onTime: <?= json_encode(__('on_time', 'On time')) ?>
+            onTime: <?= json_encode(__('on_time', 'On time')) ?>,
+            status: {
+                pending: <?= json_encode(__('pending', 'Pending')) ?>,
+                approved: <?= json_encode(__('approved', 'Approved')) ?>,
+                adjusted: <?= json_encode(__('adjusted', 'Adjusted')) ?>,
+                rejected: <?= json_encode(__('rejected', 'Rejected')) ?>,
+                cancelled: <?= json_encode(__('cancelled', 'Cancelled')) ?>
+            }
         };
-        let pendingTable, approvedTable, rejectedTable;
+        const STATUS_TONE = { pending: 'tone-amber', approved: 'tone-green', adjusted: 'tone-sky', rejected: 'tone-red', cancelled: 'tone-slate' };
+        let pendingTable, approvedTable, rejectedTable, allTable;
+        const allTables = () => [allTable, pendingTable, approvedTable, rejectedTable].filter(Boolean);
 
         function fmtDate(d) {
             if (!d) return '<span class="text-muted">&ndash;</span>';
@@ -220,7 +265,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         }
 
         function loadRejoinRequests() {
-            [pendingTable, approvedTable, rejectedTable].forEach(t => t && t.ajax.reload(null, false));
+            allTables().forEach(t => t.ajax.reload(null, false));
         }
 
         $(document).ready(function() {
@@ -265,11 +310,30 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 { data: 'approved_at', render: fmtDate }
             ], [[3, 'desc']]);
 
+            if (window.canViewAllRejoinRequests) {
+                // Column order must match $sort_columns in includes/get_rejoin_requests.php (status=all)
+                allTable = makeTable('#allRequestsTable', 'all', [
+                    { data: 'emp_name', render: (d, t, r) => person(d, r.emp_id) },
+                    { data: 'emp_id', visible: false },
+                    { data: 'return_date', render: fmtDate },
+                    { data: 'requested_rejoin_date', render: fmtDate },
+                    { data: 'final_approved_date', render: fmtDate },
+                    { data: 'status', render: function(d) {
+                        const k = String(d || '').toLowerCase();
+                        return `<span class="sr-pill sr-pill-xs ${STATUS_TONE[k] || 'tone-slate'}"><span class="sr-dot"></span>${esc(T.status[k] || d || '-')}</span>`;
+                    } },
+                    { data: 'requested_at', render: fmtDate },
+                    { data: 'approved_at', render: fmtDate },
+                    { data: 'approved_by_name', render: (d, t, r) => d ? esc(d) : (r.approved_by_emp_id ? `<span class="sr-mono">${esc(r.approved_by_emp_id)}</span>` : '<span class="text-muted">&ndash;</span>') },
+                    { data: null, orderable: false, render: (d, t, r) => longText(r.status === 'rejected' ? r.rejection_reason : (r.approval_note || r.requested_reason)) }
+                ], [[6, 'desc']]);
+            }
+
             let timer;
             $('#rjSearch').on('input', function() {
                 clearTimeout(timer);
                 const v = this.value;
-                timer = setTimeout(() => [pendingTable, approvedTable, rejectedTable].forEach(t => t.search(v).draw()), 350);
+                timer = setTimeout(() => allTables().forEach(t => t.search(v).draw()), 350);
             });
 
             $('#rjTiles').on('click', '.sr-tile', function() {

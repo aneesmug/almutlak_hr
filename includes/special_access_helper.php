@@ -19,6 +19,7 @@ if (!function_exists('get_special_access_labels')) {
             'add_business_trip_manual_allowance' => 'Business Trip: Add Manual Allowance (Taxi, Parking, etc.)',
             'view_vacation_balance_history' => 'View Vacation Balance History',
             'view_remaining_balance_in_report' => 'Show Remaining Balance in Vacation Report',
+            'view_all_rejoin_requests' => 'Rejoin Approvals: View All Requests Card (All Employees, Read-Only)',
             'manage_employee_request_block' => 'Block/Unblock Employee from All Requests',
             'manage_employee_request_type_block' => 'Block Employee by Specific Request Type',
             'manage_global_request_blocks' => 'Manage Request Type Blocks (Global, All Employees)',
@@ -187,6 +188,7 @@ if (!function_exists('get_special_access_categories')) {
                 'keys' => [
                     'view_vacation_balance_history',
                     'view_remaining_balance_in_report',
+                    'view_all_rejoin_requests',
                 ],
             ],
             'Payroll Checklist Report' => [
