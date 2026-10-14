@@ -381,7 +381,18 @@ if ($action === 'run_import') {
             // in the same batch and collapsed into it via ON DUPLICATE KEY UPDATE, instead of
             // landing as separate rows - almost always a data issue on the live table itself
             // (duplicate values in whatever column the unique key covers), not an import bug.
-            $message .= ' (' . implode('; ', $insertDiagnostics) . ')';
+            // Sum the per-statement "Records: N Duplicates: D" lines into one figure
+            $recSum = 0;
+            $dupSum = 0;
+            foreach ($insertDiagnostics as $info) {
+                if (preg_match('/Records:\s*(\d+)\s+Duplicates:\s*(\d+)/', $info, $dm)) {
+                    $recSum += (int) $dm[1];
+                    $dupSum += (int) $dm[2];
+                }
+            }
+            $message .= $dupSum > 0
+                ? ' Last batch: ' . number_format($dupSum) . ' of ' . number_format($recSum) . ' rows were duplicates of an existing unique key - the LIVE table has duplicate rows that the local unique key merges.'
+                : ' (' . implode('; ', $insertDiagnostics) . ')';
         } else {
             $message .= ' Check the import for that table.';
         }
