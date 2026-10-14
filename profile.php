@@ -2053,6 +2053,10 @@ RTL Support
 			$header_class .= ' vacation';
 			$status_label = __('on_vacation');
 			$status_icon = 'fa-plane-departure';
+		} elseif ((string)$emprow["status"] === "2") {
+			$header_class .= ' draft';
+			$status_label = __('draft', 'Draft');
+			$status_icon = 'fa-file-pen';
 		} elseif ($emprow["status"] == "0") {
 			$header_class .= ' inactive';
 			$status_label = __('inactive');

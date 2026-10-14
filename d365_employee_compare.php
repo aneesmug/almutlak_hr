@@ -383,7 +383,7 @@ $filterSelect = function ($id, $all, array $values, $blankLabel) use ($e) {
                             <td class="sr-mono"><?= $e($r['id']) ?></td>
                             <td><?= $a ? $e($a['name']) : '<span class="cmp-muted">-</span>' ?></td>
                             <td><?= $r['w'] ? $e($r['w']['name']) : '<span class="cmp-muted">-</span>' ?></td>
-                            <td><?= $a ? ((string)$a['status'] === '1' ? 'Active' : 'Inactive') : '<span class="cmp-muted">-</span>' ?></td>
+                            <td><?= $a ? ((string)$a['status'] === '1' ? 'Active' : ((string)$a['status'] === '2' ? 'Draft' : 'Inactive')) : '<span class="cmp-muted">-</span>' ?></td>
                             <td><?= $a ? $e($a['comp_name']) : '<span class="cmp-muted">-</span>' ?></td>
                             <td><?= $a ? $e($a['joining_date']) : '' ?></td>
                             <td><?= $emp ? '<span class="sr-chip">' . $e($emp['entity']) . '</span>' : '<span class="cmp-muted">-</span>' ?></td>

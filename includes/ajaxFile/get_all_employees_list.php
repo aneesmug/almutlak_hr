@@ -32,7 +32,11 @@ $employee_filter = getEmployeeFilterSQL('emp_id', true);
 // Inactive employees are only listed for users holding the 'view_inactive_employees'
 // special access (system admins always pass). Inactive = same rule as the status tile.
 $can_view_inactive = user_has_special_access($conDB, $empid ?? '', 'view_inactive_employees', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
-$inactive_scope_sql = $can_view_inactive ? '' : ' AND (status = 1 OR fly = 1)';
+// Draft (status = 2) employees are listed for inactive viewers and for anyone who can edit
+// employees (they activate drafts from Edit Employee).
+$can_view_draft = $can_view_inactive || ($is_system_admin ?? false) || ($isDeptHr ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$inactive_scope_sql = $can_view_inactive ? '' : ($can_view_draft ? ' AND (status IN (1, 2) OR fly = 1)' : ' AND (status = 1 OR fly = 1)');
 $employee_filter .= $inactive_scope_sql;
 
 if (!empty($search_term)) {
@@ -46,16 +50,18 @@ if (!empty($search_term)) {
 }
 
 // Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
-$status_filter = in_array(($_POST['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_POST['emp_status'] : '';
-if ($status_filter === 'inactive' && !$can_view_inactive) {
+$status_filter = in_array(($_POST['emp_status'] ?? ''), ['active', 'fly', 'draft', 'inactive'], true) ? $_POST['emp_status'] : '';
+if (($status_filter === 'inactive' && !$can_view_inactive) || ($status_filter === 'draft' && !$can_view_draft)) {
     $status_filter = '';
 }
 if ($status_filter === 'active') {
     $where_conditions[] = "(status = 1 AND fly = 0)";
 } elseif ($status_filter === 'fly') {
     $where_conditions[] = "fly = 1";
+} elseif ($status_filter === 'draft') {
+    $where_conditions[] = "(status = 2 AND fly <> 1)";
 } elseif ($status_filter === 'inactive') {
-    $where_conditions[] = "(status <> 1 AND fly <> 1)";
+    $where_conditions[] = "(status = 0 AND fly <> 1)";
 }
 
 $where_sql = "";
@@ -129,6 +135,8 @@ if (!empty($employees)) {
             $status_class = 'status-active';
         } elseif ($emp_status_fly == 1) {
             $status_class = 'status-fly';
+        } elseif ($emp_status == 2) {
+            $status_class = 'status-draft';
         } else {
             $status_class = 'status-inactive';
         }

@@ -109,13 +109,18 @@ $can_modify_employee = (
     ($isDeptHr ?? false) ||
     user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
-$card_can_edit = ($emp_status == 1 && $can_modify_employee);
+$card_can_edit = (in_array((string)$emp_status, ['1', '2'], true) && $can_modify_employee);
 $card_can_delete = !empty($is_system_admin);
 
-$card_state = str_replace('status-', '', (string)$status_class); // active | fly | inactive
+$card_state = str_replace('status-', '', (string)$status_class); // active | fly | draft | inactive
+// Callers only know active/fly/inactive - Draft (status = 2) is detected here for all of them.
+if ((string)($emp_status ?? '') === '2' && (string)($emp_status_fly ?? '0') !== '1') {
+    $card_state = 'draft';
+}
 $card_state_meta = [
     'active'   => ['tone' => 'green', 'label' => __('active', 'Active'), 'icon' => 'fa-check'],
     'fly'      => ['tone' => 'sky',   'label' => __('on_vacation', 'On vacation'), 'icon' => 'fa-plane'],
+    'draft'    => ['tone' => 'amber', 'label' => __('draft', 'Draft'), 'icon' => 'fa-file-pen'],
     'inactive' => ['tone' => 'slate', 'label' => __('inactive', 'Inactive'), 'icon' => 'fa-minus'],
 ][$card_state] ?? ['tone' => 'slate', 'label' => '', 'icon' => 'fa-minus'];
 $card_view_url = 'view_employee.php?emp_id=' . urlencode((string)$emp_id);

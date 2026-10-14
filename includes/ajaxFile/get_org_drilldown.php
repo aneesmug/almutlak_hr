@@ -383,7 +383,7 @@ if ($level === 'employees') {
     $limit_options = [12, 24, 48, 96];
     $search_term = trim($_POST['search'] ?? '');
     $status_filter = $_POST['status'] ?? 'active';
-    if (!in_array($status_filter, ['all', 'active', 'inactive', 'on_vacation'], true)) {
+    if (!in_array($status_filter, ['all', 'active', 'draft', 'inactive', 'on_vacation'], true)) {
         $status_filter = 'active';
     }
     $limit_raw = $_POST['limit'] ?? $limit_options[0];
@@ -428,6 +428,11 @@ if ($level === 'employees') {
             case 'active':
                 $where_clauses[] = "status = ? AND fly = ?";
                 array_push($params, 1, 0);
+                $types .= "ii";
+                break;
+            case 'draft':
+                $where_clauses[] = "status = ? AND fly <> ?";
+                array_push($params, 2, 1);
                 $types .= "ii";
                 break;
             case 'inactive':

@@ -909,7 +909,7 @@ function generateEmployeeReport($conDB, $columns, $departments, $dateFrom, $date
             $row['name'] = getDisplayName(parseName($row['name']));
         }
         if (isset($row['status'])) {
-            $row['status'] = $row['status'] == 1 ? __('active') : __('inactive');
+            $row['status'] = $row['status'] == 1 ? __('active') : ((string)$row['status'] === '2' ? __('draft', 'Draft') : __('inactive'));
         }
         if (isset($row['fly'])) {
             $row['fly'] = $row['fly'] == 1 ? __('yes') : __('no');
@@ -1809,7 +1809,7 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
             'location_code' => display_or_na($srcRow['location_code'] ?? null),
             'department_code' => display_or_na($srcRow['dept_code'] ?? null),
             'mobile' => $srcRow['mobile'] ?? '',
-            'status' => ((int)($srcRow['status'] ?? 0) === 1) ? __('active') : __('inactive'),
+            'status' => ((int)($srcRow['status'] ?? 0) === 1) ? __('active') : (((int)($srcRow['status'] ?? 0) === 2) ? __('draft', 'Draft') : __('inactive')),
         ];
         $rows[$srcRow['emp_id']] = $row;
     }

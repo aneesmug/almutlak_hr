@@ -7,6 +7,7 @@
 }
 .emp-hero.vacation { --eh-a: #f59e0b; --eh-b: #ea7a0c; }
 .emp-hero.inactive { --eh-a: #dc3545; --eh-b: #9f1d2b; }
+.emp-hero.draft { --eh-a: #6b7280; --eh-b: #374151; }
 .emp-hero::before, .emp-hero::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.08); pointer-events: none; }
 .emp-hero::before { width: 420px; height: 420px; inset-inline-end: -120px; top: -220px; }
 .emp-hero::after { width: 220px; height: 220px; inset-inline-end: 220px; bottom: -150px; }

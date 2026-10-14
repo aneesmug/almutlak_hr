@@ -38,7 +38,11 @@ $employee_filter = getEmployeeFilterSQL('emp_id', true);
 // Inactive employees are only listed for users holding the 'view_inactive_employees'
 // special access (system admins always pass). Inactive = same rule as the status tile.
 $can_view_inactive = user_has_special_access($conDB, $empid ?? '', 'view_inactive_employees', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
-$inactive_scope_sql = $can_view_inactive ? '' : ' AND (status = 1 OR fly = 1)';
+// Draft (status = 2) employees are listed for inactive viewers and for anyone who can edit
+// employees (they activate drafts from Edit Employee).
+$can_view_draft = $can_view_inactive || ($is_system_admin ?? false) || ($isDeptHr ?? false)
+    || user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+$inactive_scope_sql = $can_view_inactive ? '' : ($can_view_draft ? ' AND (status IN (1, 2) OR fly = 1)' : ' AND (status = 1 OR fly = 1)');
 $employee_filter .= $inactive_scope_sql;
 
 // Add search term filter if it exists
@@ -53,16 +57,18 @@ if (!empty($search_term)) {
 }
 
 // Status tile filter: active (working) / fly (on vacation) / inactive - same rules as the card's status_class
-$status_filter = in_array(($_GET['emp_status'] ?? ''), ['active', 'fly', 'inactive'], true) ? $_GET['emp_status'] : '';
-if ($status_filter === 'inactive' && !$can_view_inactive) {
+$status_filter = in_array(($_GET['emp_status'] ?? ''), ['active', 'fly', 'draft', 'inactive'], true) ? $_GET['emp_status'] : '';
+if (($status_filter === 'inactive' && !$can_view_inactive) || ($status_filter === 'draft' && !$can_view_draft)) {
     $status_filter = '';
 }
 if ($status_filter === 'active') {
     $where_conditions[] = "(status = 1 AND fly = 0)";
 } elseif ($status_filter === 'fly') {
     $where_conditions[] = "fly = 1";
+} elseif ($status_filter === 'draft') {
+    $where_conditions[] = "(status = 2 AND fly <> 1)";
 } elseif ($status_filter === 'inactive') {
-    $where_conditions[] = "(status <> 1 AND fly <> 1)";
+    $where_conditions[] = "(status = 0 AND fly <> 1)";
 }
 
 
@@ -123,12 +129,12 @@ $unfiltered_result = mysqli_query($conDB, $unfiltered_sql);
 $unfiltered_total_items = mysqli_fetch_assoc($unfiltered_result)['total'] ?? 0;
 
 // Tile counts (respect the same company/department/employee scope, ignore search + status)
-$emp_counts = ['all' => 0, 'active' => 0, 'fly' => 0, 'inactive' => 0];
+$emp_counts = ['all' => 0, 'active' => 0, 'fly' => 0, 'draft' => 0, 'inactive' => 0];
 $counts_res = mysqli_query($conDB, "SELECT COUNT(*) AS all_cnt,
-        SUM(status = 1 AND fly = 0) AS active_cnt, SUM(fly = 1) AS fly_cnt, SUM(status <> 1 AND fly <> 1) AS inactive_cnt
+        SUM(status = 1 AND fly = 0) AS active_cnt, SUM(fly = 1) AS fly_cnt, SUM(status = 2 AND fly <> 1) AS draft_cnt, SUM(status = 0 AND fly <> 1) AS inactive_cnt
     FROM employees WHERE 1=1" . $company_filter . $department_filter . $employee_filter);
 if ($counts_res && ($cr = mysqli_fetch_assoc($counts_res))) {
-    $emp_counts = ['all' => (int)$cr['all_cnt'], 'active' => (int)$cr['active_cnt'], 'fly' => (int)$cr['fly_cnt'], 'inactive' => (int)$cr['inactive_cnt']];
+    $emp_counts = ['all' => (int)$cr['all_cnt'], 'active' => (int)$cr['active_cnt'], 'fly' => (int)$cr['fly_cnt'], 'draft' => (int)$cr['draft_cnt'], 'inactive' => (int)$cr['inactive_cnt']];
 }
 // main_menu.php (where $can_see_new_employee_page lives) is included later, so read the role list here
 require_once __DIR__ . '/includes/page_access_helper.php';
@@ -243,6 +249,9 @@ $can_add_employee = in_array($user_role, $new_employee_roles) || in_array($user_
                         ['key' => 'active',   'tone' => 'green',  'icon' => 'fa-check-circle', 'label' => __('active', 'Active'),           'count' => $emp_counts['active']],
                         ['key' => 'fly',      'tone' => 'sky',    'icon' => 'fa-plane',        'label' => __('on_vacation', 'On vacation'), 'count' => $emp_counts['fly']],
                     ];
+                    if ($can_view_draft) {
+                        $emp_tiles[] = ['key' => 'draft', 'tone' => 'amber', 'icon' => 'fa-file-pen', 'label' => __('draft', 'Draft'), 'count' => $emp_counts['draft']];
+                    }
                     if ($can_view_inactive) {
                         $emp_tiles[] = ['key' => 'inactive', 'tone' => 'slate', 'icon' => 'fa-user-times', 'label' => __('inactive', 'Inactive'), 'count' => $emp_counts['inactive']];
                     }
@@ -296,6 +305,8 @@ $can_add_employee = in_array($user_role, $new_employee_roles) || in_array($user_
                                     $status_class = 'status-active';
                                 } elseif ($emp_status_fly == 1) {
                                     $status_class = 'status-fly';
+                                } elseif ($emp_status == 2) {
+                                    $status_class = 'status-draft';
                                 } else {
                                     $status_class = 'status-inactive';
                                 }

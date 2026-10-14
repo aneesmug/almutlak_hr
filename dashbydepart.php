@@ -741,6 +741,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                             <option value="all"><?= __('all_option') ?></option>
                                                             <option value="active" selected><?= __('active') ?></option>
                                                             <option value="on_vacation"><?= __('on_vacations') ?></option>
+                                                            <option value="draft"><?= __('draft', 'Draft') ?></option>
                                                             <option value="inactive"><?= __('inactive') ?></option>
                                                         </select>
                                                     </div>

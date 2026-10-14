@@ -267,6 +267,20 @@ if ($emprow['status'] == 1) {
 	if ($moreActionsHtml === '') {
 		$moreActionsHtml = '<div class="ma-empty"><i class="fa fa-circle-info"></i><p>' . __('no_actions_available', 'No actions available for this employee.') . '</p></div>';
 	}
+} elseif ((string)$emprow['status'] === '2') {
+	// Draft: profile is still being prepared - only document upload, edit (to activate) and notes.
+	$maDraft = [];
+	if ($isDeptHr || $isHR || $is_system_admin) {
+		$maDraft[] = "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
+	}
+	if (!in_array($current_page_name, ["edit_employee.php"]) && !empty($can_modify_employee)) {
+		$maDraft[] = "<div class=\"menu-item text-primary\" onclick=\"window.location.href='edit_employee.php?emp_id=" . htmlspecialchars($emprow['empid']) . "'\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+		$maDraft[] = "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
+	}
+	$moreActionsHtml = '<div class="ma-empty" style="padding-bottom:8px;"><i class="fa fa-file-pen"></i><p>' . __('employee_is_draft', 'This employee is in Draft. Change status to Active from Edit Employee to enable all actions.') . '</p></div>';
+	if ($maDraft) {
+		$moreActionsHtml .= '<div class="ma-group ma-group-manage"><div class="ma-group-title"><i class="fa fa-id-card"></i>' . htmlspecialchars(__('ma_group_employee', 'Employee')) . '</div><div class="ma-grid">' . implode('', $maDraft) . '</div></div>';
+	}
 } else {
 	$moreActionsHtml = '<div class="ma-empty"><i class="fa fa-user-lock"></i><p>' . __('employee_is_inactive') . '</p></div>';
 }
@@ -321,6 +335,10 @@ if ($isEmployee !== true) {
 			$header_class .= ' vacation';
 			$status_label = __('on_vacation');
 			$status_icon = 'fa-plane-departure';
+		} elseif ((string)$emprow["status"] === "2") {
+			$header_class .= ' draft';
+			$status_label = __('draft', 'Draft');
+			$status_icon = 'fa-file-pen';
 		} elseif ($emprow["status"] == "0") {
 			$header_class .= ' inactive';
 			$status_label = __('inactive');
@@ -346,7 +364,7 @@ if ($isEmployee !== true) {
 		$eh_join_ts = strtotime(str_replace('/', '-', (string)($emprow['joining_date'] ?? '')));
 		$eh_dept = ($is_rtl ?? false) ? $emprow["deptnme_ar"] : $emprow["deptnme"];
 		$eh_comp = ($is_rtl ?? false) ? ($emprow["compnme_ar"] ?? $emprow["compnme"]) : $emprow["compnme"];
-		$eh_show_actions = !in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"]) && $emprow["status"] == 1;
+		$eh_show_actions = !in_array($current_page_name, ["apply_vac_emp_dept.php", "add_vac_emp.php", "add_emp_docs.php"]) && in_array((string)$emprow["status"], ['1', '2'], true);
 		?>
 		<!-- Employee header (styles below, scoped to .emp-hero) -->
 		<div class="emp-hero<?= str_replace('profile-header', '', $header_class) ?>">
@@ -473,7 +491,7 @@ if ($isEmployee !== true) {
 					<?php if (($is_system_admin || $isHR || $isDeptHr) && $showUpdateSalaryBtn && $current_page_name <> "add_emp_slry.php"): ?>
 						<a href="javascript:void(0);" class="eab-btn eab-btn-primary updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>"><i class="mdi mdi-cash-multiple"></i> <?= __('update_salary') ?></a>
 					<?php endif ?>
-				<?php else: ?>
+				<?php elseif ((string)$emprow["status"] === "0"): ?>
 					<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="eab-btn eab-btn-danger"><i class="mdi mdi-printer"></i> <?= __('print_end_of_service') ?></a>
 				<?php endif ?>
 			</div>

@@ -100,6 +100,11 @@ if ($status_filter != 'all') {
             array_push($params, 1, 0);
             $types .= "ii";
             break;
+        case 'draft':
+            $where_clauses[] = "status = ? AND fly <> ?";
+            array_push($params, 2, 1);
+            $types .= "ii";
+            break;
         case 'inactive':
             $where_clauses[] = "status = ?";
             $params[] = 0;

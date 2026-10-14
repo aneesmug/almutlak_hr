@@ -141,6 +141,11 @@ if ($status_filter != 'all') {
             array_push($params, 1, 0);
             $types .= "ii";
             break;
+        case 'draft':
+            $where_clauses[] = "status = ? AND fly <> ?";
+            array_push($params, 2, 1);
+            $types .= "ii";
+            break;
         case 'inactive':
             $where_clauses[] = "status = ?";
             $params[] = 0;
@@ -343,6 +348,7 @@ if ($total_items > 0) {
                                             <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>><?=__('all_option')?></option>
                                             <option value="active" <?= $status_filter == 'active' ? 'selected' : '' ?>><?=__('active')?></option>
                                             <option value="on_vacation" <?= $status_filter == 'on_vacation' ? 'selected' : '' ?>><?=__('on_vacations')?></option>
+                                            <option value="draft" <?= $status_filter == 'draft' ? 'selected' : '' ?>><?= __('draft', 'Draft') ?></option>
                                             <option value="inactive" <?= $status_filter == 'inactive' ? 'selected' : '' ?>><?=__('inactive')?></option>
                                         </select>
                                     </div>

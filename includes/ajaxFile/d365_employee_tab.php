@@ -275,7 +275,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
             ['Marital status', $local['mar_status'] ?? '', d365tab_empty($worker['MaritalStatus'] ?? '') ? '' : $worker['MaritalStatus'], false],
             ['Department' . (!empty($local['dep_nme']) ? ' (' . $local['dep_nme'] . ')' : ''), $deptExpected, $deptD365, true],
             $ccRow,
-            ['Status', isset($local['status']) ? ((string)$local['status'] === '1' ? 'Active' : 'Inactive (' . $local['status'] . ')') : '', $worker['WorkerStatus'] ?? '', false],
+            ['Status', isset($local['status']) ? ((string)$local['status'] === '1' ? 'Active' : ((string)$local['status'] === '2' ? 'Draft' : 'Inactive (' . $local['status'] . ')')) : '', $worker['WorkerStatus'] ?? '', false],
         ]; ?>
         <div class="sr-card">
             <div class="sr-card-head">

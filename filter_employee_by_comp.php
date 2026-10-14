@@ -89,7 +89,7 @@ if ($department_id > 0) {
 $limit_options = [12, 24, 48, 96];
 $search_term = $_GET['search'] ?? '';
 $status_filter = $_GET['status'] ?? 'active'; // 'all', 'active', 'inactive', 'on_vacation'
-if (!in_array($status_filter, ['all', 'active', 'inactive', 'on_vacation'], true)) {
+if (!in_array($status_filter, ['all', 'active', 'draft', 'inactive', 'on_vacation'], true)) {
     $status_filter = 'active';
 }
 $items_per_page = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limit_options) ? (int)$_GET['limit'] : $limit_options[0];
@@ -163,6 +163,11 @@ if ($status_filter != 'all') {
         case 'active':
             $where_clauses[] = "status = ? AND fly = ?";
             array_push($params, 1, 0);
+            $types .= "ii";
+            break;
+        case 'draft':
+            $where_clauses[] = "status = ? AND fly <> ?";
+            array_push($params, 2, 1);
             $types .= "ii";
             break;
         case 'inactive':
@@ -372,6 +377,7 @@ if ($total_items > 0) {
                                             <option value="all" <?= $status_filter == 'all' ? 'selected' : '' ?>><?=__('all_option')?></option>
                                             <option value="active" <?= $status_filter == 'active' ? 'selected' : '' ?>><?=__('active')?></option>
                                             <option value="on_vacation" <?= $status_filter == 'on_vacation' ? 'selected' : '' ?>><?=__('on_vacations')?></option>
+                                            <option value="draft" <?= $status_filter == 'draft' ? 'selected' : '' ?>><?= __('draft', 'Draft') ?></option>
                                             <option value="inactive" <?= $status_filter == 'inactive' ? 'selected' : '' ?>><?=__('inactive')?></option>
                                         </select>
                                     </div>

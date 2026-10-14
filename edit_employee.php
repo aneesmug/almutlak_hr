@@ -128,6 +128,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			}
 		}
 		
+		// Employee status: only Active (1) <-> Draft (2) can be switched here, and only when the
+		// employee is currently Active/Draft and not away on vacation. Inactive (0) stays with
+		// the terminate / end-of-service flow. Draft employees drop out of every `status = 1`
+		// list (payroll, active employees, dropdowns).
+		if (isset($formData['emp_status']) && $old_employee
+			&& in_array((string)$old_employee['status'], ['1', '2'], true)
+			&& (string)($old_employee['fly'] ?? '0') !== '1'
+			&& in_array((string)$formData['emp_status'], ['1', '2'], true)) {
+			$setParts[] = "`status` = :status";
+			$params[':status'] = (string)$formData['emp_status'];
+			$old_values['status'] = $old_employee['status'];
+		}
+
 		// Build and execute the query
 		$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
 		$stmt = $pdo->prepare($sql);
@@ -306,6 +319,12 @@ if (mysqli_num_rows($query) == 1) {
 			.ee-form-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--sr-text); }
 			.ee-form-title i { color: var(--sr-accent); }
 			.ee-form-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--sr-muted); }
+			.ee-status-pick { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+			.ee-status-pick label { margin: 0; font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+			.ee-status-pick label i { color: var(--sr-accent); }
+			.ee-status-pick .form-control { height: 38px; border-radius: 9px; font-weight: 600; }
+			.ee-status-hint { font-size: 11px; color: var(--sr-muted); max-width: 280px; }
+			@media (max-width: 575px) { .ee-form-head { flex-wrap: wrap; } .ee-status-pick { min-width: 100%; } }
 			.ee-form .ee-sec { display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px dashed var(--sr-border);
 				font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--sr-muted); }
 			.ee-form .ee-sec.is-first { margin-top: 8px; }
@@ -421,6 +440,17 @@ if (mysqli_num_rows($query) == 1) {
 											<h4 class="ee-form-title"><i class="mdi mdi-account-edit"></i> <?= __("edit_employee_title") ?></h4>
 											<p class="ee-form-sub"><?= htmlspecialchars(($emprow['name'] ?? '') . ' · #' . ($emprow['empid'] ?? $_GET['emp_id'] ?? '')) ?></p>
 										</div>
+										<?php if (in_array((string)($emprow['status'] ?? ''), ['1', '2'], true)): ?>
+											<?php $eeStatusLocked = ((string)($emprow['fly'] ?? '0') === '1'); ?>
+											<div class="ee-status-pick">
+												<label for="emp_status"><i class="mdi mdi-account-check"></i> <?= __('employee_status', 'Employee Status') ?></label>
+												<select name="emp_status" id="emp_status" form="registration" class="form-control" <?= $eeStatusLocked ? 'disabled title="' . htmlspecialchars(__('status_locked_on_vacation', 'Cannot change status while employee is on vacation')) . '"' : '' ?>>
+													<option value="1" <?= (string)$emprow['status'] === '1' ? 'selected' : '' ?>><?= __('active', 'Active') ?></option>
+													<option value="2" <?= (string)$emprow['status'] === '2' ? 'selected' : '' ?>><?= __('draft', 'Draft') ?></option>
+												</select>
+												<span class="ee-status-hint"><?= $eeStatusLocked ? __('status_locked_on_vacation', 'Cannot change status while employee is on vacation') : __('draft_status_hint', 'Draft employees are hidden from payroll and active employee lists') ?></span>
+											</div>
+										<?php endif; ?>
 									</div>
 									<!-- --- FIX 4: Ensure the form action retains the emp_id query string --- -->
 									<form action="<?= $_SERVER['PHP_SELF']; ?>?emp_id=<?= htmlspecialchars($emprow['empid'] ?? $_GET['emp_id']); ?>" method="post" enctype="multipart/form-data" id="registration" class="registration sr-form">
