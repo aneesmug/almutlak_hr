@@ -20,6 +20,10 @@ $can_cancel_rejoin_requests = (
 // granted per user via App Settings > Special Access > 'view_all_rejoin_requests'.
 $can_view_all_rejoin_requests = user_has_special_access($conDB, $supervisor_emp_id ?? '', 'view_all_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
 
+// "Add Manual Rejoin" button - records a rejoin for a vacation that has no rejoin history,
+// granted per user via App Settings > Special Access > 'add_manual_rejoin_record'.
+$can_add_manual_rejoin = user_has_special_access($conDB, $supervisor_emp_id ?? '', 'add_manual_rejoin_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+
 // HR Payroll, HR Senior BP, and Administrator can pick ANY rejoin adjustment date
 // (including back dates) - everyone else stays limited to the +/-3 day window.
 $rejoin_elevated_roles = ['hr_payroll', 'hr_senior_bp', 'administrator'];
@@ -36,6 +40,9 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
+    <?php if ($can_add_manual_rejoin): ?>
+    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
@@ -53,6 +60,13 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
         .rj-diff { font-size: 11px; font-weight: 700; }
+        .mrj-vinfo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; margin-top: 10px; padding: 12px 14px;
+            border: 1px solid var(--sr-border); border-radius: 10px; background: var(--sr-surface-2, rgba(99, 102, 241, .04)); }
+        .mrj-vinfo:empty { display: none; }
+        .mrj-vinfo .k { display: block; font-size: 11px; color: var(--sr-muted); text-transform: uppercase; letter-spacing: .3px; }
+        .mrj-vinfo .v { display: block; font-size: 13px; font-weight: 600; color: var(--sr-text); word-break: break-word; }
+        .mrj-vinfo .wide { grid-column: 1 / -1; }
+        @media (max-width: 575px) { .mrj-vinfo { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     </style>
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
     <script> window.isRejoinElevated = <?= $is_rejoin_elevated ? 'true' : 'false' ?>;</script>
@@ -83,6 +97,11 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             <h1><?= __('rejoin_approval_requests', 'Rejoin Approval Requests') ?></h1>
                             <p><?= __('rejoin_approvals_subtitle', 'Employees back from vacation asking to confirm their rejoin date.') ?></p>
                         </div>
+                        <?php if ($can_add_manual_rejoin): ?>
+                        <div class="sr-head-actions">
+                            <button type="button" class="sr-btn sr-btn-primary" id="btnManualRejoin"><i class="mdi mdi-plus"></i> <?= __('add_manual_rejoin', 'Add manual rejoin') ?></button>
+                        </div>
+                        <?php endif; ?>
                     </div>
 
                     <div class="sr-tiles rj-tiles<?= $can_view_all_rejoin_requests ? ' rj-tiles-4' : '' ?>" id="rjTiles">
@@ -205,6 +224,9 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
     <script src="./plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="./plugins/datatables/dataTables.responsive.min.js"></script>
     <script src="./plugins/datatables/responsive.bootstrap4.min.js"></script>
+    <?php if ($can_add_manual_rejoin): ?>
+    <script src="./plugins/select2/js/select2.min.js"></script>
+    <?php endif; ?>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
@@ -348,6 +370,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 const d = $(this).data();
                 viewAndApproveRequest(d.id, d.emp, d.date, d.name, d.vac);
             });
+            $('#btnManualRejoin').on('click', addManualRejoin);
             $(document).on('click', '.js-cancel', function() {
                 cancelRejoinRequestAdmin($(this).data('id'), $(this).data('name'));
             });
@@ -427,6 +450,134 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
             }).then(function(result) {
                 if (result.isConfirmed && result.value) processRejoinApproval(rejoinRequestId, result.value);
             });
+        }
+
+        // Manual rejoin record for a Fly vacation that has no rejoin history (special access 'add_manual_rejoin_record')
+        function addManualRejoin() {
+            const H = './includes/ajaxFile/leaveHandler.php';
+            const MT = {
+                selectEmpFirst: <?= json_encode(__('select_employee_first', 'Select an employee first')) ?>,
+                searchEmp: <?= json_encode(__('search_employee', 'Search employee by name or ID')) ?>,
+                loading: <?= json_encode(__('loading', 'Loading...')) ?>,
+                selectVac: <?= json_encode(__('select_vacation', 'Select vacation')) ?>,
+                noVac: <?= json_encode(__('no_vacations_without_rejoin', 'No vacations without rejoin record')) ?>,
+                open: <?= json_encode(__('open_not_completed', 'Open (approved, not completed)')) ?>,
+                openShort: <?= json_encode(__('open', 'Open')) ?>,
+                closed: <?= json_encode(__('completed', 'Completed')) ?>,
+                planned: <?= json_encode(__('planned_return_date', 'Planned return')) ?>,
+                requestNo: <?= json_encode(__('request_no', 'Request no.')) ?>,
+                type: <?= json_encode(__('type', 'Type')) ?>,
+                status: <?= json_encode(__('status', 'Status')) ?>,
+                start: <?= json_encode(__('start_date', 'Start date')) ?>,
+                days: <?= json_encode(__('days', 'Days')) ?>,
+                existingRejoin: <?= json_encode(__('existing_rejoin', 'Existing rejoin')) ?>,
+                existingNote: <?= json_encode(__('manual_rejoin_existing_note', 'This vacation already has an approved rejoin. Saving adds a newer one; payroll will use the new date.')) ?>,
+                failed: <?= json_encode(__('request_failed', 'Request failed')) ?>
+            };
+            const html = '<form id="mrjForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+                F.section('mdi-account', <?= json_encode(__('employee', 'Employee')) ?>,
+                    F.field({ col: 12, name: 'emp_id', id: 'mrjEmp', label: <?= json_encode(__('employee', 'Employee')) ?>, req: true,
+                        html: F.select({ name: 'emp_id', id: 'mrjEmp', req: true, placeholder: MT.searchEmp,
+                            msg: <?= json_encode(__('please_select_employee', 'Please select an employee')) ?> }),
+                        hint: esc(<?= json_encode(__('manual_rejoin_emp_hint', 'Only employees with a Fly vacation that has no rejoin record, or is still approved (not completed), are listed.')) ?>) })
+                ) +
+                F.section('mdi-airplane', <?= json_encode(__('vacation', 'Vacation')) ?>,
+                    F.field({ col: 12, name: 'vacation_id', id: 'mrjVac', label: <?= json_encode(__('applied_vacations', 'Applied vacations')) ?>, req: true,
+                        html: F.select({ name: 'vacation_id', id: 'mrjVac', req: true, placeholder: MT.selectEmpFirst,
+                            msg: <?= json_encode(__('please_select_vacation', 'Please select a vacation')) ?> }) + '<div class="mrj-vinfo" id="mrjVacInfo"></div>' }) +
+                    F.field({ col: 5, name: 'rejoin_date', id: 'mrjDate', label: <?= json_encode(__('rejoin_date', 'Rejoin date')) ?>, req: true, ph: 'YYYY-MM-DD', attrs: ' readonly',
+                        msg: <?= json_encode(__('rejoin_date_required', 'Please select the rejoin date')) ?> }) +
+                    F.field({ col: 7, name: 'details', id: 'mrjDetails', type: 'textarea', rows: 3, label: <?= json_encode(__('manual_rejoin_details', 'Why is this rejoin added manually?')) ?>, req: true,
+                        ph: <?= json_encode(__('manual_rejoin_details_ph', 'e.g. Employee returned before rejoin requests existed in the system')) ?>,
+                        msg: <?= json_encode(__('manual_rejoin_details_required', 'Please write the details')) ?> })
+                ) +
+            '</form>';
+
+            F.open({
+                title: <?= json_encode(__('add_manual_rejoin', 'Add manual rejoin')) ?>,
+                html: html,
+                width: '760px',
+                icon: 'mdi-content-save',
+                confirm: <?= json_encode(__('save', 'Save')) ?>,
+                didOpen: function() {
+                    const $form = $('#mrjForm'), $vac = $('#mrjVac'), $date = $('#mrjDate');
+                    let vacs = {};
+                    const opt = text => '<option value="">' + esc(text) + '</option>';
+                    const day = d => {
+                        const dt = d ? new Date(String(d) + 'T00:00:00') : null;
+                        return dt && !isNaN(dt) ? dt.toLocaleDateString(LOCALE, { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                    };
+                    const cap = t => String(t || '').replace(/^./, c => c.toUpperCase());
+                    function showVacInfo(v) {
+                        if (!v) { $('#mrjVacInfo').empty(); return; }
+                        const isOpen = v.current_status === 'approved';
+                        const item = (k, val, cls) => `<div${cls ? ` class="${cls}"` : ''}><span class="k">${esc(k)}</span><span class="v">${val}</span></div>`;
+                        $('#mrjVacInfo').html(
+                            item(MT.requestNo, `<span class="sr-mono">${esc(v.request_inv_no || ('#' + v.id))}</span>`, 'wide') +
+                            item(MT.type, esc(cap(v.vac_type) + ' · ' + cap(v.fly_type))) +
+                            item(MT.status, `<span class="sr-pill sr-pill-xs ${isOpen ? 'tone-amber' : 'tone-green'}"><span class="sr-dot"></span>${esc(isOpen ? MT.open : MT.closed)}</span>`) +
+                            item(MT.days, esc(v.vacdays || 0)) +
+                            item(MT.start, esc(day(v.start_date))) +
+                            item(MT.planned, esc(day(v.return_date))) +
+                            item(MT.existingRejoin, v.existing_rejoin_date ? `<span class="sr-pill sr-pill-xs tone-sky">${esc(day(v.existing_rejoin_date))}</span>` : '<span class="text-muted">&ndash;</span>') +
+                            (v.existing_rejoin_date ? `<div class="wide text-warning" style="font-size:12px;"><i class="mdi mdi-alert"></i> ${esc(MT.existingNote)}</div>` : '')
+                        );
+                    }
+                    F.liveClear($form);
+                    F.select2($('#mrjEmp'), {
+                        placeholder: MT.searchEmp,
+                        ajax: {
+                            url: H, type: 'POST', dataType: 'json', delay: 250,
+                            data: p => ({ ajaxType: 'searchManualRejoinEmployees', q: p.term || '' }),
+                            processResults: d => ({ results: (d && d.results) || [] })
+                        }
+                    });
+                    // Rejoin date can't be before the selected vacation's start date
+                    function resetDate(minDate) {
+                        if (window.AppDate) AppDate.destroy($date[0]);
+                        $date.val('');
+                        F.datepicker($date, minDate ? { minDate: minDate } : {});
+                    }
+                    resetDate();
+                    $('#mrjEmp').on('change', function() {
+                        const emp = $(this).val();
+                        vacs = {};
+                        showVacInfo(null);
+                        resetDate();
+                        if (!emp) { $vac.html(opt(MT.selectEmpFirst)); return; }
+                        $vac.html(opt(MT.loading));
+                        $.post(H, { ajaxType: 'getManualRejoinVacations', emp_id: emp }, null, 'json').done(function(r) {
+                            const list = (r && r.vacations) || [];
+                            let opts = opt(list.length ? MT.selectVac : MT.noVac);
+                            list.forEach(v => {
+                                vacs[v.id] = v;
+                                // Short label - full details show in #mrjVacInfo once picked
+                                const flag = v.current_status === 'approved' ? ' · ' + MT.openShort : '';
+                                opts += `<option value="${esc(v.id)}">${esc(cap(v.fly_type || v.vac_type) + ' · ' + day(v.start_date) + ' – ' + day(v.return_date) + flag)}</option>`;
+                            });
+                            $vac.html(opts);
+                        }).fail(function(x) {
+                            $vac.html(opt((x.responseJSON && x.responseJSON.message) || MT.failed));
+                        });
+                    });
+                    $vac.on('change', function() {
+                        const v = vacs[$(this).val()];
+                        resetDate(v && v.start_date ? v.start_date : null);
+                        showVacInfo(v);
+                    });
+                },
+                preConfirm: function() {
+                    const msg = F.validate($('#mrjForm'));
+                    if (msg) { Swal.showValidationMessage(msg); return false; }
+                    return F.post(H, {
+                        ajaxType: 'addManualRejoin',
+                        emp_id: $('#mrjEmp').val(),
+                        vacation_id: $('#mrjVac').val(),
+                        rejoin_date: $('#mrjDate').val(),
+                        details: $('#mrjDetails').val()
+                    });
+                }
+            }).then(function(r) { F.done(r, loadRejoinRequests); });
         }
 
         function cancelRejoinRequestAdmin(rejoinRequestId, empName) {

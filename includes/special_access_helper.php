@@ -32,6 +32,7 @@ if (!function_exists('get_special_access_labels')) {
             'payroll_checklist_review_import' => 'Payroll Checklist Report: Review Manager File & Import Button',
             'payroll_checklist_export_excel' => 'Payroll Checklist Report: Export Excel Button',
             'direct_rejoin_bypass_approval' => 'Directly Rejoin Employee From Active Vacation (Bypass Approval Chain)',
+            'add_manual_rejoin_record' => 'Rejoin Approvals: Add Manual Rejoin Record (Vacations Without Rejoin History)',
             'ungenerate_payroll' => 'Payroll: Un-Generate Payroll Button',
             'assign_payroll_supervisor' => 'Payroll: Assign Direct Supervisor for Payroll Button',
             'manage_loan_settings' => 'Access App Settings - Loan Settings Tab',
@@ -260,6 +261,7 @@ if (!function_exists('get_special_access_categories')) {
                 'icon' => 'fa-star',
                 'keys' => [
                     'direct_rejoin_bypass_approval',
+                    'add_manual_rejoin_record',
                     'ungenerate_payroll',
                     'access_import_excel_dynamic',
                     'assign_payroll_supervisor',

@@ -8077,6 +8077,201 @@ elseif ($ajaxType == 'directRejoinBypass') {
     }
 }
 
+// ================================================================
+// Purpose: Manual rejoin records (rejoin_approvals.php "Add Manual Rejoin").
+// For a Fly annual/emergency vacation that has no rejoin history (no
+// pending/adjusted/approved rejoin_requests row), a user granted the
+// 'add_manual_rejoin_record' special access can record the rejoin directly
+// as an approved request, so payroll (final_approved_date) picks it up.
+// ================================================================
+elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVacations', 'addManualRejoin'], true)) {
+    require_once __DIR__ . '/../special_access_helper.php';
+
+    // SQL fragment: started Fly annual/emergency vacation of employee "e" that is either
+    // - without rejoin history (no approved rejoin), or
+    // - still current_status 'approved' (never marked completed - normal rejoin approval
+    //   only flips review to 'C'), so the manual rejoin can close it.
+    // Vacations with a rejoin still in the approval flow (pending/adjusted) are left to that flow.
+    $manualRejoinEligibleVac = "
+        v.emp_id = e.emp_id
+        AND v.current_status IN ('approved', 'completed')
+        AND LOWER(v.vac_type) = 'fly'
+        AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
+        AND v.start_date <= CURDATE()
+        AND NOT EXISTS (
+            SELECT 1 FROM rejoin_requests rx
+            WHERE rx.vacation_id = v.id AND rx.status IN ('pending', 'adjusted')
+        )
+        AND (
+            v.current_status = 'approved'
+            OR NOT EXISTS (
+                SELECT 1 FROM rejoin_requests rx
+                WHERE rx.vacation_id = v.id AND rx.status = 'approved'
+            )
+        )
+    ";
+
+    try {
+        if (!user_has_special_access($conDB, $current_user_id, 'add_manual_rejoin_record', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+            throw new Exception(__('access_denied', 'Access denied'));
+        }
+        $pdo = getDbConnection();
+
+        if ($ajaxType === 'searchManualRejoinEmployees') {
+            // select2 AJAX source - only employees that still have a vacation without rejoin history
+            $term = trim((string)($_POST['q'] ?? $_GET['q'] ?? ''));
+            $sql = "
+                SELECT e.emp_id, e.name
+                FROM employees e
+                WHERE e.status IN (0, 1)
+                AND EXISTS (SELECT 1 FROM emp_vacation v WHERE $manualRejoinEligibleVac)
+            ";
+            $params = [];
+            if ($term !== '') {
+                $sql .= " AND (e.name LIKE :t1 OR e.emp_id LIKE :t2)";
+                $params[':t1'] = '%' . $term . '%';
+                $params[':t2'] = '%' . $term . '%';
+            }
+            $sql .= " ORDER BY e.name LIMIT 30";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+
+            $results = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $results[] = ['id' => $row['emp_id'], 'text' => $row['emp_id'] . ' - ' . $row['name']];
+            }
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['results' => $results], JSON_INVALID_UTF8_SUBSTITUTE);
+            exit;
+        }
+
+        $emp_id = trim((string)($_POST['emp_id'] ?? ''));
+        if ($emp_id === '') {
+            throw new Exception(__('required_fields_missing', 'Required fields are missing'));
+        }
+
+        if ($ajaxType === 'getManualRejoinVacations') {
+            $stmt = $pdo->prepare("
+                SELECT v.id, v.request_inv_no, v.vac_type, v.fly_type, v.start_date, v.return_date, v.vacdays, v.review, v.current_status,
+                    (SELECT MAX(rx.final_approved_date) FROM rejoin_requests rx
+                     WHERE rx.vacation_id = v.id AND rx.status = 'approved') AS existing_rejoin_date
+                FROM emp_vacation v
+                JOIN employees e ON e.emp_id = v.emp_id
+                WHERE e.emp_id = :emp_id AND $manualRejoinEligibleVac
+                ORDER BY v.start_date DESC, v.id DESC
+            ");
+            $stmt->execute([':emp_id' => $emp_id]);
+            send_json_response(__('success'), 'ok', 'success', 200, ['vacations' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            exit;
+        }
+
+        // addManualRejoin
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $rejoin_date = trim((string)($_POST['rejoin_date'] ?? ''));
+        $details = trim((string)($_POST['details'] ?? ''));
+        if (empty($vacation_id) || $rejoin_date === '' || $details === '') {
+            throw new Exception(__('required_fields_missing', 'Required fields are missing'));
+        }
+        $rejoinDateObj = DateTime::createFromFormat('Y-m-d', $rejoin_date);
+        if (!$rejoinDateObj || $rejoinDateObj->format('Y-m-d') !== $rejoin_date) {
+            throw new Exception(__('invalid_date_format', 'Invalid rejoin date'));
+        }
+
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare("
+            SELECT v.id, v.request_inv_no, v.start_date, v.return_date, v.review, v.current_status
+            FROM emp_vacation v
+            JOIN employees e ON e.emp_id = v.emp_id
+            WHERE v.id = :vacation_id AND e.emp_id = :emp_id AND $manualRejoinEligibleVac
+            FOR UPDATE
+        ");
+        $stmt->execute([':vacation_id' => $vacation_id, ':emp_id' => $emp_id]);
+        $vacation = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$vacation) {
+            throw new Exception(__('manual_rejoin_vacation_not_eligible', 'This vacation was not found or already has a rejoin record'));
+        }
+        if (!empty($vacation['start_date']) && $rejoinDateObj < new DateTime($vacation['start_date'])) {
+            throw new Exception(__('rejoin_date_before_start', 'Rejoin date cannot be before the vacation start date'));
+        }
+
+        // Same RR-* reference format as employee-submitted rejoin requests
+        $request_inv_no = null;
+        for ($attempt = 0; $attempt < 5 && $request_inv_no === null; $attempt++) {
+            $candidate = sprintf('RR-%s-%s-%s', date('YmdHis'), preg_replace('/[^A-Za-z0-9]/', '', $emp_id), substr(bin2hex(random_bytes(4)), 0, 4));
+            $stmt_chk = $pdo->prepare("SELECT 1 FROM rejoin_requests WHERE request_inv_no = ? LIMIT 1");
+            $stmt_chk->execute([$candidate]);
+            if (!$stmt_chk->fetchColumn()) {
+                $request_inv_no = $candidate;
+            }
+        }
+        if ($request_inv_no === null) {
+            throw new Exception(__('failed_to_generate_unique_request_id'));
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO rejoin_requests
+            (request_inv_no, emp_id, vacation_id, requested_rejoin_date, requested_reason, requested_by_emp_id, status,
+             approved_at, approved_by_emp_id, approval_note, final_approved_date, final_approved_at)
+            VALUES (:inv_no, :emp_id, :vacation_id, :rejoin_date, :reason, :by1, 'approved',
+             NOW(), :by2, :note, :final_date, NOW())
+        ");
+        $stmt->execute([
+            ':inv_no' => $request_inv_no,
+            ':emp_id' => $emp_id,
+            ':vacation_id' => $vacation_id,
+            ':rejoin_date' => $rejoin_date,
+            ':reason' => $details,
+            ':by1' => $current_user_id,
+            ':by2' => $current_user_id,
+            ':note' => 'Manual rejoin record: ' . $details,
+            ':final_date' => $rejoin_date
+        ]);
+
+        // Vacation still 'approved' (not completed): mark it completed/closed
+        if ($vacation['current_status'] === 'approved' || $vacation['review'] === 'A') {
+            $pdo->prepare("UPDATE emp_vacation SET current_status = 'completed', review = 'C' WHERE id = :vacation_id")->execute([':vacation_id' => $vacation_id]);
+        }
+
+        // Still-open vacation: release it exactly like a final rejoin approval does
+        if ($vacation['review'] === 'A') {
+            $closeResult = closeTemporaryRoleAssignment($conDB, $vacation_id, $current_user_id, 'expired');
+            if (!$closeResult['success']) {
+                error_log('Manual rejoin ' . $request_inv_no . ': temporary role close failed - ' . $closeResult['message']);
+            }
+
+            $stmtCnt = $pdo->prepare("SELECT COUNT(*) FROM emp_vacation WHERE emp_id = :emp_id AND review = 'A'");
+            $stmtCnt->execute([':emp_id' => $emp_id]);
+            if ((int)$stmtCnt->fetchColumn() === 0) {
+                $pdo->prepare("UPDATE employees SET fly = 0 WHERE emp_id = :emp_id")->execute([':emp_id' => $emp_id]);
+            }
+        }
+
+        ActivityLogger::logCreate(
+            'Rejoin',
+            'rejoin_approvals.php',
+            $request_inv_no,
+            ['emp_id' => $emp_id, 'vacation_id' => $vacation_id, 'status' => 'approved', 'final_approved_date' => $rejoin_date],
+            "Manual rejoin record {$request_inv_no}: emp {$emp_id} rejoined on {$rejoin_date} for vacation {$vacation['request_inv_no']} (#{$vacation_id}, was current_status={$vacation['current_status']}/review={$vacation['review']}, now completed/C). Details: {$details}",
+            'rejoin_requests'
+        );
+
+        $pdo->commit();
+
+        send_json_response(
+            __('success'),
+            __('manual_rejoin_added_text', 'Manual rejoin record has been added'),
+            'success',
+            200
+        );
+    } catch (Exception $e) {
+        if (isset($pdo) && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        send_json_response(__('error'), $e->getMessage(), 'error', 400);
+    }
+}
+
 // ============================================================================
 // SUBMIT ADJUSTED REJOIN DATE
 // ============================================================================
