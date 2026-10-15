@@ -3115,6 +3115,29 @@ elseif ($ajaxType == 'returnVacation') {
 // ================================================================
 // --- SYSTEM ADMIN: UPDATE VACATION START/RETURN DATES ---
 // ================================================================
+elseif ($ajaxType == 'previewVacationDateChange') {
+    try {
+        if (!($is_system_admin ?? false)) {
+            throw new Exception(__('access_denied') ?: 'Access denied');
+        }
+
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $start_date = trim((string)($_POST['start_date'] ?? ''));
+        $return_date = trim((string)($_POST['return_date'] ?? ''));
+
+        $start_obj = DateTime::createFromFormat('!Y-m-d', $start_date);
+        $return_obj = DateTime::createFromFormat('!Y-m-d', $return_date);
+        if ($vacation_id <= 0 || !$start_obj || !$return_obj || $return_obj < $start_obj) {
+            throw new Exception('Invalid dates');
+        }
+
+        $impact = adjust_vacation_balance_on_date_change($conDB, $vacation_id, $start_date, $return_date, false);
+        echo json_encode(['status' => 200, 'impact' => $impact]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
 elseif ($ajaxType == 'updateVacationDatesAdmin') {
     try {
         if (!($is_system_admin ?? false)) {
@@ -3148,7 +3171,7 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             throw new Exception('Return date must be the same as or after start date');
         }
 
-        $select_sql = "SELECT id, request_inv_no, emp_id, start_date, return_date, vacdays FROM emp_vacation WHERE id = ? LIMIT 1";
+        $select_sql = "SELECT id, request_inv_no, emp_id, start_date, return_date, vacdays, current_status FROM emp_vacation WHERE id = ? LIMIT 1";
         $select_stmt = mysqli_prepare($conDB, $select_sql);
         if (!$select_stmt) {
             throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
@@ -3171,17 +3194,29 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             exit;
         }
 
-        $update_sql = "UPDATE emp_vacation SET start_date = ?, return_date = ?, vacdays = ? WHERE id = ?";
-        $update_stmt = mysqli_prepare($conDB, $update_sql);
-        if (!$update_stmt) {
-            throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
-        }
+        // Balance impact is computed from the stored (old) dates, so it runs before the date update.
+        // Both writes share one transaction: dates never change without the matching balance change.
+        mysqli_begin_transaction($conDB);
+        try {
+            $balance_impact = adjust_vacation_balance_on_date_change($conDB, $vacation_id, $start_date, $return_date, true, $current_user_id ?: null);
 
-        mysqli_stmt_bind_param($update_stmt, 'ssii', $start_date, $return_date, $new_vacdays, $vacation_id);
-        if (!mysqli_stmt_execute($update_stmt)) {
-            throw new Exception(__('database_prepare_error') . ': ' . mysqli_stmt_error($update_stmt));
+            $update_sql = "UPDATE emp_vacation SET start_date = ?, return_date = ?, vacdays = ? WHERE id = ?";
+            $update_stmt = mysqli_prepare($conDB, $update_sql);
+            if (!$update_stmt) {
+                throw new Exception(__('database_prepare_error') . ': ' . mysqli_error($conDB));
+            }
+
+            mysqli_stmt_bind_param($update_stmt, 'ssii', $start_date, $return_date, $new_vacdays, $vacation_id);
+            if (!mysqli_stmt_execute($update_stmt)) {
+                throw new Exception(__('database_prepare_error') . ': ' . mysqli_stmt_error($update_stmt));
+            }
+            mysqli_stmt_close($update_stmt);
+
+            mysqli_commit($conDB);
+        } catch (Throwable $tx_error) {
+            mysqli_rollback($conDB);
+            throw new Exception($tx_error->getMessage());
         }
-        mysqli_stmt_close($update_stmt);
 
         $log_note = sprintf(
             'System Admin updated vacation dates from %s to %s (%s days) -> %s to %s (%s days)',
@@ -3192,6 +3227,15 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             $return_date,
             $new_vacdays
         );
+        if (!empty($balance_impact['applied'])) {
+            $log_note .= sprintf(
+                '. Balance %s %s day(s): %s -> %s',
+                $balance_impact['delta'] > 0 ? 'deducted' : 'returned',
+                abs($balance_impact['delta']),
+                $balance_impact['current_balance'],
+                $balance_impact['new_balance']
+            );
+        }
 
         $log_sql = "INSERT INTO smt_request_status (emp_id, inv_no, emp_name, status, note, created_at) VALUES (?, ?, ?, 'updated', ?, NOW())";
         $log_stmt = mysqli_prepare($conDB, $log_sql);
@@ -3206,10 +3250,41 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, $log_note, 'emp_vacation');
         }
 
-        send_json_response('Success!', 'Vacation dates updated successfully. New duration: ' . $new_vacdays . ' days.', 'success', 200, [
+        // Approved vacations: tell the employee and the approvers about the new dates
+        $emails_sent = 0;
+        if (in_array((string)($existing['current_status'] ?? ''), ['approved', 'completed'], true)) {
+            try {
+                $emails_sent = send_vacation_dates_modified_emails(
+                    $conDB,
+                    $vacation_id,
+                    ['start' => (string)$existing['start_date'], 'return' => (string)$existing['return_date'], 'days' => (int)$existing['vacdays']],
+                    ['start' => $start_date, 'return' => $return_date, 'days' => $new_vacdays],
+                    $balance_impact ?? [],
+                    $userwel ?? '',
+                    (int)$current_user_id
+                );
+            } catch (Throwable $mail_error) {
+                error_log('Vacation dates modified email failed for vacation ' . $vacation_id . ': ' . $mail_error->getMessage());
+            }
+        }
+
+        $success_message = 'Vacation dates updated successfully. New duration: ' . $new_vacdays . ' days.';
+        if (!empty($balance_impact['applied'])) {
+            $success_message .= $balance_impact['delta'] > 0
+                ? sprintf(' %s extra day(s) deducted from balance (%s -> %s).', $balance_impact['delta'], $balance_impact['current_balance'], $balance_impact['new_balance'])
+                : sprintf(' %s day(s) returned to balance (%s -> %s).', abs($balance_impact['delta']), $balance_impact['current_balance'], $balance_impact['new_balance']);
+        }
+
+        if ($emails_sent > 0) {
+            $success_message .= ' Notification email sent to ' . $emails_sent . ' recipient(s).';
+        }
+
+        send_json_response('Success!', $success_message, 'success', 200, [
             'start_date' => $start_date,
             'return_date' => $return_date,
-            'vacdays' => $new_vacdays
+            'vacdays' => $new_vacdays,
+            'balance_impact' => $balance_impact,
+            'emails_sent' => $emails_sent
         ]);
     } catch (Exception $e) {
         send_json_response('Error', $e->getMessage(), 'error', 500);

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
@@ -1136,81 +1136,176 @@ if ($can_see_all_depts) {
         }
 
         function showVacationDateEditorModal(vacationId, employeeName, currentStartDate, currentReturnDate, currentDays) {
-            const safeEmployeeName = employeeName || (__('employee') || 'Employee');
+            const safeEmployeeName = $('<div>').text(employeeName || (__('employee') || 'Employee')).html();
             const originalDays = parseInt(currentDays, 10) || 0;
+            const dayWord = (n) => Math.abs(n) === 1 ? (__('day') || 'day') : (__('days') || 'days');
+            const fmtNum = (n) => String(Math.round((parseFloat(n) || 0) * 100) / 100);
 
             Swal.fire({
-                title: `${__('edit') || 'Edit'} ${__('start_date') || 'Start Date'} / ${__('return_date') || 'Return Date'}`,
+                title: `<span class="srs-head"><span class="srs-icon tone-indigo"><i class="fa fa-calendar-alt"></i></span><span class="srs-head-text">${__('edit_vacation_dates', 'Edit Vacation Dates')}<small class="srs-head-sub">${safeEmployeeName}</small></span></span>`,
                 html: `
-                    <div class="text-left" style="padding: 0.5rem 0;">
-                        <div class="alert alert-info mb-3">
-                            <strong>${safeEmployeeName}</strong><br>
-                            ${__('current_period') || 'Current period'}: ${currentStartDate || '-'} ${__('to') || 'to'} ${currentReturnDate || '-'}<br>
-                            ${__('days') || 'Days'}: <strong>${originalDays}</strong>
+                    <div class="pm-wrap">
+                        <div class="pm-applied">
+                            <span class="pm-applied-label"><i class="fa fa-calendar-check"></i> ${__('current_period') || 'Current period'}</span>
+                            <span class="pm-applied-value"><span class="srs-mono">${currentStartDate || '-'}</span> <i class="fa fa-arrow-right"></i> <span class="srs-mono">${currentReturnDate || '-'}</span></span>
+                            <span class="srs-pill tone-sky">${originalDays} ${dayWord(originalDays)}</span>
                         </div>
-                        <div class="form-group mb-3">
-                            <label for="admin_vacation_start_date" class="font-weight-bold d-block mb-2">${__('start_date') || 'Start Date'}</label>
-                            <input type="text" id="admin_vacation_start_date" class="form-control" value="${currentStartDate}" readonly style="background-color: white; cursor: pointer;">
+
+                        <div class="pm-sec">
+                            <div class="pm-sec-title"><span class="pm-step">1</span> ${__('new_dates', 'New dates')}</div>
+                            <div class="pm-grid">
+                                <div>
+                                    <label for="admin_vacation_start_date" class="srs-label">${__('start_date') || 'Start Date'} <span class="srs-req">*</span></label>
+                                    <input type="text" id="admin_vacation_start_date" class="form-control pm-date" value="${currentStartDate}" readonly>
+                                </div>
+                                <div>
+                                    <label for="admin_vacation_return_date" class="srs-label">${__('return_date') || 'Return Date'} <span class="srs-req">*</span></label>
+                                    <input type="text" id="admin_vacation_return_date" class="form-control pm-date" value="${currentReturnDate}" readonly>
+                                </div>
+                            </div>
+                            <div class="pm-calc">
+                                <span class="pm-calc-label">${__('new_vacation_period', 'New period')}</span>
+                                <span id="admin_vacation_days_preview" class="pm-calc-value">-</span>
+                                <span id="admin_vacation_days_diff"></span>
+                                <div id="admin_vacation_days_message" class="pm-status" style="display: none;"></div>
+                            </div>
                         </div>
-                        <div class="form-group mb-3">
-                            <label for="admin_vacation_return_date" class="font-weight-bold d-block mb-2">${__('return_date') || 'Return Date'}</label>
-                            <input type="text" id="admin_vacation_return_date" class="form-control" value="${currentReturnDate}" readonly style="background-color: white; cursor: pointer;">
-                        </div>
-                        <div class="p-3 rounded" style="background:#f8f9fa; border:1px solid #e9ecef;">
-                            <div class="text-muted small mb-1">${__('difference_days') || 'Difference Days'}</div>
-                            <div id="admin_vacation_days_preview" style="font-weight:700; color:#0d6efd;">-</div>
-                            <div id="admin_vacation_days_message" class="small mt-2 text-muted"></div>
+
+                        <div class="pm-sec">
+                            <div class="pm-sec-title"><span class="pm-step">2</span> ${__('vacation_balance_impact', 'Vacation balance impact')}</div>
+                            <div id="admin_vacation_balance_impact"></div>
                         </div>
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: __('update') || 'Update',
+                confirmButtonText: '<i class="fa fa-check"></i> ' + (__('update') || 'Update'),
                 cancelButtonText: __('cancel') || 'Cancel',
                 confirmButtonColor: APP_COLORS.primary,
                 allowOutsideClick: false,
+                width: '640px',
                 didOpen: () => {
                     const startInput = document.getElementById('admin_vacation_start_date');
                     const returnInput = document.getElementById('admin_vacation_return_date');
                     const preview = document.getElementById('admin_vacation_days_preview');
+                    const diffBox = document.getElementById('admin_vacation_days_diff');
                     const message = document.getElementById('admin_vacation_days_message');
+                    const impactBox = document.getElementById('admin_vacation_balance_impact');
                     const confirmBtn = Swal.getConfirmButton();
                     const $startInput = $('#admin_vacation_start_date');
                     const $returnInput = $('#admin_vacation_return_date');
+                    let impactSeq = 0;
+                    let impactTimer = null;
+
+                    const setConfirm = (enabled) => { if (confirmBtn) confirmBtn.disabled = !enabled; };
+                    const showMessage = (kind, html) => {
+                        message.className = 'pm-status ' + (kind === 'ok' ? 'is-ok' : 'is-err');
+                        message.innerHTML = html;
+                        message.style.display = '';
+                    };
+
+                    const renderImpact = (impact) => {
+                        const notes = {
+                            not_deductible: __('vde_not_deductible', 'This vacation type does not use the vacation balance, so the balance will not change.'),
+                            not_approved_yet: __('vde_not_approved_yet', 'Not final-approved yet. The balance is deducted at final approval using the new dates.'),
+                            no_balance_record: __('vde_no_balance_record', 'No vacation balance record found for this employee, so the balance will not change.'),
+                            not_found: __('vacation_request_not_found') || 'Vacation request not found.'
+                        };
+                        if (!impact.affects_balance) {
+                            impactBox.innerHTML = `<div class="vde-muted"><i class="fa fa-info-circle"></i> <span>${notes[impact.reason] || notes.not_deductible}</span></div>`;
+                            return;
+                        }
+
+                        const delta = parseFloat(impact.delta) || 0;
+                        const changeCls = delta > 0 ? 'is-minus' : (delta < 0 ? 'is-plus' : '');
+                        const changeTxt = delta > 0 ? `−${fmtNum(delta)}` : (delta < 0 ? `+${fmtNum(-delta)}` : '0');
+                        const newBal = parseFloat(impact.new_balance) || 0;
+
+                        let note;
+                        if (delta > 0) {
+                            note = `<i class="fa fa-arrow-down"></i> <span>${fmtNum(delta)} ${__('vde_extra_deducted', 'extra day(s) will be deducted from the balance.')}</span>`;
+                        } else if (delta < 0) {
+                            note = `<i class="fa fa-arrow-up"></i> <span>${fmtNum(-delta)} ${__('vde_returned', 'day(s) will be returned to the balance.')}</span>`;
+                        } else {
+                            note = `<i class="fa fa-equals"></i> <span>${__('vde_no_change', 'Charged days stay the same, so the balance will not change.')}</span>`;
+                        }
+
+                        impactBox.innerHTML = `
+                            <div class="vde-impact">
+                                <div class="vde-cell"><span>${__('current_balance', 'Current balance')}</span><strong>${fmtNum(impact.current_balance)}</strong></div>
+                                <div class="vde-cell ${changeCls}"><span>${__('change', 'Change')}</span><strong>${changeTxt}</strong></div>
+                                <div class="vde-cell ${newBal < 0 ? 'is-neg' : ''}"><span>${__('new_balance', 'New balance')}</span><strong>${fmtNum(newBal)}</strong></div>
+                            </div>
+                            <div class="vde-note">${note}</div>
+                            <div class="vde-note"><i class="fa fa-calculator"></i> <span>${__('vde_charged_days', 'Charged days (official holidays excluded)')}: <b>${fmtNum(impact.old_days)}</b> → <b>${fmtNum(impact.new_days)}</b></span></div>
+                            ${newBal < 0 ? `<div class="vde-note is-warn"><i class="fa fa-exclamation-triangle"></i> <span>${__('vde_negative_balance', 'The balance will become negative after this change.')}</span></div>` : ''}
+                        `;
+                    };
+
+                    const loadImpact = (startVal, returnVal) => {
+                        const seq = ++impactSeq;
+                        clearTimeout(impactTimer);
+                        setConfirm(false);
+                        impactBox.innerHTML = `<div class="vde-muted"><i class="fa fa-spinner fa-spin"></i> ${__('calculating', 'Calculating...')}</div>`;
+                        impactTimer = setTimeout(() => {
+                            $.ajax({
+                                url: './includes/ajaxFile/leaveHandler.php',
+                                type: 'POST',
+                                dataType: 'json',
+                                data: { ajaxType: 'previewVacationDateChange', vacation_id: vacationId, start_date: startVal, return_date: returnVal }
+                            }).done(function(res) {
+                                if (seq !== impactSeq) return;
+                                if (!res || res.status !== 200 || !res.impact) {
+                                    impactBox.innerHTML = `<div class="vde-muted"><i class="fa fa-exclamation-circle"></i> ${(res && res.message) || (__('failed_to_load_data') || 'Failed to load data')}</div>`;
+                                    return;
+                                }
+                                renderImpact(res.impact);
+                                setConfirm(startVal !== currentStartDate || returnVal !== currentReturnDate);
+                            }).fail(function() {
+                                if (seq !== impactSeq) return;
+                                impactBox.innerHTML = `<div class="vde-muted"><i class="fa fa-exclamation-circle"></i> ${__('failed_to_load_data') || 'Failed to load data'}</div>`;
+                            });
+                        }, 250);
+                    };
 
                     const updatePreview = () => {
                         const startVal = startInput.value;
                         const returnVal = returnInput.value;
+                        diffBox.innerHTML = '';
 
                         if (!startVal || !returnVal) {
                             preview.textContent = '-';
-                            message.textContent = __('select_start_and_return_dates') || 'Select both dates to calculate the total days.';
-                            if (confirmBtn) {
-                                confirmBtn.disabled = true;
-                            }
+                            showMessage('err', __('select_start_and_return_dates') || 'Select both dates to calculate the total days.');
+                            impactBox.innerHTML = '';
+                            impactSeq++;
+                            setConfirm(false);
                             return;
                         }
 
                         const start = new Date(startVal + 'T00:00:00');
                         const end = new Date(returnVal + 'T00:00:00');
-                        const timeDiff = end.getTime() - start.getTime();
-                        const calculatedDays = Math.floor(timeDiff / 86400000) + 1;
+                        const calculatedDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
 
                         if (calculatedDays <= 0) {
                             preview.textContent = __('invalid_dates') || 'Invalid dates';
-                            preview.style.color = '#dc3545';
-                            message.textContent = __('return_date_must_be_after_start_date') || 'Return date must be the same as or after start date.';
-                            if (confirmBtn) {
-                                confirmBtn.disabled = true;
-                            }
+                            showMessage('err', '<i class="fa fa-times-circle"></i> ' + (__('return_date_must_be_after_start_date') || 'Return date must be the same as or after start date.'));
+                            impactBox.innerHTML = '';
+                            impactSeq++;
+                            setConfirm(false);
                             return;
                         }
 
-                        preview.textContent = `${calculatedDays} ${__('days') || 'days'}`;
-                        preview.style.color = '#0d6efd';
-                        message.textContent = `${startVal} ${__('to') || 'to'} ${returnVal}`;
-                        if (confirmBtn) {
-                            confirmBtn.disabled = false;
+                        preview.innerHTML = `<span class="srs-mono">${startVal}</span> → <span class="srs-mono">${returnVal}</span> = ${calculatedDays} ${dayWord(calculatedDays)}`;
+                        const diff = calculatedDays - originalDays;
+                        if (diff !== 0) {
+                            diffBox.innerHTML = `<span class="srs-pill ${diff > 0 ? 'tone-amber' : 'tone-green'}">${diff > 0 ? '+' : '−'}${Math.abs(diff)} ${dayWord(diff)}</span>`;
                         }
+
+                        if (startVal === currentStartDate && returnVal === currentReturnDate) {
+                            showMessage('ok', '<i class="fa fa-info-circle"></i> ' + __('vde_same_dates', 'Same as the current dates. Change a date to update.'));
+                        } else {
+                            message.style.display = 'none';
+                        }
+                        loadImpact(startVal, returnVal);
                     };
 
                     // Start can't be after return, return can't be before start
@@ -3701,92 +3796,74 @@ if ($can_see_all_depts) {
 
         function showPaymentModal(vacationId, employeeName, currentTicketPay, currentPermitFee, currentDepartureDate, currentArrivalDate, appliedStartDate, appliedEndDate, appliedDays) {
             Swal.fire({
-                title: __('add_edit_payments_for').replace('{0}', employeeName),
+                title: `<span class="srs-head"><span class="srs-icon tone-sky"><i class="fa fa-plane-departure"></i></span><span class="srs-head-text">${__('vacation_dates_and_payments', 'Vacation Dates & Payments')}<small class="srs-head-sub">${$('<div>').text(employeeName || '').html()}</small></span></span>`,
                 html: `
-                    <div class="text-left" style="padding: 10px 20px;">
-                        <p class="mt-3 mb-4"><strong>${__('enter_update_payment_details')}</strong></p>
-                        
-                        <!-- Applied Days Info Section -->
-                        <div class="alert alert-info" role="alert" style="margin-bottom: 1.5rem;">
-                            <strong><i class="fa fa-calendar-check"></i> Applied Vacation Period:</strong><br>
-                            <strong>${appliedStartDate} to ${appliedEndDate}</strong> (${appliedDays} days)
+                    <div class="pm-wrap">
+                        <!-- Applied period (reference) -->
+                        <div class="pm-applied">
+                            <span class="pm-applied-label"><i class="fa fa-calendar-check"></i> ${__('applied_vacation_period', 'Applied vacation period')}</span>
+                            <span class="pm-applied-value"><span class="srs-mono">${appliedStartDate || '-'}</span> <i class="fa fa-arrow-right"></i> <span class="srs-mono">${appliedEndDate || '-'}</span></span>
+                            <span class="srs-pill tone-sky">${appliedDays} ${__('days') || 'days'}</span>
                         </div>
-                        
-                        <!-- 2-Column Grid Layout for Dates -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                            <!-- Start Date Field -->
-                            <div class="form-group mb-0">
-                                <label for="start_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-calendar-alt"></i> ${__('start_date') || 'Start Date'}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" id="start_date_update" class="form-control" placeholder="Select start date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                                <small class="form-text text-muted">First day of vacation period</small>
+
+                        <!-- Vacation period -->
+                        <div class="pm-sec">
+                            <div class="pm-sec-title"><span class="pm-step">1</span> ${__('vacation_period', 'Vacation period')}</div>
+                            <div class="pm-grid">
+                                <div>
+                                    <label for="start_date_update" class="srs-label">${__('start_date') || 'Start Date'} <span class="srs-req">*</span></label>
+                                    <input type="text" id="start_date_update" class="form-control pm-date" placeholder="${__('select_start_date_placeholder') || 'Select start date'}" readonly>
+                                    <small class="pm-hint">${__('first_day_of_vacation', 'First day of vacation')}</small>
+                                </div>
+                                <div>
+                                    <label for="return_date_update" class="srs-label">${__('return_date') || 'Return Date'} <span class="srs-req">*</span></label>
+                                    <input type="text" id="return_date_update" class="form-control pm-date" placeholder="${__('select_return_date_placeholder') || 'Select return date'}" readonly>
+                                    <small class="pm-hint">${__('last_working_day', 'Last working day')}</small>
+                                </div>
                             </div>
-                            
-                            <!-- Return Date Field -->
-                            <div class="form-group mb-0">
-                                <label for="return_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-calendar-alt"></i> ${__('return_date') || 'Return Date (Last Working Day)'}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" id="return_date_update" class="form-control" placeholder="Select return date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                                <small class="form-text text-muted">Last working day (days = ${appliedDays})</small>
+                            <div class="pm-calc">
+                                <span class="pm-calc-label">${__('new_vacation_period', 'New period')}</span>
+                                <span id="days_calculation_display" class="pm-calc-value">${__('to_be_calculated', 'To be calculated...')}</span>
+                                <div id="days_status_message" class="pm-status" style="display: none;"></div>
                             </div>
                         </div>
-                        
-                        <!-- Days Calculation Display -->
-                        <div class="form-group mb-3 p-3 bg-light rounded">
-                            <small class="text-muted">New Vacation Period:</small>
-                            <div id="days_calculation_display" style="font-weight: bold; color: #007bff; margin-top: 5px;">
-                                To be calculated...
-                            </div>
-                            <div id="days_status_message" style="margin-top: 8px; padding: 8px; border-radius: 4px; display: none;"></div>
-                        </div>
-                        
-                        <!-- 2-Column Grid Layout for Travel Dates -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                            <div class="form-group mb-0">
-                                <label for="departure_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-plane-departure"></i> ${__('departure_date')}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" id="departure_date_update" class="form-control" placeholder="Select departure date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                                <small class="form-text text-muted">Must be within vacation period</small>
-                            </div>
-                            
-                            <div class="form-group mb-0">
-                                <label for="arrival_date_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-plane-arrival"></i> ${__('arrival_date')}
-                                    <span class="text-danger">*</span>
-                                </label>
-                                <input type="text" id="arrival_date_update" class="form-control" placeholder="Select arrival date" readonly style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem; background-color: white; cursor: pointer;">
-                                <small class="form-text text-muted">Must be within vacation period</small>
+
+                        <!-- Travel -->
+                        <div class="pm-sec">
+                            <div class="pm-sec-title"><span class="pm-step">2</span> ${__('travel_dates', 'Travel dates')} <small>${__('must_be_within_vacation_period', 'must be within the vacation period')}</small></div>
+                            <div class="pm-grid">
+                                <div>
+                                    <label for="departure_date_update" class="srs-label"><i class="fa fa-plane-departure"></i> ${__('departure_date')} <span class="srs-req">*</span></label>
+                                    <input type="text" id="departure_date_update" class="form-control pm-date" placeholder="${__('select_departure_date', 'Select departure date')}" readonly>
+                                </div>
+                                <div>
+                                    <label for="arrival_date_update" class="srs-label"><i class="fa fa-plane-arrival"></i> ${__('arrival_date')} <span class="srs-req">*</span></label>
+                                    <input type="text" id="arrival_date_update" class="form-control pm-date" placeholder="${__('select_arrival_date', 'Select arrival date')}" readonly>
+                                </div>
                             </div>
                         </div>
-                        
-                        <!-- 2-Column Grid Layout for Payment Fields -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div class="form-group mb-0">
-                                <label for="ticket_pay_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-plane"></i> ${__('ticket_payment')}
-                                </label>
-                                <input type="number" id="ticket_pay_update" class="form-control" placeholder="${__('ticket_payment')}" value="${currentTicketPay}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
-                            </div>
-                            
-                            <div class="form-group mb-0">
-                                <label for="permit_fee_update" class="d-block text-left font-weight-bold mb-2" style="color: #333;">
-                                    <i class="fa fa-passport"></i> ${__('permit_fee')}
-                                </label>
-                                <input type="number" id="permit_fee_update" class="form-control" readonly placeholder="${__('permit_fee')}" value="${currentPermitFee}" step="0.01" style="width: 100%; padding: .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
+
+                        <!-- Payments -->
+                        <div class="pm-sec">
+                            <div class="pm-sec-title"><span class="pm-step">3</span> ${__('payments', 'Payments')}</div>
+                            <div class="pm-grid">
+                                <div>
+                                    <label for="ticket_pay_update" class="srs-label"><i class="fa fa-ticket-alt"></i> ${__('ticket_payment')}</label>
+                                    <span class="pm-money"><input type="number" id="ticket_pay_update" class="form-control" placeholder="0.00" value="${currentTicketPay}" step="0.01"><em>SAR</em></span>
+                                </div>
+                                <div>
+                                    <label for="permit_fee_update" class="srs-label"><i class="fa fa-passport"></i> ${__('permit_fee')} <span class="pm-lock" title="${__('read_only', 'Read only')}"><i class="fa fa-lock"></i></span></label>
+                                    <span class="pm-money"><input type="number" id="permit_fee_update" class="form-control" readonly placeholder="0.00" value="${currentPermitFee}" step="0.01"><em>SAR</em></span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 `,
-                confirmButtonText: __('update_payments'),
+                confirmButtonText: '<i class="fa fa-check"></i> ' + __('update_payments'),
+                confirmButtonColor: '#16a34a',
                 showCancelButton: true,
                 allowOutsideClick: false,
-                width: '60%',
+                width: '720px',
                 didOpen: () => {
                     // Helper function to format date object to "yyyy-mm-dd" string
                     function formatDateForInput(dateObj) {
@@ -3974,10 +4051,8 @@ if ($can_see_all_depts) {
                             
                             if (calculatedDays === appliedDays) {
                                 statusMsg.style.display = 'block';
-                                statusMsg.style.backgroundColor = '#d4edda';
-                                statusMsg.style.color = '#155724';
-                                statusMsg.style.borderLeft = '4px solid #28a745';
-                                statusMsg.innerHTML = '<strong>✓ Valid:</strong> Days match applied vacation period';
+                                statusMsg.className = 'pm-status is-ok';
+                                statusMsg.innerHTML = '<i class="fa fa-check-circle"></i> <strong>' + (__('valid', 'Valid')) + '</strong> · ' + (__('days_match_applied_period', 'Days match the applied vacation period'));
                                 // Enable submit button
                                 if (confirmBtn) {
                                     confirmBtn.disabled = false;
@@ -3986,9 +4061,7 @@ if ($can_see_all_depts) {
                                 }
                             } else if (calculatedDays < appliedDays) {
                                 statusMsg.style.display = 'block';
-                                statusMsg.style.backgroundColor = '#f8d7da';
-                                statusMsg.style.color = '#721c24';
-                                statusMsg.style.borderLeft = '4px solid #dc3545';
+                                statusMsg.className = 'pm-status is-err';
                                 statusMsg.innerHTML = `<strong>✗ Invalid:</strong> Selected period is ${calculatedDays} days but applied vacation is ${appliedDays} days. Must match exactly.`;
                                 // Disable submit button
                                 if (confirmBtn) {
@@ -3998,9 +4071,7 @@ if ($can_see_all_depts) {
                                 }
                             } else {
                                 statusMsg.style.display = 'block';
-                                statusMsg.style.backgroundColor = '#f8d7da';
-                                statusMsg.style.color = '#721c24';
-                                statusMsg.style.borderLeft = '4px solid #dc3545';
+                                statusMsg.className = 'pm-status is-err';
                                 statusMsg.innerHTML = `<strong>✗ Invalid:</strong> Selected period is ${calculatedDays} days but applied vacation is ${appliedDays} days. Cannot exceed.`;
                                 // Disable submit button
                                 if (confirmBtn) {

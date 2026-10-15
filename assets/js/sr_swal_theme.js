@@ -104,9 +104,53 @@
         return o;
     }
 
+    var BTN_CLASS_COLOR = {
+        primary: '#6366f1', success: '#16a34a', danger: '#dc2626', warning: '#d97706',
+        info: '#0284c7', secondary: '#64748b', light: '#64748b', dark: '#334155'
+    };
+
+    function colorFromBtnClass(cls) {
+        var m = /\bbtn-(primary|success|danger|warning|info|secondary|light|dark)\b/.exec(String(cls || ''));
+        return m ? BTN_CLASS_COLOR[m[1]] : null;
+    }
+
+    // Old Bootstrap-button styling: `confirmButtonClass` (v6-only, ignored by v11 - the
+    // button rendered unstyled) and `buttonsStyling: false` + "btn btn-*" customClass.
+    // Convert both to themed SweetAlert buttons in the matching color.
+    function normalizeButtons(opts) {
+        if (opts.confirmButtonClass !== undefined) {
+            opts.confirmButtonColor = opts.confirmButtonColor || colorFromBtnClass(opts.confirmButtonClass);
+            delete opts.confirmButtonClass;
+        }
+        if (opts.cancelButtonClass !== undefined) {
+            opts.cancelButtonColor = opts.cancelButtonColor || colorFromBtnClass(opts.cancelButtonClass);
+            delete opts.cancelButtonClass;
+        }
+        if (opts.buttonsStyling === false) {
+            var cc = (opts.customClass && typeof opts.customClass === 'object') ? opts.customClass : {};
+            var usesBootstrap = /\bbtn\b/.test(String(cc.confirmButton || '') + ' ' + String(cc.cancelButton || '') + ' ' + String(cc.denyButton || ''));
+            var hasCustom = !!(cc.confirmButton || cc.cancelButton || cc.denyButton);
+            if (usesBootstrap || !hasCustom) {
+                var copy = {};
+                for (var k in cc) if (Object.prototype.hasOwnProperty.call(cc, k)) copy[k] = cc[k];
+                ['confirm', 'cancel', 'deny'].forEach(function (b) {
+                    var key = b + 'Button';
+                    if (!copy[key]) return;
+                    var col = colorFromBtnClass(copy[key]);
+                    if (col && !opts[b + 'ButtonColor']) opts[b + 'ButtonColor'] = col;
+                    copy[key] = String(copy[key]).replace(/\b(btn(-[a-z]+)*|waves-effect|waves-light|m[lrxy]?-\d)\b/g, '').trim();
+                    if (!copy[key]) delete copy[key];
+                });
+                opts.customClass = copy;
+                delete opts.buttonsStyling;
+            }
+        }
+    }
+
     function themeOptions(opts) {
         if (opts.toast || opts.iconHtml) return opts;
         if (SKIP_CLASS.test(popupClassOf(opts))) return opts;
+        normalizeButtons(opts);
 
         addPopupClass(opts, 'sr-swal');
 
@@ -121,7 +165,11 @@
             titleHtml = (opts.title instanceof Node) ? opts.title.outerHTML : String(opts.title);
         }
 
-        if (meta) {
+        if (/class="srs-head/.test(titleHtml)) {
+            // Caller built its own icon header - keep it, just drop the big icon
+            opts.title = titleHtml;
+            if (meta) delete opts.icon;
+        } else if (meta) {
             if (!hasTitle) titleHtml = esc(t(opts.icon, meta.label));
             opts.title = headerHtml(meta, titleHtml);
             opts._srsTone = opts.icon;
@@ -208,6 +256,14 @@
         if (o.toast) return o;
         if (SKIP_CLASS.test(String(o.customClass || ''))) return o;
         o.customClass = (o.customClass ? o.customClass + ' ' : '') + 'sr-swal swal2-popup';
+        // v6 Bootstrap-styled buttons -> themed buttons in the same color
+        if (o.buttonsStyling === false && /\bbtn\b/.test(String(o.confirmButtonClass || '') + ' ' + String(o.cancelButtonClass || ''))) {
+            o.confirmButtonColor = o.confirmButtonColor || colorFromBtnClass(o.confirmButtonClass);
+            o.cancelButtonColor = o.cancelButtonColor || colorFromBtnClass(o.cancelButtonClass);
+            delete o.confirmButtonClass;
+            delete o.cancelButtonClass;
+            delete o.buttonsStyling;
+        }
         var meta = ICONS[o.type];
         var hasTitle = o.title !== undefined && o.title !== null && o.title !== '';
         var titleHtml = o.titleText ? esc(o.titleText) : (hasTitle ? String(o.title) : '');

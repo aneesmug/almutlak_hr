@@ -2524,6 +2524,7 @@ if (!function_exists('load_email_template')) {
             'employee_transfer_request' => 'smart_request_email_template.html',
             'general_request' => 'general_request_email_template.html',
             'vacation_request' => 'vacation_request_email_template.html',
+            'vacation_dates_modified' => 'vacation_dates_modified_email_template.html',
             'leave_request' => 'vacation_request_email_template.html', // Uses same template as vacation
             'loan_request' => 'loan_request_email_template.html',
             'payroll_request' => 'payroll_request_email_template.html',
@@ -5553,6 +5554,328 @@ if (!function_exists('refund_vacation_balance_on_cancel')) {
             mysqli_stmt_close($stmt_insert);
             return false;
         }
+    }
+}
+
+/**
+ * =================================================================
+ * == BALANCE IMPACT OF CHANGING AN APPROVED VACATION'S DATES
+ * =================================================================
+ * Days charged against balance for a date range, using the same rule as
+ * update_vacation_balance_on_approval(): calendar days minus official
+ * holiday days (weekends are NOT excluded at approval time).
+ */
+if (!function_exists('get_vacation_deductible_days_for_range')) {
+    function get_vacation_deductible_days_for_range($conDB, $emp_id, $start_date, $end_date)
+    {
+        $start = DateTime::createFromFormat('!Y-m-d', (string)$start_date);
+        $end = DateTime::createFromFormat('!Y-m-d', (string)$end_date);
+        if (!$start || !$end || $end < $start) {
+            return 0.0;
+        }
+        $calendar_days = (int)$start->diff($end)->days + 1;
+
+        $emp_company_id = 0;
+        $stmt = mysqli_prepare($conDB, "SELECT COALESCE(c.id, e.comp_no) AS company_id
+                                        FROM employees e
+                                        LEFT JOIN companies c ON c.comp_id = e.comp_no
+                                        WHERE e.emp_id = ?");
+        if ($stmt) {
+            $emp_id_int = (int)$emp_id;
+            mysqli_stmt_bind_param($stmt, "i", $emp_id_int);
+            if (mysqli_stmt_execute($stmt)) {
+                $res = mysqli_stmt_get_result($stmt);
+                $row = $res ? mysqli_fetch_assoc($res) : null;
+                $emp_company_id = (int)($row['company_id'] ?? 0);
+            }
+            mysqli_stmt_close($stmt);
+        }
+
+        $holiday_set = [];
+        $holidays = get_active_holidays_in_range($conDB, $start->format('Y-m-d'), $end->format('Y-m-d'), $emp_company_id > 0 ? $emp_company_id : null);
+        foreach ($holidays as $h) {
+            $h_start = DateTime::createFromFormat('!Y-m-d', substr((string)$h['start_date'], 0, 10));
+            $h_end = DateTime::createFromFormat('!Y-m-d', substr((string)$h['end_date'], 0, 10));
+            if (!$h_start || !$h_end) {
+                continue;
+            }
+            $cur = max($h_start, $start);
+            $last = min($h_end, $end);
+            $cur = clone $cur;
+            while ($cur <= $last) {
+                $holiday_set[$cur->format('Y-m-d')] = true;
+                $cur->modify('+1 day');
+            }
+        }
+
+        return (float)max(0, $calendar_days - count($holiday_set));
+    }
+}
+
+/**
+ * Emails the employee and every approver who already approved the request that
+ * an approved vacation's dates were changed (old vs new period, day and balance change).
+ * Failures are logged only; the date change itself is never rolled back for a mail error.
+ *
+ * @return int Number of emails sent
+ */
+if (!function_exists('send_vacation_dates_modified_emails')) {
+    function send_vacation_dates_modified_emails($conDB, $vacation_id, array $old, array $new, array $impact = [], $modified_by_name = '', $modified_by_id = 0)
+    {
+        if (!function_exists('send_approval_email')) {
+            return 0;
+        }
+
+        $stmt = mysqli_prepare($conDB, "SELECT ev.emp_id, ev.request_inv_no, ev.vac_type, ev.fly_type, e.name AS emp_name
+                                        FROM emp_vacation ev
+                                        JOIN employees e ON e.emp_id = ev.emp_id
+                                        WHERE ev.id = ? LIMIT 1");
+        if (!$stmt) {
+            return 0;
+        }
+        $vac_id = (int)$vacation_id;
+        mysqli_stmt_bind_param($stmt, "i", $vac_id);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $vac = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        if (!$vac) {
+            return 0;
+        }
+
+        // Employee first, then the approvers who signed off the old dates
+        $recipient_ids = [(int)$vac['emp_id'] => 'employee'];
+        $type_res = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
+        $type_row = $type_res ? mysqli_fetch_assoc($type_res) : null;
+        if ($type_row && !empty($vac['request_inv_no'])) {
+            $stmt = mysqli_prepare($conDB, "SELECT DISTINCT approver_id FROM request_approvers
+                                            WHERE request_inv_no = ? AND request_type_id = ? AND status = 'approved'
+                                            ORDER BY approver_id");
+            if ($stmt) {
+                $type_id = (int)$type_row['id'];
+                mysqli_stmt_bind_param($stmt, "si", $vac['request_inv_no'], $type_id);
+                mysqli_stmt_execute($stmt);
+                $res = mysqli_stmt_get_result($stmt);
+                while ($res && ($row = mysqli_fetch_assoc($res))) {
+                    $aid = (int)$row['approver_id'];
+                    if (!isset($recipient_ids[$aid])) {
+                        $recipient_ids[$aid] = 'approver';
+                    }
+                }
+                mysqli_stmt_close($stmt);
+            }
+        }
+        // The person who made the change already knows about it
+        if ((int)$modified_by_id > 0 && isset($recipient_ids[(int)$modified_by_id]) && $recipient_ids[(int)$modified_by_id] === 'approver') {
+            unset($recipient_ids[(int)$modified_by_id]);
+        }
+
+        $fmt = function ($d) { return date('d M Y', strtotime($d)); };
+        $num = function ($n) { return rtrim(rtrim(number_format((float)$n, 2, '.', ''), '0'), '.'); };
+
+        $req_type = trim((string)$vac['vac_type']) . (!empty($vac['fly_type']) ? ' (' . ucfirst((string)$vac['fly_type']) . ')' : '');
+        $day_diff = (int)$new['days'] - (int)$old['days'];
+        $days_change = $day_diff === 0 ? 'no change' : (($day_diff > 0 ? '+' : '') . $day_diff . ' day' . (abs($day_diff) === 1 ? '' : 's'));
+
+        if (!empty($impact['applied'])) {
+            $delta = (float)$impact['delta'];
+            $balance_info = ($delta > 0 ? $num($delta) . ' day(s) deducted' : $num(abs($delta)) . ' day(s) returned')
+                . ' (' . $num($impact['current_balance']) . ' -> ' . $num($impact['new_balance']) . ')';
+        } elseif (!empty($impact['affects_balance'])) {
+            $balance_info = 'No change';
+        } else {
+            $balance_info = 'Not affected';
+        }
+
+        $base_url = function_exists('get_base_url') ? get_base_url() : '';
+        $old_period = $fmt($old['start']) . ' to ' . $fmt($old['return']);
+        $new_period = $fmt($new['start']) . ' to ' . $fmt($new['return']);
+        $subject = 'Vacation Dates Modified - ' . $vac['emp_name'] . ' (' . $vac['request_inv_no'] . ')';
+        $modified_by_name = trim((string)$modified_by_name) !== '' ? (string)$modified_by_name : 'HR';
+
+        $sent = 0;
+        foreach ($recipient_ids as $rid => $role) {
+            $details = getEmployeeDetailsForApproval($conDB, $rid);
+            if (!$details || empty($details['email'])) {
+                continue;
+            }
+            $intro = $role === 'employee'
+                ? "The dates of your approved vacation have been changed by {$modified_by_name}. Please plan your leave according to the new period below."
+                : "The dates of an approved vacation for {$vac['emp_name']} have been changed by {$modified_by_name}. You are receiving this because you approved this request.";
+
+            $data = [
+                'APPROVER_NAME' => $details['name'],
+                'INTRO_TEXT' => $intro,
+                'REQUEST_TYPE' => $req_type,
+                'REQUEST_ID' => $vac['request_inv_no'],
+                'EMPLOYEE_NAME' => $vac['emp_name'],
+                'OLD_PERIOD' => $old_period,
+                'OLD_DAYS' => (string)(int)$old['days'],
+                'NEW_PERIOD' => $new_period,
+                'NEW_DAYS' => (string)(int)$new['days'],
+                'DAYS_CHANGE' => $days_change,
+                'BALANCE_INFO' => $balance_info,
+                'MODIFIED_BY' => $modified_by_name,
+                'REQUEST_URL' => $base_url . '/all_applied_vac.php',
+            ];
+            if (send_approval_email($conDB, $details['email'], $details['name'], $subject, 'vacation_dates_modified', $data)) {
+                $sent++;
+            }
+        }
+
+        return $sent;
+    }
+}
+
+/**
+ * Works out (and optionally applies) the balance change caused by moving an
+ * already-approved vacation from its stored dates to new dates.
+ *
+ * Only vacations whose days were deducted at final approval are affected:
+ * Local Vacation/annual, Fly/annual and encashment, in 'approved' or
+ * 'completed' status. Emergency and other types never touched the balance.
+ *
+ * delta > 0 => extra days are deducted, delta < 0 => days are given back.
+ *
+ * @return array{affects_balance:bool, reason:string, old_days:float, new_days:float, delta:float,
+ *               current_balance:float|null, new_balance:float|null, applied:bool}
+ */
+if (!function_exists('adjust_vacation_balance_on_date_change')) {
+    function adjust_vacation_balance_on_date_change($conDB, $vacation_id, $new_start, $new_return, $apply = false, $performed_by = null)
+    {
+        $out = [
+            'affects_balance' => false,
+            'reason' => '',
+            'old_days' => 0.0,
+            'new_days' => 0.0,
+            'delta' => 0.0,
+            'current_balance' => null,
+            'new_balance' => null,
+            'applied' => false,
+        ];
+
+        $vac_id = (int)$vacation_id;
+        $stmt = mysqli_prepare($conDB, "SELECT `emp_id`, `vac_type`, `fly_type`, `remarks`, `current_status`, `start_date`, `return_date`
+                                        FROM `emp_vacation` WHERE `id` = ? LIMIT 1");
+        if (!$stmt) {
+            $out['reason'] = 'db_error';
+            return $out;
+        }
+        mysqli_stmt_bind_param($stmt, "i", $vac_id);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $vac = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        if (!$vac) {
+            $out['reason'] = 'not_found';
+            return $out;
+        }
+
+        $emp_id = (int)$vac['emp_id'];
+        $vac_type = trim(strtolower((string)$vac['vac_type']));
+        $fly_type = trim(strtolower((string)$vac['fly_type']));
+        $remarks = trim(strtolower((string)($vac['remarks'] ?? '')));
+
+        // Current balance is shown in every case so the editor can display it
+        $stmt = mysqli_prepare($conDB, "SELECT * FROM `emp_vacation_balance` WHERE `emp_id` = ? ORDER BY `id` DESC LIMIT 1");
+        $balance_row = null;
+        if ($stmt) {
+            mysqli_stmt_bind_param($stmt, "i", $emp_id);
+            mysqli_stmt_execute($stmt);
+            $res = mysqli_stmt_get_result($stmt);
+            $balance_row = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+        }
+        if ($balance_row) {
+            $out['current_balance'] = round((float)$balance_row['available_balance'], 2);
+        }
+
+        $out['old_days'] = get_vacation_deductible_days_for_range($conDB, $emp_id, substr((string)$vac['start_date'], 0, 10), substr((string)$vac['return_date'], 0, 10));
+        $out['new_days'] = get_vacation_deductible_days_for_range($conDB, $emp_id, $new_start, $new_return);
+
+        // Must mirror update_vacation_balance_on_approval()
+        $is_emergency = ($fly_type === 'emergency' || strpos($vac_type, 'emergency') !== false || strpos($remarks, 'emergency') !== false);
+        $is_encashment = ($remarks === 'encashment') || ($vac_type === 'encashed');
+        $is_deductible = !$is_emergency && (
+            (($vac_type === 'local vacation' || $vac_type === 'fly') && $fly_type === 'annual') || $is_encashment
+        );
+
+        if (!$is_deductible) {
+            $out['reason'] = 'not_deductible';
+            return $out;
+        }
+        if (!in_array((string)$vac['current_status'], ['approved', 'completed'], true)) {
+            $out['reason'] = 'not_approved_yet';
+            return $out;
+        }
+        if (!$balance_row) {
+            $out['reason'] = 'no_balance_record';
+            return $out;
+        }
+
+        $out['affects_balance'] = true;
+        $out['delta'] = round($out['new_days'] - $out['old_days'], 2);
+        $out['new_balance'] = round($out['current_balance'] - $out['delta'], 2);
+        $out['reason'] = ($out['delta'] == 0.0) ? 'no_change' : 'adjusted';
+
+        if (!$apply || $out['delta'] == 0.0) {
+            return $out;
+        }
+
+        $old_available = (float)$balance_row['available_balance'];
+        $old_used = (float)$balance_row['used_days'];
+        $new_available = round($old_available - $out['delta'], 2);
+        $new_used = max(0, round($old_used + $out['delta'], 2));
+
+        // last_updated is the daily-accrual anchor (VacationCalculator), so it is left untouched
+        $stmt = mysqli_prepare($conDB, "UPDATE `emp_vacation_balance`
+                                        SET `total_days` = ?, `used_days` = ?, `remaining_balance` = ?, `available_balance` = ?
+                                        WHERE `id` = ?");
+        if (!$stmt) {
+            throw new Exception('Balance update prepare failed: ' . mysqli_error($conDB));
+        }
+        $balance_id = (int)$balance_row['id'];
+        mysqli_stmt_bind_param($stmt, "ddddi", $new_available, $new_used, $new_available, $new_available, $balance_id);
+        if (!mysqli_stmt_execute($stmt)) {
+            $err = mysqli_stmt_error($stmt);
+            mysqli_stmt_close($stmt);
+            throw new Exception('Balance update failed: ' . $err);
+        }
+        mysqli_stmt_close($stmt);
+
+        $direction = $out['delta'] > 0 ? 'deducted ' . $out['delta'] : 'returned ' . abs($out['delta']);
+        log_vacation_activity(
+            $conDB,
+            $emp_id,
+            $vac_id,
+            'VACATION_DATES_ADJUSTED',
+            sprintf(
+                'Dates changed %s to %s (%s day(s)) -> %s to %s (%s day(s)); %s day(s) %s balance',
+                substr((string)$vac['start_date'], 0, 10),
+                substr((string)$vac['return_date'], 0, 10),
+                $out['old_days'],
+                $new_start,
+                $new_return,
+                $out['new_days'],
+                $direction,
+                $out['delta'] > 0 ? 'from' : 'to'
+            ),
+            $old_available,
+            $old_used,
+            (float)$balance_row['remaining_balance'],
+            $new_available,
+            $new_used,
+            $new_available,
+            (float)$balance_row['carryover_days'],
+            $new_available,
+            $balance_row['period_start'],
+            $balance_row['period_end'],
+            $performed_by
+        );
+
+        $out['applied'] = true;
+        $out['new_balance'] = $new_available;
+        return $out;
     }
 }
 

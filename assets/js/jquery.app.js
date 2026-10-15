@@ -5967,140 +5967,99 @@ if (typeof window.addVacationAdjustments === 'undefined') {
             }
 
             Swal.fire({
-                title: __('add_edit_adjustments_for', 'Add/Edit adjustments for {0}').replace('{0}', employeeName || ''),
+                title: `<span class="srs-head"><span class="srs-icon tone-indigo"><i class="fa fa-sliders-h"></i></span><span class="srs-head-text">${__('payroll_adjustments', 'Payroll Adjustments')}<small class="srs-head-sub">${$('<div>').text(employeeName || '').html()}</small></span></span>`,
                 html: `
-                    <div class="text-left" style="padding: 10px 20px;">
-                        <div class="form-group p-3 bg-warning rounded" style="margin-bottom: 20px;">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="adj_no_modifications" onchange="
-                                    const noteField = document.getElementById('adj_payroll_note');
-                                    const overtimeField = document.getElementById('adj_overtime_hours');
-                                    document.querySelectorAll('.adj-field').forEach(el => {
-                                        el.disabled = this.checked;
-                                        if (this.checked) {
-                                            el.value = '0';
-                                        }
-                                    });
+                    <div class="adj-wrap">
+                        <label class="adj-switch" for="adj_no_modifications">
+                            <input type="checkbox" id="adj_no_modifications" onchange="
+                                const noteField = document.getElementById('adj_payroll_note');
+                                const overtimeField = document.getElementById('adj_overtime_hours');
+                                document.querySelectorAll('.adj-field').forEach(el => {
+                                    el.disabled = this.checked;
                                     if (this.checked) {
-                                        noteField.value = 'No modifications needed';
-                                        // Trigger recalculation for payroll summary
-                                        setTimeout(() => {
-                                            overtimeField.dispatchEvent(new Event('change', { bubbles: true }));
-                                        }, 100);
-                                    } else {
-                                        noteField.value = '';
+                                        el.value = '0';
                                     }
-                                ">
-                                <label class="custom-control-label" for="adj_no_modifications">
-                                    <strong><i class="fa fa-check-circle"></i> ${__('no_modifications_needed') || 'No Modifications Needed'}</strong>
-                                    <small class="d-block mt-1">${__('check_this_if_no_adjustments_required') || 'Check this if no overtime/deductions are required'}</small>
-                                </label>
+                                });
+                                document.getElementById('adj_sections').classList.toggle('is-disabled', this.checked);
+                                if (this.checked) {
+                                    noteField.value = 'No modifications needed';
+                                    // Trigger recalculation for payroll summary
+                                    setTimeout(() => {
+                                        overtimeField.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }, 100);
+                                } else {
+                                    noteField.value = '';
+                                }
+                            ">
+                            <span class="adj-switch-ui"></span>
+                            <span class="adj-switch-text">
+                                <strong>${__('no_modifications_needed') || 'No Modifications Needed'}</strong>
+                                <small>${__('check_this_if_no_adjustments_required') || 'Check this if no overtime/deductions are required'}</small>
+                            </span>
+                        </label>
+
+                        <div class="adj-sections" id="adj_sections">
+                            <!-- EARNINGS SECTION -->
+                            <div class="srs-box tone-green adj-sec">
+                                <div class="srs-box-title"><i class="fa fa-plus-circle"></i> ${__('earnings') || 'Earnings'}</div>
+                                <div class="adj-field-row">
+                                    <label for="adj_overtime_hours">${__('overtime_hours') || 'Overtime (Hours)'}</label>
+                                    <span class="adj-input"><input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}"><em>${__('hrs', 'hrs')}</em></span>
+                                </div>
+                                <div class="adj-field-row">
+                                    <label for="adj_other_earnings">${__('other_earnings') || 'Other Earnings'}</label>
+                                    <span class="adj-input"><input type="number" id="adj_other_earnings" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherEarnings || 0}"><em>SAR</em></span>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <!-- EARNINGS SECTION -->
-                        <div class="srs-box tone-green">
-                            <h5 class="srs-box-title">
-                                <i class="fa fa-plus-circle"></i> ${__('earnings') || 'Earnings'}
-                            </h5>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="adj_overtime_hours" class="text-success font-weight-bold">
-                                        <i class="fa fa-clock"></i> ${__('overtime_hours') || 'Overtime (Hours)'}
-                                    </label>
-                                    <input type="number" id="adj_overtime_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentOvertimeHours || 0}">
+
+                            <!-- DEDUCTIONS SECTION -->
+                            <div class="srs-box tone-red adj-sec">
+                                <div class="srs-box-title"><i class="fa fa-minus-circle"></i> ${__('deductions') || 'Deductions'}</div>
+                                <div class="adj-field-row">
+                                    <label for="adj_deduction_hours">${__('deduction_hours') || 'Deduction (Hours)'}</label>
+                                    <span class="adj-input"><input type="number" id="adj_deduction_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionHours || 0}"><em>${__('hrs', 'hrs')}</em></span>
                                 </div>
-                                <div class="form-group">
-                                    <label for="adj_other_earnings" class="font-weight-bold text-success">
-                                        <i class="fa fa-plus-circle"></i> ${__('other_earnings') || 'Other Earnings'}
-                                    </label>
-                                    <input type="number" id="adj_other_earnings" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherEarnings || 0}">
+                                <div class="adj-field-row">
+                                    <label for="adj_deduction_days">${__('deduction_days') || 'Deduction (Days)'}</label>
+                                    <span class="adj-input"><input type="number" id="adj_deduction_days" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionDays || 0}"><em>${__('days') || 'days'}</em></span>
                                 </div>
-                            </div>
-                        </div>
-                        
-                        <!-- DEDUCTIONS SECTION -->
-                        <div class="srs-box tone-red">
-                            <h5 class="srs-box-title">
-                                <i class="fa fa-minus-circle"></i> ${__('deductions') || 'Deductions'}
-                            </h5>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="adj_deduction_hours" class="text-danger font-weight-bold">
-                                        <i class="fa fa-minus-circle"></i> ${__('deduction_hours') || 'Deduction (Hours)'}
-                                    </label>
-                                    <input type="number" id="adj_deduction_hours" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionHours || 0}">
-                                </div>
-                                <div class="form-group">
-                                    <label for="adj_deduction_days" class="text-danger font-weight-bold">
-                                        <i class="fa fa-calendar-minus"></i> ${__('deduction_days') || 'Deduction (Days)'}
-                                    </label>
-                                    <input type="number" id="adj_deduction_days" class="form-control payroll-calc-trigger adj-field" placeholder="0" step="0.5" min="0" value="${currentDeductionDays || 0}">
-                                </div>
-                                <div class="form-group" style="grid-column: 1 / -1;">
-                                    <label for="adj_other_deductions" class="font-weight-bold text-danger">
-                                        <i class="fa fa-minus-circle"></i> ${__('other_deductions') || 'Other Deductions'}
-                                    </label>
-                                    <input type="number" id="adj_other_deductions" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherDeductionsVal || 0}">
+                                <div class="adj-field-row">
+                                    <label for="adj_other_deductions">${__('other_deductions') || 'Other Deductions'}</label>
+                                    <span class="adj-input"><input type="number" id="adj_other_deductions" class="form-control payroll-calc-trigger adj-field" placeholder="0.00" step="0.01" min="0" value="${currentOtherDeductionsVal || 0}"><em>SAR</em></span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- AUTO GOSI DEDUCTION SECTION -->
-                        <div class="srs-box tone-sky">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="adj_auto_gosi_deduction" checked>
-                                <label class="custom-control-label" for="adj_auto_gosi_deduction">
-                                    <strong><i class="fa fa-dollar-sign"></i> ${__('auto_gosi_deduction') || 'Auto GOSI Deduction'}</strong>
-                                    <small class="d-block mt-1">${__('auto_gosi_deduction_help') || 'If checked, GOSI will be automatically deducted from the vacation payment. Uncheck to exclude GOSI deduction.'}</small>
-                                </label>
-                            </div>
+                        <!-- Live summary (shown by calculatePayroll once a value is entered) -->
+                        <span id="payroll_summary_hr_top" style="display: none;"></span>
+                        <div class="adj-summary" id="payroll_calculation_summary" style="display: none;">
+                            <span class="adj-chip is-plus">${__('overtime_hours') || 'Overtime'} <strong>+<i class="icon-saudi_riyal"></i> <span id="calc_overtime_amount">0.00</span></strong></span>
+                            <span class="adj-chip is-plus">${__('other_earnings') || 'Other Earnings'} <strong>+<i class="icon-saudi_riyal"></i> <span id="calc_other_earnings">0.00</span></strong></span>
+                            <span class="adj-chip is-minus">${__('deduction_amount') || 'Deduction Amount'} <strong>-<i class="icon-saudi_riyal"></i> <span id="calc_deduction_amount">0.00</span></strong></span>
+                            <span class="adj-chip is-minus">${__('other_deductions') || 'Other Deductions'} <strong>-<i class="icon-saudi_riyal"></i> <span id="calc_other_deductions">0.00</span></strong></span>
+                            <span class="adj-net">${__('net_adjustment') || 'Net Adjustment'} <strong><i class="icon-saudi_riyal"></i> <span id="calc_net_adjustment">0.00</span></strong></span>
                         </div>
-                        
-                        <hr style="display: none;" id="payroll_summary_hr_top">
-                        
-                        <div class="form-group p-3 bg-light rounded" id="payroll_calculation_summary" style="display: none;">
-                            <h6 class="text-primary mb-3"><i class="fa fa-calculator"></i> ${__('payroll_summary') || 'Payroll Summary'}</h6>
-                            <!-- Two-column layout for payroll summary -->
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                                    <span class="text-success font-weight-bold">${__('overtime_hours') || 'Overtime Amount'}:</span>
-                                    <span class="text-success font-weight-bold">+<i class="icon-saudi_riyal"></i> <span id="calc_overtime_amount">0.00</span></span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                                    <span class="text-danger font-weight-bold">${__('deduction_amount') || 'Deduction Amount'}:</span>
-                                    <span class="text-danger font-weight-bold">-<i class="icon-saudi_riyal"></i> <span id="calc_deduction_amount">0.00</span></span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                                    <span class="text-danger font-weight-bold">${__('other_deductions') || 'Other Deductions'}:</span>
-                                    <span class="text-danger font-weight-bold">-<i class="icon-saudi_riyal"></i> <span id="calc_other_deductions">0.00</span></span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                                    <span class="text-success font-weight-bold">${__('other_earnings') || 'Other Earnings'}:</span>
-                                    <span class="text-success font-weight-bold">+<i class="icon-saudi_riyal"></i> <span id="calc_other_earnings">0.00</span></span>
-                                </div>
-                            </div>
-                            <hr style="margin: 10px 0;">
-                            <div style="display: flex; justify-content: center; padding: 8px 0;">
-                                <span class="font-weight-bold text-info">${__('net_adjustment') || 'Net Adjustment'}:&nbsp;</span>
-                                <span class="font-weight-bold text-info"><i class="icon-saudi_riyal"></i> <span id="calc_net_adjustment">0.00</span></span>
-                            </div>
-                        </div>
-                        
-                        <hr>
-                        
-                        <div class="form-group">
-                            <label for="adj_payroll_note" class="font-weight-bold">
-                                <i class="fa fa-sticky-note"></i> ${__('payroll_note') || 'Note'}
-                            </label>
-                            <textarea id="adj_payroll_note" class="form-control adj-field" rows="3" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}">${payrollNote || ''}</textarea>
+
+                        <label class="adj-switch is-small" for="adj_auto_gosi_deduction">
+                            <input type="checkbox" id="adj_auto_gosi_deduction" checked>
+                            <span class="adj-switch-ui"></span>
+                            <span class="adj-switch-text">
+                                <strong>${__('auto_gosi_deduction') || 'Auto GOSI Deduction'}</strong>
+                                <small>${__('auto_gosi_deduction_help') || 'If checked, GOSI will be automatically deducted from the vacation payment. Uncheck to exclude GOSI deduction.'}</small>
+                            </span>
+                        </label>
+
+                        <div class="adj-note">
+                            <label for="adj_payroll_note" class="srs-label"><i class="fa fa-sticky-note"></i> ${__('payroll_note') || 'Note'}</label>
+                            <textarea id="adj_payroll_note" class="form-control adj-field" rows="2" placeholder="${__('payroll_note_placeholder') || 'Add any notes about overtime/deductions...'}">${payrollNote || ''}</textarea>
                         </div>
                     </div>
                 `,
-                confirmButtonText: __('save_adjustments') || 'Save Adjustments',
+                confirmButtonText: '<i class="fa fa-check"></i> ' + (__('save_adjustments') || 'Save Adjustments'),
+                confirmButtonColor: '#16a34a',
                 showCancelButton: true,
                 allowOutsideClick: false,
-                width: '60%',
+                width: '760px',
                 // maxWidth: '1200px',
                 willOpen: () => {
                     const swalModal = Swal.getHtmlContainer();
@@ -6195,16 +6154,15 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                 didRender: () => {
                     // Add "Edit Date" button as a main action button alongside Save and Cancel
                     const swalActions = Swal.getActions();
-                    if (swalActions) {
+                    if (swalActions && !document.getElementById('edit_date_btn_adj')) {
                         const editDateBtn = document.createElement('button');
                         editDateBtn.type = 'button';
-                        editDateBtn.className = 'btn btn-primary';
+                        // Same look as the Save/Cancel buttons (themed swal2-styled), sky tone
+                        editDateBtn.className = 'swal2-styled';
                         editDateBtn.id = 'edit_date_btn_adj';
-                        editDateBtn.innerHTML = '<i class="fa fa-calendar-edit"></i> ' + (__('edit_dates') || 'Edit Dates');
-                        editDateBtn.style.marginRight = '10px';
-                        editDateBtn.style.padding = '.625em 1.1em';
-                        editDateBtn.style.fontSize = '1em';
-                        editDateBtn.style.borderRadius = '0.25em';
+                        editDateBtn.innerHTML = '<i class="fa fa-calendar-alt"></i> ' + (__('edit_dates') || 'Edit Dates');
+                        editDateBtn.style.backgroundColor = '#0284c7';
+                        editDateBtn.style.color = '#fff';
                         
                         // Close current modal and open payment modal to modify dates
                         editDateBtn.addEventListener('click', function(e) {
@@ -10267,11 +10225,11 @@ function renderAttachmentsModal(attachments, title) {
             
             let thumb;
             if (isPdf) {
-                thumb = `<canvas id="pdf-canvas-${idx}" class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;transition:transform 0.2s;background:#f9f9f9;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"></canvas>`;
+                thumb = `<canvas id="pdf-canvas-${idx}" class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;border-radius:12px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;transition:transform 0.2s;background:#f8fafc;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"></canvas>`;
             } else if (isImg) {
                 thumb = `<img src="${att}" alt="Attachment ${idx+1}" class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">`;
             } else {
-                thumb = `<div class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;font-size:2.5em;color:#007bff;transition:transform 0.2s;user-select:none;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><i class="fa fa-file-alt"></i></div>`;
+                thumb = `<div class="attachment-thumb" data-idx="${idx}" data-url="${safeUrl}" style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:12px;border:1px solid #ccc;cursor:pointer;box-shadow:0 2px 8px #0001;font-size:2.5em;color:#007bff;transition:transform 0.2s;user-select:none;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'"><i class="fa fa-file-alt"></i></div>`;
             }
             html += `<div style="text-align:center;">${thumb}<div style="font-size:0.9em;margin-top:4px;">${__('document')} ${idx+1}</div></div>`;
         });
@@ -10307,15 +10265,15 @@ function renderAttachmentsModal(attachments, title) {
         
         let preview;
         if (isPdf) {
-            preview = `<div style="width:100%;max-height:500px;display:flex;justify-content:center;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;">
+            preview = `<div style="width:100%;max-height:500px;display:flex;justify-content:center;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;padding:10px;">
                 <canvas id="att-pdf-canvas" style="max-width:100%;max-height:100%;border-radius:4px;"></canvas>
             </div>`;
         } else if (isImg) {
-            preview = `<div style="width:100%;display:flex;justify-content:center;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;">
+            preview = `<div style="width:100%;display:flex;justify-content:center;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;padding:10px;">
                 <img src="${att}" alt="Attachment ${index+1}" style="max-width:100%;max-height:500px;border-radius:4px;">
             </div>`;
         } else {
-            preview = `<div style="width:100%;height:300px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px;border:1px solid #ccc;font-size:3em;color:#007bff;user-select:none;">
+            preview = `<div style="width:100%;height:300px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:12px;border:1px solid #ccc;font-size:3em;color:#007bff;user-select:none;">
                 <i class="fa fa-file-alt"></i>
             </div>`;
         }
@@ -10330,16 +10288,16 @@ function renderAttachmentsModal(attachments, title) {
                 </div>
                 <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                     <div class="btn-group" role="group">
-                        <button type="button" id="att-back-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                        <button type="button" id="att-back-btn" class="srs-tool">
                             <i class="fa fa-arrow-left"></i> Back to Grid
                         </button>
-                        <button type="button" id="att-prev-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                        <button type="button" id="att-prev-btn" class="srs-tool">
                             <i class="fa fa-chevron-left"></i> Previous
                         </button>
-                        <button type="button" id="att-next-btn" class="btn btn-sm btn-secondary" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#6c757d;color:white;border:none;">
+                        <button type="button" id="att-next-btn" class="srs-tool">
                             Next <i class="fa fa-chevron-right"></i>
                         </button>
-                        <button type="button" id="att-open-fullscreen-btn" class="btn btn-sm btn-info" style="padding:8px 16px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                        <button type="button" id="att-open-fullscreen-btn" class="srs-tool is-primary">
                             <i class="fa fa-expand"></i> Fullscreen
                         </button>
                     </div>
@@ -10444,30 +10402,30 @@ function viewFileInPopup(fileUrl, fileName) {
         let html = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:10px;">
                 <div style="display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-                    <button type="button" class="btn btn-sm btn-info" id="zoom-out-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#17a2b8;color:white;border:none;">
+                    <button type="button" class="srs-tool" id="zoom-out-${zoomKey}">
                         <i class="fa fa-search-minus"></i> Zoom Out
                     </button>
                     <span style="font-weight:bold;min-width:80px;text-align:center;font-size:14px;">
                         <span id="zoom-level-${zoomKey}">100</span>%
                     </span>
                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-info" id="zoom-in-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                        <button type="button" class="srs-tool" id="zoom-in-${zoomKey}">
                             <i class="fa fa-search-plus"></i> Zoom In
                         </button>
-                        <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#ffc107;color:black;border:none;">
+                        <button type="button" class="srs-tool" id="zoom-reset-${zoomKey}">
                             <i class="fa fa-undo"></i> Reset
                         </button>
                     </div>
                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-success" id="rotate-ltr-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#28a745;color:white;border:none;">
+                        <button type="button" class="srs-tool" id="rotate-ltr-${zoomKey}">
                             <i class="fa fa-rotate-left"></i> Rotate LTR
                         </button>
-                        <button type="button" class="btn btn-sm btn-success" id="rotate-rtl-${zoomKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#28a745;color:white;border:none;">
+                        <button type="button" class="srs-tool" id="rotate-rtl-${zoomKey}">
                             <i class="fa fa-rotate-right"></i> Rotate RTL
                         </button>
                     </div>
                 </div>
-                <div id="img-container-${zoomKey}" style="width:100%;max-height:60vh;overflow:auto;display:flex;justify-content:center;align-items:flex-start;border:1px solid #ddd;border-radius:8px;background:#f9f9f9;padding:10px;cursor:grab;">
+                <div id="img-container-${zoomKey}" style="width:100%;max-height:60vh;overflow:auto;display:flex;justify-content:center;align-items:flex-start;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;padding:10px;cursor:grab;">
                     <img id="zoom-img-${zoomKey}" src="${fileUrl}" alt="${imageName}" style="border-radius:8px;transition:transform 0.2s ease;transform:scale(1);user-select:none;max-width:100%;max-height:100%;object-fit:contain;">
                 </div>
             </div>
@@ -10746,26 +10704,26 @@ function displayPdfPopup(pdfUrl, fileName) {
                 </div>
             </div>
             <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">
-                <button type="button" class="btn btn-sm btn-secondary" id="prev-btn-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                <button type="button" class="srs-tool" id="prev-btn-${viewerKey}">
                     <i class="fa fa-chevron-left"></i> Previous
                 </button>
-                <input type="number" id="page-input-${viewerKey}" value="1" min="1" style="width:50px;padding:6px;text-align:center;border:1px solid #ddd;border-radius:4px;">
-                <button type="button" class="btn btn-sm btn-secondary" id="next-btn-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;border-radius:4px;background-color:#6c757d;color:white;border:none;">
+                <input type="number" id="page-input-${viewerKey}" value="1" min="1" style="width:50px;padding:6px;text-align:center;border:1px solid #e5e7eb;border-radius:4px;">
+                <button type="button" class="srs-tool" id="next-btn-${viewerKey}">
                     Next <i class="fa fa-chevron-right"></i>
                 </button>
                 <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-info" id="zoom-out-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                    <button type="button" class="srs-tool" id="zoom-out-${viewerKey}">
                         <i class="fa fa-search-minus"></i> Zoom Out
                     </button>
-                    <button type="button" class="btn btn-sm btn-info" id="zoom-in-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#17a2b8;color:white;border:none;">
+                    <button type="button" class="srs-tool" id="zoom-in-${viewerKey}">
                         <i class="fa fa-search-plus"></i> Zoom In
                     </button>
-                    <button type="button" class="btn btn-sm btn-warning" id="zoom-reset-${viewerKey}" style="padding:6px 12px;font-size:13px;cursor:pointer;background-color:#ffc107;color:black;border:none;">
+                    <button type="button" class="srs-tool" id="zoom-reset-${viewerKey}">
                         <i class="fa fa-undo"></i> Reset
                     </button>
                 </div>
             </div>
-            <div style="width:100%;display:flex;justify-content:center;max-height:60vh;overflow-y:auto;overflow-x:auto;border:1px solid #ddd;border-radius:4px;background:#f9f9f9;padding:10px;">
+            <div style="width:100%;display:flex;justify-content:center;max-height:60vh;overflow-y:auto;overflow-x:auto;border:1px solid #e5e7eb;border-radius:4px;background:#f8fafc;padding:10px;">
                 <canvas id="pdf-viewer-canvas-${viewerKey}" style="display:block;margin:auto;"></canvas>
             </div>
         </div>
