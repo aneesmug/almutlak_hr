@@ -49,6 +49,10 @@
     ");
     $eosrow = mysqli_fetch_assoc($get_eos_data) ?: [];
 
+    // Reasons longer than the old VARCHAR(100) were cut on save - restore the full text
+    require_once __DIR__ . '/includes/eos_reason_fix.php';
+    eos_repair_reason($conDB, $eosrow);
+
     // Get Salary benefits
     $get_salary_data = mysqli_query($conDB, "SELECT * FROM `emp_salary` WHERE `status` = 1 AND `emp_id`='".$_GET['emp_id']."'");
     $salaryrow = mysqli_fetch_assoc($get_salary_data) ?: [];
@@ -207,11 +211,11 @@
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: var(--ep-ink); line-height: 1.4; font-size: 11.5px;
             }
             .eosp.eosp-sheet {
-                position: relative; width: 210mm; height: 296mm; padding: 11mm 13mm 8mm; margin: 0 auto; background: #fff; overflow: hidden;
+                position: relative; width: 210mm; max-height: 296mm; padding: 7mm 10mm 4mm; margin: 0 auto; background: #fff; overflow: hidden;
                 display: flex; flex-direction: column; box-shadow: 0 6px 28px rgba(15, 23, 42, .16);
             }
             .eosp.eosp-sheet::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, var(--ep-navy), var(--ep-navy-2)); }
-            .eosp .eosp-body { flex: 1 0 auto; }
+            .eosp .eosp-body { flex: 0 0 auto; }
             .eosp p, .eosp h2, .eosp h3, .eosp h4 { margin: 0; }
             .eosp .ar { direction: rtl; text-align: right; font-family: Tahoma, 'Segoe UI', sans-serif; }
             .eosp i { font-style: normal; }
@@ -231,16 +235,16 @@
             .eosp .ep-ref b { font-size: 12px; color: var(--ep-ink); font-variant-numeric: tabular-nums; }
 
             /* Sections */
-            .eosp .ep-sec { margin-top: 11px; }
+            .eosp .ep-sec { margin-top: 7px; }
             .eosp .ep-sec-title {
-                display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; margin-bottom: 6px;
+                display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; margin-bottom: 4px;
                 background: var(--ep-navy) !important; color: #fff !important; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px;
             }
             .eosp .ep-sec-title span:first-child { text-transform: uppercase; }
 
             /* Employee fields */
             .eosp .ep-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--ep-line); border-radius: 6px; overflow: hidden; }
-            .eosp .ep-field { padding: 5px 10px 6px; border-bottom: 1px solid var(--ep-line); border-inline-end: 1px solid var(--ep-line); min-width: 0; }
+            .eosp .ep-field { padding: 3px 10px 4px; border-bottom: 1px solid var(--ep-line); border-inline-end: 1px solid var(--ep-line); min-width: 0; }
             .eosp .ep-field.span-2 { grid-column: span 2; }
             .eosp .ep-field:nth-last-child(-n+3) { border-bottom: 0; }
             .eosp .ep-field:nth-child(3n+2) { border-inline-end: 0; } /* last column: Emp ID row + every 3rd after */
@@ -248,27 +252,32 @@
             .eosp .ep-lbl .ar { text-transform: none; letter-spacing: 0; font-size: 10px; }
             .eosp .ep-val { margin-top: 1px; font-size: 12px; font-weight: 600; color: var(--ep-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .eosp .ep-val.is-strong { font-size: 13px; font-weight: 700; color: var(--ep-navy); }
+            /* English left, Arabic right; when both don't fit on one line the Arabic drops to its own line (never cut off) */
+            .eosp .ep-val.is-dual { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 8px; row-gap: 0; white-space: normal; overflow: visible; }
+            .eosp .ep-val.is-dual > span { min-width: 0; white-space: nowrap; }
+            .eosp .ep-val.is-dual > .ar { direction: rtl; text-align: right; margin-left: auto; font-family: Tahoma, 'Segoe UI', Arial, sans-serif; }
             .eosp .is-mono { font-family: Consolas, 'Courier New', monospace; letter-spacing: .3px; }
 
             /* Service period */
-            .eosp .ep-service { display: grid; grid-template-columns: 78px 78px 78px 1fr; gap: 8px; }
-            .eosp .ep-stat { border: 1px solid var(--ep-line); border-radius: 6px; background: var(--ep-soft) !important; text-align: center; padding: 6px 4px; }
+            .eosp .ep-service { display: grid; grid-template-columns: repeat(3, 70px) 1fr; gap: 8px; align-items: stretch; }
+            .eosp .ep-stat { border: 1px solid var(--ep-line); border-radius: 6px; background: var(--ep-soft) !important; text-align: center; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
             .eosp .ep-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--ep-navy); line-height: 1.1; }
-            .eosp .ep-stat span { display: flex; justify-content: center; gap: 5px; font-size: 9.5px; color: var(--ep-muted); text-transform: uppercase; letter-spacing: .4px; }
-            .eosp .ep-reason { border: 1px solid var(--ep-line); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; }
+            .eosp .ep-stat span { display: flex; flex-direction: column; align-items: center; font-size: 9px; line-height: 1.25; color: var(--ep-muted); text-transform: uppercase; letter-spacing: .4px; }
+            .eosp .ep-stat span i { font-style: normal; text-transform: none; letter-spacing: 0; }
+            .eosp .ep-reason { border: 1px solid var(--ep-line); border-radius: 6px; padding: 4px 10px; display: flex; flex-direction: column; justify-content: center; }
             .eosp .ep-reason-txt { display: flex; justify-content: space-between; gap: 12px; margin-top: 3px; font-size: 12px; font-weight: 600; }
 
             /* Generic tables (assets / loans) */
             .eosp .ep-table { width: 100%; border-collapse: collapse; border: 1px solid var(--ep-line); }
             .eosp .ep-table th { background: var(--ep-soft) !important; text-align: left; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--ep-muted); padding: 5px 8px; border-bottom: 1px solid var(--ep-line); }
             .eosp .ep-table th i { text-transform: none; margin-inline-start: 4px; font-weight: 600; }
-            .eosp .ep-table td { padding: 4px 8px; border-bottom: 1px solid var(--ep-line); font-size: 11px; }
+            .eosp .ep-table td { padding: 3px 8px; border-bottom: 1px solid var(--ep-line); font-size: 11px; }
             .eosp .num { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
             /* Financial statement */
             .eosp .ep-fin { width: 100%; border-collapse: collapse; border: 1px solid var(--ep-line); }
             .eosp .ep-fin th { background: var(--ep-soft) !important; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ep-muted); padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--ep-line); }
-            .eosp .ep-fin td { padding: 4px 10px; font-size: 11.5px; border-bottom: 1px solid #f1f5f9; }
+            .eosp .ep-fin td { padding: 3px 10px; font-size: 11.5px; border-bottom: 1px solid #f1f5f9; }
             .eosp .ep-fin td.num { width: 26%; font-weight: 600; }
             .eosp .ep-fin td.neg { color: var(--ep-red); }
             .eosp .ep-fin tr.grp td { padding-top: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--ep-line); }
@@ -280,7 +289,7 @@
             .eosp .ep-fin tr.sub.is-deduct td { background: var(--ep-red-bg) !important; color: var(--ep-red); }
             .eosp .ep-fin tr.is-none td { color: var(--ep-muted); font-style: italic; }
             .eosp .ep-net {
-                display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 8px; padding: 9px 14px;
+                display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 6px; padding: 6px 14px;
                 background: var(--ep-navy) !important; color: #fff !important; border-radius: 6px;
             }
             .eosp .ep-net-lbl { display: flex; flex-direction: column; gap: 1px; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
@@ -289,24 +298,27 @@
             .eosp .ep-net-amt small { color: #cbd5e1; font-size: 12px; font-weight: 600; margin-inline-end: 3px; }
 
             /* Acknowledgment */
-            .eosp .ep-ack { margin-top: 11px; padding: 8px 12px; border: 1px solid var(--ep-line); border-inline-start: 3px solid var(--ep-navy); border-radius: 6px; background: var(--ep-soft) !important; font-size: 10.5px; line-height: 1.55; color: #374151; }
-            .eosp .ep-ack p + p { margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--ep-line); }
+            .eosp .ep-ack { margin-top: 7px; padding: 6px 12px; border: 1px solid var(--ep-line); border-inline-start: 3px solid var(--ep-navy); border-radius: 6px; background: var(--ep-soft) !important; font-size: 10.5px; line-height: 1.55; color: #374151; }
+            .eosp .ep-ack p + p { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--ep-line); }
             .eosp .ep-ack b { color: var(--ep-navy); }
 
             /* Signatures */
-            .eosp .ep-foot { display: grid; grid-template-columns: 1fr 1fr 110px; gap: 12px; padding-top: 12px; flex-shrink: 0; page-break-inside: avoid; }
+            .eosp .ep-foot { display: grid; grid-template-columns: 1fr 1fr 110px; gap: 12px; padding-top: 8px; flex-shrink: 0; page-break-inside: avoid; }
             .eosp .ep-sign { border: 1px solid var(--ep-line); border-radius: 6px; overflow: hidden; }
             .eosp .ep-sign-head { display: flex; justify-content: space-between; padding: 5px 10px; background: var(--ep-soft) !important; border-bottom: 1px solid var(--ep-line); font-size: 10.5px; font-weight: 700; color: var(--ep-navy); text-transform: uppercase; letter-spacing: .4px; }
             .eosp .ep-sign-head .ar { text-transform: none; }
-            .eosp .ep-sign-row { display: flex; align-items: flex-end; gap: 8px; padding: 0 10px; height: 25px; }
-            .eosp .ep-sign-row:nth-child(3) { height: 34px; }
+            .eosp .ep-sign-row { display: flex; align-items: flex-end; gap: 8px; padding: 0 10px; height: 22px; }
+            .eosp .ep-sign-row:nth-child(3) { height: 30px; }
             .eosp .ep-sign-row span { flex: 0 0 84px; display: flex; justify-content: space-between; font-size: 9.5px; color: var(--ep-muted); padding-bottom: 3px; }
             .eosp .ep-sign-row b { flex: 1 1 auto; border-bottom: 1px solid #9ca3af; min-height: 16px; padding-bottom: 2px; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .eosp .ep-stamp { border: 1.5px dashed #cbd5e1; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; aspect-ratio: 1; align-self: center; }
             .eosp .ep-stamp .ar { text-align: center; text-transform: none; }
-            .eosp .ep-docfoot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 5px; border-top: 1px solid var(--ep-line); font-size: 8.5px; color: #9ca3af; letter-spacing: .3px; flex-shrink: 0; }
+            .eosp .ep-docfoot { display: flex; justify-content: space-between; margin-top: 5px; padding-top: 3px; border-top: 1px solid var(--ep-line); font-size: 8.5px; color: #9ca3af; letter-spacing: .3px; flex-shrink: 0; }
             @media print {
                 .eosp.eosp-sheet { box-shadow: none; }
+                /* No stamp placeholder on paper - signature boxes take the full width */
+                .eosp .ep-stamp { display: none !important; }
+                .eosp .ep-foot { grid-template-columns: 1fr 1fr; }
             }
         </style>
     </head>
@@ -355,6 +367,27 @@
                                         $money = function ($v) { return number_format((float)$v, 2); };
                                         $total_deductions = $gosi_deduction + $total_absence_deductions + $loan_deduction;
                                         $eos_ref = !empty($eosrow['id']) ? 'EOS-' . str_pad((string)$eosrow['id'], 5, '0', STR_PAD_LEFT) : '-';
+                                        // Arabic values: department / nationality / company come from their *_ar columns.
+                                        // The name has no Arabic column, so use the shared translator (cached in translation_cache).
+                                        $name_ar = '';
+                                        $translateFile = __DIR__ . '/includes/ajaxFile/translateText.php';
+                                        if (!empty($emprow['name']) && file_exists($translateFile)) {
+                                            require_once $translateFile;
+                                            if (function_exists('auto_translate_text')) {
+                                                $nameOk = false;
+                                                $name_ar = auto_translate_text($emprow['name'], 'en', 'ar', $nameOk);
+                                                if (!$nameOk || trim($name_ar) === trim($emprow['name'])) {
+                                                    $name_ar = '';
+                                                }
+                                            }
+                                        }
+                                        // English value on the left, Arabic value on the right (Arabic hidden when missing)
+                                        $dual = function ($en, $ar) use ($h) {
+                                            $en = trim((string)($en ?? ''));
+                                            $ar = trim((string)($ar ?? ''));
+                                            return '<span class="en">' . ($en !== '' ? $h($en) : '-') . '</span>'
+                                                . ($ar !== '' && $ar !== $en ? '<span class="ar">' . $h($ar) . '</span>' : '');
+                                        };
                                         $lwd = $eosrow['end_date'] ?? ($emprow['ter_date'] ?? null);
                                         $vac_days = number_format((float)($eosrow['anul_vac_days'] ?? 0), 2);
                                         $cm_days = $eosrow['curt_month_days'] ?? '0';
@@ -379,14 +412,14 @@
                                             <section class="ep-sec">
                                                 <h4 class="ep-sec-title"><span>Employee Information</span><span class="ar">معلومات الموظف</span></h4>
                                                 <div class="ep-fields">
-                                                    <div class="ep-field span-2"><div class="ep-lbl"><span>Name of Employee</span><span class="ar">اسم الموظف</span></div><div class="ep-val is-strong"><?= $h($emprow['name']) ?></div></div>
+                                                    <div class="ep-field span-2"><div class="ep-lbl"><span>Name of Employee</span><span class="ar">اسم الموظف</span></div><div class="ep-val is-strong is-dual"><?= $dual($emprow['name'], $name_ar) ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Employee ID</span><span class="ar">الرقم الوظيفي</span></div><div class="ep-val is-mono"><?= $h($emprow['empid']) ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Iqama / ID</span><span class="ar">رقم الإقامة</span></div><div class="ep-val is-mono"><?= $h($emprow['iqama']) ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Passport No.</span><span class="ar">رقم الجواز</span></div><div class="ep-val is-mono"><?= $h($emprow['passport_number'] ?: '-') ?></div></div>
-                                                    <div class="ep-field"><div class="ep-lbl"><span>Nationality</span><span class="ar">الجنسية</span></div><div class="ep-val"><?= $h($emprow['country_name'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Nationality</span><span class="ar">الجنسية</span></div><div class="ep-val is-dual"><?= $dual($emprow['country_name'], $emprow['country_name_ar'] ?? '') ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Date of Birth</span><span class="ar">تاريخ الميلاد</span></div><div class="ep-val"><?= !empty($emprow['dob']) ? format_safe_date($emprow['dob'], 'd M, Y') : '-' ?><?= $years !== '' ? ' <small>(' . $h($years) . ')</small>' : '' ?></div></div>
-                                                    <div class="ep-field"><div class="ep-lbl"><span>Department</span><span class="ar">القسم</span></div><div class="ep-val"><?= $h($emprow['deptnme'] ?: '-') ?></div></div>
-                                                    <div class="ep-field"><div class="ep-lbl"><span>Company</span><span class="ar">الشركة</span></div><div class="ep-val"><?= $h($emprow['compnme'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Department</span><span class="ar">القسم</span></div><div class="ep-val is-dual"><?= $dual($emprow['deptnme'], $emprow['deptnme_ar'] ?? '') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Company</span><span class="ar">الشركة</span></div><div class="ep-val is-dual"><?= $dual($emprow['compnme'], $emprow['compnme_ar'] ?? '') ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Date Hired</span><span class="ar">تاريخ التعيين</span></div><div class="ep-val"><?= format_safe_date($emprow['joining_date'] ?? null, 'd M, Y') ?></div></div>
                                                     <div class="ep-field"><div class="ep-lbl"><span>Last Working Day</span><span class="ar">آخر يوم عمل</span></div><div class="ep-val"><?= $lwd ? format_safe_date($lwd, 'd M, Y') : '-' ?></div></div>
                                                 </div>
@@ -512,7 +545,7 @@
                                             <!-- Acknowledgment -->
                                             <section class="ep-ack">
                                                 <p>I acknowledge and undertake, the employee / <b><?= $h($emprow['name']) ?></b>, ID No. <b><?= $h($emprow['iqama']) ?></b>, that I have received all of my statutory dues from overtime and wages according to the Labor Law and the Workers from Al-Mutlak Trading from the beginning of my work until the date of leaving work.</p>
-                                                <p class="ar">أقر وأتعهد أنا الموظف / <b><?= $h($emprow['name']) ?></b> برقم هوية / إقامة <b><?= $h($emprow['iqama']) ?></b> بأنني استلمت كافة مستحقاتي القانونية من أجور العمل الإضافي والأجور حسب نظام العمل والعمال في شركة المطلق للتجارة منذ بداية عملي حتى تاريخ ترك العمل.</p>
+                                                <p class="ar">أقر وأتعهد أنا الموظف / <b><?= $h($name_ar !== '' ? $name_ar : $emprow['name']) ?></b> برقم هوية / إقامة <b><?= $h($emprow['iqama']) ?></b> بأنني استلمت كافة مستحقاتي القانونية من أجور العمل الإضافي والأجور حسب نظام العمل والعمال في شركة المطلق للتجارة منذ بداية عملي حتى تاريخ ترك العمل.</p>
                                             </section>
                                         </div>
 

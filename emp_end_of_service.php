@@ -565,6 +565,10 @@
                     $t_months = $serviceDuration->m;
                     $t_days = $serviceDuration->d;
 
+                    // Reason texts can be longer than the old VARCHAR(100) - widen before saving
+                    require_once __DIR__ . '/includes/eos_reason_fix.php';
+                    eos_ensure_reason_columns($conDB);
+
                     // Backward-compatible insert: include other_earnings only when column exists
                     $has_other_earnings_col = false;
                     $col_check = mysqli_query($conDB, "SHOW COLUMNS FROM `emp_eos` LIKE 'other_earnings'");
