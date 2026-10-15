@@ -402,10 +402,16 @@ elseif ($ajaxType == 'canApplyVacation') {
         // Optionally return remaining balance snapshot for UI
         require_once __DIR__ . '/../../includes/get_vacation_balance.php';
         $remaining_balance = get_employee_vacation_balance($conDB, $emp_id);
+        // Lets the apply form stop a Fly submit early (server still enforces in applyVacation).
+        require_once __DIR__ . '/../doc_expiry_helper.php';
+        $fly_docs = doc_expiry_fly_vacation_check($conDB, $emp_id);
         echo json_encode([
             'ok' => true,
             'can_apply' => true,
             'remaining_balance' => $remaining_balance,
+            'fly_doc_message' => $fly_docs['ok'] ? '' : $fly_docs['message'],
+            'fly_doc_issues' => $fly_docs['issues'],
+            'fly_doc_min_days' => DOC_EXPIRY_FLY_MIN_DAYS,
             'active_return_date' => $active_return_date,
             // Lets the apply form grey out blocked days in its date pickers (server still enforces in applyVacation).
             'blackout_dates' => array_values(array_map(function ($b) {
@@ -418,6 +424,33 @@ elseif ($ajaxType == 'canApplyVacation') {
         echo json_encode(['ok' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
     exit;
+}
+
+// ================================================================
+// --- Apply form: email the people responsible for the expired Iqama / Passport ---
+// ================================================================
+elseif ($ajaxType == 'notifyFlyDocResponsible') {
+    try {
+        $emp_id = trim((string)($_POST['emp_id'] ?? ''));
+        if ($emp_id === '') {
+            send_json_response('Error', 'Invalid employee.', 'error');
+        }
+        // One click per employee every 10 minutes per session (button spam guard)
+        $guard_key = 'fly_doc_notify_' . $emp_id;
+        if (!empty($_SESSION[$guard_key]) && time() - (int)$_SESSION[$guard_key] < 600) {
+            send_json_response('Already Sent', 'Notification was already sent a few minutes ago. Please wait before sending again.', 'info');
+        }
+        require_once __DIR__ . '/../doc_expiry_helper.php';
+        $result = doc_expiry_fly_notify_responsible($conDB, $emp_id, $userwel . ($current_user_id ? ' (#' . $current_user_id . ')' : ''));
+        if ($result['ok']) {
+            $_SESSION[$guard_key] = time();
+        }
+        send_json_response($result['ok'] ? 'Notification Sent' : 'Not Sent', $result['message'], $result['ok'] ? 'success' : 'error', 200,
+            ['sent' => $result['sent'], 'failed' => $result['failed'], 'cc' => $result['cc'] ?? null]);
+    } catch (Throwable $e) {
+        error_log('notifyFlyDocResponsible failed: ' . $e->getMessage());
+        send_json_response('Error', 'Error: ' . $e->getMessage(), 'error', 500);
+    }
 }
 
 // ================================================================
@@ -514,6 +547,15 @@ elseif ($ajaxType == 'applyVacation') {
         $is_encashed_vacation = ($vac_type === 'Encashed');
         $is_fly_annual = ($vac_type === 'Fly' && $fly_type === 'annual'); // NEW: Track if Fly | Annual specifically
         $is_fly_emergency = ($vac_type === 'Fly' && $fly_type === 'emergency'); // NEW: Track if Fly | Emergency
+
+        // Fly (Annual or Emergency): Iqama and Passport must be valid for more than 90 days
+        if ($is_fly_annual || $is_fly_emergency) {
+            require_once __DIR__ . '/../doc_expiry_helper.php';
+            $fly_docs = doc_expiry_fly_vacation_check($conDB, $emp_id);
+            if (!$fly_docs['ok']) {
+                send_json_response('Update Documents Required', $fly_docs['message'], 'error', 200, ['doc_issues' => $fly_docs['issues']]);
+            }
+        }
 
         // Server-side mirror of the client's flight-date requirement (jquery.app.js /
         // employee_profile.js) - Fly + Annual only. The client check alone is bypassable

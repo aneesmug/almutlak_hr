@@ -140,6 +140,9 @@ $(document).on('click', '.applyvacationAtter', function (e) {
             data: { ajaxType: 'canApplyVacation', emp_id: empid, is_emergency: 0 },
         }).done(function(res) {
             window.vacationBlackoutRanges = (res && res.blackout_dates) || [];
+            window.vacationFlyDocMessage = (res && res.fly_doc_message) || '';
+            window.vacationFlyDocIssues = (res && res.fly_doc_issues) || [];
+            window.vacationFlyDocMinDays = (res && res.fly_doc_min_days) || 90;
             if (!res || res.ok === false) {
                 Swal.fire({ title: 'Error', text: (res && res.message) ? res.message : 'Unable to verify eligibility.', icon: 'error' ,allowOutsideClick:false});
                 return;
@@ -572,6 +575,68 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // ...existing code...
             
             // MODIFIED: Toggle Fields Logic - now includes salary type section, flight dates, remarks, and encashment
+            // Fly (Annual or Emergency) needs Iqama + Passport valid > 90 days: show which
+            // document is the problem in place of the date sections and lock Submit.
+            function applyFlyDocBlock() {
+                const issues = window.vacationFlyDocIssues || [];
+                const blocked = $('input[name="vac_type"]:checked').val() === 'Fly' && issues.length > 0;
+                $('#flyDocBlockSection').toggleClass('d-none', !blocked);
+                if (blocked) {
+                    $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection, #flightDatesSection').addClass('d-none');
+                    const esc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
+                    const isAr = document.documentElement.lang === 'ar';
+                    const minDays = window.vacationFlyDocMinDays || 90;
+                    const rows = issues.map(function (i) {
+                        let status;
+                        if (!i.expiry) {
+                            status = __('expiry_not_updated_in_system', 'Expiry date is not updated in the system');
+                        } else if (i.days_left < 0) {
+                            status = __('expired_on', 'Expired on') + ' ' + esc(i.expiry);
+                        } else {
+                            status = __('expires_on', 'Expires on') + ' ' + esc(i.expiry) + ' (' + i.days_left + ' ' + __('days_left', 'day(s) left') + ')';
+                        }
+                        return `<div class="tv-alert is-err"><i class="fa fa-exclamation-circle"></i><span><strong>${esc(isAr ? i.label_ar : i.label)}:</strong> ${status}</span></div>`;
+                    }).join('');
+                    $('#flyDocBlockBody').html(
+                        `<p style="margin:0 0 10px;font-size:13px;">${esc(__('fly_vacation_documents_rule', 'Fly vacation needs Iqama and Passport valid for more than {days} days.').replace('{days}', minDays))}</p>`
+                        + rows
+                        + `<p style="margin:10px 0 0;font-size:13px;font-weight:600;">${esc(__('update_documents_before_applying', 'Please update the document(s) above with HR before applying.'))}</p>`
+                        + `<div style="margin-top:12px;"><button type="button" class="btn btn-sm btn-primary" id="flyDocNotifyBtn"><i class="fa fa-paper-plane"></i> ${esc(__('notify_document_responsible', 'Send notification to responsible person'))}</button></div>`
+                        + `<div id="flyDocNotifyResult" style="margin-top:10px;"></div>`
+                    );
+                    $('#flyDocNotifyBtn').off('click').on('click', function () {
+                        const $btn = $(this).prop('disabled', true);
+                        const $out = $('#flyDocNotifyResult').html(`<div class="tv-alert is-warn"><i class="fa fa-spinner fa-spin"></i><span>${esc(__('sending', 'Sending...'))}</span></div>`);
+                        $.ajax({
+                            url: './includes/ajaxFile/leaveHandler.php',
+                            type: 'POST',
+                            dataType: 'JSON',
+                            data: { ajaxType: 'notifyFlyDocResponsible', emp_id: empid },
+                        }).always(function (res, status, xhr) {
+                            if (status !== 'success') res = (xhr && xhr.responseJSON) || (res && res.responseJSON) || {};
+                            res = res || {};
+                            const ok = res.type === 'success';
+                            const list = (res.sent || []).map(function (r) {
+                                return `<li><strong>${esc(r.name || r.email)}</strong> &lt;${esc(r.email)}&gt; - ${esc((r.docs || []).join(', '))}</li>`;
+                            }).join('');
+                            const failed = (res.failed || []).map(function (r) {
+                                return `<li>${esc(r.name || r.email)} &lt;${esc(r.email)}&gt;</li>`;
+                            }).join('');
+                            const msg = esc(res.message || __('an_error_occurred', 'An error occurred')).replace(/\n/g, '<br>');
+                            $out.html(`<div class="tv-alert ${ok ? '' : 'is-err'}" style="${ok ? 'background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;' : ''}">`
+                                + `<i class="fa ${ok ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i><span>${msg}`
+                                + (list ? `<ul style="margin:4px 0 0;padding-left:18px;">${list}</ul>` : '')
+                                + (res.cc ? `<div style="margin-top:4px;">${esc(__('cc_sent_to', 'CC:'))} <strong>${esc(res.cc.name)}</strong> &lt;${esc(res.cc.email)}&gt;</div>` : '')
+                                + (failed ? `<div style="margin-top:4px;">${esc(__('email_failed_for', 'Failed for:'))}</div><ul style="margin:0;padding-left:18px;">${failed}</ul>` : '')
+                                + `</span></div>`);
+                            // Sent: keep disabled so the same notice isn't mailed twice
+                            if (!ok) $btn.prop('disabled', false);
+                        });
+                    });
+                }
+                const btn = Swal.getConfirmButton && Swal.getConfirmButton();
+                if (btn) btn.disabled = blocked;
+            }
             function toggleVacationFields() {
                 const selectedVac = document.querySelector('input[name="vac_type"]:checked');
                 $('#flyTypeSection, #replacementSection, #date_select, #notesSection, #salaryTypeSection, #flightDatesSection, #encashSection').addClass('d-none');
@@ -719,6 +784,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             } else {
                                 $('#replacementSection, #date_select, #salaryTypeSection, #flightDatesSection, #notesSection').addClass('d-none');
                             }
+                            applyFlyDocBlock();
                             // Re-initialize date pickers when fly type changes to apply proper restrictions
                             setTimeout(() => {
                                 console.log('🔄 Fly type changed to:', flyVal);
@@ -727,6 +793,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         });
                     });
                 }
+                applyFlyDocBlock();
             }
             function initVacationForm() {
                 document.querySelectorAll('input[name="vac_type"]').forEach(radio => {
@@ -794,6 +861,11 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                 const flyType = $('input[name="fly_type"]:checked').val();
                 if (!flyType) {
                     Swal.showValidationMessage(__('select_vacation_type_validation'));
+                    return false;
+                }
+                // Fly (Annual or Emergency): Iqama and Passport must be valid > 90 days (server enforces too)
+                if (selectedRadio === 'Fly' && window.vacationFlyDocMessage) {
+                    Swal.showValidationMessage($('<div>').text(window.vacationFlyDocMessage).html().replace(/\n/g, '<br>'));
                     return false;
                 }
                 if (flyType === 'annual' && blockAnnual) {
@@ -1774,6 +1846,15 @@ function vacationApply_HTML(country) {
                         </label>
                     </div>
                 </div>
+            </div>
+
+            <!-- Fly: Iqama / Passport expiry block (filled by applyFlyDocBlock) -->
+            <div class="vacation-card d-none" id="flyDocBlockSection">
+                <div class="vacation-card-header">
+                    <i class="fa fa-id-card"></i>
+                    ${__('documents_update_required', 'Update Documents Required')}
+                </div>
+                <div id="flyDocBlockBody"></div>
             </div>
 
             <!-- Date Selection -->
