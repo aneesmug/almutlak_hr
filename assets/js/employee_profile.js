@@ -577,6 +577,7 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
             // MODIFIED: Toggle Fields Logic - now includes salary type section, flight dates, remarks, and encashment
             // Fly (Annual or Emergency) needs Iqama + Passport valid > 90 days: show which
             // document is the problem in place of the date sections and lock Submit.
+            // Styles: .fdb-* in sr_swal_theme.css.
             function applyFlyDocBlock() {
                 const issues = window.vacationFlyDocIssues || [];
                 const blocked = $('input[name="vac_type"]:checked').val() === 'Fly' && issues.length > 0;
@@ -586,27 +587,69 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                     const esc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
                     const isAr = document.documentElement.lang === 'ar';
                     const minDays = window.vacationFlyDocMinDays || 90;
+                    const fmt = (ymd) => {
+                        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || ''));
+                        if (!m) return esc(ymd);
+                        try {
+                            return esc(new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(isAr ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+                        } catch (e) { return esc(ymd); }
+                    };
                     const rows = issues.map(function (i) {
-                        let status;
+                        let tone, pill, meta, pct;
                         if (!i.expiry) {
-                            status = __('expiry_not_updated_in_system', 'Expiry date is not updated in the system');
+                            tone = 'slate';
+                            pill = __('not_updated', 'Not updated');
+                            meta = __('expiry_not_updated_in_system', 'Expiry date is not updated in the system');
+                            pct = 0;
                         } else if (i.days_left < 0) {
-                            status = __('expired_on', 'Expired on') + ' ' + esc(i.expiry);
+                            tone = 'red';
+                            pill = __('expired', 'Expired');
+                            meta = __('expired_on', 'Expired on') + ' ' + fmt(i.expiry);
+                            pct = 0;
                         } else {
-                            status = __('expires_on', 'Expires on') + ' ' + esc(i.expiry) + ' (' + i.days_left + ' ' + __('days_left', 'day(s) left') + ')';
+                            tone = 'amber';
+                            pill = i.days_left + ' ' + __('days_left', 'day(s) left');
+                            meta = __('expires_on', 'Expires on') + ' ' + fmt(i.expiry);
+                            pct = Math.max(4, Math.min(100, Math.round(i.days_left / minDays * 100)));
                         }
-                        return `<div class="tv-alert is-err"><i class="fa fa-exclamation-circle"></i><span><strong>${esc(isAr ? i.label_ar : i.label)}:</strong> ${status}</span></div>`;
+                        const icon = i.doc_key === 'passport' ? 'fa-passport' : 'fa-id-card';
+                        return `<div class="fdb-doc tone-${tone}">
+                                <span class="fdb-doc-icon"><i class="fa ${icon}"></i></span>
+                                <div class="fdb-doc-main">
+                                    <div class="fdb-doc-top">
+                                        <span class="fdb-doc-name">${esc(isAr ? i.label_ar : i.label)}</span>
+                                        <span class="fdb-pill"><span class="fdb-dot"></span>${esc(pill)}</span>
+                                    </div>
+                                    <div class="fdb-doc-meta">${meta}</div>
+                                    <div class="fdb-bar" title="${esc(__('required', 'Required'))}: ${minDays}+"><span style="width:${pct}%"></span></div>
+                                </div>
+                            </div>`;
                     }).join('');
-                    $('#flyDocBlockBody').html(
-                        `<p style="margin:0 0 10px;font-size:13px;">${esc(__('fly_vacation_documents_rule', 'Fly vacation needs Iqama and Passport valid for more than {days} days.').replace('{days}', minDays))}</p>`
-                        + rows
-                        + `<p style="margin:10px 0 0;font-size:13px;font-weight:600;">${esc(__('update_documents_before_applying', 'Please update the document(s) above with HR before applying.'))}</p>`
-                        + `<div style="margin-top:12px;"><button type="button" class="btn btn-sm btn-primary" id="flyDocNotifyBtn"><i class="fa fa-paper-plane"></i> ${esc(__('notify_document_responsible', 'Send notification to responsible person'))}</button></div>`
-                        + `<div id="flyDocNotifyResult" style="margin-top:10px;"></div>`
-                    );
+                    $('#flyDocBlockBody').html(`
+                        <div class="fdb">
+                            <div class="fdb-head">
+                                <span class="fdb-head-icon"><i class="fa fa-lock"></i></span>
+                                <div>
+                                    <div class="fdb-head-title">${esc(__('fly_vacation_locked', 'Fly vacation is locked'))}</div>
+                                    <div class="fdb-head-sub">${esc(__('fly_vacation_documents_rule', 'Fly vacation needs Iqama and Passport valid for more than {days} days.').replace('{days}', minDays))}</div>
+                                </div>
+                            </div>
+                            <div class="fdb-docs">${rows}</div>
+                            <div class="fdb-foot">
+                                <div class="fdb-foot-text"><i class="fa fa-info-circle"></i> ${esc(__('update_documents_before_applying', 'Please update the document(s) above with HR before applying.'))}</div>
+                                <button type="button" class="fdb-btn" id="flyDocNotifyBtn"><i class="fa fa-paper-plane"></i> ${esc(__('notify_document_responsible', 'Notify responsible person'))}</button>
+                            </div>
+                            <div id="flyDocNotifyResult"></div>
+                        </div>`);
                     $('#flyDocNotifyBtn').off('click').on('click', function () {
                         const $btn = $(this).prop('disabled', true);
-                        const $out = $('#flyDocNotifyResult').html(`<div class="tv-alert is-warn"><i class="fa fa-spinner fa-spin"></i><span>${esc(__('sending', 'Sending...'))}</span></div>`);
+                        const btnHtml = $btn.html();
+                        $btn.html(`<i class="fa fa-spinner fa-spin"></i> ${esc(__('sending', 'Sending...'))}`);
+                        const $out = $('#flyDocNotifyResult').empty();
+                        const person = (r, extra) => `<span class="fdb-person">
+                                <span class="fdb-avatar">${esc(String(r.name || r.email || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase())}</span>
+                                <span class="fdb-person-text"><strong>${esc(r.name || r.email)}</strong><small>${esc(r.email)}${extra ? ' · ' + esc(extra) : ''}</small></span>
+                            </span>`;
                         $.ajax({
                             url: './includes/ajaxFile/leaveHandler.php',
                             type: 'POST',
@@ -616,21 +659,24 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                             if (status !== 'success') res = (xhr && xhr.responseJSON) || (res && res.responseJSON) || {};
                             res = res || {};
                             const ok = res.type === 'success';
-                            const list = (res.sent || []).map(function (r) {
-                                return `<li><strong>${esc(r.name || r.email)}</strong> &lt;${esc(r.email)}&gt; - ${esc((r.docs || []).join(', '))}</li>`;
-                            }).join('');
-                            const failed = (res.failed || []).map(function (r) {
-                                return `<li>${esc(r.name || r.email)} &lt;${esc(r.email)}&gt;</li>`;
-                            }).join('');
-                            const msg = esc(res.message || __('an_error_occurred', 'An error occurred')).replace(/\n/g, '<br>');
-                            $out.html(`<div class="tv-alert ${ok ? '' : 'is-err'}" style="${ok ? 'background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;' : ''}">`
-                                + `<i class="fa ${ok ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i><span>${msg}`
-                                + (list ? `<ul style="margin:4px 0 0;padding-left:18px;">${list}</ul>` : '')
-                                + (res.cc ? `<div style="margin-top:4px;">${esc(__('cc_sent_to', 'CC:'))} <strong>${esc(res.cc.name)}</strong> &lt;${esc(res.cc.email)}&gt;</div>` : '')
-                                + (failed ? `<div style="margin-top:4px;">${esc(__('email_failed_for', 'Failed for:'))}</div><ul style="margin:0;padding-left:18px;">${failed}</ul>` : '')
-                                + `</span></div>`);
-                            // Sent: keep disabled so the same notice isn't mailed twice
-                            if (!ok) $btn.prop('disabled', false);
+                            const lines = String(res.message || __('an_error_occurred', 'An error occurred')).split('\n');
+                            const title = lines.shift();
+                            const sent = (res.sent || []).map(r => person(r, (r.docs || []).join(', '))).join('');
+                            const cc = res.cc ? `<div class="fdb-res-label">${esc(__('cc_sent_to', 'CC'))}</div>${person(res.cc, __('employee', 'Employee'))}` : '';
+                            const failed = (res.failed || []).map(r => person(r, r.error || '')).join('');
+                            $out.html(`<div class="fdb-res ${ok ? 'is-ok' : 'is-err'}">
+                                    <div class="fdb-res-title"><i class="fa ${ok ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i> ${esc(title)}</div>
+                                    ${sent ? `<div class="fdb-people">${sent}</div>` : ''}
+                                    ${cc ? `<div class="fdb-people">${cc}</div>` : ''}
+                                    ${failed ? `<div class="fdb-res-label">${esc(__('email_failed_for', 'Failed for'))}</div><div class="fdb-people">${failed}</div>` : ''}
+                                    ${lines.length ? `<div class="fdb-res-note">${lines.map(esc).join('<br>')}</div>` : ''}
+                                </div>`);
+                            if (ok) {
+                                // Sent: keep disabled so the same notice isn't mailed twice
+                                $btn.html(`<i class="fa fa-check"></i> ${esc(__('notification_sent', 'Notification sent'))}`);
+                            } else {
+                                $btn.prop('disabled', false).html(btnHtml);
+                            }
                         });
                     });
                 }

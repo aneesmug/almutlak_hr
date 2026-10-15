@@ -610,3 +610,62 @@ html.app-dark .vde-step.is-fail { background: #3a1717; border-color: #7a2a2a; }
 html.app-dark .vde-steps-title #vde_mail_count { color: #e2e8f0; }
 html.app-dark .vde-summary.is-ok { background: #12301f; border-color: #1f6a3c; color: #86efac; }
 html.app-dark .vde-summary.is-warn { background: #33270d; border-color: #6b4f12; color: #fcd34d; }
+
+/* --- Apply vacation: Fly locked by Iqama / Passport expiry (applyFlyDocBlock in jquery.app.js / employee_profile.js) --- */
+.fdb { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+[dir="rtl"] .fdb { text-align: right; }
+.fdb-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(135deg, #fff7ed, #fef2f2); border: 1px solid #fed7aa; }
+.fdb-head-icon { flex: 0 0 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #c2410c; box-shadow: 0 1px 2px rgba(194, 65, 12, .18); font-size: 16px; }
+.fdb-head-title { font-size: 14px; font-weight: 700; color: #7c2d12; line-height: 1.3; }
+.fdb-head-sub { font-size: 12.5px; color: #9a3412; margin-top: 2px; line-height: 1.4; }
+.fdb-docs { display: grid; gap: 8px; }
+.fdb-doc { --fdb-fg: #b45309; --fdb-bg: #fffbeb; --fdb-bd: #fde68a; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e5e7eb; border-inline-start: 4px solid var(--fdb-fg); }
+.fdb-doc.tone-red { --fdb-fg: #dc2626; --fdb-bg: #fef2f2; --fdb-bd: #fecaca; }
+.fdb-doc.tone-slate { --fdb-fg: #64748b; --fdb-bg: #f1f5f9; --fdb-bd: #e2e8f0; }
+.fdb-doc-icon { flex: 0 0 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--fdb-bg); color: var(--fdb-fg); font-size: 15px; }
+.fdb-doc-main { flex: 1; min-width: 0; }
+.fdb-doc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.fdb-doc-name { font-size: 13.5px; font-weight: 700; color: #1f2937; }
+.fdb-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--fdb-bg); color: var(--fdb-fg); border: 1px solid var(--fdb-bd); white-space: nowrap; }
+.fdb-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.fdb-doc-meta { font-size: 12.5px; color: #6b7280; margin-top: 3px; }
+.fdb-bar { height: 5px; border-radius: 999px; background: #f1f5f9; margin-top: 8px; overflow: hidden; }
+.fdb-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--fdb-fg); }
+.fdb-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+.fdb-foot-text { font-size: 12.5px; color: #475569; display: flex; gap: 6px; align-items: flex-start; flex: 1 1 220px; line-height: 1.45; }
+.fdb-foot-text .fa { color: #6366f1; margin-top: 2px; }
+.fdb-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 0; border-radius: 10px; background: #4f46e5; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(79, 70, 229, .3); transition: background .15s, transform .15s; white-space: nowrap; }
+.fdb-btn:hover:not(:disabled) { background: #4338ca; transform: translateY(-1px); }
+.fdb-btn:disabled { opacity: .7; cursor: default; }
+.fdb-res { border-radius: 12px; padding: 12px 14px; border: 1px solid; }
+.fdb-res.is-ok { background: #f0fdf4; border-color: #bbf7d0; }
+.fdb-res.is-err { background: #fef2f2; border-color: #fecaca; }
+.fdb-res-title { font-size: 13px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.fdb-res.is-ok .fdb-res-title { color: #166534; }
+.fdb-res.is-err .fdb-res-title { color: #991b1b; }
+.fdb-res-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #64748b; margin: 10px 0 4px; }
+.fdb-people { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fdb-person { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px; background: #fff; border: 1px solid #e5e7eb; max-width: 100%; }
+.fdb-avatar { flex: 0 0 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #eef2ff; color: #4338ca; font-size: 11px; font-weight: 700; }
+.fdb-person-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.fdb-person-text strong { font-size: 12.5px; color: #1f2937; }
+.fdb-person-text small { font-size: 11.5px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fdb-res-note { font-size: 12px; color: #64748b; margin-top: 10px; }
+@media (max-width: 520px) { .fdb-btn { width: 100%; justify-content: center; } }
+html.app-dark .fdb-head { background: linear-gradient(135deg, #33200d, #3a1717); border-color: #6b3a12; }
+html.app-dark .fdb-head-icon { background: #1e293b; color: #fdba74; }
+html.app-dark .fdb-head-title { color: #fed7aa; }
+html.app-dark .fdb-head-sub { color: #fdba74; }
+html.app-dark .fdb-doc, html.app-dark .fdb-person { background: #0f172a; border-color: #334155; }
+html.app-dark .fdb-doc { border-inline-start-color: var(--fdb-fg); }
+html.app-dark .fdb-doc.tone-amber, html.app-dark .fdb-doc:not(.tone-red):not(.tone-slate) { --fdb-fg: #fbbf24; --fdb-bg: #33270d; --fdb-bd: #6b4f12; }
+html.app-dark .fdb-doc.tone-red { --fdb-fg: #f87171; --fdb-bg: #3a1717; --fdb-bd: #7a2a2a; }
+html.app-dark .fdb-doc.tone-slate { --fdb-fg: #94a3b8; --fdb-bg: #1e293b; --fdb-bd: #334155; }
+html.app-dark .fdb-doc-name, html.app-dark .fdb-person-text strong { color: #e2e8f0; }
+html.app-dark .fdb-doc-meta, html.app-dark .fdb-person-text small, html.app-dark .fdb-foot-text, html.app-dark .fdb-res-note { color: #94a3b8; }
+html.app-dark .fdb-bar { background: #1e293b; }
+html.app-dark .fdb-avatar { background: #312e81; color: #c7d2fe; }
+html.app-dark .fdb-res.is-ok { background: #12301f; border-color: #1f6a3c; }
+html.app-dark .fdb-res.is-err { background: #3a1717; border-color: #7a2a2a; }
+html.app-dark .fdb-res.is-ok .fdb-res-title { color: #86efac; }
+html.app-dark .fdb-res.is-err .fdb-res-title { color: #fca5a5; }
