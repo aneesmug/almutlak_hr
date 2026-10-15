@@ -349,5 +349,175 @@
         }
     }
 
+    /**
+     * "Request submitted" popup for AJAX responses that carry a `submitted` block
+     * (e.g. leaveHandler.php applyVacation): request number with copy, type, period,
+     * duration and who it is pending with. Falls back to a plain popup otherwise.
+     *
+     *   srRequestSubmitted(response, { kind: 'Vacation request' }).then(...)
+     */
+    function initials(name) {
+        var parts = String(name || '').trim().split(/\s+/);
+        return ((parts[0] || '').charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : '')).toUpperCase() || '?';
+    }
+    function fmtDate(ymd) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || ''));
+        if (!m) return esc(ymd || '-');
+        var d = new Date(+m[1], +m[2] - 1, +m[3]);
+        try {
+            return esc(d.toLocaleDateString(document.documentElement.lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+        } catch (e) { return esc(ymd); }
+    }
+
+    window.srRequestSubmitted = function (response, opts) {
+        opts = opts || {};
+        response = response || {};
+        var data = response.submitted;
+        if (!window.Swal) return Promise.resolve({});
+        if (!data || response.type !== 'success') {
+            return window.Swal.fire({ title: response.title, text: response.message, icon: response.type || 'info', allowOutsideClick: false });
+        }
+
+        var typeLabel = [data.vac_type, data.fly_type ? data.fly_type.charAt(0).toUpperCase() + data.fly_type.slice(1) : '']
+            .filter(Boolean).map(esc).join(' · ');
+        var days = parseInt(data.days, 10) || 0;
+        var rows = '';
+        if (typeLabel) rows += '<div class="srq-row"><span>' + esc(t('type', 'Type')) + '</span><b>' + typeLabel + '</b></div>';
+        if (data.start_date) {
+            rows += '<div class="srq-row"><span>' + esc(t('period', 'Period')) + '</span><b>' + fmtDate(data.start_date) +
+                ' <i class="srq-arrow">→</i> ' + fmtDate(data.end_date) + '</b></div>';
+        }
+        if (days) rows += '<div class="srq-row"><span>' + esc(t('duration', 'Duration')) + '</span><b>' + days + ' ' + esc(days === 1 ? t('day', 'day') : t('days', 'days')) + '</b></div>';
+
+        var pending = data.pending_with
+            ? '<div class="srq-pending">' +
+                  '<span class="srq-avatar">' + esc(initials(data.pending_with)) + '</span>' +
+                  '<span class="srq-pending-text"><small>' + esc(t('pending_with', 'Pending with')) + '</small><b>' + esc(data.pending_with) + '</b></span>' +
+                  '<span class="srq-badge"><i></i>' + esc(t('awaiting_approval', 'Awaiting approval')) + '</span>' +
+              '</div>'
+            : '';
+
+        var html =
+            '<div class="srq">' +
+                '<div class="srq-no">' +
+                    '<span class="srq-no-label">' + esc(t('request_no', 'Request No.')) + '</span>' +
+                    '<span class="srq-no-value">' + esc(data.request_no) + '</span>' +
+                    '<button type="button" class="srq-copy" data-copy="' + esc(data.request_no) + '">' + esc(t('copy', 'Copy')) + '</button>' +
+                '</div>' +
+                (rows ? '<div class="srq-rows">' + rows + '</div>' : '') +
+                pending +
+                '<p class="srq-note">' + esc(t('you_will_be_notified_on_approval', 'You will be notified by email as your request moves through approval.')) + '</p>' +
+            '</div>';
+
+        return window.Swal.fire({
+            title: headerHtml(ICONS.success,
+                esc(t('request_submitted', 'Request submitted')) +
+                '<small class="srs-head-sub">' + esc(opts.kind || t('vacation_request', 'Vacation request')) + '</small>'),
+            html: html,
+            confirmButtonText: esc(t('done', 'Done')),
+            confirmButtonColor: '#16a34a',
+            allowOutsideClick: false,
+            width: 520,
+            didOpen: function (popup) {
+                var btn = popup.querySelector('.srq-copy');
+                if (!btn) return;
+                btn.addEventListener('click', function () {
+                    var text = btn.getAttribute('data-copy');
+                    var done = function () {
+                        btn.textContent = t('copied', 'Copied');
+                        btn.classList.add('is-done');
+                    };
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(done, function () {});
+                    } else {
+                        var ta = document.createElement('textarea');
+                        ta.value = text; popup.appendChild(ta); ta.select();
+                        try { document.execCommand('copy'); done(); } catch (e) {}
+                        popup.removeChild(ta);
+                    }
+                });
+            }
+        });
+    };
+
+    /**
+     * "Approved" popup for AJAX responses carrying an `approval` block
+     * (leaveHandler.php approveVacation): request, employee, period, chain progress and
+     * either the next approver or "fully approved". Falls back to a plain popup otherwise.
+     */
+    window.srRequestApproved = function (response, opts) {
+        opts = opts || {};
+        response = response || {};
+        var a = response.approval;
+        if (!window.Swal) return Promise.resolve({});
+        if (!a || response.type !== 'success') {
+            return window.Swal.fire({ title: response.title, text: response.message, icon: response.type || 'info', allowOutsideClick: false });
+        }
+
+        var typeLabel = [a.vac_type, a.fly_type ? a.fly_type.charAt(0).toUpperCase() + a.fly_type.slice(1) : '']
+            .filter(Boolean).map(esc).join(' · ');
+        var days = parseInt(a.days, 10) || 0;
+        var total = parseInt(a.total_levels, 10) || 0;
+        var done = a.is_final ? total : Math.min(parseInt(a.approved_levels, 10) || 0, total);
+
+        var rows = '';
+        if (a.employee) rows += '<div class="srq-row"><span>' + esc(t('employee', 'Employee')) + '</span><b>' + esc(a.employee) + '</b></div>';
+        if (typeLabel) rows += '<div class="srq-row"><span>' + esc(t('type', 'Type')) + '</span><b>' + typeLabel + '</b></div>';
+        if (a.start_date) {
+            rows += '<div class="srq-row"><span>' + esc(t('period', 'Period')) + '</span><b>' + fmtDate(a.start_date) +
+                ' <i class="srq-arrow">→</i> ' + fmtDate(a.end_date) +
+                (days ? ' <em class="srq-days">' + days + ' ' + esc(days === 1 ? t('day', 'day') : t('days', 'days')) + '</em>' : '') + '</b></div>';
+        }
+
+        var progress = '';
+        if (total > 0) {
+            var steps = '';
+            for (var i = 1; i <= total; i++) {
+                steps += '<span class="srq-step' + (i <= done ? ' is-done' : (i === done + 1 && !a.is_final ? ' is-next' : '')) + '"></span>';
+            }
+            progress = '<div class="srq-progress">' +
+                '<div class="srq-progress-head"><span>' + esc(t('approval_progress', 'Approval progress')) + '</span><b>' + done + ' / ' + total + '</b></div>' +
+                '<div class="srq-steps">' + steps + '</div></div>';
+        }
+
+        var next = '';
+        if (a.is_final) {
+            next = '<div class="srq-pending is-final">' +
+                '<span class="srq-avatar">' + ICONS.success.svg + '</span>' +
+                '<span class="srq-pending-text"><small>' + esc(t('status', 'Status')) + '</small><b>' + esc(t('fully_approved', 'Fully approved')) + '</b></span>' +
+                '<span class="srq-badge is-ok">' + esc(t('completed', 'Completed')) + '</span></div>';
+        } else if (a.next_approver) {
+            next = '<div class="srq-pending">' +
+                '<span class="srq-avatar">' + esc(initials(a.next_approver)) + '</span>' +
+                '<span class="srq-pending-text"><small>' + esc(t('next_approver', 'Next approver')) + '</small><b>' + esc(a.next_approver) + '</b></span>' +
+                '<span class="srq-badge"><i></i>' + esc(t('awaiting_approval', 'Awaiting approval')) + '</span></div>';
+        }
+
+        var html =
+            '<div class="srq">' +
+                '<div class="srq-no">' +
+                    '<span class="srq-no-label">' + esc(t('request_no', 'Request No.')) + '</span>' +
+                    '<span class="srq-no-value">' + esc(a.request_no) + '</span>' +
+                '</div>' +
+                (rows ? '<div class="srq-rows">' + rows + '</div>' : '') +
+                progress + next +
+                (a.comment ? '<div class="srq-comment"><small>' + esc(t('your_comment', 'Your comment')) + '</small>' + esc(a.comment) + '</div>' : '') +
+                (a.warning ? '<div class="srq-warn">' + esc(a.warning) + '</div>' : '') +
+            '</div>';
+
+        var sub = esc(opts.kind || t('vacation_request', 'Vacation request'));
+        if (a.approved_by) sub += ' · ' + esc(t('approved_by', 'Approved by')) + ' ' + esc(a.approved_by);
+
+        return window.Swal.fire({
+            title: headerHtml(ICONS.success, esc(a.is_final ? t('request_fully_approved', 'Request fully approved') : t('approved', 'Approved')) +
+                '<small class="srs-head-sub">' + sub + '</small>'),
+            html: html,
+            confirmButtonText: esc(t('done', 'Done')),
+            confirmButtonColor: '#16a34a',
+            allowOutsideClick: false,
+            width: 540
+        });
+    };
+
     install();
 })();

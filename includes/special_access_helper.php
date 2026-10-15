@@ -46,6 +46,7 @@ if (!function_exists('get_special_access_labels')) {
             'view_vacation_balance_history' => 'View Vacation Balance History',
             'view_remaining_balance_in_report' => 'Show Remaining Balance in Vacation Report',
             'view_all_rejoin_requests' => 'Rejoin Approvals: View All Requests Card (All Employees, Read-Only)',
+            'edit_vacation_dates' => 'Vacation: Edit Start / Return Dates (Adjusts Balance & Emails Employee + Approvers)',
             'manage_employee_request_block' => 'Block/Unblock Employee from All Requests',
             'manage_employee_request_type_block' => 'Block Employee by Specific Request Type',
             'manage_global_request_blocks' => 'Manage Request Type Blocks (Global, All Employees)',
@@ -216,6 +217,12 @@ if (!function_exists('get_special_access_categories')) {
                     'view_vacation_balance_history',
                     'view_remaining_balance_in_report',
                     'view_all_rejoin_requests',
+                ],
+            ],
+            'Vacation Actions' => [
+                'icon' => 'fa-calendar-alt',
+                'keys' => [
+                    'edit_vacation_dates',
                 ],
             ],
             'Payroll Checklist Report' => [

@@ -927,12 +927,10 @@ function openVacationApplyModal(empid, deptId, country, currentBalance, forceEme
                         data: formData,
                     })
                     .done(function (response) {
-                        Swal.fire({
-                            title: response.title,
-                            text: response.message,
-                            icon: response.type,
-                            allowOutsideClick: false
-                        }).then(function (isConfirm) {
+                        const showResult = typeof window.srRequestSubmitted === 'function'
+                            ? window.srRequestSubmitted(response)
+                            : Swal.fire({ title: response.title, text: response.message, icon: response.type, allowOutsideClick: false });
+                        showResult.then(function (isConfirm) {
                             if (isConfirm.value && response.type === 'success') {
                                 location.reload();
                             }

@@ -719,138 +719,92 @@ if ($can_see_all_depts) {
                     }
                     const invalidPassport = missingPassport || expSoon;
 
+                    // --- Traveler verification markup (styles: .tv-* in sr_swal_theme.css) ---
+                    const tvEsc = (v) => $('<div>').text(v == null || v === '' ? '-' : String(v)).html();
+                    const tvItem = (icon, label, value, strong) => `
+                        <div class="tv-item">
+                            <span class="tv-label"><i class="fa fa-${icon}"></i>${label}</span>
+                            <span class="tv-value${strong ? ' is-strong' : ''}">${value}</span>
+                        </div>`;
                     const passportWarningHtml = invalidPassport ? `
-                    <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #f5c2c7;">
-                        <p style="margin: 0; font-size: 13px; color: #842029;">
-                            <i class="fa fa-exclamation-circle" style="margin-right: 6px;"></i>
+                        <div class="tv-alert is-err"><i class="fa fa-exclamation-circle"></i><span>
                             <strong>${__('passport_validation_issue') || 'Passport Issue:'}</strong>
                             ${missingPassport ? (__('passport_missing_message') || 'Passport number is missing.') : ''}
-                            ${missingPassport && expSoon ? ' ' : ''}
                             ${!missingPassport && expSoon ? (__('passport_expiring_soon_message') || 'Passport expires within 3 months of travel.') : ''}
-                        </p>
-                    </div>
-                ` : '';
+                        </span></div>` : '';
 
-                    // Build existing passport doc HTML
+                    // Existing passport copy (ids are used by didOpen: open / replace)
                     let existingPassportHtml = '';
                     if (data.passport_doc_url) {
                         const isImg = data.passport_doc_is_image;
                         const ext = data.passport_doc_ext || '';
-                        const viewContent = isImg ? `<img src="${data.passport_doc_url}" alt="Passport Copy" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;"/>` : `<a href="${data.passport_doc_url}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa fa-file"></i> View Passport (${ext.toUpperCase()})</a>`;
+                        const viewContent = isImg
+                            ? `<img src="${data.passport_doc_url}" alt="Passport Copy" class="tv-doc-img"/>`
+                            : `<a href="${data.passport_doc_url}" target="_blank" class="tv-doc-file"><i class="fa fa-file-pdf"></i> ${__('view_passport') || 'View Passport'} (${ext.toUpperCase()})</a>`;
                         existingPassportHtml = `
-                        <div id="existing-passport-doc" style="background:#eef7ff; padding:12px; border-radius:6px; margin-top:15px; border:1px solid #c5e0ff;">
-                            <h6 style="margin:0 0 10px; color:#0b5eb7;"><i class='fa fa-file'></i> ${__('current_passport_copy') || 'Current Passport Copy'}</h6>
-                            <div style="margin-bottom:10px;">${viewContent}</div>
-                            <div class="btn-group" role="group">
-                                <button type="button" id="open-passport-btn" class="btn btn-sm btn-primary"><i class="fa fa-external-link-alt"></i> ${__('open_passport_file') || 'Open Passport'}</button>
-                                <button type="button" id="replace-passport-btn" class="btn btn-sm btn-warning"><i class="fa fa-sync-alt"></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
+                        <div id="existing-passport-doc" class="tv-doc">
+                            <div class="tv-doc-view">${viewContent}</div>
+                            <div class="tv-doc-actions">
+                                <button type="button" id="open-passport-btn" class="srs-tool"><i class="fa fa-external-link-alt"></i> ${__('open_passport_file') || 'Open Passport'}</button>
+                                <button type="button" id="replace-passport-btn" class="srs-tool"><i class="fa fa-sync-alt"></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
                             </div>
                             <input type="file" id="replace_passport_input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
-                        </div>
-                    `;
+                            <small class="tv-hint" id="replace-passport-hint" style="display:none;"><i class="fa fa-info-circle"></i> ${__('upload_new_passport_hint') || 'Select a new file to replace the stored passport copy.'}</small>
+                        </div>`;
                     }
-
-                    // Build passport section
                     const requireUpload = !data.passport_doc_url;
                     const passportSectionHtml = `
-                    <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #3085d6;">
-                        <h5 style="color: #004085; margin-top: 0; border-bottom: 2px solid #3085d6; padding-bottom: 8px;">
-                            <i class="fa fa-file-upload"></i> ${__('passport_copy') || 'Passport Copy'} ${requireUpload ? '<span class="text-danger">*</span>' : ''}
-                        </h5>
-                        ${requireUpload ? `
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label for="passport_file" style="font-weight: 600; color: #666; margin-bottom: 8px; display: block;">
-                                    <i class="fa fa-passport" style="margin-right: 5px; color: #3085d6;"></i> ${__('select_passport_file') || 'Select passport copy (PDF, JPG, PNG)'}
-                                </label>
-                                <input type="file" id="passport_file" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file" style="padding: 10px; border: 2px dashed #3085d6; border-radius: 6px; background: #f8f9fa; width: 100%;">
-                                <small class="form-text text-muted" style="margin-top: 8px; display: block;">
-                                    <i class="fa fa-info-circle"></i> ${__('passport_file_help') || 'Please upload a clear copy of the employee passport. Accepted formats: PDF, JPG, PNG (Max 5MB)'}
-                                </small>
-                            </div>
-                        ` : ''}
-                        ${existingPassportHtml}
-                    </div>
-                `;
+                        <div class="tv-card">
+                            <div class="tv-card-head"><span class="tv-ico tone-sky"><i class="fa fa-file-upload"></i></span>${__('passport_copy') || 'Passport Copy'}
+                                ${requireUpload ? `<span class="tv-tag is-req">${__('required') || 'Required'}</span>` : `<span class="tv-tag is-ok"><i class="fa fa-check"></i> ${__('on_file') || 'On file'}</span>`}</div>
+                            ${requireUpload ? `
+                                <label for="passport_file" class="tv-drop">
+                                    <i class="fa fa-cloud-upload-alt"></i>
+                                    <span>${__('select_passport_file') || 'Select passport copy (PDF, JPG, PNG)'}</span>
+                                    <small>${__('passport_file_help_short', 'PDF, JPG or PNG · max 5MB')}</small>
+                                    <input type="file" id="passport_file" accept=".pdf,.jpg,.jpeg,.png" class="tv-drop-input" onchange="var f=this.files[0];this.parentNode.classList.toggle('has-file',!!f);if(f)this.parentNode.querySelector('span').textContent=f.name;">
+                                </label>` : ''}
+                            ${existingPassportHtml}
+                        </div>`;
 
-                    // Show confirmation modal
                     Swal.fire({
-                        title: '<i class="fa fa-passport"></i> ' + (__('verify_traveler_information') || 'Verify Traveler Information'),
+                        title: `<span class="srs-head"><span class="srs-icon tone-sky"><i class="fa fa-passport"></i></span><span class="srs-head-text">${__('verify_traveler_information') || 'Verify Traveler Information'}<small class="srs-head-sub">${tvEsc(data.employee_name)} · ${tvEsc(data.request_inv_no)}</small></span></span>`,
                         html: `
-                        <div style="text-align: left; max-height: 500px; overflow-y: auto;">
-                            ${passportWarningHtml}
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                <h5 style="color: #667eea; margin-top: 0; border-bottom: 2px solid #667eea; padding-bottom: 8px;">
-                                    <i class="fa fa-user"></i> ${__('employee_information') || 'Employee Information'}
-                                </h5>
-                                <table style="width: 100%; font-size: 14px;">
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Name:</td>
-                                        <td style="padding: 8px;">${data.employee_name || '-'}</td>
-                                    </tr>
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Employee ID:</td>
-                                        <td style="padding: 8px;">${data.emp_id || '-'}</td>
-                                    </tr>
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Department:</td>
-                                        <td style="padding: 8px;">${data.department_name || '-'}</td>
-                                    </tr>
-                                </table>
+                            <div class="tv-wrap">
+                                ${passportWarningHtml}
+                                <div class="tv-card">
+                                    <div class="tv-card-head"><span class="tv-ico tone-indigo"><i class="fa fa-user"></i></span>${__('employee_information') || 'Employee Information'}</div>
+                                    <div class="tv-grid">
+                                        ${tvItem('id-card', __('employee_name') || 'Employee Name', tvEsc(data.employee_name), true)}
+                                        ${tvItem('hashtag', __('emp_id') || 'Employee ID', tvEsc(data.emp_id))}
+                                        ${tvItem('building', __('department') || 'Department', tvEsc(data.department_name))}
+                                        ${tvItem('passport', __('passport_no') || 'Passport No', `<span class="srs-mono">${tvEsc(data.passport_number)}</span>`, true)}
+                                    </div>
+                                </div>
+                                <div class="tv-card">
+                                    <div class="tv-card-head"><span class="tv-ico tone-amber"><i class="fa fa-plane"></i></span>${__('trip_details') || 'Trip Details'}</div>
+                                    <div class="tv-route">
+                                        <div><small>${__('start_date') || 'Start'}</small><b>${tvEsc(data.trip_start_date)}</b></div>
+                                        <div class="tv-route-mid"><i class="fa fa-plane"></i><span>${tvEsc(data.destination)}</span></div>
+                                        <div><small>${__('end_date') || 'End'}</small><b>${tvEsc(data.trip_end_date)}</b></div>
+                                    </div>
+                                    <div class="tv-grid">
+                                        ${tvItem('clock', __('duration') || 'Duration', `${tvEsc(data.trip_days)} ${__('days') || 'days'}`)}
+                                        ${tvItem('bus', __('transportation') || 'Transportation', tvEsc(__(data.transportation_type) || data.transportation_type))}
+                                    </div>
+                                </div>
+                                ${passportSectionHtml}
+                                <div class="tv-alert is-warn"><i class="fa fa-exclamation-triangle"></i><span><strong>${__('important') || 'Important'}:</strong> ${__('verify_information_notice') || 'Please verify all information is correct before sending the email.'}</span></div>
+                                <div class="tv-alert is-err"><i class="fa fa-ban"></i><span><strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}</span></div>
                             </div>
-
-                            <div style="background: #fff9e6; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
-                                <h5 style="color: #856404; margin-top: 0; border-bottom: 2px solid #ffc107; padding-bottom: 8px;">
-                                    <i class="fa fa-plane"></i> ${__('trip_details') || 'Trip Details'}
-                                </h5>
-                                <table style="width: 100%; font-size: 14px;">
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Destination:</td>
-                                        <td style="padding: 8px;">${data.destination || '-'}</td>
-                                    </tr>
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Trip Dates:</td>
-                                        <td style="padding: 8px;">${data.trip_start_date} to ${data.trip_end_date} (${data.trip_days} days)</td>
-                                    </tr>
-                                    <tr style="border-bottom: 1px solid #dee2e6;">
-                                        <td style="padding: 8px; font-weight: 600;">Transportation:</td>
-                                        <td style="padding: 8px;"><i class="fa fa-plane"></i> ${__(data.transportation_type)}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding: 8px; font-weight: 600;">Reference Number:</td>
-                                        <td style="padding: 8px;">${data.request_inv_no || '-'}</td>
-                                    </tr>
-                                </table>
-                            </div>
-
-                            <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffc107;">
-                                <p style="margin: 0; font-size: 13px; color: #856404;">
-                                    <i class="fa fa-exclamation-triangle" style="margin-right: 5px;"></i>
-                                    <strong>${__('important') || 'Important'}:</strong> ${__('verify_information_notice') || 'Please verify all information is correct before sending the email.'}
-                                </p>
-                            </div>
-
-                            <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #f5c2c7;">
-                                <p style="margin: 0; font-size: 13px; color: #842029;">
-                                    <i class="fa fa-ban" style="margin-right: 5px;"></i>
-                                    <strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}
-                                </p>
-                            </div>
-
-                            ${passportSectionHtml}
-                        </div>
-                    `,
-                        icon: 'question',
+                        `,
                         showCancelButton: true,
-                        confirmButtonText: '<i class="fa fa-check-circle"></i> ' + (__('confirm_and_send') || 'Confirm & Send Email'),
-                        cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
-                        confirmButtonColor: '#28a745',
-                        cancelButtonColor: '#dc3545',
+                        confirmButtonText: '<i class="fa fa-paper-plane"></i> ' + (__('confirm_and_send') || 'Confirm & Send Email'),
+                        cancelButtonText: __('cancel') || 'Cancel',
+                        confirmButtonColor: '#16a34a',
+                        cancelButtonColor: '#64748b',
                         allowOutsideClick: false,
-                        width: '650px',
-                        customClass: {
-                            confirmButton: 'btn btn-success btn-lg',
-                            cancelButton: 'btn btn-danger btn-lg'
-                        },
+                        width: '640px',
                         didOpen: () => {
                             const confirmBtn = Swal.getConfirmButton();
                             const passportFileInput = document.getElementById('passport_file');

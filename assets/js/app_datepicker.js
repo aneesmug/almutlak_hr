@@ -132,6 +132,109 @@
         return out;
     }
 
+    // Year picker: the header year (flatpickr's small number field with arrows) becomes a
+    // button; clicking it opens a grid of years (12 per page, arrows to page) over the days.
+    // Years outside minDate/maxDate are blocked. Works for single, range and month pickers.
+    var YEARS_PER_PAGE = 12;
+
+    // api: { year(): view year, setYear(y), selectedYears(): [y], minYear(), maxYear() }
+    function buildYearPanel(cal, hideEl, api) {
+        if (!cal || cal._appDpYears || !hideEl) return null;
+        var ar = isArabic();
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'app-dp-year-btn';
+        btn.setAttribute('aria-label', ar ? 'اختر السنة' : 'Choose year');
+        hideEl.parentNode.insertBefore(btn, hideEl.nextSibling);
+        hideEl.classList.add('app-dp-year-hidden');
+
+        var panel = document.createElement('div');
+        panel.className = 'app-dp-years';
+        panel.innerHTML =
+            '<div class="app-dp-years-head">' +
+                '<button type="button" class="app-dp-years-nav" data-step="-1" aria-label="' + (ar ? 'السابق' : 'Previous') + '">&lsaquo;</button>' +
+                '<span class="app-dp-years-label"></span>' +
+                '<button type="button" class="app-dp-years-nav" data-step="1" aria-label="' + (ar ? 'التالي' : 'Next') + '">&rsaquo;</button>' +
+            '</div>' +
+            '<div class="app-dp-years-grid"></div>';
+        cal.appendChild(panel);
+        cal._appDpYears = panel;
+
+        var grid = panel.querySelector('.app-dp-years-grid');
+        var label = panel.querySelector('.app-dp-years-label');
+        var pageStart = 0;
+
+        function sync() {
+            btn.innerHTML = '<span>' + api.year() + '</span><i class="app-dp-caret"></i>';
+        }
+        function render() {
+            var min = api.minYear(), max = api.maxYear(), view = api.year(), now = api.thisYear();
+            var selected = api.selectedYears();
+            var html = '';
+            for (var y = pageStart; y < pageStart + YEARS_PER_PAGE; y++) {
+                var cls = 'app-dp-year';
+                if (y === view) cls += ' is-view';
+                if (selected.indexOf(y) !== -1) cls += ' is-selected';
+                if (y === now) cls += ' is-today';
+                html += '<button type="button" class="' + cls + '" data-year="' + y + '"' + (y < min || y > max ? ' disabled' : '') + '>' + y + '</button>';
+            }
+            grid.innerHTML = html;
+            label.textContent = pageStart + ' – ' + (pageStart + YEARS_PER_PAGE - 1);
+            panel.querySelector('[data-step="-1"]').disabled = pageStart <= min;
+            panel.querySelector('[data-step="1"]').disabled = pageStart + YEARS_PER_PAGE - 1 >= max;
+        }
+        function open() {
+            var view = api.year();
+            pageStart = view - (view % YEARS_PER_PAGE);
+            var head = cal.querySelector('.flatpickr-months');
+            panel.style.top = (head ? head.offsetTop + head.offsetHeight : 0) + 'px';
+            render();
+            cal.classList.add('app-dp-years-open');
+        }
+        function close() { cal.classList.remove('app-dp-years-open'); }
+
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            cal.classList.contains('app-dp-years-open') ? close() : open();
+        });
+        panel.addEventListener('click', function (e) {
+            var t = e.target.closest('button');
+            if (!t || t.disabled) return;
+            e.preventDefault();
+            if (t.hasAttribute('data-step')) {
+                pageStart += (+t.getAttribute('data-step')) * YEARS_PER_PAGE;
+                render();
+            } else if (t.hasAttribute('data-year')) {
+                api.setYear(+t.getAttribute('data-year'));
+                sync();
+                close();
+            }
+        });
+
+        sync();
+        return { sync: sync, close: close };
+    }
+
+    function attachYearPanel(fp) {
+        if (!fp.yearElements || !fp.yearElements.length) return;
+        var ui = buildYearPanel(fp.calendarContainer, fp.yearElements[0].parentNode /* .numInputWrapper */, {
+            year: function () { return fp.currentYear; },
+            thisYear: function () { return new Date().getFullYear(); },
+            setYear: function (y) {
+                fp.changeYear(y);
+                // changeYear clamps the month to min/max; redraw so days match the new year
+                fp.redraw();
+            },
+            selectedYears: function () { return (fp.selectedDates || []).map(function (d) { return d.getFullYear(); }); },
+            minYear: function () { return fp.config.minDate ? fp.config.minDate.getFullYear() : -Infinity; },
+            maxYear: function () { return fp.config.maxDate ? fp.config.maxDate.getFullYear() : Infinity; }
+        });
+        if (!ui) return;
+        fp._appDpSyncYear = ui.sync;
+        fp._appDpCloseYears = ui.close;
+    }
+
     function create(target, opts, mode) {
         var el = toElement(target);
         if (!el) return null;
@@ -171,6 +274,7 @@
                     fp.calendarContainer.setAttribute('dir', 'rtl');
                 }
                 if (o.inline) fp.calendarContainer.classList.add('app-dp-inline');
+                attachYearPanel(fp);
                 if (userOnReady) userOnReady.apply(this, arguments);
             },
             onOpen: function (selected, str, fp) {
@@ -178,11 +282,13 @@
                 fp._appDpScroll = scrollParents(fp.input);
                 fp._appDpScroll.forEach(function (p) { p.addEventListener('scroll', reposition, { passive: true }); });
                 fp._appDpReposition = reposition;
+                if (fp._appDpSyncYear) fp._appDpSyncYear();
                 if (userOnOpen) userOnOpen.apply(this, arguments);
             },
             onClose: function (selected, str, fp) {
                 (fp._appDpScroll || []).forEach(function (p) { p.removeEventListener('scroll', fp._appDpReposition); });
                 fp._appDpScroll = [];
+                if (fp._appDpCloseYears) fp._appDpCloseYears();
                 // Range picker closed after only the first click: keep it as a 1-day range.
                 if (mode === 'range' && selected.length === 1) {
                     fp.setDate([selected[0], selected[0]], true);
@@ -190,11 +296,17 @@
                 if (userOnClose) userOnClose.apply(this, arguments);
             },
             onChange: function (selected, str, fp) {
+                if (fp._appDpSyncYear) fp._appDpSyncYear();
                 fp.input.dispatchEvent(new Event('change', { bubbles: true }));
                 if (userOnChange) userOnChange.apply(this, arguments);
             }
         };
-        if (o.onMonthChange) config.onMonthChange = o.onMonthChange;
+        // Keep the year button in step with arrow / keyboard / setDate navigation
+        var syncYear = function (selected, str, fp) { if (fp._appDpSyncYear) fp._appDpSyncYear(); };
+        config.onYearChange = [syncYear];
+        config.onMonthChange = [syncYear];
+        if (o.onYearChange) config.onYearChange.push(o.onYearChange);
+        if (o.onMonthChange) config.onMonthChange.push(o.onMonthChange);
         if (o.onDayCreate) config.onDayCreate = o.onDayCreate;
         if (o.enableDates) config.enable = o.enableDates;
         if (o.plugins) config.plugins = o.plugins;
@@ -475,6 +587,15 @@
             self._render();
         });
 
+        this._years = buildYearPanel(cal, this.$year, {
+            year: function () { return self.view.y; },
+            thisYear: function () { return toHijriParts(new Date()).y; },
+            setYear: function (y) { self.view.y = y; self._render(); },
+            selectedYears: function () { return self.selectedDates.map(function (d) { return toHijriParts(d).y; }); },
+            minYear: function () { return self.minDate ? toHijriParts(self.minDate).y : -Infinity; },
+            maxYear: function () { return self.maxDate ? toHijriParts(self.maxDate).y : Infinity; }
+        });
+
         if (this.o.inline) {
             this.el.parentNode.insertBefore(cal, this.el.nextSibling);
         } else if (this.o.static || (this.o.static === undefined && this.el.closest && this.el.closest('.modal'))) {
@@ -508,6 +629,7 @@
         this.$year.innerHTML = years;
         this.$year.value = String(v.y);
         this.$month.value = String(v.m);
+        if (this._years) this._years.sync();
 
         var first = fromHijriParts(v.y, v.m, 1);
         if (!first) return;
@@ -573,6 +695,7 @@
         var self = this;
         this.cal.classList.remove('open');
         this.isOpen = false;
+        if (this._years) this._years.close();
         document.removeEventListener('mousedown', this._outside, true);
         document.removeEventListener('touchstart', this._outside, true);
         document.removeEventListener('keydown', this._key);

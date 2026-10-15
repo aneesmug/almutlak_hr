@@ -1670,11 +1670,13 @@ elseif ($ajaxType == 'applyVacation') {
 
         // 10. Send success response with next approver name (where it will wait)
         $pending_with_text = '';
+        $pending_with_name = '';
         if ($first_approver && !empty($first_approver['approver_id'])) {
             $first_details = getEmployeeDetailsForApproval($conDB, (int)$first_approver['approver_id']);
             if ($first_details && !empty($first_details['name'])) {
                 $label = function_exists('__') ? __('pending_with') : 'Pending with';
                 $pending_with_text = " $label: " . $first_details['name'] . ".";
+                $pending_with_name = (string)$first_details['name'];
 
                 // Notify first approver using ApprovalChainManager
                 $chainManager->notifyApprover(
@@ -1726,7 +1728,18 @@ elseif ($ajaxType == 'applyVacation') {
             $log_stmt->close();
         }
         
-        send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success");
+        // Structured copy of the message for the client's "request submitted" popup
+        send_json_response("Success!", sprintf(__("your_vacation_request_submitted_for_approval"), htmlspecialchars($request_inv_no)) . $pending_with_text, "success", 200, [
+            'submitted' => [
+                'request_no' => (string)$request_inv_no,
+                'pending_with' => $pending_with_name,
+                'start_date' => (string)$start_date,
+                'end_date' => (string)$end_date,
+                'days' => (int)$vacdays,
+                'vac_type' => (string)$vac_type,
+                'fly_type' => (string)$fly_type,
+            ],
+        ]);
     } catch (Throwable $e) {
         // Throwable (not just Exception) so PHP Errors/TypeErrors return JSON instead of a blank 500
         error_log('applyVacation failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
@@ -2635,7 +2648,67 @@ elseif ($ajaxType == 'approveVacation') {
             $log_stmt->close();
         }
         
-        send_json_response("Approved!", __("the_vacation_request_has_been_approved") . $role_assignment_warning, "success");
+        // Structured summary for the client's "approved" popup: who approved, where the chain stands now
+        $approval_summary = [
+            'request_no' => (string)$request_inv_no,
+            'employee' => '',
+            'vac_type' => '',
+            'fly_type' => '',
+            'start_date' => '',
+            'end_date' => '',
+            'days' => 0,
+            'level' => (int)$approval_level,
+            'approved_by' => (string)($userwel ?? ''),
+            'total_levels' => 0,
+            'approved_levels' => 0,
+            'next_approver' => '',
+            'is_final' => false,
+            'comment' => (string)$approval_comment,
+            'warning' => trim(strip_tags((string)$role_assignment_warning)),
+        ];
+        $sum_stmt = $conDB->prepare("SELECT ev.vac_type, ev.fly_type, ev.start_date, ev.return_date, ev.vacdays, ev.current_status, e.name AS emp_name
+                                     FROM emp_vacation ev LEFT JOIN employees e ON e.emp_id = ev.emp_id WHERE ev.id = ? LIMIT 1");
+        if ($sum_stmt) {
+            $sum_stmt->bind_param('i', $vacation_id);
+            $sum_stmt->execute();
+            if ($sum_row = $sum_stmt->get_result()->fetch_assoc()) {
+                $approval_summary['employee'] = (string)$sum_row['emp_name'];
+                $approval_summary['vac_type'] = (string)$sum_row['vac_type'];
+                $approval_summary['fly_type'] = (string)$sum_row['fly_type'];
+                $approval_summary['start_date'] = substr((string)$sum_row['start_date'], 0, 10);
+                $approval_summary['end_date'] = substr((string)$sum_row['return_date'], 0, 10);
+                $approval_summary['days'] = (int)$sum_row['vacdays'];
+                $approval_summary['is_final'] = in_array((string)$sum_row['current_status'], ['approved', 'completed'], true);
+            }
+            $sum_stmt->close();
+        }
+        $chain_stmt = $conDB->prepare("SELECT ra.status, COALESCE(e.name, al.fullname, al.username) AS approver_name
+                                       FROM request_approvers ra
+                                       LEFT JOIN employees e ON e.emp_id = ra.approver_id
+                                       LEFT JOIN admin_login al ON al.emp_id = ra.approver_id
+                                       WHERE ra.request_inv_no = ?
+                                       ORDER BY ra.approval_level ASC");
+        if ($chain_stmt) {
+            $chain_stmt->bind_param('s', $request_inv_no);
+            $chain_stmt->execute();
+            $chain_res = $chain_stmt->get_result();
+            while ($chain_row = $chain_res->fetch_assoc()) {
+                $approval_summary['total_levels']++;
+                if ($chain_row['status'] === 'approved') {
+                    $approval_summary['approved_levels']++;
+                } elseif ($approval_summary['next_approver'] === '' && in_array($chain_row['status'], ['pending', 'awaiting'], true)) {
+                    $approval_summary['next_approver'] = (string)$chain_row['approver_name'];
+                }
+            }
+            $chain_stmt->close();
+        }
+        if ($approval_summary['is_final']) {
+            $approval_summary['next_approver'] = '';
+        }
+
+        send_json_response("Approved!", __("the_vacation_request_has_been_approved") . $role_assignment_warning, "success", 200, [
+            'approval' => $approval_summary,
+        ]);
     } catch (Exception $e) {
 
         send_json_response("Error", $e->getMessage(), "error", 500);
@@ -3115,9 +3188,38 @@ elseif ($ajaxType == 'returnVacation') {
 // ================================================================
 // --- SYSTEM ADMIN: UPDATE VACATION START/RETURN DATES ---
 // ================================================================
+elseif ($ajaxType == 'sendVacationDatesModifiedEmail') {
+    // One "dates modified" email per call, queued by updateVacationDatesAdmin (defer_emails=1)
+    try {
+        require_once __DIR__ . '/../special_access_helper.php';
+        if (!user_has_special_access($conDB, $current_user_id, 'edit_vacation_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+            throw new Exception(__('access_denied') ?: 'Access denied');
+        }
+        $vacation_id = (int)($_POST['vacation_id'] ?? 0);
+        $recipient_id = (int)($_POST['recipient_id'] ?? 0);
+        $ctx = $_SESSION['vde_mail'][$vacation_id] ?? null;
+        if (!$ctx || ($ctx['expires'] ?? 0) < time()) {
+            throw new Exception('Email session expired. Please change the dates again to resend.');
+        }
+        if (!isset($ctx['recipients'][$recipient_id])) {
+            throw new Exception('This person is not a recipient of this notification.');
+        }
+        @set_time_limit(25);
+        $ok = send_vacation_dates_modified_email_to($conDB, $vacation_id, $recipient_id, $ctx['recipients'][$recipient_id], $ctx['old'], $ctx['new'], $ctx['impact'], $ctx['by']);
+        unset($_SESSION['vde_mail'][$vacation_id]['recipients'][$recipient_id]);
+        if (empty($_SESSION['vde_mail'][$vacation_id]['recipients'])) {
+            unset($_SESSION['vde_mail'][$vacation_id]);
+        }
+        echo json_encode(['status' => $ok ? 200 : 500, 'sent' => $ok, 'message' => $ok ? 'Sent' : 'Email could not be sent (check SMTP settings or the address).']);
+    } catch (Throwable $e) {
+        echo json_encode(['status' => 500, 'sent' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
 elseif ($ajaxType == 'previewVacationDateChange') {
     try {
-        if (!($is_system_admin ?? false)) {
+        require_once __DIR__ . '/../special_access_helper.php';
+        if (!user_has_special_access($conDB, $current_user_id, 'edit_vacation_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
             throw new Exception(__('access_denied') ?: 'Access denied');
         }
 
@@ -3140,7 +3242,8 @@ elseif ($ajaxType == 'previewVacationDateChange') {
 }
 elseif ($ajaxType == 'updateVacationDatesAdmin') {
     try {
-        if (!($is_system_admin ?? false)) {
+        require_once __DIR__ . '/../special_access_helper.php';
+        if (!user_has_special_access($conDB, $current_user_id, 'edit_vacation_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
             throw new Exception(__('access_denied') ?: 'Access denied');
         }
 
@@ -3219,7 +3322,8 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
         }
 
         $log_note = sprintf(
-            'System Admin updated vacation dates from %s to %s (%s days) -> %s to %s (%s days)',
+            '%s updated vacation dates from %s to %s (%s days) -> %s to %s (%s days)',
+            (string)($userwel ?? 'User'),
             (string)$existing['start_date'],
             (string)$existing['return_date'],
             (string)$existing['vacdays'],
@@ -3250,9 +3354,25 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             ActivityLogger::logUpdate('Vacation', 'leaveHandler.php', $vacation_id, $log_note, 'emp_vacation');
         }
 
-        // Approved vacations: tell the employee and the approvers about the new dates
+        // Approved vacations: tell the employee and the approvers about the new dates.
+        // defer_emails=1 (the editor modal): only queue them here; the client then sends them
+        // one request per recipient (sendVacationDatesModifiedEmail) so it can show progress
+        // and no single request runs into max_execution_time.
         $emails_sent = 0;
-        if (in_array((string)($existing['current_status'] ?? ''), ['approved', 'completed'], true)) {
+        $email_queue = [];
+        $is_approved_vacation = in_array((string)($existing['current_status'] ?? ''), ['approved', 'completed'], true);
+        $defer_emails = !empty($_POST['defer_emails']);
+        if ($is_approved_vacation && $defer_emails) {
+            $email_queue = get_vacation_dates_modified_recipients($conDB, $vacation_id, (int)$current_user_id);
+            $_SESSION['vde_mail'][$vacation_id] = [
+                'old' => ['start' => (string)$existing['start_date'], 'return' => (string)$existing['return_date'], 'days' => (int)$existing['vacdays']],
+                'new' => ['start' => $start_date, 'return' => $return_date, 'days' => $new_vacdays],
+                'impact' => $balance_impact ?? [],
+                'by' => (string)($userwel ?? ''),
+                'recipients' => array_column($email_queue, 'role', 'id'),
+                'expires' => time() + 900,
+            ];
+        } elseif ($is_approved_vacation) {
             try {
                 $emails_sent = send_vacation_dates_modified_emails(
                     $conDB,
@@ -3284,7 +3404,8 @@ elseif ($ajaxType == 'updateVacationDatesAdmin') {
             'return_date' => $return_date,
             'vacdays' => $new_vacdays,
             'balance_impact' => $balance_impact,
-            'emails_sent' => $emails_sent
+            'emails_sent' => $emails_sent,
+            'email_queue' => $email_queue
         ]);
     } catch (Exception $e) {
         send_json_response('Error', $e->getMessage(), 'error', 500);

@@ -188,6 +188,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                         height: 100vh;
                         margin: 0;
                     }
+                    .otp-ok { text-align: left; }
+                    .otp-user { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+                    .otp-avatar { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; font-weight: 700; font-size: 15px; }
+                    .otp-user-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+                    .otp-user-text small { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #15803d; }
+                    .otp-user-text b { font-size: 15px; color: #0f172a; overflow-wrap: anywhere; }
+                    .otp-badge { padding: 3px 10px; border-radius: 999px; background: #dcfce7; color: #15803d; font-size: 12px; font-weight: 600; white-space: nowrap; }
+                    .otp-redirect { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 8px; font-size: 13px; color: #64748b; }
+                    .otp-redirect b { color: #0f172a; font-variant-numeric: tabular-nums; }
+                    .otp-bar { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+                    .otp-bar #progress-bar { height: 100%; width: 100%; border-radius: 999px; background: linear-gradient(90deg, #22c55e, #16a34a); transition: width .05s linear; }
                 </style>
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
@@ -195,17 +206,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                         const totalMs = 3000;
                         const startTime = Date.now();
 
+                        // userFullName is already HTML-escaped server side
+                        const initials = String(userFullName || '').replace(/&[a-z#0-9]+;/gi, '').trim().split(/\s+/)
+                            .filter(Boolean).map(function (w, i, all) { return (i === 0 || i === all.length - 1) ? w.charAt(0) : ''; })
+                            .join('').toUpperCase() || '✓';
+
                         Swal.fire({
-                            title: '✓ OTP Verified Successfully',
-                            html: '<p>Welcome, ' + userFullName + '!</p>'
-                                + '<p>You have been logged in successfully.</p>'
-                                + '<p style="margin-top: 15px; font-size: 16px; color: #666;">'
-                                + 'Redirecting to dashboard in <strong id="countdown-timer">3</strong> seconds...'
-                                + '</p>'
-                                + '<div style="margin-top: 20px; width: 100%; height: 6px; background-color: #e5e7eb; border-radius: 3px; overflow: hidden;">'
-                                + '<div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, #3b82f6, #0ea5e9); width: 100%; transition: width 0.05s linear;"></div>'
+                            title: '<span class="srs-head"><span class="srs-icon tone-green"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg></span>'
+                                + '<span class="srs-head-text">OTP verified<small class="srs-head-sub">Your identity has been confirmed</small></span></span>',
+                            html: '<div class="otp-ok">'
+                                + '<div class="otp-user"><span class="otp-avatar">' + initials + '</span>'
+                                + '<span class="otp-user-text"><small>Welcome back</small><b>' + userFullName + '</b></span>'
+                                + '<span class="otp-badge">Signed in</span></div>'
+                                + '<div class="otp-redirect"><span>Opening your dashboard</span><b><span id="countdown-timer">3</span>s</b></div>'
+                                + '<div class="otp-bar"><div id="progress-bar"></div></div>'
                                 + '</div>',
-                            icon: 'success',
+                            width: 440,
                             allowOutsideClick: false,
                             allowEscapeKey: false,
                             showConfirmButton: false,

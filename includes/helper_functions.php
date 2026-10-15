@@ -5613,25 +5613,19 @@ if (!function_exists('get_vacation_deductible_days_for_range')) {
 }
 
 /**
- * Emails the employee and every approver who already approved the request that
- * an approved vacation's dates were changed (old vs new period, day and balance change).
- * Failures are logged only; the date change itself is never rolled back for a mail error.
- *
- * @return int Number of emails sent
+ * "Vacation dates modified" notification for an approved vacation, split in two so the
+ * client can send one email per request (several SMTP sends in one request can exceed
+ * the 25s max_execution_time set in db.php):
+ *   get_vacation_dates_modified_recipients()  -> who gets it (employee + approvers who approved)
+ *   send_vacation_dates_modified_email_to()   -> one email to one recipient
+ * send_vacation_dates_modified_emails() still sends to everyone in one go (CLI / batch use).
  */
-if (!function_exists('send_vacation_dates_modified_emails')) {
-    function send_vacation_dates_modified_emails($conDB, $vacation_id, array $old, array $new, array $impact = [], $modified_by_name = '', $modified_by_id = 0)
+if (!function_exists('get_vacation_dates_modified_recipients')) {
+    function get_vacation_dates_modified_recipients($conDB, $vacation_id, $modified_by_id = 0)
     {
-        if (!function_exists('send_approval_email')) {
-            return 0;
-        }
-
-        $stmt = mysqli_prepare($conDB, "SELECT ev.emp_id, ev.request_inv_no, ev.vac_type, ev.fly_type, e.name AS emp_name
-                                        FROM emp_vacation ev
-                                        JOIN employees e ON e.emp_id = ev.emp_id
-                                        WHERE ev.id = ? LIMIT 1");
+        $stmt = mysqli_prepare($conDB, "SELECT emp_id, request_inv_no FROM emp_vacation WHERE id = ? LIMIT 1");
         if (!$stmt) {
-            return 0;
+            return [];
         }
         $vac_id = (int)$vacation_id;
         mysqli_stmt_bind_param($stmt, "i", $vac_id);
@@ -5640,17 +5634,17 @@ if (!function_exists('send_vacation_dates_modified_emails')) {
         $vac = $res ? mysqli_fetch_assoc($res) : null;
         mysqli_stmt_close($stmt);
         if (!$vac) {
-            return 0;
+            return [];
         }
 
         // Employee first, then the approvers who signed off the old dates
-        $recipient_ids = [(int)$vac['emp_id'] => 'employee'];
+        $ids = [(int)$vac['emp_id'] => 'employee'];
         $type_res = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'vacation_request' LIMIT 1");
         $type_row = $type_res ? mysqli_fetch_assoc($type_res) : null;
         if ($type_row && !empty($vac['request_inv_no'])) {
-            $stmt = mysqli_prepare($conDB, "SELECT DISTINCT approver_id FROM request_approvers
+            $stmt = mysqli_prepare($conDB, "SELECT approver_id FROM request_approvers
                                             WHERE request_inv_no = ? AND request_type_id = ? AND status = 'approved'
-                                            ORDER BY approver_id");
+                                            ORDER BY approval_level");
             if ($stmt) {
                 $type_id = (int)$type_row['id'];
                 mysqli_stmt_bind_param($stmt, "si", $vac['request_inv_no'], $type_id);
@@ -5658,16 +5652,57 @@ if (!function_exists('send_vacation_dates_modified_emails')) {
                 $res = mysqli_stmt_get_result($stmt);
                 while ($res && ($row = mysqli_fetch_assoc($res))) {
                     $aid = (int)$row['approver_id'];
-                    if (!isset($recipient_ids[$aid])) {
-                        $recipient_ids[$aid] = 'approver';
+                    if (!isset($ids[$aid])) {
+                        $ids[$aid] = 'approver';
                     }
                 }
                 mysqli_stmt_close($stmt);
             }
         }
         // The person who made the change already knows about it
-        if ((int)$modified_by_id > 0 && isset($recipient_ids[(int)$modified_by_id]) && $recipient_ids[(int)$modified_by_id] === 'approver') {
-            unset($recipient_ids[(int)$modified_by_id]);
+        if ((int)$modified_by_id > 0 && ($ids[(int)$modified_by_id] ?? '') === 'approver') {
+            unset($ids[(int)$modified_by_id]);
+        }
+
+        $out = [];
+        foreach ($ids as $rid => $role) {
+            $details = getEmployeeDetailsForApproval($conDB, $rid);
+            $out[] = [
+                'id' => (int)$rid,
+                'role' => $role,
+                'name' => (string)($details['name'] ?? ('#' . $rid)),
+                'has_email' => !empty($details['email']),
+            ];
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('send_vacation_dates_modified_email_to')) {
+    function send_vacation_dates_modified_email_to($conDB, $vacation_id, $recipient_id, $role, array $old, array $new, array $impact = [], $modified_by_name = '')
+    {
+        if (!function_exists('send_approval_email')) {
+            return false;
+        }
+        $details = getEmployeeDetailsForApproval($conDB, (int)$recipient_id);
+        if (!$details || empty($details['email'])) {
+            return false;
+        }
+
+        $stmt = mysqli_prepare($conDB, "SELECT ev.request_inv_no, ev.vac_type, ev.fly_type, e.name AS emp_name
+                                        FROM emp_vacation ev JOIN employees e ON e.emp_id = ev.emp_id
+                                        WHERE ev.id = ? LIMIT 1");
+        if (!$stmt) {
+            return false;
+        }
+        $vac_id = (int)$vacation_id;
+        mysqli_stmt_bind_param($stmt, "i", $vac_id);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $vac = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+        if (!$vac) {
+            return false;
         }
 
         $fmt = function ($d) { return date('d M Y', strtotime($d)); };
@@ -5687,42 +5722,41 @@ if (!function_exists('send_vacation_dates_modified_emails')) {
             $balance_info = 'Not affected';
         }
 
-        $base_url = function_exists('get_base_url') ? get_base_url() : '';
-        $old_period = $fmt($old['start']) . ' to ' . $fmt($old['return']);
-        $new_period = $fmt($new['start']) . ' to ' . $fmt($new['return']);
-        $subject = 'Vacation Dates Modified - ' . $vac['emp_name'] . ' (' . $vac['request_inv_no'] . ')';
         $modified_by_name = trim((string)$modified_by_name) !== '' ? (string)$modified_by_name : 'HR';
+        $intro = $role === 'employee'
+            ? "The dates of your approved vacation have been changed by {$modified_by_name}. Please plan your leave according to the new period below."
+            : "The dates of an approved vacation for {$vac['emp_name']} have been changed by {$modified_by_name}. You are receiving this because you approved this request.";
 
+        $data = [
+            'APPROVER_NAME' => $details['name'],
+            'INTRO_TEXT' => $intro,
+            'REQUEST_TYPE' => $req_type,
+            'REQUEST_ID' => $vac['request_inv_no'],
+            'EMPLOYEE_NAME' => $vac['emp_name'],
+            'OLD_PERIOD' => $fmt($old['start']) . ' to ' . $fmt($old['return']),
+            'OLD_DAYS' => (string)(int)$old['days'],
+            'NEW_PERIOD' => $fmt($new['start']) . ' to ' . $fmt($new['return']),
+            'NEW_DAYS' => (string)(int)$new['days'],
+            'DAYS_CHANGE' => $days_change,
+            'BALANCE_INFO' => $balance_info,
+            'MODIFIED_BY' => $modified_by_name,
+            'REQUEST_URL' => (function_exists('get_base_url') ? get_base_url() : '') . '/all_applied_vac.php',
+        ];
+        $subject = 'Vacation Dates Modified - ' . $vac['emp_name'] . ' (' . $vac['request_inv_no'] . ')';
+
+        return (bool)send_approval_email($conDB, $details['email'], $details['name'], $subject, 'vacation_dates_modified', $data);
+    }
+}
+
+if (!function_exists('send_vacation_dates_modified_emails')) {
+    function send_vacation_dates_modified_emails($conDB, $vacation_id, array $old, array $new, array $impact = [], $modified_by_name = '', $modified_by_id = 0)
+    {
         $sent = 0;
-        foreach ($recipient_ids as $rid => $role) {
-            $details = getEmployeeDetailsForApproval($conDB, $rid);
-            if (!$details || empty($details['email'])) {
-                continue;
-            }
-            $intro = $role === 'employee'
-                ? "The dates of your approved vacation have been changed by {$modified_by_name}. Please plan your leave according to the new period below."
-                : "The dates of an approved vacation for {$vac['emp_name']} have been changed by {$modified_by_name}. You are receiving this because you approved this request.";
-
-            $data = [
-                'APPROVER_NAME' => $details['name'],
-                'INTRO_TEXT' => $intro,
-                'REQUEST_TYPE' => $req_type,
-                'REQUEST_ID' => $vac['request_inv_no'],
-                'EMPLOYEE_NAME' => $vac['emp_name'],
-                'OLD_PERIOD' => $old_period,
-                'OLD_DAYS' => (string)(int)$old['days'],
-                'NEW_PERIOD' => $new_period,
-                'NEW_DAYS' => (string)(int)$new['days'],
-                'DAYS_CHANGE' => $days_change,
-                'BALANCE_INFO' => $balance_info,
-                'MODIFIED_BY' => $modified_by_name,
-                'REQUEST_URL' => $base_url . '/all_applied_vac.php',
-            ];
-            if (send_approval_email($conDB, $details['email'], $details['name'], $subject, 'vacation_dates_modified', $data)) {
+        foreach (get_vacation_dates_modified_recipients($conDB, $vacation_id, $modified_by_id) as $r) {
+            if ($r['has_email'] && send_vacation_dates_modified_email_to($conDB, $vacation_id, $r['id'], $r['role'], $old, $new, $impact, $modified_by_name)) {
                 $sent++;
             }
         }
-
         return $sent;
     }
 }
@@ -5752,6 +5786,7 @@ if (!function_exists('adjust_vacation_balance_on_date_change')) {
             'current_balance' => null,
             'new_balance' => null,
             'applied' => false,
+            'is_approved' => false,
         ];
 
         $vac_id = (int)$vacation_id;
@@ -5772,6 +5807,8 @@ if (!function_exists('adjust_vacation_balance_on_date_change')) {
         }
 
         $emp_id = (int)$vac['emp_id'];
+        // Approved/completed vacations also trigger the "dates modified" emails on save
+        $out['is_approved'] = in_array((string)$vac['current_status'], ['approved', 'completed'], true);
         $vac_type = trim(strtolower((string)$vac['vac_type']));
         $fly_type = trim(strtolower((string)$vac['fly_type']));
         $remarks = trim(strtolower((string)($vac['remarks'] ?? '')));

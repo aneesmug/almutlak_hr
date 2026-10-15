@@ -9,6 +9,11 @@ $can_cancel_vacation_requests = (
     !empty($is_system_admin)
     || user_has_special_access($conDB, $empid ?? '', 'cancel_vacation_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
 );
+// Edit start / return dates of a vacation (also adjusts balance + emails when approved) - Special Access
+$can_edit_vacation_dates = (
+    !empty($is_system_admin)
+    || user_has_special_access($conDB, $empid ?? '', 'edit_vacation_dates', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
+);
 $cancellable_vacation_statuses = ['apply', 'pending_approval', 'pending', 'hr_assistant_approved', 'hr_manager_approved', 'gm_approved', 'approved'];
 // $user_type, $empid, $user_dept, $is_system_admin, $isHR, $isDeptHr are available from session_check.php
 // Restrict access: Employees cannot view this detailed report page,
@@ -945,7 +950,7 @@ if ($can_see_all_depts) {
                                                                     <a class="dropdown-item" href="<?= $h($report_url) ?>" target="_blank"><i class="mdi mdi-file-pdf"></i><?= __('report') ?></a>
                                                                 <?php endif; ?>
                                                                 <a class="dropdown-item" href="vacation_status_history.php?request_inv_no=<?= urlencode($req['request_inv_no']); ?>" target="_blank"><i class="mdi mdi-history"></i><?= __('history') ?></a>
-                                                                <?php if ($is_system_admin): ?>
+                                                                <?php if ($can_edit_vacation_dates): ?>
                                                                     <a class="dropdown-item" href="javascript:void(0);" onclick="openVacationDateEditor(<?= (int)$req['id']; ?>, '<?= htmlspecialchars(addslashes(getDisplayName(parseName($req['employee_name']))), ENT_QUOTES); ?>')">
                                                                         <i class="mdi mdi-pencil text-primary"></i><?= __('edit') ?> <?= __('start') ?> / <?= __('return') ?>
                                                                     </a>
@@ -1056,7 +1061,7 @@ if ($can_see_all_depts) {
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
-        const canEditVacationDates = <?= !empty($is_system_admin) ? 'true' : 'false' ?>;
+        const canEditVacationDates = <?= $can_edit_vacation_dates ? 'true' : 'false' ?>;
 
         // Status tabs / search / extra filters (all reload the page through applyFilters())
         $(function() {
@@ -1101,6 +1106,20 @@ if ($can_see_all_depts) {
             window.location.href = `${baseUrl}?${params.toString()}`;
         }
 
+        // approveVacation result: designed popup when the response carries an `approval` summary
+        function showApprovalResult(response) {
+            response = response || {};
+            if (typeof window.srRequestApproved === 'function' && response.approval) {
+                return window.srRequestApproved(response);
+            }
+            return Swal.fire({
+                title: response.title || __('success') || 'Success',
+                text: response.message || '',
+                icon: response.type || 'success',
+                allowOutsideClick: false
+            });
+        }
+
         function openVacationDateEditor(vacationId, employeeName) {
             if (!canEditVacationDates) {
                 return;
@@ -1140,6 +1159,7 @@ if ($can_see_all_depts) {
             const originalDays = parseInt(currentDays, 10) || 0;
             const dayWord = (n) => Math.abs(n) === 1 ? (__('day') || 'day') : (__('days') || 'days');
             const fmtNum = (n) => String(Math.round((parseFloat(n) || 0) * 100) / 100);
+            let vdeLastImpact = null;
 
             Swal.fire({
                 title: `<span class="srs-head"><span class="srs-icon tone-indigo"><i class="fa fa-calendar-alt"></i></span><span class="srs-head-text">${__('edit_vacation_dates', 'Edit Vacation Dates')}<small class="srs-head-sub">${safeEmployeeName}</small></span></span>`,
@@ -1204,6 +1224,7 @@ if ($can_see_all_depts) {
                     };
 
                     const renderImpact = (impact) => {
+                        vdeLastImpact = impact;
                         const notes = {
                             not_deductible: __('vde_not_deductible', 'This vacation type does not use the vacation balance, so the balance will not change.'),
                             not_approved_yet: __('vde_not_approved_yet', 'Not final-approved yet. The balance is deducted at final approval using the new dates.'),
@@ -1357,28 +1378,166 @@ if ($can_see_all_depts) {
                     return;
                 }
 
-                $.ajax({
-                    url: './includes/ajaxFile/leaveHandler.php',
-                    type: 'POST',
-                    dataType: 'json',
-                    data: {
-                        ajaxType: 'updateVacationDatesAdmin',
-                        vacation_id: vacationId,
-                        start_date: result.value.start_date,
-                        return_date: result.value.return_date
-                    }
-                }).done(function(response) {
-                    Swal.fire({
-                        title: response.title || (__('success') || 'Success'),
-                        text: response.message || (__('vacation_dates_updated') || 'Vacation dates updated successfully'),
-                        icon: response.type || 'success',
-                        allowOutsideClick: false
-                    }).then(function() {
-                        location.reload();
-                    });
-                }).fail(function(xhr, textStatus) {
-                    Swal.fire(__('error') || 'Error', `${__('request_failed') || 'Request failed'}: ${textStatus}`, 'error');
+                // Step-by-step progress: 1) save dates + balance (one request, one DB transaction),
+                // 2) approved vacations: one request per email recipient. Each row gets ✓ / ✗.
+                const willEmail = !!(vdeLastImpact && vdeLastImpact.is_approved);
+                const willAdjust = !!(vdeLastImpact && vdeLastImpact.affects_balance && parseFloat(vdeLastImpact.delta));
+                const vdeEsc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
+                const stepRow = (key, icon, text) => `
+                    <li class="vde-step" data-step="${key}">
+                        <span class="vde-step-ico"><i class="fa fa-${icon}"></i></span>
+                        <span class="vde-step-text">${text}<small class="vde-step-msg"></small></span>
+                        <span class="vde-step-state"><i class="fa fa-spinner fa-spin"></i></span>
+                    </li>`;
+
+                Swal.fire({
+                    title: `<span class="srs-head"><span class="srs-icon tone-indigo" id="vde_prog_icon"><i class="fa fa-${willEmail ? 'paper-plane' : 'save'}"></i></span><span class="srs-head-text"><span id="vde_prog_title">${willEmail ? __('saving_and_sending_emails', 'Saving & sending emails') : __('saving', 'Saving...')}</span><small class="srs-head-sub">${safeEmployeeName}</small></span></span>`,
+                    html: `
+                        <ul class="vde-steps" id="vde_steps">
+                            ${stepRow('save', 'calendar-check', `${__('saving_new_dates', 'Saving new dates')} <b class="srs-mono">${result.value.start_date} → ${result.value.return_date}</b>`)}
+                            ${willAdjust ? stepRow('balance', 'balance-scale', __('updating_vacation_balance', 'Updating vacation balance')) : ''}
+                        </ul>
+                        <div id="vde_mail_block" style="display:none;">
+                            <div class="vde-steps-title"><i class="fa fa-envelope"></i> ${__('email_notifications', 'Email notifications')} <span id="vde_mail_count"></span></div>
+                            <ul class="vde-steps" id="vde_mail_steps"></ul>
+                        </div>
+                        <div id="vde_result"></div>
+                        <p class="vde-wait" id="vde_wait">${__('please_wait_do_not_close', 'Please wait, do not close this window.')}</p>
+                    `,
+                    width: 520,
+                    showConfirmButton: false,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    didOpen: () => setTimeout(runSave, 0)
+                }).then((r) => {
+                    if (r.isConfirmed && vdeSaved) location.reload();
                 });
+
+                let vdeSaved = false;
+                const popup = () => Swal.getPopup();
+                const setStep = (sel, state, msg) => {
+                    const li = popup() && popup().querySelector(sel);
+                    if (!li) return;
+                    li.classList.remove('is-done', 'is-fail', 'is-skip');
+                    if (state) li.classList.add('is-' + state);
+                    li.querySelector('.vde-step-state').innerHTML = state === 'done' ? '<i class="fa fa-check"></i>'
+                        : state === 'fail' ? '<i class="fa fa-times"></i>'
+                        : state === 'skip' ? '<i class="fa fa-minus"></i>'
+                        : '<i class="fa fa-spinner fa-spin"></i>';
+                    li.querySelector('.vde-step-msg').textContent = msg || '';
+                };
+                const finish = (tone, title, html) => {
+                    const p = popup();
+                    if (!p) return;
+                    const icon = p.querySelector('#vde_prog_icon');
+                    if (icon) {
+                        icon.className = 'srs-icon tone-' + tone;
+                        icon.innerHTML = `<i class="fa fa-${tone === 'green' ? 'check' : (tone === 'amber' ? 'exclamation-triangle' : 'times')}"></i>`;
+                    }
+                    p.querySelector('#vde_prog_title').textContent = title;
+                    p.querySelector('#vde_result').innerHTML = html || '';
+                    const wait = p.querySelector('#vde_wait');
+                    if (wait) wait.remove();
+                    // Reveal the confirm button directly: Swal.update() would re-render the html and lose the step states
+                    const btn = Swal.getConfirmButton();
+                    const actions = Swal.getActions();
+                    if (btn && actions) {
+                        btn.innerHTML = vdeSaved ? (__('done') || 'Done') : (__('close') || 'Close');
+                        btn.style.backgroundColor = tone === 'red' ? '#64748b' : '#16a34a';
+                        btn.style.display = 'inline-block';
+                        actions.style.display = 'flex';
+                        btn.focus();
+                    }
+                };
+
+                const sendEmails = (queue) => {
+                    const block = popup().querySelector('#vde_mail_block');
+                    const list = popup().querySelector('#vde_mail_steps');
+                    block.style.display = '';
+                    list.innerHTML = queue.map((r) => stepRow('mail-' + r.id, r.role === 'employee' ? 'user' : 'user-check',
+                        `<span>${vdeEsc(r.name)} <em class="vde-role">${r.role === 'employee' ? (__('employee') || 'Employee') : (__('approver') || 'Approver')}</em></span>`)).join('');
+
+                    let sent = 0, failed = 0, skipped = 0, i = 0;
+                    const count = () => { popup().querySelector('#vde_mail_count').textContent = `${sent}/${queue.length}`; };
+                    count();
+                    const next = () => {
+                        if (i >= queue.length) {
+                            const summary = `<div class="vde-summary ${failed ? 'is-warn' : 'is-ok'}"><i class="fa fa-${failed ? 'exclamation-triangle' : 'check-circle'}"></i><span>${__('dates_saved', 'Dates saved')} · ${sent} ${__('of', 'of')} ${queue.length} ${__('emails_sent', 'emails sent')}${skipped ? ` · ${skipped} ${__('without_email_address', 'without an email address')}` : ''}${failed ? ` · ${failed} ${__('failed', 'failed')}` : ''}</span></div>`;
+                            finish(failed ? 'amber' : 'green', failed ? __('dates_saved_some_emails_failed', 'Dates saved, some emails failed') : __('vacation_dates_updated', 'Vacation dates updated'), summary);
+                            return;
+                        }
+                        const r = queue[i++];
+                        const sel = `[data-step="mail-${r.id}"]`;
+                        if (!r.has_email) {
+                            skipped++;
+                            setStep(sel, 'skip', __('no_email_address', 'No email address'));
+                            return next();
+                        }
+                        $.ajax({
+                            url: './includes/ajaxFile/leaveHandler.php',
+                            type: 'POST',
+                            dataType: 'json',
+                            timeout: 30000,
+                            data: { ajaxType: 'sendVacationDatesModifiedEmail', vacation_id: vacationId, recipient_id: r.id }
+                        }).done((res) => {
+                            if (res && res.sent) { sent++; setStep(sel, 'done', __('sent', 'Sent')); }
+                            else { failed++; setStep(sel, 'fail', (res && res.message) || (__('failed') || 'Failed')); }
+                        }).fail((xhr, textStatus) => {
+                            failed++;
+                            setStep(sel, 'fail', (xhr.responseJSON && xhr.responseJSON.message) || textStatus);
+                        }).always(() => { count(); next(); });
+                    };
+                    next();
+                };
+
+                const runSave = () => {
+                    $.ajax({
+                        url: './includes/ajaxFile/leaveHandler.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        timeout: 30000,
+                        data: {
+                            ajaxType: 'updateVacationDatesAdmin',
+                            vacation_id: vacationId,
+                            start_date: result.value.start_date,
+                            return_date: result.value.return_date,
+                            defer_emails: 1
+                        }
+                    }).done(function(response) {
+                        if (!response || response.type === 'error') {
+                            setStep('[data-step="save"]', 'fail', (response && response.message) || '');
+                            setStep('[data-step="balance"]', 'skip');
+                            finish('red', __('update_failed', 'Update failed'), '');
+                            return;
+                        }
+                        if (response.type === 'info') {
+                            setStep('[data-step="save"]', 'skip', response.message || '');
+                            setStep('[data-step="balance"]', 'skip');
+                            finish('amber', __('no_changes', 'No changes'), '');
+                            return;
+                        }
+                        vdeSaved = true;
+                        const bi = response.balance_impact || {};
+                        setStep('[data-step="save"]', 'done', `${response.vacdays || ''} ${__('days') || 'days'}`);
+                        if (bi.applied) {
+                            const d = parseFloat(bi.delta) || 0;
+                            setStep('[data-step="balance"]', 'done', `${d > 0 ? '−' : '+'}${Math.abs(d)} · ${bi.current_balance} → ${bi.new_balance}`);
+                        } else {
+                            setStep('[data-step="balance"]', 'skip', __('no_change', 'No change'));
+                        }
+                        const queue = Array.isArray(response.email_queue) ? response.email_queue : [];
+                        if (queue.length) {
+                            sendEmails(queue);
+                        } else {
+                            finish('green', __('vacation_dates_updated', 'Vacation dates updated'), '');
+                        }
+                    }).fail(function(xhr, textStatus) {
+                        const msg = (xhr.responseJSON && xhr.responseJSON.message) || `${__('request_failed') || 'Request failed'} (${textStatus})`;
+                        setStep('[data-step="save"]', 'fail', msg);
+                        setStep('[data-step="balance"]', 'skip');
+                        finish('red', __('update_failed', 'Update failed'), '');
+                    });
+                };
             });
         }
 
@@ -2165,12 +2324,7 @@ if ($can_see_all_depts) {
                         }).then((result) => {
                             if (result.isConfirmed) {
                                 const response = result.value;
-                                Swal.fire({
-                                    title: response.title,
-                                    text: response.message,
-                                    icon: response.type,
-                                    allowOutsideClick: false
-                                }).then(() => {
+                                showApprovalResult(response).then(() => {
                                     location.reload();
                                 });
                             }
@@ -2738,6 +2892,22 @@ if ($can_see_all_depts) {
             let commentHtml = ''; // Comment textarea
             let confirmButtonText = __('yes_approve_it');
 
+            // Card section used by every block of this modal (styles: .apv-* in sr_swal_theme.css)
+            const apvTag = (required) => required
+                ? `<span class="apv-tag is-req">${__('required') || 'Required'}</span>`
+                : `<span class="apv-tag">${__('optional') || 'Optional'}</span>`;
+            const apvSec = (icon, tone, title, tag, body) => `
+                <div class="apv-sec">
+                    <div class="apv-sec-head">
+                        <span class="apv-ico tone-${tone}"><i class="fa fa-${icon}"></i></span>
+                        <span class="apv-sec-title">${title}</span>
+                        ${tag || ''}
+                    </div>
+                    ${body}
+                </div>`;
+            const apvEsc = (v) => $("<div>").text(v == null ? "" : String(v)).html();
+            const apvNote = (icon, html) => `<div class="apv-note"><i class="fa fa-${icon}"></i><span>${html}</span></div>`;
+
             // --- Condition 1: Show Payment Fields? ---
             // Payment fields should NOT be shown during approval modal
             // Payment entry happens AFTER approval through separate action button
@@ -2795,68 +2965,35 @@ if ($can_see_all_depts) {
 
             // [NEW] --- GR Officer Visa/Re-Entry Fee Section ---
             if (isGR_Officer && isFlyVacation) {
-                hrPayrollHtml = `
-                    <div class="swal-gr-officer-fields text-left mt-3">
-                        <hr>
-                        <h6 class="text-primary mb-3"><i class="fa fa-passport"></i> ${__('visa_re_entry_fee_information') || 'Visa & Re-Entry Fee Information'}</h6>
-                        <div class="form-group">
-                            <label for="swal_permit_fee" class="font-weight-bold">
-                                <i class="fa fa-coins"></i> ${__('permit_fee') || 'Permit & Visa Fees (Exit & Re-Entry)'} 
-                                <span class="text-danger">*</span>
-                            </label>
-                            <input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" required min="0" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem;">
-                            <small class="form-text text-muted">
-                                <i class="fa fa-info-circle"></i> ${__('permit_fee_description') || 'Enter the total amount for exit and re-entry visa permit fees (in SAR). Use 0.00 if no fee applies.'}
-                            </small>
-                        </div>
-                    </div>
-                `;
+                hrPayrollHtml = apvSec('passport', 'sky', __('visa_re_entry_fee_information') || 'Visa & Re-Entry Fee Information', apvTag(true), `
+                    <label for="swal_permit_fee" class="srs-label">${__('permit_fee') || 'Permit & Visa Fees (Exit & Re-Entry)'} <span class="srs-req">*</span></label>
+                    <span class="pm-money"><input type="number" id="swal_permit_fee" class="form-control" placeholder="0.00" step="0.01" required min="0"><em>SAR</em></span>
+                    <small class="apv-hint">${__('permit_fee_description') || 'Enter the total amount for exit and re-entry visa permit fees (in SAR). Use 0.00 if no fee applies.'}</small>
+                `);
             }
     
             // Payroll adjustments moved to post-approval action only
             // Only for HR Senior BP approving (to notify HR team members)
             if (isHR_SeniorBP) {
-                hrTeamCCHtml = `
-                    <div class="swal-hr-team-cc text-left mt-3">
-                        <hr>
-                        <h6 class="text-primary mb-3"><i class="fa fa-users"></i> ${__('notify_hr_team')}</h6>
-                        <div class="form-group">
-                            <label for="hr_team_cc_select" class="font-weight-bold">
-                                <i class="fa fa-envelope"></i> ${__('select_hr_team_members_cc')} 
-                                <span class="text-muted">(${__('optional')})</span>
-                            </label>
-                            <select id="hr_team_cc_select" class="form-control swal-select2-dynamic" multiple="multiple" style="width: 100%;">
-                                <option value="">${__('loading_hr_team')}</option>
-                            </select>
-                            <small class="form-text text-muted">
-                                <i class="fa fa-info-circle"></i> ${__('hr_team_cc_note') || 'Selected HR team members will receive email notifications (CC only, not approvers)'}
-                            </small>
-                        </div>
-                    </div>
-                `;
+                hrTeamCCHtml = apvSec('users', 'indigo', __('notify_hr_team') || 'Notify HR Team', apvTag(false), `
+                    <label for="hr_team_cc_select" class="srs-label">${__('select_hr_team_members_cc') || 'HR team members to CC'}</label>
+                    <select id="hr_team_cc_select" class="form-control swal-select2-dynamic" multiple="multiple" style="width: 100%;">
+                        <option value="">${__('loading_hr_team')}</option>
+                    </select>
+                    <small class="apv-hint"><i class="fa fa-envelope"></i> ${__('hr_team_cc_note_text', 'They get an email copy only. They are not added as approvers.')}</small>
+                `);
             }
 
             // Show Finance Team CC selector for GR Officer (to notify Finance about exit & re-entry fee)
             let financeTeamCCHtml = '';
             if (isGR_Officer) {
-                financeTeamCCHtml = `
-                    <div class="swal-finance-team-cc text-left mt-3">
-                        <hr>
-                        <h6 class="text-primary mb-3"><i class="fa fa-users"></i> ${__('notify_finance_team') || 'Notify Finance Team'}</h6>
-                        <div class="form-group">
-                            <label for="finance_team_cc_select" class="font-weight-bold">
-                                <i class="fa fa-envelope"></i> ${__('select_finance_team_members_cc') || 'Select finance team members CC'}
-                                <span class="text-muted">(${__('optional')})</span>
-                            </label>
-                            <select id="finance_team_cc_select" class="form-control swal-select2-dynamic" multiple="multiple" style="width: 100%;">
-                                <option value="">${__('loading_finance_team') || 'Loading finance team...'}</option>
-                            </select>
-                            <small class="form-text text-muted">
-                                <i class="fa fa-info-circle"></i> ${__('finance_team_cc_note') || 'Selected Finance team members will receive email notifications (CC) to process exit & re-entry fee.'}
-                            </small>
-                        </div>
-                    </div>
-                `;
+                financeTeamCCHtml = apvSec('coins', 'amber', __('notify_finance_team') || 'Notify Finance Team', apvTag(false), `
+                    <label for="finance_team_cc_select" class="srs-label">${__('select_finance_team_members_cc') || 'Finance team members to CC'}</label>
+                    <select id="finance_team_cc_select" class="form-control swal-select2-dynamic" multiple="multiple" style="width: 100%;">
+                        <option value="">${__('loading_finance_team') || 'Loading finance team...'}</option>
+                    </select>
+                    <small class="apv-hint"><i class="fa fa-envelope"></i> ${__('finance_team_cc_note') || 'Selected Finance team members will receive email notifications (CC) to process exit & re-entry fee.'}</small>
+                `);
             }
 
             // --- Condition 2: Show Chain Builder? ---
@@ -2864,15 +3001,7 @@ if ($can_see_all_depts) {
                 // SIMPLE LEAVE APPROVAL LOGIC
                 if (isLevel1) {
                     // Level 1: Supervisor/Manager approving → HR Senior BP will be auto-selected by backend
-                    chainHtml = `
-                        <div class="swal-approval-chain text-left mt-3">
-                            <hr>
-                            <p class="text-info">
-                                <i class="fa fa-info-circle"></i> 
-                                ${__('approval_chain_auto_built') || 'Approval will be automatically forwarded to HR Senior BP.'}
-                            </p>
-                        </div>
-                    `;
+                    chainHtml = apvNote('route', __('approval_chain_auto_built') || 'Approval will be automatically forwarded to HR Senior BP.');
                 }
                 // Level 2 (HR Senior BP): No chain needed, final approval
 
@@ -2881,36 +3010,22 @@ if ($can_see_all_depts) {
                 if (isLevel1) {
                     // Level 1 Manager: Chain will be auto-built from assets (no UI needed)
                     // Show additional note for Fly + Annual vacations about GR Officer
-                    const grOfficerNote = isFlyVacation ? `<br><i class="fa fa-passport"></i> ${__('gr_officer_auto_added', 'GR Officer will be automatically added for visa/emergency handling.')}` : '';
-                    chainHtml = `
-                        <div class="swal-approval-chain text-left mt-3">
-                            <hr>
-                            <p class="text-info">
-                                <i class="fa fa-info-circle"></i> 
-                                ${__('approval_chain_auto_built') || 'Approval chain will be automatically determined based on assigned assets (HR Senior BP + Asset Teams).'}
-                                ${grOfficerNote}
-                            </p>
-                        </div>
-                    `;
+                    chainHtml = apvNote('route', __('approval_chain_auto_built') || 'Approval chain will be automatically determined based on assigned assets (HR Senior BP + Asset Teams).')
+                        + (isFlyVacation ? apvNote('passport', __('gr_officer_auto_added', 'GR Officer will be automatically added for visa/emergency handling.')) : '');
                 } else if (isHR_Assistant) {
                     // HR Assistant: Build full chain
-                    chainHtml = `
-                        <div class="swal-approval-chain text-left mt-3">
-                            <hr>
-                            
-                            <label for="approver_select" class="mt-2">${__('select_next_approver')}</label>
-                            <div class="swal-approval-chain-builder">
-                                <select id="approver_select" class="form-control swal-select2-dynamic">
-                                    <option value="">${__('select_an_approver')}</option>
-                                </select>
-                                <button type="button" id="add-approver-btn-new" class="btn btn-success"><i class="fa fa-plus"></i> ${__('add')}</button>
-                            </div>
-
-                            <ol id="approver-chain-list" class="mt-3">
-                                <li id="approver-chain-list-empty">${__('no_approvers_added_yet')}</li>
-                            </ol>
+                    chainHtml = apvSec('sitemap', 'green', __('approval_chain') || 'Approval chain', '', `
+                        <label for="approver_select" class="srs-label">${__('select_next_approver')}</label>
+                        <div class="swal-approval-chain-builder apv-chain-add">
+                            <select id="approver_select" class="form-control swal-select2-dynamic">
+                                <option value="">${__('select_an_approver')}</option>
+                            </select>
+                            <button type="button" id="add-approver-btn-new" class="btn btn-success"><i class="fa fa-plus"></i> ${__('add')}</button>
                         </div>
-                    `;
+                        <ol id="approver-chain-list" class="apv-chain-list">
+                            <li id="approver-chain-list-empty">${__('no_approvers_added_yet')}</li>
+                        </ol>
+                    `);
                 }
             }
 
@@ -2918,31 +3033,31 @@ if ($can_see_all_depts) {
             // Add comment field for all approvals
             // Make it REQUIRED for GR Officer
             const isCommentRequired = isGR_Officer;
-            commentHtml = `
-                <div class="swal-comment-section text-left mt-3">
-                    <hr>
-                    <h6 class="text-primary mb-3">
-                        <i class="fa fa-comment"></i> ${__('approval_comment') || 'Approval Comment'}
-                        ${isCommentRequired ? '<span class="text-danger">*</span>' : '<span class="text-muted">(Optional)</span>'}
-                    </h6>
-                    <div class="form-group">
-                        <textarea id="swal_approval_comment" class="form-control" rows="4" placeholder="${__('write_comment') || 'Write your comment or review for this approval (optional)...'}" style="width: 100%; padding: .375rem .75rem; border: 1px solid #ced4da; border-radius: .25rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; font-size: 14px;" ${isCommentRequired ? 'required' : ''}></textarea>
-                        <small class="form-text text-muted">
-                            <span id="char-count">0</span>/5000 ${__('characters')}
-                        </small>
-                    </div>
+            commentHtml = apvSec('comment-dots', 'slate', __('approval_comment') || 'Approval Comment', apvTag(isCommentRequired), `
+                <div class="apv-textarea">
+                    <textarea id="swal_approval_comment" class="form-control" rows="3" maxlength="5000" placeholder="${isCommentRequired ? (__('write_comment_required', 'Write your comment or review for this approval...')) : (__('write_comment') || 'Write your comment or review for this approval (optional)...')}" ${isCommentRequired ? 'required' : ''}></textarea>
+                    <small class="apv-count"><span id="char-count">0</span>/5000</small>
                 </div>
-            `;
+            `);
+
+            const apvTitle = isAssetClearanceRole ? (__('asset_clearance_confirmation') || 'Asset Clearance Confirmation') : (__('confirm_approval') || 'Confirm Approval');
+            const apvDays = parseInt(totalDays, 10) || 0;
+            const apvTypeLabel = [vacType, flyType ? flyType.charAt(0).toUpperCase() + flyType.slice(1) : ''].filter(Boolean).join(' · ');
+            const apvSummary = `
+                <div class="apv-summary">
+                    <span class="apv-sum-item"><i class="fa fa-tag"></i>${apvEsc(apvTypeLabel || '-')}</span>
+                    <span class="apv-sum-item"><i class="fa fa-calendar"></i><span class="srs-mono">${apvEsc(startDate || '-')}</span> → <span class="srs-mono">${apvEsc(endDate || '-')}</span></span>
+                    ${apvDays ? `<span class="srs-pill tone-sky">${apvDays} ${apvDays === 1 ? (__('day') || 'day') : (__('days') || 'days')}</span>` : ''}
+                </div>`;
 
             Swal.fire({
-                title: isAssetClearanceRole ? (__('asset_clearance_confirmation') || 'Asset Clearance Confirmation') : __('confirm_approval'),
-                html: infoHtml + paymentHtml + hrPayrollHtml + hrTeamCCHtml + financeTeamCCHtml + commentHtml + chainHtml, // Combine all HTML parts
-                icon: 'warning',
-                // width: '40%', // Set modal width
+                title: `<span class="srs-head"><span class="srs-icon tone-${isAssetClearanceRole ? 'amber' : 'green'}"><i class="fa fa-${isAssetClearanceRole ? 'boxes' : 'check-double'}"></i></span><span class="srs-head-text">${apvTitle}<small class="srs-head-sub">${apvEsc(employeeName || '')}</small></span></span>`,
+                html: `<div class="apv-wrap">${apvSummary}${infoHtml}${paymentHtml}${chainHtml}${hrPayrollHtml}${hrTeamCCHtml}${financeTeamCCHtml}${commentHtml}</div>`,
+                width: 600,
                 showCancelButton: true,
                 confirmButtonColor: APP_COLORS.success,
-                cancelButtonColor: APP_COLORS.danger,
-                confirmButtonText: confirmButtonText,
+                cancelButtonColor: '#64748b',
+                confirmButtonText: '<i class="fa fa-check"></i> ' + confirmButtonText,
                 allowOutsideClick: false,
                 willOpen: () => {
                     const swalModal = Swal.getHtmlContainer();
@@ -3162,13 +3277,9 @@ if ($can_see_all_depts) {
                         $('#char-count').text(currentLength);
 
                         // Change color if approaching limit
-                        if (currentLength > maxLength * 0.9) {
-                            $('#char-count').css('color', '#dc3545'); // Red warning
-                        } else if (currentLength > maxLength * 0.7) {
-                            $('#char-count').css('color', '#ffc107'); // Yellow warning
-                        } else {
-                            $('#char-count').css('color', '#6c757d'); // Default gray
-                        }
+                        $('#char-count').closest('.apv-count')
+                            .toggleClass('is-warn', currentLength > maxLength * 0.7 && currentLength <= maxLength * 0.9)
+                            .toggleClass('is-err', currentLength > maxLength * 0.9);
                     });
 
                     // --- HR PAYROLL CALCULATIONS ---
@@ -3580,12 +3691,7 @@ if ($can_see_all_depts) {
                     console.log('sendApproval - Response success:', response.success);
                     console.log('sendApproval - Response message:', response.message);
 
-                    Swal.fire({
-                        title: response.title || __('success') || 'Success',
-                        text: response.message || '',
-                        icon: response.type || 'success',
-                        allowOutsideClick: false
-                    }).then(function(isConfirm) {
+                    showApprovalResult(response).then(function(isConfirm) {
                         if (isConfirm) {
                             location.reload();
                         }
@@ -3634,12 +3740,7 @@ if ($can_see_all_depts) {
                     approval_comment: approvalComment
                 },
                 success: function(response) {
-                    Swal.fire({
-                        title: response.title || 'Approved!',
-                        text: response.message || 'The vacation request has been approved and payer has been assigned.',
-                        icon: response.type || 'success',
-                        allowOutsideClick: false
-                    }).then(() => location.reload());
+                    showApprovalResult(response).then(() => location.reload());
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     Swal.fire({
@@ -4218,154 +4319,92 @@ if ($can_see_all_depts) {
                         }
                         const invalidPassport = missingPassport || expSoon;
 
-                        const passportWarningHtml = invalidPassport ? `
-                        <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #f5c2c7;">
-                            <p style="margin: 0; font-size: 13px; color: #842029;">
-                                <i class="fa fa-exclamation-circle" style="margin-right: 6px;"></i>
-                                <strong>${__('passport_validation_issue') || 'Passport Issue:'}</strong>
-                                ${missingPassport ? (__('passport_missing_message') || 'Passport number is missing.') : ''}
-                                ${missingPassport && expSoon ? ' ' : ''}
-                                ${!missingPassport && expSoon ? (__('passport_expiring_soon_message') || 'Passport expires within 3 months of travel.') : ''}
-                            </p>
-                        </div>
-                    ` : '';
+                    // --- Traveler verification markup (styles: .tv-* in sr_swal_theme.css) ---
+                    const tvEsc = (v) => $('<div>').text(v == null || v === '' ? '-' : String(v)).html();
+                    const tvItem = (icon, label, value, strong) => `
+                        <div class="tv-item">
+                            <span class="tv-label"><i class="fa fa-${icon}"></i>${label}</span>
+                            <span class="tv-value${strong ? ' is-strong' : ''}">${value}</span>
+                        </div>`;
+                    const passportWarningHtml = invalidPassport ? `
+                        <div class="tv-alert is-err"><i class="fa fa-exclamation-circle"></i><span>
+                            <strong>${__('passport_validation_issue') || 'Passport Issue:'}</strong>
+                            ${missingPassport ? (__('passport_missing_message') || 'Passport number is missing.') : ''}
+                            ${!missingPassport && expSoon ? (__('passport_expiring_soon_message') || 'Passport expires within 3 months of travel.') : ''}
+                        </span></div>` : '';
 
-                        // Build existing passport doc HTML if present
-                        let existingPassportHtml = '';
-                        if (data.passport_doc_url) {
-                            const isImg = data.passport_doc_is_image;
-                            const ext = data.passport_doc_ext || '';
-                            const viewContent = isImg ? `<img src="${data.passport_doc_url}" alt="Passport Copy" style="max-width:100%; max-height:180px; border:1px solid #ddd; border-radius:6px;"/>` : `<a href="${data.passport_doc_url}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fa fa-file"></i> View Passport (${ext.toUpperCase()})</a>`;
-                            existingPassportHtml = `
-                            <div id="existing-passport-doc" style="background:#eef7ff; padding:12px; border-radius:6px; margin-top:15px; border:1px solid #c5e0ff;">
-                                <h6 style="margin:0 0 10px; color:#0b5eb7;"><i class='fa fa-file'></i> ${__('current_passport_copy') || 'Current Passport Copy'}</h6>
-                                <div style="margin-bottom:10px;">${viewContent}</div>
-                                <div class="btn-group" role="group">
-                                    <button type="button" id="open-passport-btn" class="btn btn-sm btn-primary"><i class="fa fa-external-link-alt"></i> ${__('open_passport_file') || 'Open Passport'}</button>
-                                    <button type="button" id="replace-passport-btn" class="btn btn-sm btn-warning"><i class="fa fa-sync-alt"></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
-                                </div>
-                                <input type="file" id="replace_passport_input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
-                                <small class="form-text text-muted" id="replace-passport-hint" style="display:none;">
-                                    <i class="fa fa-info-circle"></i> ${__('upload_new_passport_hint') || 'Select a new file to replace the stored passport copy.'}
-                                </small>
+                    // Existing passport copy (ids are used by didOpen: open / replace)
+                    let existingPassportHtml = '';
+                    if (data.passport_doc_url) {
+                        const isImg = data.passport_doc_is_image;
+                        const ext = data.passport_doc_ext || '';
+                        const viewContent = isImg
+                            ? `<img src="${data.passport_doc_url}" alt="Passport Copy" class="tv-doc-img"/>`
+                            : `<a href="${data.passport_doc_url}" target="_blank" class="tv-doc-file"><i class="fa fa-file-pdf"></i> ${__('view_passport') || 'View Passport'} (${ext.toUpperCase()})</a>`;
+                        existingPassportHtml = `
+                        <div id="existing-passport-doc" class="tv-doc">
+                            <div class="tv-doc-view">${viewContent}</div>
+                            <div class="tv-doc-actions">
+                                <button type="button" id="open-passport-btn" class="srs-tool"><i class="fa fa-external-link-alt"></i> ${__('open_passport_file') || 'Open Passport'}</button>
+                                <button type="button" id="replace-passport-btn" class="srs-tool"><i class="fa fa-sync-alt"></i> ${__('replace_passport_copy') || 'Replace Passport Copy'}</button>
                             </div>
-                        `;
-                        }
-                        // Build passport section: show upload only if no existing doc
-                        const requireUpload = !data.passport_doc_url;
-                        const passportSectionHtml = `
-                        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #3085d6;">
-                            <h5 style="color: #004085; margin-top: 0; border-bottom: 2px solid #3085d6; padding-bottom: 8px;">
-                                <i class="fa fa-file-upload"></i> ${__('passport_copy') || 'Passport Copy'} ${requireUpload ? '<span class="text-danger">*</span>' : ''}
-                            </h5>
+                            <input type="file" id="replace_passport_input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;" />
+                            <small class="tv-hint" id="replace-passport-hint" style="display:none;"><i class="fa fa-info-circle"></i> ${__('upload_new_passport_hint') || 'Select a new file to replace the stored passport copy.'}</small>
+                        </div>`;
+                    }
+                    const requireUpload = !data.passport_doc_url;
+                    const passportSectionHtml = `
+                        <div class="tv-card">
+                            <div class="tv-card-head"><span class="tv-ico tone-sky"><i class="fa fa-file-upload"></i></span>${__('passport_copy') || 'Passport Copy'}
+                                ${requireUpload ? `<span class="tv-tag is-req">${__('required') || 'Required'}</span>` : `<span class="tv-tag is-ok"><i class="fa fa-check"></i> ${__('on_file') || 'On file'}</span>`}</div>
                             ${requireUpload ? `
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="passport_file" style="font-weight: 600; color: #666; margin-bottom: 8px; display: block;">
-                                        <i class="fa fa-passport" style="margin-right: 5px; color: #3085d6;"></i> ${__('select_passport_file') || 'Select passport copy (PDF, JPG, PNG)'}
-                                    </label>
-                                    <input type="file" id="passport_file" accept=".pdf,.jpg,.jpeg,.png" class="form-control-file" style="padding: 10px; border: 2px dashed #3085d6; border-radius: 6px; background: #f8f9fa; width: 100%;">
-                                    <small class="form-text text-muted" style="margin-top: 8px; display: block;">
-                                        <i class="fa fa-info-circle"></i> ${__('passport_file_help') || 'Please upload a clear copy of the employee\'s passport. Accepted formats: PDF, JPG, PNG (Max 5MB)'}
-                                    </small>
-                                </div>
-                            ` : ''}
+                                <label for="passport_file" class="tv-drop">
+                                    <i class="fa fa-cloud-upload-alt"></i>
+                                    <span>${__('select_passport_file') || 'Select passport copy (PDF, JPG, PNG)'}</span>
+                                    <small>${__('passport_file_help_short', 'PDF, JPG or PNG · max 5MB')}</small>
+                                    <input type="file" id="passport_file" accept=".pdf,.jpg,.jpeg,.png" class="tv-drop-input" onchange="var f=this.files[0];this.parentNode.classList.toggle('has-file',!!f);if(f)this.parentNode.querySelector('span').textContent=f.name;">
+                                </label>` : ''}
                             ${existingPassportHtml}
-                        </div>
-                    `;
-                        // Show confirmation with all traveler details
-                        Swal.fire({
-                            title: '<i class="fa fa-passport"></i> ' + (__('verify_traveler_information') || 'Verify Traveler Information'),
-                            html: `
-                            <div style="text-align: left; max-height: 500px; overflow-y: auto;">
+                        </div>`;
+
+                    Swal.fire({
+                        title: `<span class="srs-head"><span class="srs-icon tone-sky"><i class="fa fa-passport"></i></span><span class="srs-head-text">${__('verify_traveler_information') || 'Verify Traveler Information'}<small class="srs-head-sub">${tvEsc(data.employee_name)} · ${tvEsc(data.request_inv_no)}</small></span></span>`,
+                        html: `
+                            <div class="tv-wrap">
                                 ${passportWarningHtml}
-                                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                    <h5 style="color: #667eea; margin-top: 0; border-bottom: 2px solid #667eea; padding-bottom: 8px;">
-                                        <i class="fa fa-user"></i> ${__('employee_information') || 'Employee Information'}
-                                    </h5>
-                                    <table style="width: 100%; font-size: 14px;">
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666; width: 45%;"><i class="fa fa-id-card" style="margin-right: 5px; color: #667eea;"></i> ${__('employee_name') || 'Employee Name'}:</td>
-                                            <td style="padding: 8px;"><strong>${data.employee_name || 'N/A'}</strong></td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-hashtag" style="margin-right: 5px; color: #667eea;"></i> ${__('emp_id') || 'Employee ID'}:</td>
-                                            <td style="padding: 8px;">${data.emp_id || 'N/A'}</td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-passport" style="margin-right: 5px; color: #667eea;"></i> ${__('passport_no') || 'Passport No'}:</td>
-                                            <td style="padding: 8px;"><strong>${data.passport_number || 'N/A'}</strong></td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-times" style="margin-right: 5px; color: #667eea;"></i> ${__('passport_expiry') || 'Passport Expiry'}:</td>
-                                            <td style="padding: 8px;">${data.passport_exp || 'N/A'}</td>
-                                        </tr>
-                                    </table>
+                                <div class="tv-card">
+                                    <div class="tv-card-head"><span class="tv-ico tone-indigo"><i class="fa fa-user"></i></span>${__('employee_information') || 'Employee Information'}</div>
+                                    <div class="tv-grid">
+                                        ${tvItem('id-card', __('employee_name') || 'Employee Name', tvEsc(data.employee_name), true)}
+                                        ${tvItem('hashtag', __('emp_id') || 'Employee ID', tvEsc(data.emp_id))}
+                                        ${tvItem('passport', __('passport_no') || 'Passport No', `<span class="srs-mono">${tvEsc(data.passport_number)}</span>`, true)}
+                                        ${tvItem('calendar-times', __('passport_expiry') || 'Passport Expiry', tvEsc(data.passport_exp))}
+                                    </div>
                                 </div>
-
-                                <div style="background: #fff9e6; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ffc107;">
-                                    <h5 style="color: #856404; margin-top: 0; border-bottom: 2px solid #ffc107; padding-bottom: 8px;">
-                                        <i class="fa fa-plane"></i> ${__('travel_details') || 'Travel Details'}
-                                    </h5>
-                                    <table style="width: 100%; font-size: 14px;">
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666; width: 45%;"><i class="fa fa-map-marker-alt" style="margin-right: 5px; color: #ffc107;"></i> ${__('departure_to') || 'Departure To'}:</td>
-                                            <td style="padding: 8px;"><strong>${data.country_name || 'N/A'}</strong></td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-plane-departure" style="margin-right: 5px; color: #ffc107;"></i> ${__('departure_date') || 'Departure Date'}:</td>
-                                            <td style="padding: 8px;"><strong>${data.departure_date || 'N/A'}</strong></td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-plane-arrival" style="margin-right: 5px; color: #ffc107;"></i> ${__('arrival_date') || 'Arrival Date'}:</td>
-                                            <td style="padding: 8px;"><strong>${data.arrival_date || 'N/A'}</strong></td>
-                                        </tr>
-                                        <tr style="border-bottom: 1px solid #dee2e6;">
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-alt" style="margin-right: 5px; color: #ffc107;"></i> ${__('vacation_start') || 'Vacation Start'}:</td>
-                                            <td style="padding: 8px;">${data.start_date || 'N/A'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 8px; font-weight: 600; color: #666;"><i class="fa fa-calendar-check" style="margin-right: 5px; color: #ffc107;"></i> ${__('vacation_return') || 'Vacation Return'}:</td>
-                                            <td style="padding: 8px;">${data.return_date || 'N/A'}</td>
-                                        </tr>
-                                    </table>
+                                <div class="tv-card">
+                                    <div class="tv-card-head"><span class="tv-ico tone-amber"><i class="fa fa-plane"></i></span>${__('travel_details') || 'Travel Details'}</div>
+                                    <div class="tv-route">
+                                        <div><small>${__('departure_date') || 'Departure'}</small><b>${tvEsc(data.departure_date)}</b></div>
+                                        <div class="tv-route-mid"><i class="fa fa-plane"></i><span>${tvEsc(data.country_name)}</span></div>
+                                        <div><small>${__('arrival_date') || 'Arrival'}</small><b>${tvEsc(data.arrival_date)}</b></div>
+                                    </div>
+                                    <div class="tv-grid">
+                                        ${tvItem('calendar-alt', __('vacation_start') || 'Vacation Start', tvEsc(data.start_date))}
+                                        ${tvItem('calendar-check', __('vacation_return') || 'Vacation Return', tvEsc(data.return_date))}
+                                    </div>
                                 </div>
-
-                                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3085d6;">
-                                    <p style="margin: 0; font-size: 13px; color: #004085;">
-                                        <i class="fa fa-info-circle" style="margin-right: 5px;"></i>
-                                        <strong>${__('reference_number') || 'Reference Number'}:</strong> ${data.request_inv_no || 'N/A'}
-                                    </p>
-                                </div>
-
-                                <div style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #ffc107;">
-                                    <p style="margin: 0; font-size: 13px; color: #856404;">
-                                        <i class="fa fa-exclamation-triangle" style="margin-right: 5px;"></i>
-                                        <strong>${__('important') || 'Important'}:</strong> ${__('verify_information_notice') || 'Please verify all information is correct. If any information is incorrect, please contact HR for corrections before sending this email.'}
-                                    </p>
-                                </div>
-
-                                <div style="background: #f8d7da; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #f5c2c7;">
-                                    <p style="margin: 0; font-size: 13px; color: #842029;">
-                                        <i class="fa fa-ban" style="margin-right: 5px;"></i>
-                                        <strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}
-                                    </p>
-                                </div>
-
                                 ${passportSectionHtml}
+                                <div class="tv-alert is-warn"><i class="fa fa-exclamation-triangle"></i><span><strong>${__('important') || 'Important'}:</strong> ${__('verify_information_notice') || 'Please verify all information is correct before sending the email.'}</span></div>
+                                <div class="tv-alert is-err"><i class="fa fa-ban"></i><span><strong>${__('note') || 'Note'}:</strong> ${__('email_sent_once_warning') || 'This email can only be sent once. After sending, the button will be hidden.'}</span></div>
                             </div>
                         `,
-                            icon: 'question',
-                            showCancelButton: true,
-                            confirmButtonText: '<i class="fa fa-check-circle"></i> ' + (__('confirm_and_send') || 'Confirm & Send Email'),
-                            cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
-                            confirmButtonColor: '#28a745',
-                            cancelButtonColor: '#dc3545',
-                            allowOutsideClick: false,
-                            width: '650px',
-                            customClass: {
-                                confirmButton: 'btn btn-success btn-lg',
-                                cancelButton: 'btn btn-danger btn-lg'
-                            },
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="fa fa-paper-plane"></i> ' + (__('confirm_and_send') || 'Confirm & Send Email'),
+                        cancelButtonText: __('cancel') || 'Cancel',
+                        confirmButtonColor: '#16a34a',
+                        cancelButtonColor: '#64748b',
+                        allowOutsideClick: false,
+                        width: '640px',
                             didOpen: () => {
                                 const confirmBtn = Swal.getConfirmButton();
                                 const passportFileInput = document.getElementById('passport_file');
@@ -4800,63 +4839,70 @@ if ($can_see_all_depts) {
             });
        
  }        function displaySettlementModal(vacationId, requestInvNo, employeeId, employeeName, vacationDays, totalPayable, workingDaysSalary, vacationSalary, overtimeAmount, otherEarnings, deductionAmount, gosiDeduction, isEncashed, encashmentAmount, encashGosi, approvalChainText) {
-            // Build the breakdown HTML based on vacation type
+            // Settlement summary (styles: .st-* in sr_swal_theme.css)
+            const stEsc = (v) => $('<div>').text(v == null ? '' : String(v)).html();
+            const stMoney = (v) => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const stLine = (label, amount, sign) => `
+                <div class="st-line${sign === '+' ? ' is-plus' : (sign === '-' ? ' is-minus' : '')}">
+                    <span>${label}</span><b>${sign || ''}${stMoney(amount)} <em>SAR</em></b>
+                </div>`;
+
             let breakdownHtml = '';
-            
             if (isEncashed) {
-                // Encashed vacation breakdown
-                breakdownHtml = `
-                    <div class="alert alert-info" style="font-size: 0.85rem;">
-                        <strong><i class="fa fa-money-bill-wave"></i> ${__('encashment_breakdown')}:</strong>
-                        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #dee2e6;">
-                            <span>${__('encashment_amount_gross')}:</span>
-                            <span><strong>${parseFloat(encashmentAmount).toFixed(2)} SAR</strong></span>
-                        </div>
-                        ${encashGosi > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;">
-                            <span>- ${__('gosi_deduction')}:</span>
-                            <span>-${parseFloat(encashGosi).toFixed(2)} SAR</span>
-                        </div>` : ''}
-                        <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 8px; border-top: 2px solid #28a745; font-weight: bold; color: #28a745;">
-                            <span>${__('net_encashment')}:</span>
-                            <span>${parseFloat(totalPayable).toFixed(2)} SAR</span>
-                        </div>
-                    </div>
-                `;
+                breakdownHtml =
+                    stLine(__('encashment_amount_gross') || 'Encashment amount (gross)', encashmentAmount) +
+                    (encashGosi > 0 ? stLine(__('gosi_deduction') || 'GOSI deduction', encashGosi, '-') : '');
             } else {
-                // Payable vacation breakdown (Fly Annual or Local Annual removed from payroll)
-                breakdownHtml = `
-                    <div class="alert alert-info" style="font-size: 0.85rem;">
-                        <strong><i class="fa fa-calculator"></i> ${__('settlement_breakdown')}:</strong>
-                        ${workingDaysSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('working_days_salary')}:</span><span>${parseFloat(workingDaysSalary).toFixed(2)} SAR</span></div>` : ''}
-                        ${vacationSalary > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0;"><span>${__('vacation_salary')}:</span><span>${parseFloat(vacationSalary).toFixed(2)} SAR</span></div>` : ''}
-                        ${overtimeAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: green;"><span>+ ${__('overtime')}:</span><span>+${parseFloat(overtimeAmount).toFixed(2)} SAR</span></div>` : ''}
-                        ${otherEarnings > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: green;"><span>+ ${__('other_earnings') || 'Other Earnings'}:</span><span>+${parseFloat(otherEarnings).toFixed(2)} SAR</span></div>` : ''}
-                        ${deductionAmount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('deductions')}:</span><span>-${parseFloat(deductionAmount).toFixed(2)} SAR</span></div>` : ''}
-                        ${gosiDeduction > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: red;"><span>- ${__('gosi_deduction')}:</span><span>-${parseFloat(gosiDeduction).toFixed(2)} SAR</span></div>` : ''}
-                    </div>
-                `;
+                breakdownHtml =
+                    (workingDaysSalary > 0 ? stLine(__('working_days_salary') || 'Working days salary', workingDaysSalary) : '') +
+                    (vacationSalary > 0 ? stLine(__('vacation_salary') || 'Vacation salary', vacationSalary) : '') +
+                    (overtimeAmount > 0 ? stLine(__('overtime') || 'Overtime', overtimeAmount, '+') : '') +
+                    (otherEarnings > 0 ? stLine(__('other_earnings') || 'Other Earnings', otherEarnings, '+') : '') +
+                    (deductionAmount > 0 ? stLine(__('deductions') || 'Deductions', deductionAmount, '-') : '') +
+                    (gosiDeduction > 0 ? stLine(__('gosi_deduction') || 'GOSI deduction', gosiDeduction, '-') : '');
             }
-            
+
+            const chainSteps = String(approvalChainText || '')
+                .split(/\s*(?:→|->|&rarr;)\s*/)
+                .map((x) => x.trim())
+                .filter(Boolean);
+            const chainHtml = chainSteps.length
+                ? `<div class="st-chain">${chainSteps.map((step, i) => `<span class="st-step"><i>${i + 1}</i>${stEsc(step)}</span>`).join('<span class="st-step-arrow">›</span>')}</div>`
+                : '';
+            const days = parseInt(vacationDays, 10) || 0;
+
             Swal.fire({
-                title: __('create_settlement') || 'Create Settlement',
+                title: `<span class="srs-head"><span class="srs-icon tone-green"><i class="fa fa-file-invoice-dollar"></i></span><span class="srs-head-text">${__('create_settlement') || 'Create Settlement'}<small class="srs-head-sub">${stEsc(employeeName)}</small></span></span>`,
                 html: `
-                    <div class="text-left">
-                        <p><strong>${__('employee')}:</strong> ${employeeName}</p>
-                        <p><strong>${__('request')}:</strong> ${requestInvNo}</p>
-                        <p><strong>${__('vacation_days')}:</strong> ${vacationDays} ${__('days')}</p>
-                        <hr>
-                        ${breakdownHtml}
-                        <p><strong>${__('total_payable')}:</strong> <span class="badge badge-success" style="font-size: 1.1rem;">SAR ${parseFloat(totalPayable).toFixed(2)}</span></p>
-                        <hr>
-                        <p class="text-muted"><small>${__('settlement_creation_note')}: <strong>${approvalChainText}</strong></small></p>
+                    <div class="st-wrap">
+                        <div class="st-meta">
+                            <span class="st-meta-item"><small>${__('request') || 'Request'}</small><b class="srs-mono">${stEsc(requestInvNo)}</b></span>
+                            <span class="st-meta-item"><small>${isEncashed ? (__('encashed_days') || 'Encashed days') : (__('vacation_days') || 'Vacation days')}</small><b>${days} ${days === 1 ? (__('day') || 'day') : (__('days') || 'days')}</b></span>
+                        </div>
+                        <div class="st-total">
+                            <small>${isEncashed ? (__('net_encashment') || 'Net encashment') : (__('total_payable') || 'Total payable')}</small>
+                            <strong>${stMoney(totalPayable)} <em>SAR</em></strong>
+                        </div>
+                        ${breakdownHtml ? `
+                        <div class="st-card">
+                            <div class="st-card-title"><i class="fa fa-calculator"></i> ${isEncashed ? (__('encashment_breakdown') || 'Encashment breakdown') : (__('settlement_breakdown') || 'Settlement breakdown')}</div>
+                            ${breakdownHtml}
+                            <div class="st-line is-total"><span>${__('total_payable') || 'Total payable'}</span><b>${stMoney(totalPayable)} <em>SAR</em></b></div>
+                        </div>` : ''}
+                        ${chainHtml ? `
+                        <div class="st-card">
+                            <div class="st-card-title"><i class="fa fa-route"></i> ${__('settlement_approval_chain') || 'Settlement approval chain'}</div>
+                            ${chainHtml}
+                            <p class="st-note">${__('settlement_creation_note_short', 'Creating it starts this approval chain.')}</p>
+                        </div>` : ''}
                     </div>
                 `,
-                icon: 'question',
+                width: 580,
                 showCancelButton: true,
-                confirmButtonColor: '#28a745',
+                confirmButtonColor: '#16a34a',
                 confirmButtonText: '<i class="fa fa-check"></i> ' + (__('create_settlement') || 'Create Settlement'),
-                cancelButtonColor: '#dc3545',
-                cancelButtonText: '<i class="fa fa-times"></i> ' + (__('cancel') || 'Cancel'),
+                cancelButtonColor: '#64748b',
+                cancelButtonText: __('cancel') || 'Cancel',
                 allowOutsideClick: false,
                 showLoaderOnConfirm: true,
                 preConfirm: () => {

@@ -162,3 +162,46 @@ html.app-dark .form-control.app-dp-input[readonly]:not(.app-dp-locked):not(:disa
 .app-dp-hijri-foot { padding: 6px 10px 8px; font-size: 12px; color: var(--dp-muted); text-align: center; border-top: 1px solid var(--dp-line); direction: ltr; }
 .app-dp-rtl .app-dp-hijri-foot { direction: rtl; }
 .flatpickr-calendar.app-dp-hijri.static.open { z-index: 1060; }
+
+/* Year picker (attachYearPanel in app_datepicker.js): header year button + year grid */
+.app-dp .app-dp-year-hidden { display: none !important; }
+.app-dp .app-dp-year-btn {
+    display: inline-flex; align-items: center; gap: 4px; margin-inline-start: 4px; padding: 2px 6px;
+    border: 0; border-radius: 6px; background: transparent; color: var(--dp-ink);
+    font: inherit; font-weight: 600; cursor: pointer; line-height: 1.4; vertical-align: middle;
+}
+.app-dp .app-dp-year-btn:hover,
+.app-dp.app-dp-years-open .app-dp-year-btn { background: var(--dp-accent-soft); color: var(--dp-accent-strong); }
+.app-dp .app-dp-caret {
+    display: inline-block;
+    width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid currentColor; opacity: .7; transition: transform .15s;
+}
+.app-dp.app-dp-years-open .app-dp-caret { transform: scaleY(-1); }
+
+.app-dp .app-dp-years {
+    display: none; position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+    flex-direction: column; padding: 6px 8px 10px; background: var(--dp-surface);
+    border-radius: 0 0 12px 12px;
+}
+.app-dp.app-dp-years-open .app-dp-years { display: flex; }
+.app-dp .app-dp-years-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.app-dp .app-dp-years-label { font-size: 12px; font-weight: 600; color: var(--dp-muted); direction: ltr; }
+.app-dp .app-dp-years-nav {
+    width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent;
+    color: var(--dp-muted); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.app-dp .app-dp-years-nav:hover:not(:disabled) { background: var(--dp-surface-2); color: var(--dp-accent); }
+.app-dp .app-dp-years-nav:disabled { opacity: .3; cursor: not-allowed; }
+.app-dp-rtl .app-dp-years-head { flex-direction: row-reverse; }
+.app-dp .app-dp-years-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.app-dp .app-dp-year {
+    border: 1px solid transparent; border-radius: 8px; background: var(--dp-surface-2);
+    color: var(--dp-ink); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+    font-variant-numeric: tabular-nums; min-height: 34px;
+}
+.app-dp .app-dp-year:hover:not(:disabled) { background: var(--dp-accent-soft); color: var(--dp-accent-strong); }
+.app-dp .app-dp-year.is-today { border-color: var(--dp-accent); }
+.app-dp .app-dp-year.is-view { background: var(--dp-accent-soft); color: var(--dp-accent-strong); font-weight: 700; }
+.app-dp .app-dp-year.is-selected { background: var(--dp-accent); border-color: var(--dp-accent); color: #fff; font-weight: 700; }
+.app-dp .app-dp-year:disabled { color: var(--dp-muted); background: var(--dp-block-bg); cursor: not-allowed; text-decoration: line-through; opacity: .7; }
