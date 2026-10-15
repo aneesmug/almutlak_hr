@@ -968,77 +968,196 @@ foreach ($employees as $employee) {
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="shortcut icon" href="<?= htmlspecialchars((string)(function_exists('get_setting') ? (get_setting($conDB, 'favicon') ?? 'assets/images/favicon.ico') : 'assets/images/favicon.ico')) ?>">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
-    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
+    <?php if ($is_rtl ?? false): ?>
+        <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
+    <?php endif; ?>
     <link href="plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background: #f4f7fb; }
-        .page-header {
-            background: linear-gradient(135deg, #0f5b78 0%, #138a72 100%);
-            color: #fff;
-            padding: 30px 0;
-            margin-bottom: 28px;
-            box-shadow: 0 8px 24px rgba(15, 91, 120, 0.18);
-            text-align: <?= ($is_rtl ?? false) ? 'right' : 'left' ?>;
+        /* ---- Page shell (sr-page design system, assets/css/smart_request.css) ---- */
+        .pc-page .sr-head { align-items: flex-start; }
+        .pc-page .sr-head h1 i { color: var(--sr-accent); margin-inline-end: 6px; }
+        .pc-head-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .pc-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 720px; }
+        .pc-actions .sr-btn { gap: 6px; }
+        .pc-actions .sr-btn .sr-count { margin-inline-start: 2px; }
+        .sr-btn-warn { background: #f59e0b; border-color: #f59e0b; color: #fff !important; }
+        .sr-btn-warn:hover { background: #d97706; border-color: #d97706; color: #fff !important; }
+        .sr-btn.is-on { background: var(--tone-amber-bg); border-color: var(--tone-amber-bd); color: var(--tone-amber-fg) !important; }
+        .sr-btn:disabled { opacity: .55; cursor: not-allowed; }
+        .pc-more-btn .sr-count { background: #fff; color: var(--sr-accent-strong); }
+
+        /* ---- Employee detail popup ---- */
+        .pc-detail-container .swal2-popup.pc-detail-popup { width: min(1240px, 96vw) !important; padding: 0 !important; border-radius: 18px; overflow: hidden; background: var(--sr-surface-2, #f8fafc); }
+        /* Employee detail popup: banner header + scrolling body (all inside html-container) */
+        .pc-detail-popup .swal2-title { display: none !important; }
+        .pc-detail-popup .swal2-html-container { margin: 0 !important; padding: 0 !important; text-align: start !important; overflow: visible !important; max-height: none !important; }
+        .pc-detail-popup .swal2-close { top: 14px; color: rgba(255, 255, 255, .85); z-index: 3; }
+        .pc-detail-popup .swal2-close:hover { color: #fff; background: rgba(255, 255, 255, .15); }
+        .pc-detail-popup .swal2-actions { margin: 0; padding: 12px 20px; gap: 8px; justify-content: flex-end; background: var(--sr-surface); border-top: 1px solid var(--sr-border); width: 100%; }
+        .pc-detail-popup .swal2-footer { margin: 0; padding: 10px 20px; border-top: 1px solid var(--sr-border); background: var(--sr-surface); }
+        .pc-dbody { padding: 16px 20px 6px; max-height: 64vh; overflow-y: auto; }
+        /* Prev / Next: content is swapped in place; this overlay covers the popup while it loads */
+        .pc-detail-container .swal2-popup.pc-detail-popup { position: relative; }
+        .pc-dloader { position: absolute; inset: 0; z-index: 6; display: none; align-items: center; justify-content: center;
+            background: rgba(255, 255, 255, .6); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+        .pc-dloader.show { display: flex; }
+        .pc-dloader-box { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 600;
+            color: var(--sr-text-2); background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow); }
+        .pc-spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--sr-accent-soft); border-top-color: var(--sr-accent); animation: pcSpin .7s linear infinite; }
+        @keyframes pcSpin { to { transform: rotate(360deg); } }
+        html.app-dark .pc-dloader { background: rgba(15, 23, 42, .55); }
+
+        .pc-dhead { position: relative; display: flex; align-items: center; gap: 16px; padding: 18px 64px 18px 22px; color: #fff; line-height: 1.4;
+            background: linear-gradient(120deg, var(--sr-accent-strong) 0%, #6d28d9 55%, #7c3aed 100%); overflow: hidden; }
+        .pc-dhead::after { content: ''; position: absolute; inset-inline-end: -60px; top: -80px; width: 260px; height: 260px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 70%); pointer-events: none; }
+        [dir="rtl"] .pc-dhead { padding: 18px 22px 18px 64px; }
+        .pc-dhead-avatar { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 800; letter-spacing: .5px; color: #fff; background: rgba(255, 255, 255, .18); border: 1px solid rgba(255, 255, 255, .35); }
+        .pc-dhead-main { flex: 1 1 auto; min-width: 0; position: relative; z-index: 1; }
+        .pc-dhead-name { display: block; font-size: 18px; font-weight: 800; color: #fff; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pc-dhead-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .pc-dhead-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5;
+            color: #fff; background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .22); white-space: nowrap; }
+        .pc-dhead-chip i { font-size: 13px; opacity: .85; }
+        .pc-dhead-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; position: relative; z-index: 1; }
+        .pc-dhead-net { text-align: end; }
+        .pc-dhead-net small { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .8; }
+        .pc-dhead-net b { display: block; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pc-dhead-net b .icon-saudi_riyal { font-size: .7em !important; opacity: .85; }
+        .pc-dhead-pills { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+        .pc-dhead-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 1.5;
+            background: #fff; white-space: nowrap; }
+        .pc-dhead-pill.ok { color: #15803d; } .pc-dhead-pill.bad { color: #b91c1c; } .pc-dhead-pill.wait { color: #475569; }
+        html.app-dark .pc-dhead { background: linear-gradient(120deg, #3730a3 0%, #4c1d95 60%, #5b21b6 100%); }
+        html.app-dark .pc-dhead-pill { background: rgba(15, 23, 42, .75); }
+        html.app-dark .pc-dhead-pill.ok { color: #4ade80; } html.app-dark .pc-dhead-pill.bad { color: #f87171; } html.app-dark .pc-dhead-pill.wait { color: #cbd5e1; }
+        @media (max-width: 767px) { .pc-dhead { flex-wrap: wrap; } .pc-dhead-side { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; } .pc-dhead-net { text-align: start; } }
+        .pc-kpi { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .pc-kpi-box { position: relative; padding: 11px 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); min-width: 0; }
+        .pc-kpi-box::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px; border-radius: 3px; background: var(--k-fg, var(--sr-border-strong)); }
+        .pc-kpi-box.k-green { --k-fg: var(--tone-green-fg); } .pc-kpi-box.k-red { --k-fg: var(--tone-red-fg); }
+        .pc-kpi-box.k-sky { --k-fg: var(--tone-sky-fg); } .pc-kpi-box.k-indigo { --k-fg: var(--tone-indigo-fg); }
+        .pc-kpi-label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pc-kpi-value { display: block; margin-top: 3px; font-size: 18px; font-weight: 800; color: var(--k-fg, var(--sr-text)); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pc-kpi-value .icon-saudi_riyal { font-size: .8em; opacity: .75; }
+        .pc-formula { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 14px; margin-bottom: 14px; border-radius: 12px;
+            border: 1px dashed var(--sr-border-strong); background: var(--sr-surface); font-size: 13px; color: var(--sr-text-2); font-variant-numeric: tabular-nums; }
+        .pc-formula b { color: var(--sr-text); }
+        .pc-formula .op { color: var(--sr-muted); font-weight: 700; }
+        .pc-formula .ok { color: var(--tone-green-fg); } .pc-formula .bad { color: var(--tone-red-fg); }
+        .pc-dgrid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+        .pc-dgrid.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-panel { border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); min-width: 0; overflow: hidden; }
+        .pc-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--sr-border); font-size: 13.5px; font-weight: 700; color: var(--sr-text); }
+        .pc-panel-head i { margin-inline-end: 6px; color: var(--sr-accent); }
+        .pc-panel-head .pc-panel-total { font-variant-numeric: tabular-nums; }
+        .pc-panel.p-green .pc-panel-head { background: var(--tone-green-bg); color: var(--tone-green-fg); border-color: var(--tone-green-bd); }
+        .pc-panel.p-green .pc-panel-head i { color: var(--tone-green-fg); } .pc-panel.p-green { border-color: var(--tone-green-bd); }
+        .pc-panel.p-red .pc-panel-head { background: var(--tone-red-bg); color: var(--tone-red-fg); border-color: var(--tone-red-bd); }
+        .pc-panel.p-red .pc-panel-head i { color: var(--tone-red-fg); } .pc-panel.p-red { border-color: var(--tone-red-bd); }
+        .pc-sal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-sal-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--sr-border); font-size: 13px; }
+        .pc-sal-row:nth-child(odd) { border-inline-end: 1px solid var(--sr-border); }
+        .pc-sal-row span { color: var(--sr-muted); font-weight: 600; }
+        .pc-sal-row b { color: var(--sr-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pc-sal-row.is-zero b { color: var(--sr-muted); font-weight: 500; opacity: .7; }
+        .pc-kv { margin: 0; padding: 0; list-style: none; }
+        .pc-kv li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--sr-border); font-size: 13px; }
+        .pc-kv li:last-child { border-bottom: 0; }
+        .pc-kv span { color: var(--sr-muted); font-weight: 600; }
+        .pc-kv b { color: var(--sr-text); text-align: end; word-break: break-all; }
+        .pc-items { margin: 0; padding: 6px 0; list-style: none; }
+        .pc-items li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; }
+        .pc-items li + li { border-top: 1px dashed var(--sr-border); }
+        .pc-item-name { display: block; font-weight: 700; color: var(--sr-text); font-size: 13.5px; }
+        .pc-item-meta { display: block; margin-top: 2px; font-size: 12px; color: var(--sr-muted); }
+        .pc-item-amt { font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .p-green .pc-item-amt { color: var(--tone-green-fg); } .p-red .pc-item-amt { color: var(--tone-red-fg); }
+        .pc-items-empty { padding: 18px 14px; text-align: center; color: var(--sr-muted); font-size: 13px; }
+        .pc-items-empty i { display: block; font-size: 22px; opacity: .6; margin-bottom: 4px; }
+        .pc-fb { border: 1px solid var(--tone-amber-bd); border-radius: 12px; background: var(--tone-amber-bg); margin-bottom: 14px; overflow: hidden; }
+        .pc-fb-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-weight: 700; color: var(--tone-amber-fg); }
+        .pc-fb-list { max-height: 190px; overflow-y: auto; padding: 0 10px 10px; }
+        .pc-fb-item { padding: 10px 12px; border-radius: 10px; background: var(--sr-surface); border: 1px solid var(--sr-border); }
+        .pc-fb-item + .pc-fb-item { margin-top: 8px; }
+        .pc-fb-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--sr-text); }
+        .pc-fb-when { font-size: 11.5px; color: var(--sr-muted); margin: 2px 0 6px; }
+        .pc-fb-note { font-size: 13px; color: var(--sr-text-2); white-space: pre-wrap; }
+        .pc-fb-resolved { margin-top: 6px; font-size: 11.5px; color: var(--tone-green-fg); }
+        .pc-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+        .pc-nav-counter { font-weight: 700; color: var(--sr-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+        .pc-nav-counter kbd { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: var(--sr-surface-3); color: var(--sr-muted); border: 1px solid var(--sr-border); box-shadow: none; }
+        .sr-btn.pc-btn-check { background: var(--sr-surface); border-color: #16a34a; color: #16a34a !important; }
+        .sr-btn.pc-btn-check:hover { background: var(--tone-green-bg); }
+        @media (max-width: 1199px) { .pc-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 991px) { .pc-dgrid, .pc-dgrid.even { grid-template-columns: 1fr; } }
+        @media (max-width: 575px) { .pc-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pc-sal { grid-template-columns: 1fr; } .pc-sal-row:nth-child(odd) { border-inline-end: 0; } }
+
+        /* ---- More Actions popup (same look as view_employee.php / profile.php) ---- */
+        .more-actions-modal { --ma-bg: #f5f6fa; --ma-card: #fff; --ma-border: #e8ebf1; --ma-text: #1f2937; --ma-muted: #8a93a3; --ma-accent: #5b73e8; }
+        html.app-dark .more-actions-modal { --ma-bg: #1b1f27; --ma-card: #242a35; --ma-border: #323a48; --ma-text: #e5e7eb; --ma-muted: #9aa3b2; --ma-accent: #8b9cf4; }
+        .more-actions-modal .swal2-popup { border-radius: 18px; box-shadow: 0 24px 64px rgba(15, 23, 42, .22); overflow: hidden; background: var(--ma-bg); padding: 0 !important; }
+        .more-actions-modal .swal2-title { margin: 0; padding: 0; text-align: start; background: var(--ma-card); border-bottom: 1px solid var(--ma-border); }
+        .more-actions-modal .ma-head { padding: 18px 56px 14px 20px; }
+        [dir="rtl"] .more-actions-modal .ma-head { padding: 18px 20px 14px 56px; }
+        .more-actions-modal .ma-head p { margin: 3px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ma-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .more-actions-modal .swal2-html-container { margin: 0 !important; padding: 0 !important; overflow: visible; text-align: start; }
+        .more-actions-modal .menu-items-container { padding: 14px 16px 18px; max-height: 62vh; overflow-y: auto; background: var(--ma-bg); }
+        .more-actions-modal .ma-group + .ma-group { margin-top: 16px; }
+        .more-actions-modal .ma-group-title { display: flex; align-items: center; gap: 7px; margin: 0 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--ma-muted); }
+        .more-actions-modal .ma-group-title i { font-size: 11px; }
+        .more-actions-modal .ma-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        @media (max-width: 520px) { .more-actions-modal .ma-grid { grid-template-columns: 1fr; } }
+        .more-actions-modal .menu-item { display: flex !important; align-items: center; gap: 11px; min-height: 56px; padding: 10px 12px !important; margin: 0 !important;
+            cursor: pointer !important; border: 1px solid var(--ma-border); border-radius: 12px; background: var(--ma-card); font-weight: 600; user-select: none;
+            transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+        .more-actions-modal .menu-item:hover { border-color: currentColor; box-shadow: 0 6px 16px rgba(15, 23, 42, .08); transform: translateY(-1px); }
+        .more-actions-modal .menu-item:active { transform: scale(.98); }
+        .more-actions-modal .menu-item:focus-visible { outline: 2px solid var(--ma-accent); outline-offset: 2px; }
+        .more-actions-modal .menu-item i { flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; background-color: rgba(108, 117, 125, .14); }
+        .more-actions-modal .menu-item span { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.3; color: var(--ma-text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .more-actions-modal .menu-item .ma-count { flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11.5px; line-height: 22px; text-align: center; }
+        .more-actions-modal .menu-item.text-primary { color: var(--primary) !important; } .more-actions-modal .menu-item.text-primary i { background-color: rgba(91, 115, 232, .14); }
+        .more-actions-modal .menu-item.text-warning { color: var(--warning) !important; } .more-actions-modal .menu-item.text-warning i { background-color: rgba(241, 180, 76, .16); }
+        .more-actions-modal .menu-item.text-info { color: var(--info) !important; } .more-actions-modal .menu-item.text-info i { background-color: rgba(80, 165, 241, .14); }
+        .more-actions-modal .menu-item.text-success { color: var(--success) !important; } .more-actions-modal .menu-item.text-success i { background-color: rgba(40, 167, 69, .14); }
+        .more-actions-modal .menu-item.text-secondary { color: var(--secondary) !important; } .more-actions-modal .menu-item.text-secondary i { background-color: rgba(108, 117, 125, .14); }
+        .more-actions-modal .menu-item.text-dark { color: var(--ma-text) !important; } .more-actions-modal .menu-item.text-dark i { background-color: rgba(108, 117, 125, .16); }
+        .more-actions-modal .swal2-close { font-size: 1.5rem; color: var(--ma-muted); width: 36px; height: 36px; top: 10px; }
+        .more-actions-modal .swal2-close:hover { color: #f46a6a; }
+        /* Filters */
+        .pc-filters .sr-card-head h3 i, .pc-list .sr-card-head h3 i { color: var(--sr-accent); margin-inline-end: 6px; }
+        .pc-filters .sr-filter-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+        .pc-filters .select2-container { width: 100% !important; }
+        .pc-filters .select2-container--default .select2-selection--multiple {
+            min-height: 38px; border: 1px solid var(--sr-border-strong); border-radius: 9px; padding: 2px 6px; background: var(--sr-surface-2);
         }
-        .page-header h3 { margin: 0; font-weight: 700; }
-        .toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 16px;
+        .pc-filters .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: var(--sr-accent); }
+        .pc-filters .select2-container--default .select2-selection--multiple .select2-selection__choice { margin-top: 4px; }
+        .pc-filters .pc-reset { width: 100%; justify-content: center; height: 38px; }
+        /* KPI cards (static sr-scard) */
+        .pc-kpis .sr-scard { cursor: default; }
+        .pc-kpis .sr-scard:hover { transform: none; }
+        .pc-kpis .pc-money { font-size: 19px; letter-spacing: -.3px; white-space: nowrap; }
+        .pc-kpis .pc-money .icon-saudi_riyal { font-size: .8em; opacity: .7; margin-inline-end: 2px; }
+        /* Table card */
+        .pc-list .sr-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .pc-list .pc-table-wrap { padding: 12px 16px 16px; }
+        .pc-list .dataTables_wrapper .dataTables_filter input, .pc-list .dataTables_wrapper .dataTables_length select {
+            height: 34px; border-radius: 8px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text); padding: 0 10px;
         }
-        .toolbar .btn { border-radius: 999px; padding: 10px 18px; font-weight: 600; }
-        .filter-card .form-group label {
-            font-size: 12px;
-            font-weight: 700;
-            color: #5d7286;
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .filter-card .form-control {
-            border-radius: 10px;
-            min-height: 42px;
-        }
-        .filter-card .filter-action-wrap {
-            height: 100%;
-        }
-        .filter-card .filter-action-spacer {
-            display: block;
-            visibility: hidden;
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .filter-card .filter-reset-btn {
-            min-height: 42px;
-            border-radius: 10px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            font-weight: 600;
-        }
-        .filter-card .select2-container {
-            width: 100% !important;
-        }
-        .filter-card .select2-container--default .select2-selection--multiple {
-            min-height: 42px;
-            border: 1px solid #ced4da;
-            border-radius: 10px;
-            padding: 3px 6px;
-        }
-        .filter-card .select2-container--default.select2-container--focus .select2-selection--multiple {
-            border-color: #80bdff;
-        }
-        .filter-card .select2-container--default .select2-selection--multiple .select2-selection__choice {
-            margin-top: 4px;
-        }
+        .pc-list #checklistTable thead th { white-space: nowrap; }
+        .pc-list #checklistTable td { vertical-align: middle; }
+        .pc-list .pc-emp { font-weight: 700; color: var(--sr-text); }
+        .pc-list .pc-num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; }
         .checklist-nav-footer {
             text-align: center;
         }
@@ -1068,80 +1187,22 @@ foreach ($employees as $employee) {
             color: #5d7286;
             min-width: 80px;
         }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
-            margin-bottom: 22px;
-        }
-        .summary-card {
-            background: #fff;
-            border: 1px solid #e5edf4;
-            border-radius: 16px;
-            padding: 18px;
-            box-shadow: 0 8px 24px rgba(24, 39, 75, 0.05);
-        }
-        .summary-label {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #789;
-            margin-bottom: 8px;
-        }
-        .summary-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: #183247;
-        }
-        .list-card {
-            background: #fff;
-            border: 1px solid #e2eaf1;
-            border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(24, 39, 75, 0.05);
-            overflow: hidden;
-        }
-        .list-card-header {
-            background: linear-gradient(135deg, #eef7fb 0%, #f7fbf8 100%);
-            padding: 14px 16px;
-            border-bottom: 1px solid #e2eaf1;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .list-card-title {
-            color: #173247;
-            font-size: 16px;
-            font-weight: 700;
-            margin: 0;
-        }
-        .pill-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            font-weight: 700;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-        .pill-success { background: #eaf8ee; color: #1f8b3c; }
-        .pill-danger { background: #fdecec; color: #c43636; }
-        .pill-warning { background: #fff7df; color: #ad7b00; }
-        .pill-primary { background: #e9f2ff; color: #1d62d1; }
-        .pill-secondary { background: #eef2f6; color: #607080; }
+        /* Used by popups built in JS (e.g. import "Skipped Rows") */
+        .list-card { background: var(--sr-surface); border: 1px solid var(--sr-border); border-radius: 12px; overflow: hidden; }
+        .list-card-header { padding: 12px 16px; border-bottom: 1px solid var(--sr-border); background: var(--sr-surface-2);
+            display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .list-card-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--sr-text); }
+        .pill-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 11.5px; border: 1px solid transparent; }
+        .pill-success { background: var(--tone-green-bg); color: var(--tone-green-fg); border-color: var(--tone-green-bd); }
+        .pill-danger { background: var(--tone-red-bg); color: var(--tone-red-fg); border-color: var(--tone-red-bd); }
+        .pill-warning { background: var(--tone-amber-bg); color: var(--tone-amber-fg); border-color: var(--tone-amber-bd); }
+        .pill-primary { background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); border-color: var(--tone-indigo-bd); }
+        .pill-secondary { background: var(--tone-slate-bg); color: var(--tone-slate-fg); border-color: var(--tone-slate-bd); }
         .table-compact td, .table-compact th { vertical-align: middle; }
-        .checklist-row-checked td {
-            background: #edf9f0 !important;
-        }
-        .checklist-row-checked:hover td {
-            background: #e3f5e7 !important;
-        }
-        .diff-positive { color: #c43636; font-weight: 700; }
-        .diff-zero { color: #1f8b3c; font-weight: 700; }
+        .checklist-row-checked td { background: var(--tone-green-bg) !important; }
+        .checklist-row-checked:hover td { background: var(--tone-green-bg) !important; filter: brightness(.98); }
+        .diff-positive { color: var(--tone-red-fg); font-weight: 700; }
+        .diff-zero { color: var(--tone-green-fg); font-weight: 700; }
         .calc-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1286,24 +1347,19 @@ foreach ($employees as $employee) {
             text-align: left !important;
             margin: 0.75rem 0.8rem 0.2rem 0.8rem !important;
         }
-        .empty-state {
-            background: #fff;
-            border-radius: 18px;
-            padding: 40px 24px;
-            text-align: center;
-            border: 1px solid #e2eaf1;
-            box-shadow: 0 10px 30px rgba(24, 39, 75, 0.05);
-        }
         .modal-lg-custom { max-width: 1100px; }
         @media (max-width: 991px) {
             .details-grid { grid-template-columns: 1fr; }
             .line-items-two-col { grid-template-columns: 1fr; }
         }
         @media print {
-            .toolbar { display: none !important; }
-            .page-header { box-shadow: none; }
-            body { background: #fff; }
-            .employee-card, .summary-card { box-shadow: none; }
+            .left.side-menu, .topbar, .footer, .pc-actions, .pc-filters, #bulkCheckSelectedBtn,
+            .dataTables_length, .dataTables_filter, .dataTables_paginate { display: none !important; }
+            .content-page { margin: 0 !important; padding: 0 !important; }
+            .content-page .content { padding: 0 !important; margin: 0 !important; }
+            body, .sr-page { background: #fff !important; }
+            .sr-card, .sr-scard { box-shadow: none !important; }
+            .pc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
             .print-hide-status { display: none !important; }
         }
         #payrollImportReviewTabs .nav-link#payrollImportBenefitsTab {
@@ -1324,73 +1380,105 @@ foreach ($employees as $employee) {
         }
     </style>
 </head>
-<body>
-    <div class="page-header">
-        <div class="container-fluid">
-            <h3><i class="fas fa-clipboard-check"></i> <?= __('payroll_checklist_report', 'Payroll Checklist Report') ?></h3>
-            <p class="mb-0"><?= __('payroll_checklist_subtitle', 'Detailed payroll calculation review for approvers') ?>: <?= htmlspecialchars($monthTitle) ?></p>
-            <div class="toolbar">
-                <div class="btn-group flex-wrap" role="group">
-                    <?php if (!$isFinanceOfficerChecklistUser): ?>
-                        <a href="all_payroll_approvals.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back_to_payroll_approvals', 'Back to Payroll Approvals') ?></a>
-                    <?php else: ?>
-                        <a href="dashboard.php" class="btn btn-light"><i class="fas fa-arrow-left"></i> <?= __('back', 'Back') ?></a>
-                    <?php endif; ?>
-                    <?php if ($requestInvNo !== ''): ?>
-                        <a href="payroll_status_history.php?inv_no=<?= urlencode($requestInvNo) ?>" target="_blank" class="btn btn-outline-light"><i class="fas fa-history"></i> <?= __('history') ?></a>
-                    <?php endif; ?>
-                    <?php if ($assignedScopeToggleUrl !== ''): ?>
-                        <a href="<?= htmlspecialchars($assignedScopeToggleUrl) ?>" class="btn <?= $assignedScopeOnly ? 'btn-warning' : 'btn-info' ?>">
-                            <i class="fas fa-filter"></i>
-                            <?= $assignedScopeOnly
-                                ? __('show_all_employees', 'Show All Employees')
-                                : __('show_my_assigned_companies_only', 'Show My Assigned Companies Only') ?>
-                        </a>
-                    <?php endif; ?>
-                    <?php if ($canFinanceOfficerApproveHere): ?>
-                        <?php if ($financeOfficerAlreadyApproved): ?>
-                            <button type="button" class="btn btn-success" disabled>
-                                <i class="fas fa-check-circle"></i> <?= __('finance_officer_approved', 'Finance Officer Approved') ?>
-                            </button>
-                        <?php else: ?>
-                            <button type="button" id="financeOfficerApproveBtn" class="btn btn-primary" onclick="approveFinanceOfficerVerification()" <?= $financeOfficerCanApproveNow ? '' : 'disabled' ?>>
-                                <i class="fas fa-user-check"></i> <?= __('approve_finance_verification', 'Approve Finance Verification') ?>
-                            </button>
-                        <?php endif; ?>
-                    <?php endif; ?>
-                    <?php if ($requestInvNo !== ''): ?>
-                        <button type="button" id="feedbackFollowupBtn" class="btn btn-warning" onclick="notifyPayrollGeneratorFeedback()" style="display: <?= $showFeedbackFollowupButton ? 'inline-flex' : 'none' ?>; align-items:center; gap:6px;">
-                            <i class="fas fa-paper-plane"></i> <?= __('send_feedback_followup', 'Send Feedback Follow-up') ?>
-                            <span class="badge badge-light ml-1" id="feedbackFollowupCountBadge"><?= (int)$feedbackTotals['pending_followup_count'] ?></span>
-                        </button>
-                    <?php endif; ?>
-                    <?php if ($canUploadManagerPayrollExcel): ?>
-                        <button type="button" class="btn btn-info" onclick="openManagerPayrollUploadModal()">
-                            <i class="fas fa-file-upload"></i> <?= __('upload_payroll_excel', 'Upload Payroll Excel') ?>
-                        </button>
-                    <?php endif; ?>
-                    <?php if ($canReviewManagerUploadedPayrollExcel): ?>
-                        <button type="button" id="managerReviewImportBtn" class="btn btn-primary" onclick="reviewManagerUploadedPayrollExcel()" style="display:inline-flex; align-items:center; gap:6px;">
-                            <i class="fas fa-file-import"></i> <?= __('review_import_manager_file', 'Review Manager File & Import') ?>
-                            <span class="badge badge-light ml-1" id="managerPendingReviewCountBadge" style="display:none;">0</span>
-                        </button>
-                    <?php endif; ?>
-                    <?php if ($canExportChecklistExcel): ?>
-                        <button type="button" class="btn btn-success" onclick="exportChecklistExcel()"><i class="fas fa-file-excel"></i> <?= __('export_excel', 'Export Excel') ?></button>
-                    <?php endif; ?>
-                    <button type="button" class="btn btn-outline-light" onclick="printFullChecklistTable()"><i class="fas fa-print"></i> <?= __('print', 'Print') ?></button>
+<body class="enlarged" data-keep-enlarged="true">
+    <div id="wrapper">
+        <div class="left side-menu">
+            <div class="slimscroll-menu" id="remove-scroll">
+                <div class="topbar-left">
+                    <a href="dashboard.php" class="logo">
+                        <span><img src="<?= get_setting($conDB, 'logo') ?>" alt="" height="22"></span>
+                        <i><img src="<?= get_setting($conDB, 'white_logo') ?>" alt="" height="28"></i>
+                    </a>
                 </div>
+                <?php include("./includes/main_menu.php"); ?>
             </div>
         </div>
-    </div>
+        <div class="content-page">
+            <?php include("./includes/topbar.php"); ?>
 
-    <div class="container-fluid" style="margin-bottom: 32px;">
-        <div class="list-card filter-card mb-3">
-            <div class="list-card-header">
-                <h5 class="list-card-title"><i class="fas fa-filter"></i> <?= __('filters', 'Filters') ?></h5>
+    <div class="content sr-page pc-page">
+    <div class="container-fluid">
+        <div class="sr-head">
+            <div>
+                <h1><i class="fas fa-clipboard-check"></i><?= __('payroll_checklist_report', 'Payroll Checklist Report') ?></h1>
+                <p><?= __('payroll_checklist_subtitle', 'Detailed payroll calculation review for approvers') ?></p>
+                <div class="pc-head-meta">
+                    <span class="sr-chip"><i class="mdi mdi-calendar"></i><?= htmlspecialchars($monthTitle) ?></span>
+                    <?php if ($requestInvNo !== ''): ?><span class="sr-chip sr-mono"><i class="mdi mdi-pound"></i><?= htmlspecialchars($requestInvNo) ?></span><?php endif; ?>
+                    <?php if ($assignedScopeOnly): ?><span class="sr-chip"><i class="mdi mdi-filter"></i><?= __('my_assigned_companies', 'My assigned companies') ?></span><?php endif; ?>
+                </div>
             </div>
-            <div class="p-3">
-                <form method="GET" class="row" id="checklistFilterForm">
+            <?php
+            // Secondary actions live in the "More Actions" popup (same look as the employee page);
+            // only Back, the finance approval and the feedback follow-up stay on the header.
+            $pcMa = ['file' => [], 'report' => [], 'view' => []];
+            if ($canUploadManagerPayrollExcel) {
+                $pcMa['file'][] = '<div class="menu-item text-info" role="button" data-pc-action="upload"><i class="fa fa-file-upload"></i><span>' . htmlspecialchars(__('upload_payroll_excel', 'Upload Payroll Excel')) . '</span></div>';
+            }
+            if ($canReviewManagerUploadedPayrollExcel) {
+                $pcMa['file'][] = '<div class="menu-item text-primary" role="button" data-pc-action="review_import"><i class="fa fa-file-import"></i><span>' . htmlspecialchars(__('review_import_manager_file', 'Review Manager File & Import')) . '</span><b class="ma-count" data-pc-import-count style="display:none;">0</b></div>';
+            }
+            if ($canExportChecklistExcel) {
+                $pcMa['report'][] = '<div class="menu-item text-success" role="button" data-pc-action="export"><i class="fa fa-file-excel"></i><span>' . htmlspecialchars(__('export_excel', 'Export Excel')) . '</span></div>';
+            }
+            $pcMa['report'][] = '<div class="menu-item text-dark" role="button" data-pc-action="print"><i class="fa fa-print"></i><span>' . htmlspecialchars(__('print', 'Print')) . '</span></div>';
+            if ($requestInvNo !== '') {
+                $pcMa['report'][] = '<div class="menu-item text-secondary" role="button" data-pc-href="payroll_status_history.php?inv_no=' . urlencode($requestInvNo) . '" data-pc-blank="1"><i class="fa fa-history"></i><span>' . htmlspecialchars(__('history', 'History')) . '</span></div>';
+            }
+            if ($assignedScopeToggleUrl !== '') {
+                $pcMa['view'][] = '<div class="menu-item ' . ($assignedScopeOnly ? 'text-warning' : 'text-info') . '" role="button" data-pc-href="' . htmlspecialchars($assignedScopeToggleUrl) . '"><i class="fa fa-filter"></i><span>'
+                    . htmlspecialchars($assignedScopeOnly ? __('show_all_employees', 'Show All Employees') : __('show_my_assigned_companies_only', 'Show My Assigned Companies Only')) . '</span></div>';
+            }
+            $pcMaTitles = [
+                'file' => ['fa-file-excel', __('ma_group_payroll_file', 'Payroll File')],
+                'report' => ['fa-chart-bar', __('ma_group_report', 'Report')],
+                'view' => ['fa-eye', __('ma_group_view', 'View')],
+            ];
+            $pcMoreActionsHtml = '';
+            foreach ($pcMa as $pcKey => $pcItems) {
+                if ($pcItems) {
+                    $pcMoreActionsHtml .= '<div class="ma-group"><div class="ma-group-title"><i class="fa ' . $pcMaTitles[$pcKey][0] . '"></i>' . htmlspecialchars($pcMaTitles[$pcKey][1]) . '</div><div class="ma-grid">' . implode('', $pcItems) . '</div></div>';
+                }
+            }
+            ?>
+            <div class="pc-actions">
+                <?php if (!$isFinanceOfficerChecklistUser): ?>
+                    <a href="all_payroll_approvals.php" class="sr-btn"><i class="fas fa-arrow-left"></i> <?= __('back_to_payroll_approvals', 'Back to Payroll Approvals') ?></a>
+                <?php else: ?>
+                    <a href="dashboard.php" class="sr-btn"><i class="fas fa-arrow-left"></i> <?= __('back', 'Back') ?></a>
+                <?php endif; ?>
+                <?php if ($canFinanceOfficerApproveHere): ?>
+                    <?php if ($financeOfficerAlreadyApproved): ?>
+                        <button type="button" class="sr-btn sr-btn-success" disabled>
+                            <i class="fas fa-check-circle"></i> <?= __('finance_officer_approved', 'Finance Officer Approved') ?>
+                        </button>
+                    <?php else: ?>
+                        <button type="button" id="financeOfficerApproveBtn" class="sr-btn sr-btn-primary" onclick="approveFinanceOfficerVerification()" <?= $financeOfficerCanApproveNow ? '' : 'disabled' ?>>
+                            <i class="fas fa-user-check"></i> <?= __('approve_finance_verification', 'Approve Finance Verification') ?>
+                        </button>
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($requestInvNo !== ''): ?>
+                    <button type="button" id="feedbackFollowupBtn" class="sr-btn sr-btn-warn" onclick="notifyPayrollGeneratorFeedback()" style="display: <?= $showFeedbackFollowupButton ? 'inline-flex' : 'none' ?>; align-items:center; gap:6px;">
+                        <i class="fas fa-paper-plane"></i> <?= __('send_feedback_followup', 'Send Feedback Follow-up') ?>
+                        <span class="sr-count" id="feedbackFollowupCountBadge"><?= (int)$feedbackTotals['pending_followup_count'] ?></span>
+                    </button>
+                <?php endif; ?>
+                <?php if ($pcMoreActionsHtml !== ''): ?>
+                    <!-- id managerReviewImportBtn / managerPendingReviewCountBadge: refreshManagerReviewButtonCount() shows the pending-import count here -->
+                    <button type="button" id="<?= $canReviewManagerUploadedPayrollExcel ? 'managerReviewImportBtn' : 'pcMoreActionsBtn' ?>" class="sr-btn sr-btn-primary pc-more-btn" onclick="openPcMoreActions()">
+                        <i class="fas fa-th-large"></i> <?= __('more_actions', 'More Actions') ?>
+                        <?php if ($canReviewManagerUploadedPayrollExcel): ?><span class="sr-count" id="managerPendingReviewCountBadge" style="display:none;" title="<?= htmlspecialchars(__('manager_files_pending_review', 'Manager files waiting for review'), ENT_QUOTES) ?>">0</span><?php endif; ?>
+                    </button>
+                <?php endif; ?>
+            </div>
+            <template id="pcMoreActionsTpl"><?= $pcMoreActionsHtml ?></template>
+        </div>
+
+        <div class="sr-card pc-filters mb-3">
+            <div class="sr-card-head"><h3 class="sr-card-title"><i class="fas fa-filter"></i><?= __('filters', 'Filters') ?></h3></div>
+            <div>
+                <form method="GET" class="sr-filter-grid" id="checklistFilterForm">
                     <input type="hidden" name="month" value="<?= htmlspecialchars($monthYear) ?>">
                     <?php if ($requestInvNo !== ''): ?>
                         <input type="hidden" name="request_inv_no" value="<?= htmlspecialchars($requestInvNo) ?>">
@@ -1399,8 +1487,8 @@ foreach ($employees as $employee) {
                         <input type="hidden" name="assigned_scope" value="1">
                     <?php endif; ?>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group">
+                    <div>
+                        <div class="form-group mb-0">
                             <label for="filterCompany"><?= __('company', 'Company') ?></label>
                             <select class="form-control" id="filterCompany" name="company">
                                 <option value=""><?= __('all', 'All') ?> <?= __('company', 'Company') ?></option>
@@ -1413,8 +1501,8 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group">
+                    <div>
+                        <div class="form-group mb-0">
                             <label for="filterDepartment"><?= __('department', 'Department') ?></label>
                             <select class="form-control" id="filterDepartment" name="department">
                                 <option value=""><?= __('all', 'All') ?> <?= __('department', 'Department') ?></option>
@@ -1428,8 +1516,8 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group">
+                    <div>
+                        <div class="form-group mb-0">
                             <label for="filterSponsor"><?= __('sponsor', 'Sponsor') ?></label>
                             <select class="form-control" id="filterSponsor" name="sponsor">
                                 <option value=""><?= __('all', 'All') ?> <?= __('sponsor', 'Sponsor') ?></option>
@@ -1442,8 +1530,8 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group">
+                    <div>
+                        <div class="form-group mb-0">
                             <label for="filterFeedbackStatus"><?= __('feedback_status', 'Feedback Status') ?></label>
                             <select class="form-control" id="filterFeedbackStatus" name="feedback_status">
                                 <option value=""><?= __('all', 'All') ?> <?= __('feedback', 'Feedback') ?></option>
@@ -1454,8 +1542,8 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group">
+                    <div>
+                        <div class="form-group mb-0">
                             <label for="filterPaymentType"><?= __('salary_payment_type_label', 'Payment Type') ?></label>
                             <?php $selectedPaymentTypeMap = array_flip($selectedPaymentTypes); ?>
                             <select class="form-control" id="filterPaymentType" name="payment_type[]" multiple size="3">
@@ -1466,46 +1554,75 @@ foreach ($employees as $employee) {
                         </div>
                     </div>
 
-                    <div class="col-md-2 col-sm-6">
-                        <div class="form-group filter-action-wrap">
-                            <span class="filter-action-spacer"><?= __('feedback_status', 'Feedback Status') ?></span>
-                            <a href="payroll_checklist_report.php?month=<?= urlencode($monthYear) ?><?= $requestInvNo !== '' ? '&request_inv_no=' . urlencode($requestInvNo) : '' ?><?= $assignedScopeOnly ? '&assigned_scope=1' : '' ?>" class="btn btn-outline-secondary filter-reset-btn"><i class="fas fa-undo mr-2"></i> <?= __('reset_filters', 'Reset Filters') ?></a>
+                    <div>
+                        <div class="form-group mb-0">
+                            <label>&nbsp;</label>
+                            <a href="payroll_checklist_report.php?month=<?= urlencode($monthYear) ?><?= $requestInvNo !== '' ? '&request_inv_no=' . urlencode($requestInvNo) : '' ?><?= $assignedScopeOnly ? '&assigned_scope=1' : '' ?>" class="sr-btn pc-reset"><i class="fas fa-undo"></i> <?= __('reset_filters', 'Reset Filters') ?></a>
                         </div>
                     </div>
                 </form>
             </div>
         </div>
 
-        <div class="summary-grid">
-            <div class="summary-card"><div class="summary-label"><?= __('employees', 'Employees') ?></div><div class="summary-value" id="summaryEmployeesValue"><?= (int)$summary['employees'] ?></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('total_gross_salary_label', 'Gross Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryGrossValue"><?= number_format($summary['gross'], 2) ?></span></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('benefits_total', 'Benefits Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryBenefitsValue"><?= number_format($summary['benefits'], 2) ?></span></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('deductions_total', 'Deductions Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryDeductionsValue"><?= number_format($summary['deductions'], 2) ?></span></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('net_salary_label', 'Net Total') ?></div><div class="summary-value"><i class="icon-saudi_riyal"></i> <span id="summaryNetValue"><?= number_format($summary['net'], 2) ?></span></div></div>
-            <div class="summary-card"><div class="summary-label"><?= __('calculation_conflicts', 'Calculation Conflicts') ?><i class="fas fa-info-circle text-muted ml-1" data-toggle="tooltip" data-placement="top" title="<?= htmlspecialchars(__('calculation_conflicts_tooltip', 'Employees where Net Salary does not match (Gross + Benefits - Deductions).'), ENT_QUOTES) ?>" style="cursor: help;"></i></div><div class="summary-value" id="summaryMismatchValue" style="color: <?= $summary['mismatch_count'] > 0 ? '#c43636' : '#1f8b3c' ?>;"><?= (int)$summary['mismatch_count'] ?></div></div>
+        <?php
+        require_once __DIR__ . '/includes/sr_list_helpers.php'; // sr_stat_cols(), sr_scard_foot()
+        $pcTotalEmp = (int)$summary['employees'];
+        $pcChecked = (int)$checkedEmployeesCount;
+        $pcRemaining = max(0, $pcTotalEmp - $pcChecked);
+        $pcCardCount = $canCheckPayrollChecklistEmployees ? 8 : 6;
+        $pcCard = function ($tone, $icon, $label, $hint, $valueHtml, $foot = '') {
+            return '<div class="sr-scard st-' . $tone . '">'
+                . '<span class="sr-scard-ico"><i class="mdi ' . $icon . '"></i></span>'
+                . '<span class="sr-scard-body"><span class="sr-scard-label">' . $label . '</span>'
+                . ($hint !== '' ? '<span class="sr-scard-hint">' . $hint . '</span>' : '') . '</span>'
+                . $valueHtml . $foot . '</div>';
+        };
+        $pcMoney = function ($id, $amount) {
+            return '<span class="sr-scard-value pc-money"><i class="icon-saudi_riyal"></i><span id="' . $id . '">' . number_format((float)$amount, 2) . '</span></span>';
+        };
+        ?>
+        <div class="sr-scards pc-kpis" style="--sr-scard-cols: <?= sr_stat_cols($pcCardCount) ?>;">
+            <?= $pcCard('indigo', 'mdi-account-multiple', __('employees', 'Employees'), __('in_this_payroll', 'In this payroll'),
+                '<span class="sr-scard-value" id="summaryEmployeesValue">' . $pcTotalEmp . '</span>') ?>
+            <?= $pcCard('slate', 'mdi-cash', __('total_gross_salary_label', 'Gross Total'), __('before_benefits_deductions', 'Before benefits & deductions'),
+                $pcMoney('summaryGrossValue', $summary['gross'])) ?>
+            <?= $pcCard('green', 'mdi-plus-circle', __('benefits_total', 'Benefits Total'), __('added_to_gross', 'Added to gross'),
+                $pcMoney('summaryBenefitsValue', $summary['benefits'])) ?>
+            <?= $pcCard('red', 'mdi-minus-circle', __('deductions_total', 'Deductions Total'), __('taken_from_gross', 'Taken from gross'),
+                $pcMoney('summaryDeductionsValue', $summary['deductions'])) ?>
+            <?= $pcCard('sky', 'mdi-wallet', __('net_salary_label', 'Net Total'), __('to_be_paid', 'To be paid'),
+                $pcMoney('summaryNetValue', $summary['net'])) ?>
+            <?= $pcCard((int)$summary['mismatch_count'] > 0 ? 'red' : 'green', 'mdi-scale-balance', __('calculation_conflicts', 'Calculation Conflicts'),
+                htmlspecialchars(__('calculation_conflicts_short', 'Net ≠ Gross + Benefits − Deductions')),
+                '<span class="sr-scard-value" id="summaryMismatchValue" title="' . htmlspecialchars(__('calculation_conflicts_tooltip', 'Employees where Net Salary does not match (Gross + Benefits - Deductions).'), ENT_QUOTES) . '">' . (int)$summary['mismatch_count'] . '</span>') ?>
             <?php if ($canCheckPayrollChecklistEmployees): ?>
-                <div class="summary-card"><div class="summary-label"><?= __('checked_by_me', 'Checked By Me') ?></div><div class="summary-value" id="checkedEmployeesValue"><?= (int)$checkedEmployeesCount ?> / <?= (int)$summary['employees'] ?></div></div>
-                <div class="summary-card"><div class="summary-label"><?= __('remaining_to_check', 'Remaining To Check') ?></div><div class="summary-value" id="remainingEmployeesValue" style="color: <?= ((int)$summary['employees'] - (int)$checkedEmployeesCount) > 0 ? '#ad7b00' : '#1f8b3c' ?>;"><?= max(0, (int)$summary['employees'] - (int)$checkedEmployeesCount) ?></div></div>
+                <?= $pcCard('green', 'mdi-account-check', __('checked_by_me', 'Checked By Me'), __('reviewed_and_ok', 'Reviewed and OK'),
+                    '<span class="sr-scard-value" id="checkedEmployeesValue">' . $pcChecked . ' / ' . $pcTotalEmp . '</span>',
+                    str_replace(['<i style', '<span class="sr-scard-pct">'], ['<i id="pcCheckedBar" style', '<span class="sr-scard-pct" id="pcCheckedPct">'], sr_scard_foot($pcChecked, $pcTotalEmp))) ?>
+                <?= $pcCard($pcRemaining > 0 ? 'amber' : 'green', 'mdi-timer-sand', __('remaining_to_check', 'Remaining To Check'), __('still_to_review', 'Still to review'),
+                    '<span class="sr-scard-value" id="remainingEmployeesValue">' . $pcRemaining . '</span>') ?>
             <?php endif; ?>
         </div>
 
         <?php if (empty($employees)): ?>
-            <div class="empty-state">
-                <h4><?= __('no_generated_payrolls_for_month_info', 'No generated payrolls found for this month.') ?></h4>
-                <p class="text-muted mb-0"><?= __('please_generate_payroll_first', 'Generate payroll first, then review the checklist report.') ?></p>
+            <div class="sr-card">
+                <div class="sr-empty"><i class="mdi mdi-clipboard-text"></i>
+                    <strong style="display: block; color: var(--sr-text); font-size: 15px;"><?= __('no_generated_payrolls_for_month_info', 'No generated payrolls found for this month.') ?></strong>
+                    <?= __('please_generate_payroll_first', 'Generate payroll first, then review the checklist report.') ?>
+                </div>
             </div>
         <?php else: ?>
-            <div class="list-card">
-                <div class="list-card-header d-flex align-items-center justify-content-between flex-wrap">
-                    <h5 class="list-card-title mb-0"><i class="fas fa-users"></i> <?= __('employee_payroll_list', 'Employee Payroll Check List') ?></h5>
+            <div class="sr-card pc-list">
+                <div class="sr-card-head">
+                    <h3 class="sr-card-title"><i class="fas fa-users"></i><?= __('employee_payroll_list', 'Employee Payroll Check List') ?></h3>
                     <?php if ($canCheckPayrollChecklistEmployees): ?>
-                        <button type="button" id="bulkCheckSelectedBtn" class="btn btn-success btn-sm" disabled onclick="bulkCheckSelectedEmployees()">
-                            <i class="fas fa-check-double mr-1"></i> <?= __('check_selected', 'Check Selected') ?> (<span id="bulkCheckSelectedCount">0</span>)
+                        <button type="button" id="bulkCheckSelectedBtn" class="sr-btn sr-btn-sm sr-btn-success" disabled onclick="bulkCheckSelectedEmployees()">
+                            <i class="fas fa-check-double"></i> <?= __('check_selected', 'Check Selected') ?> (<span id="bulkCheckSelectedCount">0</span>)
                         </button>
                     <?php endif; ?>
                 </div>
-                <div class="table-responsive p-3">
-                    <table class="table table-bordered table-hover table-compact" id="checklistTable" style="width:100%;">
+                <div class="table-responsive sr-table-wrap pc-table-wrap">
+                    <table class="table sr-table table-hover table-compact" id="checklistTable" style="width:100%;">
                         <thead>
                             <tr>
                                 <?php if ($canCheckPayrollChecklistEmployees): ?>
@@ -1520,7 +1637,7 @@ foreach ($employees as $employee) {
                                 <th><?= __('net_salary_label', 'Total Net Salary') ?></th>
                                 <th><?= __('difference', 'Difference') ?></th>
                                 <th class="print-hide-status"><?= __('status') ?></th>
-                                <th class="print-hide-status\"><?= __('actions') ?></th>
+                                <th class="print-hide-status text-center"><?= __('actions') ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1567,16 +1684,16 @@ foreach ($employees as $employee) {
                                         </td>
                                     <?php endif; ?>
                                     <td><?= htmlspecialchars((string)$employee['emp_id']) ?></td>
-                                    <td><?= htmlspecialchars(getDisplayName((string)($employee['employee_name'] ?? ''))) ?></td>
+                                    <td class="pc-emp"><?= htmlspecialchars(getDisplayName((string)($employee['employee_name'] ?? ''))) ?></td>
                                     <td><?= htmlspecialchars(getDisplayName((string)(($is_rtl ?? false) ? ($employee['department_name_ar'] ?? $employee['department_name'] ?? 'N/A') : ($employee['department_name'] ?? $employee['department_name_ar'] ?? 'N/A')))) ?></td>
-                                    <td data-order="<?= (float)($employee['total_gross_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_gross_salary'] ?? 0), 2) ?></td>
-                                    <td data-order="<?= (float)($employee['total_benefits'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_benefits'] ?? 0), 2) ?></td>
-                                    <td data-order="<?= (float)($employee['total_deductions'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_deductions'] ?? 0), 2) ?></td>
-                                    <td data-order="<?= (float)($employee['net_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['net_salary'] ?? 0), 2) ?></td>
-                                    <td class="<?= abs($difference) < 0.01 ? 'diff-zero' : 'diff-positive' ?>"><?= number_format($difference, 2) ?></td>
+                                    <td class="pc-num" data-order="<?= (float)($employee['total_gross_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_gross_salary'] ?? 0), 2) ?></td>
+                                    <td class="pc-num" data-order="<?= (float)($employee['total_benefits'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_benefits'] ?? 0), 2) ?></td>
+                                    <td class="pc-num" data-order="<?= (float)($employee['total_deductions'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['total_deductions'] ?? 0), 2) ?></td>
+                                    <td class="pc-num" data-order="<?= (float)($employee['net_salary'] ?? 0) ?>"><i class="icon-saudi_riyal"></i> <?= number_format((float)($employee['net_salary'] ?? 0), 2) ?></td>
+                                    <td class="pc-num <?= abs($difference) < 0.01 ? 'diff-zero' : 'diff-positive' ?>"><?= number_format($difference, 2) ?></td>
                                     <td class="print-hide-status"><span class="pill-badge <?= $statusBadge ?>"><i class="fas <?= $statusIcon ?>"></i> <?= htmlspecialchars(getDisplayName(ucfirst($statusValue))) ?></span></td>
                                     <td class="text-center print-hide-status">
-                                        <div class="btn-group dropdown">
+                                        <div class="btn-group dropdown sr-actions">
                                             <a href="javascript:void(0);" class="table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm" data-toggle="dropdown" aria-expanded="false">
                                                 <i class="mdi mdi-dots-horizontal"></i>
                                             </a>
@@ -1610,14 +1727,24 @@ foreach ($employees as $employee) {
             </div>
         <?php endif; ?>
     </div>
+    </div>
+            <footer class="footer"><?= $site_footer ?? '' ?></footer>
+        </div>
+    </div>
 
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/metisMenu.min.js"></script>
+    <script src="assets/js/waves.js"></script>
+    <script src="assets/js/jquery.slimscroll.js"></script>
     <script src="plugins/datatables/jquery.dataTables.min.js"></script>
     <script src="plugins/datatables/dataTables.bootstrap4.min.js"></script>
     <script src="./plugins/select2/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script> window.lang = window.lang || <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
+    <script src="assets/js/jquery.core.js"></script>
+    <script src="assets/js/jquery.app.js"></script>
     <script>
         const employeesData = <?= json_encode($employeesForJs, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const employeeMap = {};
@@ -1732,6 +1859,56 @@ foreach ($employees as $employee) {
                 closeOnSelect: false,
                 allowClear: true,
                 placeholder: '<?= addslashes(__('select_payment_types', 'Select payment type(s)')) ?>'
+            });
+        }
+
+        // "More Actions" popup: secondary header actions as tiles (template #pcMoreActionsTpl).
+        // Each tile closes the popup first, then runs the original action (they open their own popups).
+        function openPcMoreActions() {
+            const tpl = document.getElementById('pcMoreActionsTpl');
+            if (!tpl) return;
+            const sub = [<?= json_encode($monthTitle, JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($requestInvNo, JSON_UNESCAPED_UNICODE) ?>].filter(Boolean).join(' · ');
+            Swal.fire({
+                title: '<div class="ma-head"><div style="font-size:18px;font-weight:700;color:var(--ma-text);">' + esc(<?= json_encode(__('more_actions', 'More Actions')) ?>) + '</div>'
+                    + (sub ? '<p>' + esc(sub) + '</p>' : '') + '</div>',
+                html: '<div class="menu-items-container">' + tpl.innerHTML + '</div>',
+                showConfirmButton: false,
+                showCloseButton: true,
+                customClass: { container: 'more-actions-modal', popup: 'sr-page' },
+                width: '620px',
+                padding: '0',
+                didOpen: function() {
+                    const box = Swal.getHtmlContainer();
+                    const pending = Number(window.pcPendingImportCount || 0);
+                    box.querySelectorAll('[data-pc-import-count]').forEach(function(el) {
+                        el.textContent = String(pending);
+                        el.style.display = pending > 0 ? 'inline-block' : 'none';
+                    });
+                    box.querySelectorAll('.menu-item').forEach(function(item) {
+                        item.setAttribute('tabindex', '0');
+                        const run = function() {
+                            const href = item.getAttribute('data-pc-href');
+                            if (href) {
+                                if (item.getAttribute('data-pc-blank') === '1') { window.open(href, '_blank', 'noopener'); Swal.close(); }
+                                else { window.location.href = href; }
+                                return;
+                            }
+                            const action = item.getAttribute('data-pc-action');
+                            const actions = {
+                                upload: typeof openManagerPayrollUploadModal === 'function' ? openManagerPayrollUploadModal : null,
+                                review_import: typeof reviewManagerUploadedPayrollExcel === 'function' ? reviewManagerUploadedPayrollExcel : null,
+                                export: exportChecklistExcel,
+                                print: printFullChecklistTable
+                            };
+                            Swal.close();
+                            if (actions[action]) setTimeout(actions[action], 120);
+                        };
+                        item.addEventListener('click', run);
+                        item.addEventListener('keydown', function(e) {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(); }
+                        });
+                    });
+                }
             });
         }
 
@@ -1874,9 +2051,18 @@ foreach ($employees as $employee) {
             if (checkedValue) {
                 checkedValue.textContent = `${checkedCount} / ${totalEmployees}`;
             }
+            const checkedPct = totalEmployees > 0 ? Math.min(100, Math.round(checkedCount / totalEmployees * 100)) : 0;
+            const checkedBar = document.getElementById('pcCheckedBar');
+            const checkedPctEl = document.getElementById('pcCheckedPct');
+            if (checkedBar) checkedBar.style.width = checkedPct + '%';
+            if (checkedPctEl) checkedPctEl.textContent = checkedPct + '%';
             if (remainingValue) {
                 remainingValue.textContent = String(remainingEmployees);
-                remainingValue.style.color = remainingEmployees > 0 ? '#ad7b00' : '#1f8b3c';
+                const remainingCard = remainingValue.closest('.sr-scard');
+                if (remainingCard) {
+                    remainingCard.classList.toggle('st-amber', remainingEmployees > 0);
+                    remainingCard.classList.toggle('st-green', remainingEmployees === 0);
+                }
             }
 
             if (remainingEmployees > 0) {
@@ -1959,27 +2145,9 @@ foreach ($employees as $employee) {
             if (!button) {
                 return;
             }
-
-            const closeBtn = Swal.getConfirmButton();
-            button.className = 'swal2-confirm swal2-styled';
-            button.style.display = 'inline-flex';
-            button.style.alignItems = 'center';
-            button.style.justifyContent = 'center';
-            button.style.gap = '6px';
-            button.style.boxShadow = 'none';
-            button.style.border = '1px solid #28a745';
-            button.style.backgroundColor = isChecked ? '#28a745' : '#fff';
-            button.style.color = isChecked ? '#fff' : '#28a745';
-
-            if (closeBtn) {
-                const closeBtnStyles = window.getComputedStyle(closeBtn);
-                button.style.padding = closeBtnStyles.padding;
-                button.style.fontSize = closeBtnStyles.fontSize;
-                button.style.borderRadius = closeBtnStyles.borderRadius;
-                button.style.margin = closeBtnStyles.margin;
-                button.style.height = `${closeBtn.offsetHeight}px`;
-                button.style.minWidth = `${closeBtn.offsetWidth}px`;
-            }
+            // Checked = solid green, not yet = green outline (sr-btn look, same height as Close)
+            button.removeAttribute('style');
+            button.className = 'sr-btn ' + (isChecked ? 'sr-btn-success' : 'pc-btn-check');
         }
 
         function updateEmployeeReviewButton(empId, isChecked, checkedAt) {
@@ -2295,7 +2463,11 @@ foreach ($employees as $employee) {
             if (netEl) netEl.textContent = fmt(totals.net);
             if (mismatchEl) {
                 mismatchEl.textContent = String(totals.mismatch);
-                mismatchEl.style.color = totals.mismatch > 0 ? '#c43636' : '#1f8b3c';
+                const mismatchCard = mismatchEl.closest('.sr-scard');
+                if (mismatchCard) {
+                    mismatchCard.classList.toggle('st-red', totals.mismatch > 0);
+                    mismatchCard.classList.toggle('st-green', totals.mismatch === 0);
+                }
             }
         }
 
@@ -2323,14 +2495,8 @@ foreach ($employees as $employee) {
                 return;
             }
 
-            checklistModalNavigationBusy = true;
-            detachChecklistModalKeyboardNavigation();
-            Swal.close();
-
-            window.setTimeout(function() {
-                checklistModalNavigationBusy = false;
-                openEmployeeDetail(targetEmployee.emp_id);
-            }, 60);
+            // The open popup stays; only its content is reloaded (loadEmployeeDetailInline)
+            openEmployeeDetail(targetEmployee.emp_id);
         }
 
         function attachChecklistModalKeyboardNavigation(navigationState) {
@@ -2443,21 +2609,21 @@ foreach ($employees as $employee) {
 
         function buildItemsList(items, itemNameKey, emptyText) {
             if (!Array.isArray(items) || items.length === 0) {
-                return `<div style="padding:16px;color:#6b8296;">${esc(emptyText)}</div>`;
+                return `<div class="pc-items-empty"><i class="mdi mdi-inbox"></i>${esc(emptyText)}</div>`;
             }
-
-            const amountColor = itemNameKey === 'benefit' ? '#1f8b3c' : '#c43636';
-            return `<ul class="line-items-two-col">${items.map(item => {
-                const title = `${esc(item[itemNameKey] || '')}: <span style="color:${amountColor};"><i class="icon-saudi_riyal"></i> ${fmt(item.note || 0)}</span>`;
+            return `<ul class="pc-items">${items.map(item => {
                 const meta = [];
                 if (Number(item.days || 0) > 0) meta.push(`${esc(item.days)} <?= addslashes(__('days', 'Days')) ?>`);
                 if (Number(item.hours || 0) > 0) meta.push(`${esc(item.hours)} <?= addslashes(__('hours', 'Hours')) ?>`);
-                if (item.calculation_type) meta.push(esc(item.calculation_type));
-                return `<li><div class="item-title">${title}</div><div class="item-meta">${meta.join(' | ')}</div></li>`;
+                if (item.calculation_type) meta.push(esc(String(item.calculation_type).replace(/_/g, ' ')));
+                return `<li><div style="min-width:0;"><span class="pc-item-name">${esc(item[itemNameKey] || '')}</span>`
+                    + (meta.length ? `<span class="pc-item-meta">${meta.join(' · ')}</span>` : '')
+                    + `</div><span class="pc-item-amt"><i class="icon-saudi_riyal"></i> ${fmt(item.note || 0)}</span></li>`;
             }).join('')}</ul>`;
         }
 
         function buildSalaryAllowancesGrid(emp) {
+            // Bank / IBAN moved to the employee details panel; zero amounts are dimmed
             const items = [
                 { label: '<?= addslashes(__('basic_salary_label', 'Basic Salary')) ?>', value: emp.basic_salary },
                 { label: '<?= addslashes(__('housing_allowance_label', 'Housing')) ?>', value: emp.housing_allowance },
@@ -2468,20 +2634,12 @@ foreach ($employees as $employee) {
                 { label: '<?= addslashes(__('fuel_allowance_label', 'Fuel')) ?>', value: emp.fuel_allowance },
                 { label: '<?= addslashes(__('telephone_allowance_label', 'Telephone')) ?>', value: emp.telephone_allowance },
                 { label: '<?= addslashes(__('other_allowance_label', 'Other')) ?>', value: emp.other_allowance },
-                { label: '<?= addslashes(__('guard_allowance_label', 'Guard')) ?>', value: emp.guard_allowance },
-                { label: '<?= addslashes(__('bank_name', 'Bank')) ?>', value: emp.bank_name_s || 'N/A', isText: true },
-                { label: '<?= addslashes(__('iban', 'IBAN')) ?>', value: emp.iban || 'N/A', isText: true }
+                { label: '<?= addslashes(__('guard_allowance_label', 'Guard')) ?>', value: emp.guard_allowance }
             ];
-            let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">';
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                html += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eef3f7; border-right: ${(i + 1) % 2 === 0 ? 'none' : '1px solid #eef3f7'};">
-                    <span style="color: #637b90; font-weight: 600; min-width: 80px; font-size: 13px;">${esc(item.label)}</span>
-                    <span style="color: #173247; font-weight: 700; text-align: right; min-width: 80px; font-size: 13px;">${item.isText ? esc(String(item.value)) : `<i class="icon-saudi_riyal"></i> ${fmt(item.value)}`}</span>
-                </div>`;
-            }
-            html += '</div>';
-            return html;
+            return '<div class="pc-sal">' + items.map(item => {
+                const zero = Math.abs(Number(item.value || 0)) < 0.005;
+                return `<div class="pc-sal-row${zero ? ' is-zero' : ''}"><span>${esc(item.label)}</span><b><i class="icon-saudi_riyal"></i> ${fmt(item.value)}</b></div>`;
+            }).join('') + '</div>';
         }
 
         function buildFeedbackHtml(feedbacks) {
@@ -2490,68 +2648,45 @@ foreach ($employees as $employee) {
             }
 
             const feedbackRowsHtml = feedbacks.map(item => {
-                const createdAt = item.created_at
-                    ? new Date(item.created_at.replace(' ', 'T')).toLocaleString()
-                    : '-';
-                const resolvedAt = item.resolved_at
-                    ? new Date(item.resolved_at.replace(' ', 'T')).toLocaleString()
-                    : '';
-                const statusClass = String(item.status || '').toLowerCase() === 'resolved' ? 'success' : 'warning';
+                const createdAt = item.created_at ? new Date(item.created_at.replace(' ', 'T')).toLocaleString() : '-';
+                const resolvedAt = item.resolved_at ? new Date(item.resolved_at.replace(' ', 'T')).toLocaleString() : '';
                 const isResolved = String(item.status || '').toLowerCase() === 'resolved';
                 return `
-                    <div class="border rounded p-2 mb-2 bg-light">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <strong><i class="fas fa-user-check"></i> ${esc(item.approver_name || '-')}</strong>
-                            <span class="badge badge-${statusClass}">${esc(item.status || 'open')}</span>
+                    <div class="pc-fb-item">
+                        <div class="pc-fb-top">
+                            <span><i class="fas fa-user-check"></i> ${esc(item.approver_name || '-')}</span>
+                            <span class="pill-badge ${isResolved ? 'pill-success' : 'pill-warning'}">${esc(item.status || 'open')}</span>
                         </div>
-                        <div class="small text-muted mb-1">
-                            <i class="far fa-calendar-alt"></i> ${esc(item.payroll_month || '-')}
-                            &nbsp; | &nbsp;
-                            <i class="far fa-clock"></i> ${esc(createdAt)}
-                        </div>
-                        <div>${esc(item.feedback_note || '')}</div>
-                        ${isResolved ? `<div class="mt-2 small text-muted"><i class="fas fa-check-circle text-success"></i> <?= addslashes(__('resolved_by', 'Resolved By')) ?>: ${esc(item.resolved_by_name || '-')} ${resolvedAt ? ('| ' + esc(resolvedAt)) : ''}</div>` : ''}
-                    </div>
-                `;
+                        <div class="pc-fb-when"><i class="far fa-calendar-alt"></i> ${esc(item.payroll_month || '-')} &nbsp;·&nbsp; <i class="far fa-clock"></i> ${esc(createdAt)}</div>
+                        <div class="pc-fb-note">${esc(item.feedback_note || '')}</div>
+                        ${isResolved ? `<div class="pc-fb-resolved"><i class="fas fa-check-circle"></i> <?= addslashes(__('resolved_by', 'Resolved By')) ?>: ${esc(item.resolved_by_name || '-')} ${resolvedAt ? ('· ' + esc(resolvedAt)) : ''}</div>` : ''}
+                    </div>`;
             }).join('');
 
             const hasActiveFeedback = feedbacks.some(item => {
                 const status = String(item.status || '').trim().toLowerCase();
                 return status === 'open' || status === 'submitted' || status === 'pending' || status === '';
             });
-            const feedbackInitiallyHiddenClass = hasActiveFeedback ? '' : ' d-none';
-            const feedbackToggleHtml = feedbacks.length > 0 && !hasActiveFeedback
-                ? `
-                    <div class="mb-2 text-end">
-                        <button type="button" id="toggleFeedbackBlockBtn" class="btn btn-sm btn-outline-warning">
-                            <i class="fas fa-eye"></i> <?= addslashes(__('show_approver_feedback', 'Show Approver Feedback')) ?>
+            // Resolved-only feedback starts collapsed behind a toggle
+            const feedbackToggleHtml = !hasActiveFeedback
+                ? `<div style="margin-bottom:10px;text-align:end;">
+                        <button type="button" id="toggleFeedbackBlockBtn" class="sr-btn sr-btn-sm">
+                            <i class="fas fa-eye"></i> <?= addslashes(__('show_approver_feedback', 'Show Approver Feedback')) ?> (${feedbacks.length})
                         </button>
-                    </div>
-                `
+                   </div>`
                 : '';
 
             return `
                 ${feedbackToggleHtml}
-                <div id="approverFeedbackBlock" class="card border-warning shadow-sm mb-3${feedbackInitiallyHiddenClass}">
-                    <div class="card-header d-flex justify-content-between align-items-center" style="background:#fff8e1;">
-                        <h6 class="mb-0 text-warning"><i class="fas fa-comment-dots"></i> <?= addslashes(__('approver_feedback', 'Approver Feedback')) ?></h6>
-                        <span class="badge badge-warning">${feedbacks.length}</span>
-                    </div>
-                    <div class="card-body py-2" style="max-height: 180px; overflow-y: auto;">
-                        ${feedbackRowsHtml}
-                    </div>
-                </div>
-            `;
+                <div id="approverFeedbackBlock" class="pc-fb${hasActiveFeedback ? '' : ' d-none'}">
+                    <div class="pc-fb-head"><span><i class="fas fa-comment-dots"></i> <?= addslashes(__('approver_feedback', 'Approver Feedback')) ?></span><span class="sr-count">${feedbacks.length}</span></div>
+                    <div class="pc-fb-list">${feedbackRowsHtml}</div>
+                </div>`;
         }
 
-        async function openEmployeeDetail(empId) {
-            const emp = employeeMap[empId];
-            if (!emp) return;
+        let checklistDetailLoadToken = 0;
 
-            const navigationState = getChecklistEmployeeNavigationState(empId);
-            const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
-
-            let feedbacks = [];
+        async function fetchEmployeeDetailFeedbacks(empId) {
             try {
                 const detailsParams = new URLSearchParams();
                 detailsParams.set('emp_id', String(empId));
@@ -2565,158 +2700,286 @@ foreach ($employees as $employee) {
                 if (response.ok) {
                     const data = await response.json();
                     if (data.feedbacks && Array.isArray(data.feedbacks)) {
-                        feedbacks = data.feedbacks;
+                        return data.feedbacks;
                     }
                 }
             } catch (err) {
                 console.warn('Failed to fetch feedback:', err);
             }
+            return [];
+        }
 
-            const diffClass = Math.abs(Number(emp.net_difference || 0)) < 0.01 ? 'diff-zero' : 'diff-positive';
-            const conflictText = emp.is_balanced
-                ? '<?= addslashes(__('calculation_ok', 'Calculation OK')) ?>'
-                : '<?= addslashes(__('calculation_conflict', 'Calculation Conflict')) ?>';
+        // Header + body + footer markup for one employee
+        function buildEmployeeDetailView(empId, feedbacks) {
+            const emp = employeeMap[empId];
+            const navigationState = getChecklistEmployeeNavigationState(empId);
+            const currentPosition = navigationState.currentIndex >= 0 ? navigationState.currentIndex + 1 : null;
 
+            const isBalanced = Math.abs(Number(emp.net_difference || 0)) < 0.01;
             const feedbackHtml = buildFeedbackHtml(feedbacks);
             const isEmployeeChecked = !!emp.is_review_checked;
             const requiresChecklistReview = !!emp.requires_checklist_review;
+            const ini = String(emp.employee_name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+            const money = v => `<i class="icon-saudi_riyal"></i> ${fmt(v)}`;
+            const sumOf = list => (Array.isArray(list) ? list : []).reduce((t, i) => t + Number(i.note || 0), 0);
 
+            // Header: who + where + status
+            const headerHtml = `
+                <div class="pc-dhead">
+                    <span class="pc-dhead-avatar">${esc(ini)}</span>
+                    <div class="pc-dhead-main">
+                        <span class="pc-dhead-name" title="${esc(emp.employee_name)}">${esc(emp.employee_name)}</span>
+                        <div class="pc-dhead-meta">
+                            <span class="pc-dhead-chip sr-mono"><i class="mdi mdi-pound"></i>${esc(emp.emp_id)}</span>
+                            ${emp.department_name ? `<span class="pc-dhead-chip"><i class="mdi mdi-domain"></i>${esc(emp.department_name)}</span>` : ''}
+                            ${emp.company_name ? `<span class="pc-dhead-chip"><i class="mdi mdi-city"></i>${esc(emp.company_name)}</span>` : ''}
+                            <span class="pc-dhead-chip"><i class="mdi mdi-credit-card"></i>${esc(getPaymentTypeLabel(emp.payment_type))}</span>
+                        </div>
+                    </div>
+                    <div class="pc-dhead-side">
+                        <div class="pc-dhead-net">
+                            <small><?= addslashes(__('net_salary_label', 'Net Salary')) ?></small>
+                            <b><i class="icon-saudi_riyal"></i> ${fmt(emp.net_salary)}</b>
+                        </div>
+                        <div class="pc-dhead-pills">
+                            <span class="pc-dhead-pill ${isBalanced ? 'ok' : 'bad'}"><i class="fas ${isBalanced ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i>
+                                ${isBalanced ? '<?= addslashes(__('calculation_ok', 'Calculation OK')) ?>' : '<?= addslashes(__('calculation_conflict', 'Calculation Conflict')) ?>'}</span>
+                            ${requiresChecklistReview ? `<span class="pc-dhead-pill ${isEmployeeChecked ? 'ok' : 'wait'}"><i class="fas ${isEmployeeChecked ? 'fa-user-check' : 'fa-hourglass-half'}"></i>
+                                ${isEmployeeChecked ? '<?= addslashes(__('checked', 'Checked')) ?>' : '<?= addslashes(__('not_checked_yet', 'Not checked yet')) ?>'}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+
+            const kpi = (cls, label, value) => `<div class="pc-kpi-box ${cls}"><span class="pc-kpi-label">${label}</span><span class="pc-kpi-value">${value}</span></div>`;
             const detailHtml = `
                 ${feedbackHtml}
-                <div class="calc-grid">
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('salary_payment_type_label', 'Payment Type')) ?></div><div class="calc-value">${esc(getPaymentTypeLabel(emp.payment_type))}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('total_gross_salary_label', 'Gross Salary')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_gross_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('benefits_total', 'Benefits')) ?></div><div class="calc-value" style="color:#1f8b3c;"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_benefits)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('deductions_total', 'Deductions')) ?></div><div class="calc-value" style="color:#c43636;"><i class="icon-saudi_riyal"></i> ${fmt(emp.total_deductions)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('expected_net_salary', 'Expected Net')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.expected_net_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('net_salary_label', 'Actual Net')) ?></div><div class="calc-value"><i class="icon-saudi_riyal"></i> ${fmt(emp.net_salary)}</div></div>
-                    <div class="calc-box"><div class="calc-title"><?= addslashes(__('difference', 'Difference')) ?></div><div class="calc-value ${diffClass}"><i class="icon-saudi_riyal"></i> ${fmt(emp.net_difference)}</div></div>
+                <div class="pc-kpi">
+                    ${kpi('', '<?= addslashes(__('total_gross_salary_label', 'Gross Salary')) ?>', money(emp.total_gross_salary))}
+                    ${kpi('k-green', '<?= addslashes(__('benefits_total', 'Benefits')) ?>', money(emp.total_benefits))}
+                    ${kpi('k-red', '<?= addslashes(__('deductions_total', 'Deductions')) ?>', money(emp.total_deductions))}
+                    ${kpi('k-indigo', '<?= addslashes(__('expected_net_salary', 'Expected Net')) ?>', money(emp.expected_net_salary))}
+                    ${kpi('k-sky', '<?= addslashes(__('net_salary_label', 'Actual Net')) ?>', money(emp.net_salary))}
+                    ${kpi(isBalanced ? 'k-green' : 'k-red', '<?= addslashes(__('difference', 'Difference')) ?>', money(emp.net_difference))}
                 </div>
-                <div class="details-grid">
-                    <div class="detail-panel">
-                        <h5><i class="fas fa-wallet"></i> <?= addslashes(__('salary_allowances_breakdown', 'Salary & Allowances Breakdown')) ?></h5>
+                <div class="pc-formula">
+                    <i class="mdi mdi-calculator" style="color:var(--sr-accent);font-size:16px;"></i>
+                    <span><?= addslashes(__('gross', 'Gross')) ?> <b>${fmt(emp.total_gross_salary)}</b></span>
+                    <span class="op">+</span><span><?= addslashes(__('benefits', 'Benefits')) ?> <b>${fmt(emp.total_benefits)}</b></span>
+                    <span class="op">−</span><span><?= addslashes(__('deductions', 'Deductions')) ?> <b>${fmt(emp.total_deductions)}</b></span>
+                    <span class="op">=</span><span><?= addslashes(__('expected_net_salary', 'Expected Net')) ?> <b>${fmt(emp.expected_net_salary)}</b></span>
+                    <span class="op">·</span><span><?= addslashes(__('net_salary_label', 'Actual Net')) ?> <b>${fmt(emp.net_salary)}</b></span>
+                    <span class="${isBalanced ? 'ok' : 'bad'}"><i class="fas ${isBalanced ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i>
+                        ${isBalanced ? '<?= addslashes(__('calculation_ok', 'Calculation OK')) ?>' : '<?= addslashes(__('difference', 'Difference')) ?> ' + fmt(emp.net_difference)}</span>
+                </div>
+                <div class="pc-dgrid">
+                    <div class="pc-panel">
+                        <div class="pc-panel-head"><span><i class="fas fa-wallet"></i><?= addslashes(__('salary_allowances_breakdown', 'Salary & Allowances Breakdown')) ?></span>
+                            <span class="pc-panel-total">${money(emp.total_gross_salary)}</span></div>
                         ${buildSalaryAllowancesGrid(emp)}
                     </div>
-                    <div class="detail-panel">
-                        <h5><i class="fas fa-id-badge"></i> <?= addslashes(__('employee_details', 'Employee Details')) ?></h5>
-                        <ul class="detail-list">
-                            <li><span class="label"><?= addslashes(__('name')) ?></span><span class="value">${esc(emp.employee_name)}</span></li>
-                            <li><span class="label"><?= addslashes(__('department')) ?></span><span class="value">${esc(emp.department_name)}</span></li>
-                            <li><span class="label"><?= addslashes(__('company', 'Company')) ?></span><span class="value">${esc(emp.company_name)}</span></li>
-                            <li><span class="label"><?= addslashes(__('iqama', 'Iqama')) ?></span><span class="value">${esc(emp.iqama || 'N/A')}</span></li>
+                    <div class="pc-panel">
+                        <div class="pc-panel-head"><span><i class="fas fa-id-badge"></i><?= addslashes(__('employee_details', 'Employee Details')) ?></span></div>
+                        <ul class="pc-kv">
+                            <li><span><?= addslashes(__('department')) ?></span><b>${esc(emp.department_name || '-')}</b></li>
+                            <li><span><?= addslashes(__('company', 'Company')) ?></span><b>${esc(emp.company_name || '-')}</b></li>
+                            <li><span><?= addslashes(__('iqama', 'Iqama')) ?></span><b class="sr-mono">${esc(emp.iqama || 'N/A')}</b></li>
+                            <li><span><?= addslashes(__('salary_payment_type_label', 'Payment Type')) ?></span><b>${esc(getPaymentTypeLabel(emp.payment_type))}</b></li>
+                            <li><span><?= addslashes(__('bank_name', 'Bank')) ?></span><b>${esc(emp.bank_name_s || 'N/A')}</b></li>
+                            <li><span><?= addslashes(__('iban', 'IBAN')) ?></span><b class="sr-mono">${esc(emp.iban || 'N/A')}</b></li>
                         </ul>
                     </div>
-                    <div class="detail-panel detail-panel-benefits">
-                        <h5><i class="fas fa-plus-circle"></i> <?= addslashes(__('benefits_section', 'Benefits')) ?></h5>
+                </div>
+                <div class="pc-dgrid even">
+                    <div class="pc-panel p-green">
+                        <div class="pc-panel-head"><span><i class="fas fa-plus-circle"></i><?= addslashes(__('benefits_section', 'Benefits')) ?></span>
+                            <span class="pc-panel-total">${money(sumOf(emp.benefits_list))}</span></div>
                         ${buildItemsList(emp.benefits_list, 'benefit', '<?= addslashes(__('no_benefits_added', 'No benefits added')) ?>')}
                     </div>
-                    <div class="detail-panel detail-panel-deductions">
-                        <h5><i class="fas fa-minus-circle"></i> <?= addslashes(__('deductions_section', 'Deductions')) ?></h5>
+                    <div class="pc-panel p-red">
+                        <div class="pc-panel-head"><span><i class="fas fa-minus-circle"></i><?= addslashes(__('deductions_section', 'Deductions')) ?></span>
+                            <span class="pc-panel-total">${money(sumOf(emp.deductions_list))}</span></div>
                         ${buildItemsList(emp.deductions_list, 'deduction', '<?= addslashes(__('no_deductions_added', 'No deductions added')) ?>')}
                     </div>
                 </div>
             `;
 
             const modalFooterHtml = `
-                <div class="checklist-nav-footer">
-                    <div class="checklist-nav-actions">
-                        <button type="button" id="prevChecklistEmployeeBtn" class="btn btn-sm btn-outline-primary checklist-nav-btn" ${navigationState.previousEmployee ? '' : 'disabled'}>
-                            <i class="fas fa-arrow-left"></i>
-                            <span><?= addslashes(__('previous', 'Previous')) ?></span>
-                        </button>
-                        ${currentPosition ? `<small class="checklist-nav-counter mb-0">${currentPosition} / ${navigationState.employees.length}</small>` : '<span></span>'}
-                        <button type="button" id="nextChecklistEmployeeBtn" class="btn btn-sm btn-outline-primary checklist-nav-btn" ${navigationState.nextEmployee ? '' : 'disabled'}>
-                            <span><?= addslashes(__('next', 'Next')) ?></span>
-                            <i class="fas fa-arrow-right"></i>
-                        </button>
-                    </div>
+                <div class="pc-nav">
+                    <button type="button" id="prevChecklistEmployeeBtn" class="sr-btn sr-btn-sm checklist-nav-btn" ${navigationState.previousEmployee ? '' : 'disabled'}>
+                        <i class="fas fa-arrow-left"></i><span><?= addslashes(__('previous', 'Previous')) ?></span>
+                    </button>
+                    ${currentPosition ? `<span class="pc-nav-counter">${currentPosition} / ${navigationState.employees.length} &nbsp;<kbd>←</kbd> <kbd>→</kbd></span>` : '<span></span>'}
+                    <button type="button" id="nextChecklistEmployeeBtn" class="sr-btn sr-btn-sm checklist-nav-btn" ${navigationState.nextEmployee ? '' : 'disabled'}>
+                        <span><?= addslashes(__('next', 'Next')) ?></span><i class="fas fa-arrow-right"></i>
+                    </button>
                 </div>
             `;
 
+            return {
+                emp,
+                navigationState,
+                isEmployeeChecked,
+                requiresChecklistReview,
+                html: headerHtml + '<div class="pc-dbody">' + detailHtml + '</div>',
+                footer: modalFooterHtml
+            };
+        }
+
+        function isEmployeeDetailOpen() {
+            const popup = Swal.isVisible() ? Swal.getPopup() : null;
+            return !!(popup && popup.classList.contains('pc-detail-popup'));
+        }
+
+        function setEmployeeDetailLoading(isLoading) {
+            const popup = Swal.getPopup();
+            if (!popup) {
+                return;
+            }
+            let overlay = popup.querySelector('.pc-dloader');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'pc-dloader';
+                overlay.innerHTML = '<div class="pc-dloader-box"><span class="pc-spinner"></span><span><?= addslashes(__('loading', 'Loading')) ?>...</span></div>';
+                popup.appendChild(overlay);
+            }
+            overlay.classList.toggle('show', isLoading);
+            if (isLoading) {
+                popup.querySelectorAll('.checklist-nav-btn, #modalReviewToggleBtn').forEach(btn => { btn.disabled = true; });
+            }
+        }
+
+        // Wires the buttons / keys of the content currently in the popup
+        function bindEmployeeDetailView(empId, view) {
+            const popup = Swal.getPopup();
+            if (!popup) {
+                return;
+            }
+            const navigationState = view.navigationState;
+            attachChecklistModalKeyboardNavigation(navigationState);
+
+            // Mark Checked button belongs to one employee: rebuild it for each one
+            const oldReviewBtn = document.getElementById('modalReviewToggleBtn');
+            if (oldReviewBtn) {
+                oldReviewBtn.remove();
+            }
+            const swalActions = Swal.getActions();
+            const empHasOpenFeedback = (Number(view.emp.open_feedback_count || 0) > 0);
+            if (checklistReviewState.canManage && swalActions && !empHasOpenFeedback && view.requiresChecklistReview) {
+                const modalReviewBtn = document.createElement('button');
+                modalReviewBtn.type = 'button';
+                modalReviewBtn.id = 'modalReviewToggleBtn';
+                modalReviewBtn.setAttribute('data-emp-id', String(empId));
+                modalReviewBtn.addEventListener('click', function() {
+                    toggleEmployeeReviewCheck(empId, this);
+                });
+
+                const closeBtn = Swal.getConfirmButton();
+                if (closeBtn && closeBtn.parentNode === swalActions) {
+                    swalActions.insertBefore(modalReviewBtn, closeBtn);
+                } else {
+                    swalActions.appendChild(modalReviewBtn);
+                }
+                updateEmployeeReviewButton(empId, view.isEmployeeChecked, '');
+            }
+
+            const prevBtn = popup.querySelector('#prevChecklistEmployeeBtn');
+            const nextBtn = popup.querySelector('#nextChecklistEmployeeBtn');
+            const toggleFeedbackBtn = popup.querySelector('#toggleFeedbackBlockBtn');
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', function() {
+                    navigateChecklistEmployeeFromModal(navigationState.previousEmployee);
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', function() {
+                    navigateChecklistEmployeeFromModal(navigationState.nextEmployee);
+                });
+            }
+
+            if (toggleFeedbackBtn) {
+                toggleFeedbackBtn.addEventListener('click', function() {
+                    const block = document.getElementById('approverFeedbackBlock');
+                    if (!block) {
+                        return;
+                    }
+
+                    const isHidden = block.classList.contains('d-none');
+                    if (isHidden) {
+                        block.classList.remove('d-none');
+                        this.innerHTML = `<i class="fas fa-eye-slash"></i> <?= addslashes(__('hide_approver_feedback', 'Hide Approver Feedback')) ?>`;
+                    } else {
+                        block.classList.add('d-none');
+                        this.innerHTML = `<i class="fas fa-eye"></i> <?= addslashes(__('show_approver_feedback', 'Show Approver Feedback')) ?>`;
+                    }
+                });
+            }
+        }
+
+        // Popup already open (Previous / Next / arrow keys): show a loader and swap the content only
+        async function loadEmployeeDetailInline(empId) {
+            const token = ++checklistDetailLoadToken;
+            checklistModalNavigationBusy = true;
+            setEmployeeDetailLoading(true);
+
+            const feedbacks = await fetchEmployeeDetailFeedbacks(empId);
+            if (token !== checklistDetailLoadToken || !isEmployeeDetailOpen()) {
+                return; // closed or superseded meanwhile
+            }
+
+            const view = buildEmployeeDetailView(empId, feedbacks);
+            const container = Swal.getHtmlContainer();
+            const footer = Swal.getFooter();
+            if (container) {
+                container.innerHTML = view.html;
+            }
+            if (footer) {
+                footer.innerHTML = view.footer;
+            }
+            bindEmployeeDetailView(empId, view);
+            setEmployeeDetailLoading(false);
+            checklistModalNavigationBusy = false;
+        }
+
+        async function openEmployeeDetail(empId) {
+            if (!employeeMap[empId]) return;
+
+            if (isEmployeeDetailOpen()) {
+                return loadEmployeeDetailInline(empId);
+            }
+
+            const token = ++checklistDetailLoadToken;
+            const feedbacks = await fetchEmployeeDetailFeedbacks(empId);
+            if (token !== checklistDetailLoadToken) {
+                return;
+            }
+            const view = buildEmployeeDetailView(empId, feedbacks);
+
             Swal.fire({
-                title: `<i class="fas fa-user"></i> ${esc(emp.employee_name)} (${esc(emp.emp_id)})`,
-                html: detailHtml,
-                footer: modalFooterHtml,
-                width: '94vw',
+                html: view.html,
+                footer: view.footer,
+                width: '1240px',
+                padding: '0',
                 allowOutsideClick: false,
                 stopKeydownPropagation: false,
                 keydownListenerCapture: true,
                 customClass: {
-                    popup: 'swal-landscape-popup',
-                    container: 'swal-landscape-container'
+                    popup: 'pc-detail-popup sr-page', // sr-page = design tokens (popups render outside the page)
+                    container: 'pc-detail-container',
+                    confirmButton: 'sr-btn'
                 },
+                buttonsStyling: false,
                 showCloseButton: true,
                 showConfirmButton: true,
                 confirmButtonText: '<?= addslashes(__('close', 'Close')) ?>',
                 focusConfirm: false,
                 didOpen: () => {
-                    const prevBtn = document.getElementById('prevChecklistEmployeeBtn');
-                    const nextBtn = document.getElementById('nextChecklistEmployeeBtn');
-                    const toggleFeedbackBtn = document.getElementById('toggleFeedbackBlockBtn');
-                    const swalActions = Swal.getActions();
-
-                    attachChecklistModalKeyboardNavigation(navigationState);
-
-                    const empHasOpenFeedback = (Number(emp.open_feedback_count || 0) > 0);
-                    if (checklistReviewState.canManage && swalActions && !empHasOpenFeedback && requiresChecklistReview) {
-                        let modalReviewBtn = document.getElementById('modalReviewToggleBtn');
-                        if (!modalReviewBtn) {
-                            modalReviewBtn = document.createElement('button');
-                            modalReviewBtn.type = 'button';
-                            modalReviewBtn.id = 'modalReviewToggleBtn';
-                            modalReviewBtn.setAttribute('data-emp-id', String(empId));
-                            modalReviewBtn.addEventListener('click', function() {
-                                toggleEmployeeReviewCheck(empId, this);
-                            });
-
-                            const closeBtn = Swal.getConfirmButton();
-                            if (closeBtn && closeBtn.parentNode === swalActions) {
-                                swalActions.insertBefore(modalReviewBtn, closeBtn);
-                            } else {
-                                swalActions.appendChild(modalReviewBtn);
-                            }
-                        }
-
-                        updateEmployeeReviewButton(empId, isEmployeeChecked, '');
-                    }
-
-                    if (prevBtn) {
-                        prevBtn.addEventListener('click', function() {
-                            if (!navigationState.previousEmployee) {
-                                return;
-                            }
-                            navigateChecklistEmployeeFromModal(navigationState.previousEmployee);
-                        });
-                    }
-
-                    if (nextBtn) {
-                        nextBtn.addEventListener('click', function() {
-                            if (!navigationState.nextEmployee) {
-                                return;
-                            }
-                            navigateChecklistEmployeeFromModal(navigationState.nextEmployee);
-                        });
-                    }
-
-                    if (toggleFeedbackBtn) {
-                        toggleFeedbackBtn.addEventListener('click', function() {
-                            const block = document.getElementById('approverFeedbackBlock');
-                            if (!block) {
-                                return;
-                            }
-
-                            const isHidden = block.classList.contains('d-none');
-                            if (isHidden) {
-                                block.classList.remove('d-none');
-                                this.innerHTML = `<i class="fas fa-eye-slash"></i> <?= addslashes(__('hide_approver_feedback', 'Hide Approver Feedback')) ?>`;
-                            } else {
-                                block.classList.add('d-none');
-                                this.innerHTML = `<i class="fas fa-eye"></i> <?= addslashes(__('show_approver_feedback', 'Show Approver Feedback')) ?>`;
-                            }
-                        });
-                    }
+                    bindEmployeeDetailView(empId, view);
                 },
                 willClose: () => {
+                    checklistDetailLoadToken++;
+                    checklistModalNavigationBusy = false;
                     detachChecklistModalKeyboardNavigation();
                 }
             });
@@ -2986,6 +3249,7 @@ foreach ($employees as $employee) {
                 }, 0);
 
                 badge.textContent = String(pendingCount);
+                window.pcPendingImportCount = pendingCount; // also shown on the tile in the More Actions popup
                 badge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
             } catch (error) {
                 badge.style.display = 'none';

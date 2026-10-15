@@ -54,6 +54,12 @@ if ($current_filter === null) {
     $current_filter = ($is_system_admin ?? false) ? 'all' : 'my_pending';
 }
 
+// Filter + count block, wrapped in a closure so the status cards can count every status
+// with exactly the same rules (sr_status_counts); the current status runs it once as before.
+require_once __DIR__ . '/includes/sr_list_helpers.php';
+$sr_scope = sr_scope_vars(get_defined_vars());
+$sr_build_filter = function ($current_filter) use ($sr_scope) {
+    extract($sr_scope, EXTR_SKIP);
 $where_clauses = [];
 $params = [];
 $types = "";
@@ -124,6 +130,10 @@ if (!empty($params)) {
 mysqli_stmt_execute($stmt_count);
 $total_items = (int)(mysqli_stmt_get_result($stmt_count)->fetch_assoc()['total'] ?? 0);
 mysqli_stmt_close($stmt_count);
+    return sr_scope_vars(get_defined_vars());
+};
+extract($sr_build_filter($current_filter));
+$sr_status_counts = sr_status_counts($all_statuses, $current_filter, $total_items, $sr_build_filter, 'total_items');
 
 $total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
 if ($current_page > $total_pages && $total_pages > 0) {
@@ -295,8 +305,8 @@ if ($total_items > 0) {
                         <div><?= __('request_employee_transfer_hint', 'To request an employee transfer, open that employee\'s profile and use "More Actions" > "Request Employee Transfer".') ?></div>
                     </div>
 
+                    <?= sr_status_tabs($all_statuses, $current_filter, $total_items, $sr_status_counts) ?>
                     <div class="sr-card">
-                        <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
                         <?= sr_list_toolbar($search_term) ?>
 
                         <?php if (!empty($requests)): ?>

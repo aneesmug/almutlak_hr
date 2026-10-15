@@ -142,12 +142,20 @@
                             </div>
                         <?php endif; ?>
 
-                        <!-- Status summary tiles (also act as the status filter) -->
-                        <div class="sr-tiles" id="srTiles" role="tablist">
-                            <?php foreach ($status_tiles as $tile_status => $tile): ?>
-                                <button type="button" class="sr-tile<?= $tile_status === '' ? ' active' : '' ?>" data-status="<?= $tile_status ?>" role="tab">
-                                    <span class="sr-tile-label"><span class="sr-dot <?= $tile[1] ?>"></span><?= htmlspecialchars($tile[0]) ?></span>
-                                    <span class="sr-tile-value" data-count="<?= $tile_status === '' ? 'all' : $tile_status ?>">&ndash;</span>
+                        <!-- Status cards (also act as the status filter) -->
+                        <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; ?>
+                        <div class="sr-scards" id="srTiles" role="tablist" style="--sr-scard-cols: <?= sr_stat_cols(count($status_tiles)) ?>;">
+                            <?php foreach ($status_tiles as $tile_status => $tile):
+                                $tile_tone = $tile_status === 'approved' ? 'indigo' : sr_status_tone($tile_status);
+                                $tile_hint = $tile_status === 'approved' ? __('status_hint_approved_next', 'Approved, next step pending') : sr_status_hint($tile_status); ?>
+                                <button type="button" class="sr-tile sr-scard st-<?= $tile_tone ?><?= $tile_status === '' ? ' active' : '' ?>" data-status="<?= $tile_status ?>" role="tab" title="<?= htmlspecialchars($tile_hint ?: $tile[0], ENT_QUOTES) ?>">
+                                    <span class="sr-scard-ico"><i class="mdi <?= sr_status_icon($tile_status) ?>"></i></span>
+                                    <span class="sr-scard-body">
+                                        <span class="sr-scard-label"><?= htmlspecialchars($tile[0]) ?></span>
+                                        <?php if ($tile_hint !== ''): ?><span class="sr-scard-hint"><?= htmlspecialchars($tile_hint) ?></span><?php endif; ?>
+                                    </span>
+                                    <span class="sr-scard-value" data-count="<?= $tile_status === '' ? 'all' : $tile_status ?>">&ndash;</span>
+                        <?= sr_scard_foot(0, 0, $tile_status === '' ? 'all' : $tile_status) ?>
                                 </button>
                             <?php endforeach; ?>
                         </div>
@@ -326,6 +334,14 @@
                     $('[data-count]').each(function () {
                         var key = $(this).data('count');
                         $(this).text(counts[key] !== undefined ? counts[key] : '0');
+                    });
+                    // Share bar: each count as % of "All" (capped at 100)
+                    var base = parseInt(counts.all, 10) || 0;
+                    $('[data-bar]').each(function () {
+                        var n = parseInt(counts[$(this).data('bar')], 10) || 0;
+                        var pct = base > 0 ? Math.min(100, Math.round(n / base * 100)) : 0;
+                        $(this).css('width', pct + '%');
+                        $('[data-pct="' + $(this).data('bar') + '"]').text(pct + '%');
                     });
                     return json.data;
                 }

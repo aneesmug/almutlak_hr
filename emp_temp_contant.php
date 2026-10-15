@@ -10,7 +10,10 @@ if (mysqli_num_rows($query) == 1) {
 
     $requests = [];
     $counts = ['Pending' => 0, 'Approved' => 0, 'Rejected' => 0];
-    $sql = "SELECT `employee_temp_contants`.*, `employees`.`name`, `department`.`dep_nme`
+    // Current employee values are loaded too, so the review popup can show Current -> Requested
+    $sql = "SELECT `employee_temp_contants`.*, `employees`.`name`, `department`.`dep_nme`,
+            `employees`.`mobile` AS `cur_mobile`, `employees`.`email` AS `cur_email`, `employees`.`passport_number` AS `cur_passport_number`,
+            `employees`.`passport_exp` AS `cur_passport_exp`, `employees`.`address` AS `cur_address`, `employees`.`avatar` AS `cur_avatar`
         FROM `employee_temp_contants`
         LEFT JOIN `employees` ON `employees`.`emp_id` = `employee_temp_contants`.`emp_id`
         LEFT JOIN `department` ON `department`.`id` = `employees`.`dept`
@@ -32,6 +35,12 @@ if (mysqli_num_rows($query) == 1) {
         if (strpos($t, 'picture') !== false || strpos($t, 'photo') !== false) return 'mdi-account-box';
         if (strpos($t, 'document') !== false) return 'mdi-file-document';
         return 'mdi-pencil';
+    };
+    // Current value of the field a request wants to change (same mapping as hrHandler.php approve)
+    $current_value = function ($rec) {
+        $map = ['Mobile' => 'cur_mobile', 'Email' => 'cur_email', 'Passport No' => 'cur_passport_number',
+                'Passport Exp' => 'cur_passport_exp', 'Address' => 'cur_address', 'Profile Picture' => 'cur_avatar'];
+        return isset($map[$rec['type']]) ? (string)($rec[$map[$rec['type']]] ?? '') : '';
     };
     $initials = function ($name) {
         $p = preg_split('/\s+/', trim((string)$name), -1, PREG_SPLIT_NO_EMPTY);
@@ -63,12 +72,29 @@ if (mysqli_num_rows($query) == 1) {
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .sr-page .sr-tiles.tc-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        @media (max-width: 767px) { .sr-page .sr-tiles.tc-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .tc-value { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; font-weight: 600; color: var(--sr-text); }
-        .tc-preview { margin-top: 10px; text-align: center; }
-        .tc-preview img { max-width: 100%; max-height: 260px; border-radius: 10px; border: 1px solid var(--sr-border); }
-        .tc-new { font-size: 18px; font-weight: 800; color: var(--tone-green-fg); word-break: break-word; }
+        /* Review popup: employee header, Current -> Requested comparison, decision */
+        .tc-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); margin-bottom: 14px; }
+        .tc-head .sr-avatar { width: 44px; height: 44px; font-size: 15px; }
+        .tc-head-main { flex: 1 1 auto; min-width: 0; }
+        .tc-head-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .tc-head-type { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px;
+            background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); font-size: 22px; }
+        .tc-compare { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; margin-bottom: 14px; }
+        .tc-side { min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface); }
+        .tc-side.is-new { border-color: var(--tone-green-bd); background: var(--tone-green-bg); }
+        .tc-side-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sr-muted); margin-bottom: 6px; }
+        .tc-side.is-new .tc-side-label { color: var(--tone-green-fg); }
+        .tc-side-value { font-size: 16px; font-weight: 700; color: var(--sr-text); word-break: break-word; unicode-bidi: plaintext; }
+        .tc-side.is-new .tc-side-value { color: var(--tone-green-fg); }
+        .tc-side-value.is-empty { font-size: 13px; font-weight: 500; color: var(--sr-muted); font-style: italic; }
+        .tc-arrow { display: flex; align-items: center; justify-content: center; color: var(--sr-muted); font-size: 22px; }
+        [dir="rtl"] .tc-arrow i { transform: scaleX(-1); }
+        .tc-img { display: block; width: 100%; max-height: 220px; object-fit: contain; border-radius: 10px; border: 1px solid var(--sr-border); background: var(--sr-surface); }
+        .tc-file { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 14px; border-radius: 12px; border: 1px dashed var(--sr-border-strong); background: var(--sr-surface-2); }
+        .tc-file i { font-size: 28px; color: var(--tone-indigo-fg); }
+        .tc-file-main { flex: 1 1 auto; min-width: 0; }
+        @media (max-width: 575px) { .tc-compare { grid-template-columns: 1fr; } .tc-arrow i { transform: rotate(90deg); } }
     </style>
     <script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 </head>
@@ -101,23 +127,28 @@ if (mysqli_num_rows($query) == 1) {
                         </div>
                     </div>
 
-                    <div class="sr-tiles tc-tiles" id="tcTiles">
-                        <button type="button" class="sr-tile active" data-status="Pending">
-                            <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('pending', 'Pending') ?></span>
-                            <span class="sr-tile-value"><?= $counts['Pending'] ?></span>
+                    <?php
+                    require_once __DIR__ . '/includes/sr_list_helpers.php'; // sr_scard_foot()
+                    // [status, tone, icon, label, hint, count]
+                    $tc_tiles = [
+                        ['Pending', 'amber', 'mdi-timer-sand', __('pending', 'Pending'), __('tc_hint_pending', 'Waiting for HR approval'), $counts['Pending']],
+                        ['Approved', 'green', 'mdi-check-circle', __('approved', 'Approved'), __('tc_hint_approved', 'Applied to the profile'), $counts['Approved']],
+                        ['Rejected', 'red', 'mdi-close-circle', __('rejected', 'Rejected'), __('tc_hint_rejected', 'Declined changes'), $counts['Rejected']],
+                        ['', 'indigo', 'mdi-format-list-bulleted', __('all', 'All'), __('tc_hint_all', 'Every update request'), count($requests)],
+                    ];
+                    ?>
+                    <div class="sr-scards" id="tcTiles" style="--sr-scard-cols: 4;">
+                        <?php foreach ($tc_tiles as [$tc_status, $tc_tone, $tc_icon, $tc_label, $tc_hint, $tc_count]): ?>
+                        <button type="button" class="sr-tile sr-scard st-<?= $tc_tone ?><?= $tc_status === 'Pending' ? ' active' : '' ?><?= ($tc_status === 'Pending' && $tc_count > 0) ? ' sr-scard-alert' : '' ?>" data-status="<?= $tc_status ?>" title="<?= htmlspecialchars($tc_hint, ENT_QUOTES) ?>">
+                            <span class="sr-scard-ico"><i class="mdi <?= $tc_icon ?>"></i></span>
+                            <span class="sr-scard-body">
+                                <span class="sr-scard-label"><?= htmlspecialchars($tc_label) ?></span>
+                                <span class="sr-scard-hint"><?= htmlspecialchars($tc_hint) ?></span>
+                            </span>
+                            <span class="sr-scard-value"><?= number_format($tc_count) ?></span>
+                            <?= sr_scard_foot($tc_count, count($requests)) ?>
                         </button>
-                        <button type="button" class="sr-tile" data-status="Approved">
-                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('approved', 'Approved') ?></span>
-                            <span class="sr-tile-value"><?= $counts['Approved'] ?></span>
-                        </button>
-                        <button type="button" class="sr-tile" data-status="Rejected">
-                            <span class="sr-tile-label"><span class="sr-dot dot-red"></span><?= __('rejected', 'Rejected') ?></span>
-                            <span class="sr-tile-value"><?= $counts['Rejected'] ?></span>
-                        </button>
-                        <button type="button" class="sr-tile" data-status="">
-                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all', 'All') ?></span>
-                            <span class="sr-tile-value"><?= count($requests) ?></span>
-                        </button>
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="sr-card">
@@ -178,7 +209,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <td class="text-right">
                                                 <div class="sr-actions">
                                                     <?php if ($pending): ?>
-                                                        <a href="javascript:void(0);" class="sr-open-btn contantChk" data-emp_id="<?= $h($rec['emp_id']) ?>" data-name="<?= $h($rec['name']) ?>" data-id="<?= (int)$rec['id'] ?>" data-path="<?= $h($rec['path']) ?>" data-type="<?= $h($rec['type']) ?>" data-new_value="<?= $h($rec['new_value']) ?>"><i class="mdi mdi-check"></i> <?= __('review', 'Review') ?></a>
+                                                        <a href="javascript:void(0);" class="sr-open-btn contantChk" data-emp_id="<?= $h($rec['emp_id']) ?>" data-name="<?= $h($rec['name']) ?>" data-id="<?= (int)$rec['id'] ?>" data-path="<?= $h($rec['path']) ?>" data-type="<?= $h($rec['type']) ?>" data-new_value="<?= $h($rec['new_value']) ?>" data-current="<?= $h($current_value($rec)) ?>" data-dept="<?= $h($rec['dep_nme']) ?>" data-date="<?= $date ? $h(date('d M Y, h:i a', $date)) : '' ?>" data-icon="<?= $type_icon($rec['type']) ?>"><i class="mdi mdi-check"></i> <?= __('review', 'Review') ?></a>
                                                     <?php endif; ?>
                                                     <?php if ($can_delete): ?>
                                                         <a href="javascript:void(0);" class="sr-more-btn deleteAjax" title="<?= __('delete') ?>" data-id="<?= (int)$rec['id'] ?>" data-tbl="employee_temp_contants" data-file="0"><i class="mdi mdi-delete text-danger"></i></a>
@@ -270,28 +301,58 @@ if (mysqli_num_rows($query) == 1) {
                 const path = d.path || '', isImg = /\.(jpe?g|png|gif|webp)$/i.test(path);
                 const ini = String(d.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
-                let change = '';
-                if (path) {
-                    change = (d.new_value ? `<div class="sr-hint" style="margin-top:0;">${esc(d.new_value)}</div>` : '') +
-                        (isImg ? `<div class="tc-preview"><a href="${esc(path)}" target="_blank" rel="noopener"><img src="${esc(path)}" alt=""></a></div>`
-                               : `<a href="${esc(path)}" target="_blank" rel="noopener" class="sr-btn sr-btn-sm mt-2"><i class="mdi mdi-paperclip"></i> ${esc(t('show_attachment', 'Open attachment'))}</a>`);
+                const current = String(d.current || '').trim(), isAvatar = d.type === 'Profile Picture';
+                const side = (cls, icon, label, body) =>
+                    `<div class="tc-side ${cls}"><div class="tc-side-label"><i class="mdi ${icon}"></i>${esc(label)}</div>${body}</div>`;
+                const valueBox = (v) => v ? `<div class="tc-side-value">${esc(v)}</div>`
+                    : `<div class="tc-side-value is-empty">${esc(t('not_set', 'Not set'))}</div>`;
+                const imgBox = (src) => src ? `<a href="${esc(src)}" target="_blank" rel="noopener"><img class="tc-img" src="${esc(src)}" alt=""></a>`
+                    : `<div class="tc-side-value is-empty">${esc(t('no_picture', 'No picture'))}</div>`;
+
+                // What changes: picture -> side-by-side images; file -> attachment card; value -> Current / Requested
+                let change;
+                if (isAvatar || (path && isImg && current)) {
+                    change = '<div class="tc-compare">' +
+                        side('', 'mdi-history', t('current', 'Current'), imgBox(current)) +
+                        '<div class="tc-arrow"><i class="mdi mdi-arrow-right-bold"></i></div>' +
+                        side('is-new', 'mdi-new-box', t('requested', 'Requested'), imgBox(path)) +
+                        '</div>';
+                } else if (path) {
+                    change = (isImg ? `<div class="tc-compare" style="grid-template-columns:1fr;">${side('is-new', 'mdi-new-box', t('requested', 'Requested'), imgBox(path))}</div>` : '') +
+                        `<div class="tc-file"><i class="mdi mdi-file-document"></i>
+                            <div class="tc-file-main"><span class="sr-cell-title">${esc(d.new_value || d.type)}</span>
+                                <span class="sr-cell-sub sr-mono">${esc(path.split('/').pop())}</span></div>
+                            <a href="${esc(path)}" target="_blank" rel="noopener" class="sr-btn sr-btn-sm"><i class="mdi mdi-open-in-new"></i> ${esc(t('open', 'Open'))}</a></div>`;
                 } else {
-                    change = `<div class="sr-field-label">${esc(t('new_value', 'New value'))}</div><div class="tc-new">${esc(d.new_value)}</div>`;
+                    change = '<div class="tc-compare">' +
+                        side('', 'mdi-history', t('current', 'Current'), valueBox(current)) +
+                        '<div class="tc-arrow"><i class="mdi mdi-arrow-right-bold"></i></div>' +
+                        side('is-new', 'mdi-new-box', t('requested', 'Requested'), valueBox(String(d.new_value || ''))) +
+                        '</div>';
                 }
 
                 const html = '<form id="submitEmployeeTempContantForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
-                    `<div class="sr-fsec"><div class="sr-fsec-head"><span><i class="mdi mdi-account"></i> ${esc(t('request_update_field', 'Requested change'))}</span><span class="sr-chip">${esc(d.type)}</span></div>
-                        <div class="sr-card-body" style="padding:14px;">
-                            <div class="sr-person" style="margin-bottom:12px;"><span class="sr-avatar">${esc(ini)}</span>
-                                <div><span class="sr-cell-title">${esc(d.name)}</span><span class="sr-cell-sub sr-mono">${esc(d.emp_id)}</span></div></div>
-                            ${change}
-                        </div></div>` +
-                    F.section('mdi-gavel', t('action', 'Action'),
+                    `<div class="tc-head">
+                        <span class="sr-avatar">${esc(ini)}</span>
+                        <div class="tc-head-main">
+                            <span class="sr-cell-title">${esc(d.name)}</span>
+                            <span class="sr-cell-sub sr-mono">${esc(d.emp_id)}</span>
+                            <div class="tc-head-meta">
+                                <span class="sr-chip"><i class="mdi ${esc(d.icon || 'mdi-pencil')}"></i>${esc(d.type)}</span>
+                                ${d.dept ? `<span class="sr-chip"><i class="mdi mdi-domain"></i>${esc(d.dept)}</span>` : ''}
+                                ${d.date ? `<span class="sr-chip"><i class="mdi mdi-calendar-clock"></i>${esc(d.date)}</span>` : ''}
+                            </div>
+                        </div>
+                        <span class="tc-head-type"><i class="mdi ${esc(d.icon || 'mdi-pencil')}"></i></span>
+                    </div>` +
+                    change +
+                    F.section('mdi-gavel', t('decision', 'Decision'),
                         F.field({ col: 12, name: 'contant_check', html:
                             '<div class="sr-attach-choice">' +
-                                `<label class="sr-choice sr-choice-approve"><input type="radio" name="contant_check" value="approve" data-required="1" data-msg="${esc(t('select_action_validation', 'Select an action'))}"><span><i class="mdi mdi-check-circle"></i> ${esc(t('approve_request', 'Approve'))}</span></label>` +
+                                `<label class="sr-choice sr-choice-approve"><input type="radio" name="contant_check" value="approve" data-required="1" data-msg="${esc(t('select_action_validation', 'Select an action'))}"><span><i class="mdi mdi-check-circle"></i> ${esc(t('approve_and_apply', 'Approve & apply'))}</span></label>` +
                                 `<label class="sr-choice sr-choice-reject"><input type="radio" name="contant_check" value="not_approve"><span><i class="mdi mdi-close-circle"></i> ${esc(t('reject_request', 'Reject'))}</span></label>` +
-                            '</div>' }) +
+                            '</div>',
+                            hint: esc(t('tc_approve_hint', 'Approving copies the requested value into the employee profile.')) }) +
                         F.field({ col: 12, name: 'notes', id: 'tcNotes', type: 'textarea', rows: 3, label: t('notes', 'Notes'), ph: t('optional_notes_placeholder', 'Optional notes') }).replace('sr-fcol c-12', 'sr-fcol c-12 js-notes" style="display:none;')
                     ) +
                     `<input type="hidden" name="id" value="${esc(d.id)}"><input type="hidden" name="empid" value="${esc(d.emp_id)}">` +
@@ -300,7 +361,7 @@ if (mysqli_num_rows($query) == 1) {
                 F.open({
                     title: t('employee_info_update_request', 'Info update request'),
                     html: html,
-                    width: '640px',
+                    width: '720px',
                     icon: 'mdi-check',
                     confirm: t('submit_action', 'Submit'),
                     didOpen: function() {

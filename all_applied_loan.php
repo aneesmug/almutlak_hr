@@ -81,6 +81,12 @@ if ($current_filter === null) {
     }
 }
 
+// Filter + count block, wrapped in a closure so the status cards can count every status
+// with exactly the same rules (sr_status_counts); the current status runs it once as before.
+require_once __DIR__ . '/includes/sr_list_helpers.php';
+$sr_scope = sr_scope_vars(get_defined_vars());
+$sr_build_filter = function ($current_filter) use ($sr_scope) {
+    extract($sr_scope, EXTR_SKIP);
 $where_clauses = [];
 $params = [];
 $types = "";
@@ -188,6 +194,10 @@ if (!empty($params)) {
 $stmt_count->execute();
 $total_items = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
 $stmt_count->close();
+    return sr_scope_vars(get_defined_vars());
+};
+extract($sr_build_filter($current_filter));
+$sr_status_counts = sr_status_counts($all_statuses, $current_filter, $total_items, $sr_build_filter, 'total_items');
 
 $total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
 if ($current_page > $total_pages && $total_pages > 0) {
@@ -372,8 +382,8 @@ function get_next_approver_name_fallback(mysqli $conDB, array $loanRow) {
                             </div>
                         </div>
 
+                        <?= sr_status_tabs($all_statuses, $current_filter, $total_items, $sr_status_counts) ?>
                         <div class="sr-card">
-                            <?= sr_status_tabs($all_statuses, $current_filter, $total_items) ?>
                             <?= sr_list_toolbar($search_term, (!empty($search_term) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
                             <?php if (!empty($requests)): ?>

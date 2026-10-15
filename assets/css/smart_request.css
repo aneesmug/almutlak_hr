@@ -1181,3 +1181,63 @@ html.app-dark body.sr-standalone { background: #0f1420; }
 .srh-crit { display: flex; align-items: center; gap: 10px; } .srh-crit .srh-progress { flex: 1; margin: 0; }
 button.sr-open-btn { border: 0; cursor: pointer; }
 .srh-note { unicode-bidi: plaintext; text-align: start; }
+
+/* ===================================================================
+   Status cards (sr-scards / sr-scard) - shared by the approval list pages
+   (sr_status_tabs() with counts) and any page that wants the same look:
+   tone icon chip, label + hint, count, share bar (% of All); active = tinted + accent bar.
+   <div class="sr-scards" style="--sr-scard-cols: 5">
+     <button class="sr-scard st-amber active" data-status="...">
+       <span class="sr-scard-ico"><i class="mdi ..."></i></span>
+       <span class="sr-scard-body"><span class="sr-scard-label">..</span><span class="sr-scard-hint">..</span></span>
+       <span class="sr-scard-value">12</span>
+     </button>
+   </div>
+   =================================================================== */
+.sr-scards { display: grid; grid-template-columns: repeat(var(--sr-scard-cols, 4), minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 1399px) { .sr-scards { gap: 10px; } }
+@media (max-width: 1199px) { .sr-scards { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); } }
+@media (max-width: 767px)  { .sr-scards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px)  { .sr-scards { grid-template-columns: 1fr; } }
+.sr-scard {
+    --st-fg: var(--tone-slate-fg); --st-bg: var(--tone-slate-bg); --st-bd: var(--tone-slate-bd);
+    position: relative; overflow: hidden; width: 100%; min-width: 0; text-align: start; cursor: pointer;
+    display: flex; align-items: center; gap: 12px; padding-block: 14px; padding-inline: 18px 16px;
+    border-radius: 12px; background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow);
+    color: inherit; font: inherit;
+    transition: border-color .15s, transform .15s, box-shadow .15s, background-color .15s;
+}
+.sr-scard.st-indigo { --st-fg: var(--tone-indigo-fg); --st-bg: var(--tone-indigo-bg); --st-bd: var(--tone-indigo-bd); }
+.sr-scard.st-amber  { --st-fg: var(--tone-amber-fg);  --st-bg: var(--tone-amber-bg);  --st-bd: var(--tone-amber-bd); }
+.sr-scard.st-sky    { --st-fg: var(--tone-sky-fg);    --st-bg: var(--tone-sky-bg);    --st-bd: var(--tone-sky-bd); }
+.sr-scard.st-green  { --st-fg: var(--tone-green-fg);  --st-bg: var(--tone-green-bg);  --st-bd: var(--tone-green-bd); }
+.sr-scard.st-red    { --st-fg: var(--tone-red-fg);    --st-bg: var(--tone-red-bg);    --st-bd: var(--tone-red-bd); }
+.sr-scard::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px;
+    border-radius: 3px; background: var(--st-fg); opacity: 0; transition: opacity .15s; }
+.sr-scard:hover { border-color: var(--st-bd); transform: translateY(-1px); }
+.sr-scard:focus-visible { outline: 2px solid var(--st-fg); outline-offset: 2px; }
+.sr-scard-ico { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 11px; background: var(--st-bg); color: var(--st-fg); font-size: 19px; }
+.sr-scard-body { flex: 1 1 0; min-width: 0; }
+.sr-scard-label { display: block; font-size: 13px; font-weight: 700; color: var(--sr-text); text-transform: none; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-scard-hint { display: block; text-transform: none; letter-spacing: 0; margin-top: 2px; font-size: 11.5px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-scard-value { flex: 0 0 auto; font-size: 26px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+.sr-scard.active { background: var(--st-bg); border-color: var(--st-bd); box-shadow: 0 0 0 1px var(--st-bd) inset, var(--sr-shadow); }
+.sr-scard.active::before { opacity: 1; }
+.sr-scard.active::after { display: none; }
+.sr-scard.active .sr-scard-ico { background: var(--st-fg); color: var(--sr-surface); }
+.sr-scard.active .sr-scard-value { color: var(--st-fg); }
+.sr-scard-alert .sr-scard-value { color: var(--st-fg); }
+.sr-scard-alert .sr-scard-ico::after { content: ''; position: absolute; top: -3px; inset-inline-end: -3px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--st-fg); border: 2px solid var(--sr-surface); animation: sr-scard-pulse 1.6s ease-out infinite; }
+@keyframes sr-scard-pulse { 0% { box-shadow: 0 0 0 0 var(--st-bd); } 100% { box-shadow: 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .sr-scard-alert .sr-scard-ico::after { animation: none; } }
+/* Share bar under each card: count as % of the "All" card */
+.sr-scard { flex-wrap: wrap; row-gap: 10px; }
+.sr-scard-foot { flex: 0 0 100%; display: flex; align-items: center; gap: 8px; }
+.sr-scard-bar { flex: 1 1 auto; height: 4px; border-radius: 999px; background: var(--sr-surface-3); overflow: hidden; }
+.sr-scard-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--st-fg); transition: width .4s ease; }
+.sr-scard-pct { flex: 0 0 auto; min-width: 34px; text-align: end; font-size: 11px; font-weight: 700; color: var(--st-fg); font-variant-numeric: tabular-nums; }
+.sr-scard.active .sr-scard-bar { background: var(--sr-surface); }
+@media (prefers-reduced-motion: reduce) { .sr-scard-bar i { transition: none; } }
+}

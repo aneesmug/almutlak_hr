@@ -71,6 +71,12 @@ if ($current_filter === null) {
     }
 }
 
+// Filter + count block, wrapped in a closure so the status cards can count every status
+// with exactly the same rules (sr_status_counts); the current status runs it once as before.
+require_once __DIR__ . '/includes/sr_list_helpers.php';
+$sr_scope = sr_scope_vars(get_defined_vars());
+$sr_build_filter = function ($current_filter) use ($sr_scope) {
+    extract($sr_scope, EXTR_SKIP);
 $whereClauses = [];
 $params = [];
 $paramTypes = "";
@@ -171,6 +177,10 @@ if (!empty($params)) {
 $countStmt->execute();
 $totalItems = $countStmt->get_result()->fetch_assoc()['total'] ?? 0;
 $countStmt->close();
+    return sr_scope_vars(get_defined_vars());
+};
+extract($sr_build_filter($current_filter));
+$sr_status_counts = sr_status_counts($allStatuses, $current_filter, $totalItems, $sr_build_filter, 'totalItems');
 
 $totalPages = $showAll ? 1 : ceil($totalItems / $itemsPerPage);
 if ($currentPage > $totalPages && $totalPages > 0) {
@@ -380,8 +390,8 @@ if ($canSeeAllDepts) {
                         </div>
                     </div>
 
+                    <?= sr_status_tabs($allStatuses, $current_filter, $totalItems, $sr_status_counts) ?>
                     <div class="sr-card">
-                        <?= sr_status_tabs($allStatuses, $current_filter, $totalItems) ?>
                         <?= sr_list_toolbar($searchTerm, (!empty($searchTerm) || $current_filter !== 'my_pending') ? 'resetFilters(' . (int)$perpage . ')' : '') ?>
 
                         <?php if (!empty($settlements)): ?>

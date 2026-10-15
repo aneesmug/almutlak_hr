@@ -448,6 +448,8 @@ if ($vacation_type_id > 0) {
 // --- END NEW VACATION PENDING COUNT ---
 
 // --- Fetch Rejoin Pending Approval Count (NEW) ---
+// request_approvers.request_inv_no holds rejoin_requests.request_inv_no ('RR-...'), not rr.id -
+// joining on rr.id matched nothing, so the menu badge always showed 0.
 $rejoin_pending_count = 0;
 $rejoin_type_id = 0;
 $rejoin_type_query = mysqli_query($conDB, "SELECT id FROM approval_request_types WHERE type_name = 'rejoin_request' LIMIT 1");
@@ -459,7 +461,7 @@ if ($rejoin_type_id > 0) {
     // Admin: count all distinct rejoin requests still pending anywhere
                 $rejoin_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                                  FROM request_approvers ra
-                                                                                 JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
+                                                                                 JOIN rejoin_requests rr ON rr.request_inv_no = ra.request_inv_no
                                                                                  WHERE ra.status = 'pending'
                                                                                      AND rr.status = 'pending'
                                                                                      AND ra.request_type_id = $rejoin_type_id";
@@ -485,7 +487,7 @@ if ($rejoin_type_id > 0) {
         // Regular user: count requests awaiting THIS user's approval
                 $rejoin_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
                                                                      FROM request_approvers ra
-                                                                     JOIN rejoin_requests rr ON rr.id = ra.request_inv_no
+                                                                     JOIN rejoin_requests rr ON rr.request_inv_no = ra.request_inv_no
                                                                      WHERE " . approverInSql('ra.approver_id') . "
                                                                          AND ra.status = 'pending'
                                                                          AND rr.status = 'pending'
@@ -601,12 +603,12 @@ if ($row = mysqli_fetch_assoc($payroll_type_query)) {
 
 if ($payroll_table_exists && $payroll_type_id > 0) {
     if ($is_system_admin || $user_role == 'Administrator') {
-        $payroll_pending_query_admin = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-            FROM request_approvers ra
-            JOIN payroll_approval_requests pr ON pr.request_inv_no = ra.request_inv_no
-            WHERE ra.request_type_id = $payroll_type_id
-              AND ra.status = 'pending'
-              AND pr.status = 'pending_approval'";
+        // Admin: every payroll request not finally approved yet - same as the page's "All Pending"
+        // card. Not limited to requests with a pending chain step, so a request whose chain is
+        // done but whose status never moved on still shows up instead of silently counting 0.
+        $payroll_pending_query_admin = "SELECT COUNT(DISTINCT pr.request_inv_no) AS count
+            FROM payroll_approval_requests pr
+            WHERE pr.status = 'pending_approval'";
         $res_payroll_admin = mysqli_query($conDB, $payroll_pending_query_admin);
         if ($res_payroll_admin && ($rpa = mysqli_fetch_assoc($res_payroll_admin))) {
             $payroll_pending_count = (int)$rpa['count'];
@@ -622,13 +624,26 @@ if ($payroll_table_exists && $payroll_type_id > 0) {
             $payroll_pending_count = (int)$rpd['count'];
         }
     } else {
-        $payroll_pending_query = "SELECT COUNT(DISTINCT ra.request_inv_no) AS count
-            FROM request_approvers ra
-            JOIN payroll_approval_requests pr ON pr.request_inv_no = ra.request_inv_no
-            WHERE ra.request_type_id = $payroll_type_id
-              AND " . approverInSql('ra.approver_id') . "
-              AND ra.status = 'pending'
-              AND pr.status = 'pending_approval'";
+        // Waiting on this user: their pending step in the approval chain, OR a finance verification
+        // assigned to them (Payroll Checklist) that they have not approved yet.
+        $pfv_tbl_res = mysqli_query($conDB, "SHOW TABLES LIKE 'payroll_finance_verification'");
+        $pfv_sql = ($pfv_tbl_res && mysqli_num_rows($pfv_tbl_res) > 0)
+            ? " OR EXISTS (SELECT 1 FROM payroll_finance_verification pfv
+                           WHERE pfv.request_inv_no = pr.request_inv_no
+                             AND pfv.officer_approved = 0
+                             AND " . approverInSql('pfv.finance_officer_emp_id') . ")"
+            : "";
+        $payroll_pending_query = "SELECT COUNT(DISTINCT pr.request_inv_no) AS count
+            FROM payroll_approval_requests pr
+            WHERE pr.status = 'pending_approval'
+              AND (
+                  EXISTS (SELECT 1 FROM request_approvers ra
+                          WHERE ra.request_inv_no = pr.request_inv_no
+                            AND ra.request_type_id = $payroll_type_id
+                            AND ra.status = 'pending'
+                            AND " . approverInSql('ra.approver_id') . ")
+                  $pfv_sql
+              )";
         $res_payroll = mysqli_query($conDB, $payroll_pending_query);
         if ($res_payroll && ($rp = mysqli_fetch_assoc($res_payroll))) {
             $payroll_pending_count = (int)$rp['count'];
@@ -758,15 +773,41 @@ if ($rec = mysqli_fetch_assoc($sql_count_vacapv)) {
     $status_cont_vacapv = $rec["statusaprv"];
 }
 
-// Get count for temporary contracts with 'Pending' status
-$sql_count_aprl = mysqli_query($conDB, "SELECT COUNT(*) AS `contaprl` FROM `employee_temp_contants` WHERE `status`='Pending'");
+// Get count for employee info update (content update) requests with 'Pending' status -
+// active employees only, same as the list on emp_temp_contant.php
+$sql_count_aprl = mysqli_query($conDB, "SELECT COUNT(*) AS `contaprl` FROM `employee_temp_contants` t
+    JOIN `employees` e ON e.`emp_id` = t.`emp_id` AND e.`status` = 1
+    WHERE t.`status` = 'Pending'");
 if ($rec = mysqli_fetch_assoc($sql_count_aprl)) {
     $status_cont_contaprl = $rec["contaprl"];
 }
 
+// --- Employee Transfer pending count ---
+// Admin: every transfer still in approval. Others: transfers waiting on their own chain step.
+// Matches all approval_request_types rows named 'employee_transfer_request' (there are two ids).
+$transfer_pending_count = 0;
+$transfer_tbl_res = mysqli_query($conDB, "SHOW TABLES LIKE 'emp_transfers'");
+if ($transfer_tbl_res && mysqli_num_rows($transfer_tbl_res) > 0) {
+    if ($is_system_admin || $user_role == 'Administrator') {
+        $transfer_sql = "SELECT COUNT(*) AS count FROM emp_transfers WHERE current_status = 'pending_approval'";
+    } else {
+        $transfer_sql = "SELECT COUNT(DISTINCT et.id) AS count
+            FROM emp_transfers et
+            JOIN request_approvers ra ON ra.request_inv_no = et.request_inv_no
+                AND ra.request_type_id IN (SELECT id FROM approval_request_types WHERE type_name = 'employee_transfer_request')
+            WHERE et.current_status = 'pending_approval'
+              AND ra.status = 'pending'
+              AND " . approverInSql('ra.approver_id');
+    }
+    $res_transfer = mysqli_query($conDB, $transfer_sql);
+    if ($res_transfer && ($rt = mysqli_fetch_assoc($res_transfer))) {
+        $transfer_pending_count = (int)$rt['count'];
+    }
+}
+
 // --- CALCULATE TOTAL COUNTS FOR PARENT MENUS ---
 // Total count for Approvals menu
-$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $salary_increment_pending_count + $payroll_pending_count + $status_cont_contaprl;
+$approvals_total_count = $vacation_pending_count + $rejoin_pending_count + $loan_pending_count + $resignation_pending_count + $settlement_pending_count + $business_trip_pending_count + $salary_increment_pending_count + $payroll_pending_count + $status_cont_contaprl + $transfer_pending_count;
 
 // Total count for Requests menu
 $requests_total_count = $smart_request_count + $general_request_count;
@@ -882,7 +923,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     <li><a href="<?= $appliedBusinessTripLink ?>"><i class="fa-duotone fa-plane" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('business_trip', 'Business Trip') ?></span><?= ($business_trip_pending_count > 0) ? "<span class='badgez badge-danger'>$business_trip_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (in_array($user_role, $can_see_employee_transfers_page) || in_array($user_type, $can_see_employee_transfers_page)) || (function_exists('employee_transfer_user_has_stake') && employee_transfer_user_has_stake($conDB, $empid ?? ''))): ?>
-                    <li><a href="<?= $appliedEmployeeTransfersLink ?>"><i class="fa-duotone fa-people-arrows" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('employee_transfer_requests', 'Employee Transfers') ?></span></a></li>
+                    <li><a href="<?= $appliedEmployeeTransfersLink ?>"><i class="fa-duotone fa-people-arrows" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('employee_transfer_requests', 'Employee Transfers') ?></span><?= ($transfer_pending_count > 0) ? "<span class='badgez badge-danger'>$transfer_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isSalaryIncrementMenuBlocked && (in_array($user_role, $can_see_salary_increment_page) || in_array($user_type, $can_see_salary_increment_page)))): ?>
                     <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa-duotone fa-arrow-trend-up" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>

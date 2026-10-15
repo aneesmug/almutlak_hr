@@ -84,6 +84,12 @@ if ($current_filter === null) {
     }
 }
 
+// Filter + count block, wrapped in a closure so the status cards can count every status
+// with exactly the same rules (sr_status_counts); the current status runs it once as before.
+require_once __DIR__ . '/includes/sr_list_helpers.php';
+$sr_scope = sr_scope_vars(get_defined_vars());
+$sr_build_filter = function ($current_filter) use ($sr_scope) {
+    extract($sr_scope, EXTR_SKIP);
 $where_clauses = [];
 $params = [];
 $types = "";
@@ -249,6 +255,10 @@ if (!empty($params)) {
 $stmt_count->execute();
 $total_items = $stmt_count->get_result()->fetch_assoc()['total'] ?? 0;
 $stmt_count->close();
+    return sr_scope_vars(get_defined_vars());
+};
+extract($sr_build_filter($current_filter));
+$sr_status_counts = sr_status_counts($all_statuses, $current_filter, $total_items, $sr_build_filter, 'total_items');
 
 
 $total_pages = $show_all ? 1 : ceil($total_items / $items_per_page);
@@ -567,19 +577,9 @@ if ($can_see_all_depts) {
                         </div>
                     </div>
 
+                    <!-- Status cards (applyFilters() reads #statusFilter) -->
+                    <?= sr_status_tabs($all_statuses, $current_filter, $total_items, $sr_status_counts) ?>
                     <div class="sr-card">
-                        <!-- Status filter (applyFilters() reads #statusFilter) -->
-                        <input type="hidden" id="statusFilter" value="<?= $h($current_filter) ?>">
-                        <ul class="sr-tabs" id="vacStatusTabs">
-                            <?php foreach ($all_statuses as $status_key => $status_value): ?>
-                                <li>
-                                    <a class="nav-link<?= $current_filter == $status_key ? ' active' : '' ?>" data-status="<?= $h($status_key) ?>">
-                                        <i class="mdi <?= $status_icons[$status_key] ?? 'mdi-format-list-bulleted' ?>"></i><?= $h($status_value) ?>
-                                        <?php if ($current_filter == $status_key): ?><span class="sr-count"><?= (int)$total_items ?></span><?php endif; ?>
-                                    </a>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
 
                         <div class="sr-toolbar">
                             <div class="sr-search">
@@ -1060,7 +1060,7 @@ if ($can_see_all_depts) {
 
         // Status tabs / search / extra filters (all reload the page through applyFilters())
         $(function() {
-            $('#vacStatusTabs').on('click', '.nav-link', function() {
+            $('#srStatusTabs').on('click', '.sr-scard, .nav-link', function() {
                 $('#statusFilter').val($(this).data('status'));
                 applyFilters();
             });

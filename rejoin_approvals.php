@@ -53,37 +53,6 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        /* Status tiles - icon chip, label + hint, count; each tile carries its own tone */
-        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(var(--rj-cols, 4), minmax(0, 1fr)); gap: 12px; }
-        @media (max-width: 1199px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        @media (max-width: 420px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: 1fr; } }
-        .rj-tile { --rj-fg: var(--tone-slate-fg); --rj-bg: var(--tone-slate-bg); --rj-bd: var(--tone-slate-bd);
-            display: flex; align-items: center; gap: 12px; padding-block: 14px; padding-inline: 18px 16px; overflow: hidden; }
-        .rj-tile.t-indigo { --rj-fg: var(--tone-indigo-fg); --rj-bg: var(--tone-indigo-bg); --rj-bd: var(--tone-indigo-bd); }
-        .rj-tile.t-red    { --rj-fg: var(--tone-red-fg);    --rj-bg: var(--tone-red-bg);    --rj-bd: var(--tone-red-bd); }
-        .rj-tile.t-amber  { --rj-fg: var(--tone-amber-fg);  --rj-bg: var(--tone-amber-bg);  --rj-bd: var(--tone-amber-bd); }
-        .rj-tile.t-green  { --rj-fg: var(--tone-green-fg);  --rj-bg: var(--tone-green-bg);  --rj-bd: var(--tone-green-bd); }
-        .rj-tile::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px;
-            border-radius: 3px; background: var(--rj-fg); opacity: 0; transition: opacity .15s; }
-        .rj-tile-icon { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-            width: 40px; height: 40px; border-radius: 11px; background: var(--rj-bg); color: var(--rj-fg); font-size: 20px; }
-        .rj-tile-body { flex: 1 1 auto; min-width: 0; }
-        .rj-tile-label { display: block; font-size: 13px; font-weight: 700; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .rj-tile-hint { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .rj-tile .sr-tile-value { flex: 0 0 auto; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
-        .rj-tile:hover { border-color: var(--rj-bd); }
-        .rj-tile.active { background: var(--rj-bg); border-color: var(--rj-bd); box-shadow: 0 0 0 1px var(--rj-bd) inset, var(--sr-shadow); }
-        .rj-tile.active::after { display: none; }
-        .rj-tile.active::before { opacity: 1; }
-        .rj-tile.active .rj-tile-icon { background: var(--rj-fg); color: var(--sr-surface); }
-        .rj-tile.active .sr-tile-value { color: var(--rj-fg); }
-        /* Missing Rejoin with open items: count in tone + pulsing marker on the icon */
-        .rj-tile.rj-alert .sr-tile-value { color: var(--rj-fg); }
-        .rj-tile.rj-alert .rj-tile-icon::after { content: ''; position: absolute; top: -3px; inset-inline-end: -3px; width: 10px; height: 10px;
-            border-radius: 50%; background: var(--rj-fg); border: 2px solid var(--sr-surface); animation: rj-pulse 1.6s ease-out infinite; }
-        @keyframes rj-pulse { 0% { box-shadow: 0 0 0 0 var(--rj-bd); } 100% { box-shadow: 0 0 0 7px transparent; } }
-        @media (prefers-reduced-motion: reduce) { .rj-tile.rj-alert .rj-tile-icon::after { animation: none; } }
         .rj-pane { display: none; }
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
@@ -144,15 +113,17 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                     $rj_tiles[] = ['approved', 't-green', 'mdi-check-circle-outline', __('approved_requests', 'Approved'), __('approved_rejoin_hint', 'Rejoin confirmed'), false];
                     $rj_tiles[] = ['rejected', 't-slate', 'mdi-close-circle-outline', __('rejected_requests', 'Rejected'), __('rejected_rejoin_hint', 'Not accepted'), false];
                     ?>
-                    <div class="sr-tiles rj-tiles" id="rjTiles" style="--rj-cols: <?= count($rj_tiles) ?>;">
+                    <?php require_once __DIR__ . '/includes/sr_list_helpers.php'; // sr_stat_cols(), sr_scard_foot() ?>
+                    <div class="sr-scards" id="rjTiles" style="--sr-scard-cols: <?= sr_stat_cols(count($rj_tiles)) ?>;">
                         <?php foreach ($rj_tiles as [$pane, $tone, $icon, $label, $hint, $active]): ?>
-                        <button type="button" class="sr-tile rj-tile <?= $tone ?><?= $active ? ' active' : '' ?>" data-pane="<?= $pane ?>" title="<?= htmlspecialchars($hint, ENT_QUOTES) ?>">
-                            <span class="rj-tile-icon"><i class="mdi <?= $icon ?>"></i></span>
-                            <span class="rj-tile-body">
-                                <span class="rj-tile-label"><?= htmlspecialchars($label) ?></span>
-                                <span class="rj-tile-hint"><?= htmlspecialchars($hint) ?></span>
+                        <button type="button" class="sr-tile sr-scard st-<?= substr($tone, 2) ?><?= $active ? ' active' : '' ?>" data-pane="<?= $pane ?>" title="<?= htmlspecialchars($hint, ENT_QUOTES) ?>">
+                            <span class="sr-scard-ico"><i class="mdi <?= $icon ?>"></i></span>
+                            <span class="sr-scard-body">
+                                <span class="sr-scard-label"><?= htmlspecialchars($label) ?></span>
+                                <span class="sr-scard-hint"><?= htmlspecialchars($hint) ?></span>
                             </span>
-                            <span class="sr-tile-value" id="<?= $pane ?>-count">&ndash;</span>
+                            <span class="sr-scard-value" id="<?= $pane ?>-count">&ndash;</span>
+                            <?= sr_scard_foot(0, 0, $pane) ?>
                         </button>
                         <?php endforeach; ?>
                     </div>
@@ -344,6 +315,18 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         function dateRange() {
             return ($('#rjDateRange').val() && window.AppDate) ? AppDate.rangeValues('#rjDateRange') : ['', ''];
         }
+        // Share bar on each card: count as % of "All" (if shown), else of pending + approved + rejected
+        const rjCounts = {};
+        function updateRjBars() {
+            const base = rjCounts.all !== undefined
+                ? rjCounts.all
+                : (rjCounts.pending || 0) + (rjCounts.approved || 0) + (rjCounts.rejected || 0);
+            Object.keys(rjCounts).forEach(function(k) {
+                const pct = base > 0 ? Math.min(100, Math.round(rjCounts[k] / base * 100)) : 0;
+                $('#rjTiles [data-bar="' + k + '"]').css('width', pct + '%');
+                $('#rjTiles [data-pct="' + k + '"]').text(pct + '%');
+            });
+        }
         function makeTable(sel, status, columns, order) {
             return $(sel).DataTable({
                 dom: 'rtip', processing: true, serverSide: true, responsive: true, pageLength: 10, order: order,
@@ -358,7 +341,9 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                     dataSrc: json => {
                         const n = Number((json && json.recordsTotal) || 0);
                         $('#' + status + '-count').text(n);
-                        if (status === 'missing') $('#missing-count').closest('.rj-tile').toggleClass('rj-alert', n > 0);
+                        if (status === 'missing') $('#missing-count').closest('.sr-scard').toggleClass('sr-scard-alert', n > 0);
+                        rjCounts[status] = n;
+                        updateRjBars();
                         return json.data || [];
                     }
                 },
