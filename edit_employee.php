@@ -141,10 +141,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 			$old_values['status'] = $old_employee['status'];
 		}
 
+		// Employee status -> Inactive (0) set directly from this page (no end-of-service settlement).
+		// Same preconditions as above, plus the editor must hold edit rights (POST runs before the
+		// page-level access check) and a reason note. The login account is deactivated too.
+		$setInactive = false;
+		if (isset($formData['emp_status']) && (string)$formData['emp_status'] === '0' && $old_employee
+			&& in_array((string)$old_employee['status'], ['1', '2'], true)
+			&& (string)($old_employee['fly'] ?? '0') !== '1') {
+			$canSetInactive = ($is_system_admin || $isDeptHr
+				|| user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
+			$inactiveReason = trim((string)($formData['inactive_reason'] ?? ''));
+			$inactiveType = in_array(($formData['inactive_type'] ?? ''), ['terminat', 'expired'], true) ? $formData['inactive_type'] : 'terminat';
+			$inactiveDate = trim((string)($formData['inactive_date'] ?? ''));
+			$inactiveDateObj = DateTime::createFromFormat('Y-m-d', $inactiveDate);
+			if (!$inactiveDateObj || $inactiveDateObj->format('Y-m-d') !== $inactiveDate) {
+				$inactiveDate = date('Y-m-d');
+			}
+			if ($canSetInactive && $inactiveReason !== '') {
+				$setParts[] = "`status` = :status";
+				$setParts[] = "`note` = :inactive_note";
+				$setParts[] = "`ter_note` = :ter_note";
+				$setParts[] = "`ter_date` = :ter_date";
+				$setParts[] = "`fly` = '0'";
+				$params[':status'] = '0';
+				$params[':inactive_note'] = $inactiveType;
+				$params[':ter_note'] = $inactiveReason;
+				$params[':ter_date'] = $inactiveDate;
+				$old_values['status'] = $old_employee['status'];
+				$old_values['note'] = $old_employee['note'] ?? '';
+				$old_values['ter_note'] = $old_employee['ter_note'] ?? '';
+				$old_values['ter_date'] = $old_employee['ter_date'] ?? '';
+				$setInactive = true;
+			}
+		}
+
+		// Inactive (0) -> Active (1) / Draft (2): undo what the Inactive path above wrote (clear note,
+		// ter_note, ter_date) and re-enable the login. Not allowed when the employee left through
+		// End of Service - that has an emp_eos record and settlement which a status flip can't undo.
+		$setReactivated = false;
+		if (isset($formData['emp_status']) && $old_employee
+			&& (string)$old_employee['status'] === '0'
+			&& in_array((string)$formData['emp_status'], ['1', '2'], true)) {
+			$canReactivate = ($is_system_admin || $isDeptHr
+				|| user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false));
+			$eosStmt = $pdo->prepare("SELECT COUNT(*) FROM `emp_eos` WHERE `emp_id` = :emp_id");
+			$eosStmt->execute([':emp_id' => $employee_id_from_form]);
+			if ($canReactivate && (int)$eosStmt->fetchColumn() === 0) {
+				$setParts[] = "`status` = :status";
+				$setParts[] = "`note` = ''";
+				$setParts[] = "`ter_note` = ''";
+				$setParts[] = "`ter_date` = ''";
+				$params[':status'] = (string)$formData['emp_status'];
+				$old_values['status'] = $old_employee['status'];
+				$old_values['note'] = $old_employee['note'] ?? '';
+				$old_values['ter_note'] = $old_employee['ter_note'] ?? '';
+				$old_values['ter_date'] = $old_employee['ter_date'] ?? '';
+				$setReactivated = true;
+			}
+		}
+
 		// Build and execute the query
 		$sql = "UPDATE `employees` SET " . implode(', ', $setParts) . " WHERE `emp_id` = :emp_id";
 		$stmt = $pdo->prepare($sql);
 		$stmt->execute($params);
+
+		// Inactive employee: deactivate the matching login account as well (same as terminate / EOS).
+		if ($setInactive) {
+			$loginOffStmt = $pdo->prepare("UPDATE `admin_login` SET `status` = 0 WHERE `emp_id` = :emp_id");
+			$loginOffStmt->execute([':emp_id' => $employee_id_from_form]);
+		}
+		// Reactivated employee: switch the login back on (only when back to Active, Draft stays locked out).
+		if ($setReactivated && $params[':status'] === '1') {
+			$loginOnStmt = $pdo->prepare("UPDATE `admin_login` SET `status` = 1 WHERE `emp_id` = :emp_id");
+			$loginOnStmt->execute([':emp_id' => $employee_id_from_form]);
+		}
 
 		// Keep admin_login.dept in sync with employees.dept (all_users.php reads admin_login's own copy).
 		if (isset($params[':dept'])) {
@@ -173,7 +243,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 		}
 		
 		// Store alert data in session for display on the view page
-		if ($stmt->rowCount() > 0) {
+		if ($setInactive && $stmt->rowCount() > 0) {
+			$_SESSION['swal_alert'] = [
+				'title' => __("success"),
+				'message' => __('employee_set_inactive_success', 'Employee has been set to Inactive and the login account was disabled.'),
+				'type' => 'success'
+			];
+		} elseif ($setReactivated && $stmt->rowCount() > 0) {
+			$_SESSION['swal_alert'] = [
+				'title' => __("success"),
+				'message' => __('employee_reactivated_success', 'Employee has been reactivated and the inactive details were cleared.'),
+				'type' => 'success'
+			];
+		} elseif ($stmt->rowCount() > 0) {
 			$_SESSION['swal_alert'] = [
 				'title' => __("success"),
 				'message' => __("employee_details_edited_successfully"),
@@ -440,15 +522,37 @@ if (mysqli_num_rows($query) == 1) {
 											<h4 class="ee-form-title"><i class="mdi mdi-account-edit"></i> <?= __("edit_employee_title") ?></h4>
 											<p class="ee-form-sub"><?= htmlspecialchars(($emprow['name'] ?? '') . ' · #' . ($emprow['empid'] ?? $_GET['emp_id'] ?? '')) ?></p>
 										</div>
-										<?php if (in_array((string)($emprow['status'] ?? ''), ['1', '2'], true)): ?>
-											<?php $eeStatusLocked = ((string)($emprow['fly'] ?? '0') === '1'); ?>
+										<?php if (in_array((string)($emprow['status'] ?? ''), ['0', '1', '2'], true)): ?>
+											<?php
+												$eeIsInactive = ((string)$emprow['status'] === '0');
+												$eeHasEos = false;
+												if ($eeIsInactive) {
+													$eeEosStmt = $conDB->prepare("SELECT 1 FROM `emp_eos` WHERE `emp_id` = ? LIMIT 1");
+													$eeEosStmt->bind_param("s", $emprow['empid']);
+													$eeEosStmt->execute();
+													$eeEosStmt->store_result();
+													$eeHasEos = $eeEosStmt->num_rows > 0;
+													$eeEosStmt->close();
+												}
+												$eeStatusLocked = $eeIsInactive ? $eeHasEos : ((string)($emprow['fly'] ?? '0') === '1');
+												$eeLockMsg = $eeHasEos
+													? __('status_locked_eos', 'Left through End of Service - cannot be reactivated here')
+													: __('status_locked_on_vacation', 'Cannot change status while employee is on vacation');
+												$eeHint = $eeStatusLocked ? $eeLockMsg
+													: ($eeIsInactive ? __('reactivate_status_hint', 'Choose Active to reactivate - inactive reason and date will be cleared')
+													: __('draft_status_hint', 'Draft employees are hidden from payroll and active employee lists'));
+											?>
 											<div class="ee-status-pick">
 												<label for="emp_status"><i class="mdi mdi-account-check"></i> <?= __('employee_status', 'Employee Status') ?></label>
-												<select name="emp_status" id="emp_status" form="registration" class="form-control" <?= $eeStatusLocked ? 'disabled title="' . htmlspecialchars(__('status_locked_on_vacation', 'Cannot change status while employee is on vacation')) . '"' : '' ?>>
+												<select name="emp_status" id="emp_status" form="registration" class="form-control" data-initial="<?= htmlspecialchars((string)$emprow['status']) ?>" <?= $eeStatusLocked ? 'disabled title="' . htmlspecialchars($eeLockMsg) . '"' : '' ?>>
 													<option value="1" <?= (string)$emprow['status'] === '1' ? 'selected' : '' ?>><?= __('active', 'Active') ?></option>
 													<option value="2" <?= (string)$emprow['status'] === '2' ? 'selected' : '' ?>><?= __('draft', 'Draft') ?></option>
+													<option value="0" <?= (string)$emprow['status'] === '0' ? 'selected' : '' ?>><?= __('inactive', 'Inactive') ?></option>
 												</select>
-												<span class="ee-status-hint"><?= $eeStatusLocked ? __('status_locked_on_vacation', 'Cannot change status while employee is on vacation') : __('draft_status_hint', 'Draft employees are hidden from payroll and active employee lists') ?></span>
+												<input type="hidden" name="inactive_type" id="inactive_type" form="registration" value="">
+												<input type="hidden" name="inactive_date" id="inactive_date" form="registration" value="">
+												<input type="hidden" name="inactive_reason" id="inactive_reason" form="registration" value="">
+												<span class="ee-status-hint"><?= htmlspecialchars($eeHint) ?></span>
 											</div>
 										<?php endif; ?>
 									</div>
@@ -1152,6 +1256,117 @@ if (mysqli_num_rows($query) == 1) {
 				});
 
 				/***************************/
+
+				/***********Status -> Inactive**********/
+				// Picking Inactive asks for type, date and reason, then saves the form straight away.
+				// Cancelling puts the dropdown back to the previous status.
+				(function() {
+					const $status = $('#emp_status');
+					if (!$status.length) return;
+					let prevStatus = $status.val();
+					const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+					const empName = <?= json_encode((string)($emprow['name'] ?? '')) ?>;
+
+					$status.on('change', function() {
+						// Inactive employee -> Active / Draft: confirm, then save (server clears the inactive details).
+						if ($status.data('initial') === 0 && $status.val() !== '0') {
+							if (typeof Swal === 'undefined') {
+								$status.val(prevStatus);
+								return;
+							}
+							const toActive = $status.val() === '1';
+							Swal.fire({
+								title: <?= json_encode(__('reactivate_employee', 'Reactivate Employee')) ?>,
+								html: '<div class="sr-notice tone-green" style="margin: 0; text-align: start;"><i class="mdi mdi-account-check"></i><div><strong>' + esc(empName) + '</strong><br>' +
+									esc(toActive
+										? <?= json_encode(__('reactivate_active_text', 'Status will be set to Active, the inactive type, reason and date will be cleared and the login account enabled again.')) ?>
+										: <?= json_encode(__('reactivate_draft_text', 'Status will be set to Draft and the inactive type, reason and date will be cleared.')) ?>) +
+									'</div></div>',
+								showCancelButton: true,
+								confirmButtonText: '<i class="mdi mdi-account-check"></i> ' + <?= json_encode(__('reactivate_button', 'Reactivate')) ?>,
+								cancelButtonText: <?= json_encode(__('cancel', 'Cancel')) ?>,
+								customClass: { popup: 'sr-addline-popup sr-page' },
+								allowOutsideClick: false
+							}).then(function(result) {
+								if (!result.isConfirmed) {
+									$status.val(prevStatus);
+									return;
+								}
+								$('#registration').find('button[name="submit"]').trigger('click');
+							});
+							return;
+						}
+						if ($status.val() !== '0') {
+							prevStatus = $status.val();
+							$('#inactive_type, #inactive_date, #inactive_reason').val('');
+							return;
+						}
+						// Already inactive: nothing to do
+						if ($status.data('initial') === 0) {
+							prevStatus = '0';
+							return;
+						}
+						if (typeof Swal === 'undefined') {
+							$status.val(prevStatus);
+							return;
+						}
+						const today = new Date().toISOString().slice(0, 10);
+						Swal.fire({
+							title: <?= json_encode(__('set_employee_inactive', 'Set Employee Inactive')) ?>,
+							html:
+								'<form class="sr-form" onsubmit="return false;">' +
+								'<div class="sr-notice tone-amber is-compact" style="margin: 0 0 12px;"><i class="mdi mdi-alert-circle-outline"></i><div><strong>' + esc(empName) + '</strong><br>' +
+								<?= json_encode(__('set_inactive_warning', 'The employee and the login account will be deactivated. No End of Service settlement is created - use the End of Service page for that.')) ?> + '</div></div>' +
+								'<div class="sr-fsec" style="margin: 0;"><div class="sr-fgrid">' +
+								'<div class="sr-fcol c-6"><label for="sw_inactive_type">' + <?= json_encode(__('inactive_type', 'Type')) ?> + '</label>' +
+								'<select id="sw_inactive_type" class="form-control">' +
+								'<option value="terminat">' + esc(<?= json_encode(__('terminated', 'Terminated')) ?>) + '</option>' +
+								'<option value="expired">' + esc(<?= json_encode(__('expired', 'Expired')) ?>) + '</option>' +
+								'</select></div>' +
+								'<div class="sr-fcol c-6"><label for="sw_inactive_date">' + <?= json_encode(__('inactive_date', 'Inactive Date')) ?> + ' <span class="text-danger">*</span></label>' +
+								'<input type="text" id="sw_inactive_date" class="form-control" value="' + today + '"></div>' +
+								'<div class="sr-fcol c-12"><label for="sw_inactive_reason">' + <?= json_encode(__('reason', 'Reason')) ?> + ' <span class="text-danger">*</span></label>' +
+								'<textarea id="sw_inactive_reason" class="form-control" rows="3"></textarea></div>' +
+								'</div></div></form>',
+							showCancelButton: true,
+							confirmButtonText: '<i class="mdi mdi-account-off"></i> ' + <?= json_encode(__('set_inactive_button', 'Set Inactive')) ?>,
+							cancelButtonText: <?= json_encode(__('cancel', 'Cancel')) ?>,
+							customClass: { popup: 'sr-addline-popup sr-page' },
+							allowOutsideClick: false,
+							didOpen: function() {
+								if (window.AppDate) {
+									AppDate.single('#sw_inactive_date', { static: true });
+								}
+								$('#sw_inactive_reason').trigger('focus');
+							},
+							preConfirm: function() {
+								const date = $.trim($('#sw_inactive_date').val());
+								const reason = $.trim($('#sw_inactive_reason').val());
+								$('#sw_inactive_date, #sw_inactive_reason').removeClass('is-invalid');
+								if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+									$('#sw_inactive_date').addClass('is-invalid');
+									Swal.showValidationMessage(<?= json_encode(__('please_select_date', 'Please select a date')) ?>);
+									return false;
+								}
+								if (!reason) {
+									$('#sw_inactive_reason').addClass('is-invalid');
+									Swal.showValidationMessage(<?= json_encode(__('please_enter_reason', 'Please enter a reason')) ?>);
+									return false;
+								}
+								return { type: $('#sw_inactive_type').val(), date: date, reason: reason };
+							}
+						}).then(function(result) {
+							if (!result.isConfirmed || !result.value) {
+								$status.val(prevStatus);
+								return;
+							}
+							$('#inactive_type').val(result.value.type);
+							$('#inactive_date').val(result.value.date);
+							$('#inactive_reason').val(result.value.reason);
+							$('#registration').find('button[name="submit"]').trigger('click');
+						});
+					});
+				})();
 
 				jQuery('#terminat_emp').on('click', function(event) {
 					$("#ter_note").attr('required', '');

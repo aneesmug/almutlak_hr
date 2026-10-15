@@ -196,6 +196,119 @@
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
         <script src="assets/js/modernizr.min.js"></script>
+        <!-- Final settlement sheet: one fixed A4 page. Used for the on-screen preview and copied into the print iframe. -->
+        <style id="eospStyles">
+            .eosp-preview { display: flex; justify-content: center; padding: 10px 0 24px; overflow-x: auto; }
+            .eosp, .eosp * { box-sizing: border-box; }
+            .eosp {
+                --ep-ink: #1f2937; --ep-muted: #6b7280; --ep-line: #e5e7eb; --ep-soft: #f8fafc;
+                --ep-navy: #1e3a5f; --ep-navy-2: #2c5282; --ep-green: #166534; --ep-green-bg: #f0fdf4; --ep-red: #b91c1c; --ep-red-bg: #fef2f2;
+                -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: var(--ep-ink); line-height: 1.4; font-size: 11.5px;
+            }
+            .eosp.eosp-sheet {
+                position: relative; width: 210mm; height: 296mm; padding: 11mm 13mm 8mm; margin: 0 auto; background: #fff; overflow: hidden;
+                display: flex; flex-direction: column; box-shadow: 0 6px 28px rgba(15, 23, 42, .16);
+            }
+            .eosp.eosp-sheet::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, var(--ep-navy), var(--ep-navy-2)); }
+            .eosp .eosp-body { flex: 1 0 auto; }
+            .eosp p, .eosp h2, .eosp h3, .eosp h4 { margin: 0; }
+            .eosp .ar { direction: rtl; text-align: right; font-family: Tahoma, 'Segoe UI', sans-serif; }
+            .eosp i { font-style: normal; }
+            .eosp small { font-size: .85em; color: var(--ep-muted); font-weight: 400; }
+
+            /* Header */
+            .eosp .ep-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1.5px solid var(--ep-navy); }
+            .eosp .ep-logo { height: 54px; width: auto; max-width: 170px; object-fit: contain; }
+            .eosp .ep-title { text-align: center; }
+            .eosp .ep-title h2 { font-size: 21px; font-weight: 800; letter-spacing: 2.5px; color: var(--ep-navy); }
+            .eosp .ep-title h3 { font-size: 17px; font-weight: 700; color: var(--ep-navy); margin-top: 1px; direction: rtl; }
+            .eosp .ep-title p { margin-top: 3px; font-size: 10px; color: var(--ep-muted); letter-spacing: .3px; }
+            .eosp .ep-ref { justify-self: end; border: 1px solid var(--ep-line); border-radius: 6px; overflow: hidden; min-width: 170px; }
+            .eosp .ep-ref > div { display: flex; flex-direction: column; padding: 4px 10px; }
+            .eosp .ep-ref > div + div { border-top: 1px solid var(--ep-line); }
+            .eosp .ep-ref span { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--ep-muted); display: flex; justify-content: space-between; gap: 8px; }
+            .eosp .ep-ref b { font-size: 12px; color: var(--ep-ink); font-variant-numeric: tabular-nums; }
+
+            /* Sections */
+            .eosp .ep-sec { margin-top: 11px; }
+            .eosp .ep-sec-title {
+                display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; margin-bottom: 6px;
+                background: var(--ep-navy) !important; color: #fff !important; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .4px;
+            }
+            .eosp .ep-sec-title span:first-child { text-transform: uppercase; }
+
+            /* Employee fields */
+            .eosp .ep-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--ep-line); border-radius: 6px; overflow: hidden; }
+            .eosp .ep-field { padding: 5px 10px 6px; border-bottom: 1px solid var(--ep-line); border-inline-end: 1px solid var(--ep-line); min-width: 0; }
+            .eosp .ep-field.span-2 { grid-column: span 2; }
+            .eosp .ep-field:nth-last-child(-n+3) { border-bottom: 0; }
+            .eosp .ep-field:nth-child(3n+2) { border-inline-end: 0; } /* last column: Emp ID row + every 3rd after */
+            .eosp .ep-lbl { display: flex; justify-content: space-between; gap: 6px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--ep-muted); }
+            .eosp .ep-lbl .ar { text-transform: none; letter-spacing: 0; font-size: 10px; }
+            .eosp .ep-val { margin-top: 1px; font-size: 12px; font-weight: 600; color: var(--ep-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .eosp .ep-val.is-strong { font-size: 13px; font-weight: 700; color: var(--ep-navy); }
+            .eosp .is-mono { font-family: Consolas, 'Courier New', monospace; letter-spacing: .3px; }
+
+            /* Service period */
+            .eosp .ep-service { display: grid; grid-template-columns: 78px 78px 78px 1fr; gap: 8px; }
+            .eosp .ep-stat { border: 1px solid var(--ep-line); border-radius: 6px; background: var(--ep-soft) !important; text-align: center; padding: 6px 4px; }
+            .eosp .ep-stat b { display: block; font-size: 20px; font-weight: 800; color: var(--ep-navy); line-height: 1.1; }
+            .eosp .ep-stat span { display: flex; justify-content: center; gap: 5px; font-size: 9.5px; color: var(--ep-muted); text-transform: uppercase; letter-spacing: .4px; }
+            .eosp .ep-reason { border: 1px solid var(--ep-line); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; }
+            .eosp .ep-reason-txt { display: flex; justify-content: space-between; gap: 12px; margin-top: 3px; font-size: 12px; font-weight: 600; }
+
+            /* Generic tables (assets / loans) */
+            .eosp .ep-table { width: 100%; border-collapse: collapse; border: 1px solid var(--ep-line); }
+            .eosp .ep-table th { background: var(--ep-soft) !important; text-align: left; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--ep-muted); padding: 5px 8px; border-bottom: 1px solid var(--ep-line); }
+            .eosp .ep-table th i { text-transform: none; margin-inline-start: 4px; font-weight: 600; }
+            .eosp .ep-table td { padding: 4px 8px; border-bottom: 1px solid var(--ep-line); font-size: 11px; }
+            .eosp .num { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+            /* Financial statement */
+            .eosp .ep-fin { width: 100%; border-collapse: collapse; border: 1px solid var(--ep-line); }
+            .eosp .ep-fin th { background: var(--ep-soft) !important; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ep-muted); padding: 5px 10px; text-align: left; border-bottom: 1px solid var(--ep-line); }
+            .eosp .ep-fin td { padding: 4px 10px; font-size: 11.5px; border-bottom: 1px solid #f1f5f9; }
+            .eosp .ep-fin td.num { width: 26%; font-weight: 600; }
+            .eosp .ep-fin td.neg { color: var(--ep-red); }
+            .eosp .ep-fin tr.grp td { padding-top: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--ep-line); }
+            .eosp .ep-fin tr.grp td.ar { font-size: 11px; text-transform: none; letter-spacing: 0; }
+            .eosp .ep-fin tr.grp.is-earn td { color: var(--ep-green); }
+            .eosp .ep-fin tr.grp.is-deduct td { color: var(--ep-red); }
+            .eosp .ep-fin tr.sub td { font-weight: 700; border-top: 1px solid var(--ep-line); border-bottom: 1px solid var(--ep-line); }
+            .eosp .ep-fin tr.sub.is-earn td { background: var(--ep-green-bg) !important; color: var(--ep-green); }
+            .eosp .ep-fin tr.sub.is-deduct td { background: var(--ep-red-bg) !important; color: var(--ep-red); }
+            .eosp .ep-fin tr.is-none td { color: var(--ep-muted); font-style: italic; }
+            .eosp .ep-net {
+                display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 8px; padding: 9px 14px;
+                background: var(--ep-navy) !important; color: #fff !important; border-radius: 6px;
+            }
+            .eosp .ep-net-lbl { display: flex; flex-direction: column; gap: 1px; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+            .eosp .ep-net-lbl .ar { text-align: left; font-size: 12px; letter-spacing: 0; opacity: .9; }
+            .eosp .ep-net-amt { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+            .eosp .ep-net-amt small { color: #cbd5e1; font-size: 12px; font-weight: 600; margin-inline-end: 3px; }
+
+            /* Acknowledgment */
+            .eosp .ep-ack { margin-top: 11px; padding: 8px 12px; border: 1px solid var(--ep-line); border-inline-start: 3px solid var(--ep-navy); border-radius: 6px; background: var(--ep-soft) !important; font-size: 10.5px; line-height: 1.55; color: #374151; }
+            .eosp .ep-ack p + p { margin-top: 5px; padding-top: 5px; border-top: 1px dashed var(--ep-line); }
+            .eosp .ep-ack b { color: var(--ep-navy); }
+
+            /* Signatures */
+            .eosp .ep-foot { display: grid; grid-template-columns: 1fr 1fr 110px; gap: 12px; padding-top: 12px; flex-shrink: 0; page-break-inside: avoid; }
+            .eosp .ep-sign { border: 1px solid var(--ep-line); border-radius: 6px; overflow: hidden; }
+            .eosp .ep-sign-head { display: flex; justify-content: space-between; padding: 5px 10px; background: var(--ep-soft) !important; border-bottom: 1px solid var(--ep-line); font-size: 10.5px; font-weight: 700; color: var(--ep-navy); text-transform: uppercase; letter-spacing: .4px; }
+            .eosp .ep-sign-head .ar { text-transform: none; }
+            .eosp .ep-sign-row { display: flex; align-items: flex-end; gap: 8px; padding: 0 10px; height: 25px; }
+            .eosp .ep-sign-row:nth-child(3) { height: 34px; }
+            .eosp .ep-sign-row span { flex: 0 0 84px; display: flex; justify-content: space-between; font-size: 9.5px; color: var(--ep-muted); padding-bottom: 3px; }
+            .eosp .ep-sign-row b { flex: 1 1 auto; border-bottom: 1px solid #9ca3af; min-height: 16px; padding-bottom: 2px; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .eosp .ep-stamp { border: 1.5px dashed #cbd5e1; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; aspect-ratio: 1; align-self: center; }
+            .eosp .ep-stamp .ar { text-align: center; text-transform: none; }
+            .eosp .ep-docfoot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 5px; border-top: 1px solid var(--ep-line); font-size: 8.5px; color: #9ca3af; letter-spacing: .3px; flex-shrink: 0; }
+            @media print {
+                .eosp.eosp-sheet { box-shadow: none; }
+            }
+        </style>
     </head>
     <body class="enlarged" data-keep-enlarged="true" onload="printDiv()">
 
@@ -236,252 +349,190 @@
                         <div class="row">
                             <div class="col-md-12">
                                 <!-- Printable Area -->
-                                <div class="card-box" id="dvContents">
-                                    <div class="print-container">
-                                        <div class="main-content">
+                                <div class="eosp-preview" id="dvContents">
+                                    <?php
+                                        $h = function ($v) { return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8'); };
+                                        $money = function ($v) { return number_format((float)$v, 2); };
+                                        $total_deductions = $gosi_deduction + $total_absence_deductions + $loan_deduction;
+                                        $eos_ref = !empty($eosrow['id']) ? 'EOS-' . str_pad((string)$eosrow['id'], 5, '0', STR_PAD_LEFT) : '-';
+                                        $lwd = $eosrow['end_date'] ?? ($emprow['ter_date'] ?? null);
+                                        $vac_days = number_format((float)($eosrow['anul_vac_days'] ?? 0), 2);
+                                        $cm_days = $eosrow['curt_month_days'] ?? '0';
+                                    ?>
+                                    <div class="eosp eosp-sheet">
+                                        <div class="eosp-body">
                                             <!-- Header -->
-                                            <div class="header-section">
-                                                <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo" class="logo">
-                                                <div class="header-titles">
+                                            <header class="ep-head">
+                                                <img src="<?=get_setting($conDB, 'logo')?>" alt="Company Logo" class="ep-logo">
+                                                <div class="ep-title">
                                                     <h2>FINAL SETTLEMENT</h2>
-                                                    <h3 class="arabic-title">مخالصة نهائية</h3>
+                                                    <h3>مخالصة نهائية</h3>
+                                                    <p>End of Service Clearance &middot; مخالصة نهاية الخدمة</p>
                                                 </div>
-                                            </div>
+                                                <div class="ep-ref">
+                                                    <div><span>Reference No. <i>الرقم المرجعي</i></span><b><?= $h($eos_ref) ?></b></div>
+                                                    <div><span>Issue Date <i>تاريخ الإصدار</i></span><b><?= date('d M, Y') ?></b></div>
+                                                </div>
+                                            </header>
 
-                                            <!-- Employee Details Section -->
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Employee Information</span><span class="arabic-label">معلومات الموظف</span></h4>
-                                                <div class="details-grid">
-                                                    <div class="grid-item">
-                                                        <p class="detail-line"><span><strong>Name of Employee:</strong> <?=$emprow['name']; ?></span><span class="arabic-label"><strong>اسم الموظف</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Iqama / ID:</strong> <?=$emprow['iqama']; ?></span><span class="arabic-label"><strong>رقم الإقامة</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Passport No:</strong> <?=$emprow['passport_number']; ?></span><span class="arabic-label"><strong>رقم الجواز</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Date of Birth:</strong> <?=(!empty($emprow['dob'])) ? format_safe_date($emprow['dob'], 'M d, Y') : "";?> (Age: <?=$years; ?>)</span><span class="arabic-label"><strong>تاريخ الميلاد</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Nationality:</strong> <?=$emprow['country_name']; ?></span><span class="arabic-label"><strong>الجنسية</strong></span></p>
+                                            <!-- Employee Information -->
+                                            <section class="ep-sec">
+                                                <h4 class="ep-sec-title"><span>Employee Information</span><span class="ar">معلومات الموظف</span></h4>
+                                                <div class="ep-fields">
+                                                    <div class="ep-field span-2"><div class="ep-lbl"><span>Name of Employee</span><span class="ar">اسم الموظف</span></div><div class="ep-val is-strong"><?= $h($emprow['name']) ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Employee ID</span><span class="ar">الرقم الوظيفي</span></div><div class="ep-val is-mono"><?= $h($emprow['empid']) ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Iqama / ID</span><span class="ar">رقم الإقامة</span></div><div class="ep-val is-mono"><?= $h($emprow['iqama']) ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Passport No.</span><span class="ar">رقم الجواز</span></div><div class="ep-val is-mono"><?= $h($emprow['passport_number'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Nationality</span><span class="ar">الجنسية</span></div><div class="ep-val"><?= $h($emprow['country_name'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Date of Birth</span><span class="ar">تاريخ الميلاد</span></div><div class="ep-val"><?= !empty($emprow['dob']) ? format_safe_date($emprow['dob'], 'd M, Y') : '-' ?><?= $years !== '' ? ' <small>(' . $h($years) . ')</small>' : '' ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Department</span><span class="ar">القسم</span></div><div class="ep-val"><?= $h($emprow['deptnme'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Company</span><span class="ar">الشركة</span></div><div class="ep-val"><?= $h($emprow['compnme'] ?: '-') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Date Hired</span><span class="ar">تاريخ التعيين</span></div><div class="ep-val"><?= format_safe_date($emprow['joining_date'] ?? null, 'd M, Y') ?></div></div>
+                                                    <div class="ep-field"><div class="ep-lbl"><span>Last Working Day</span><span class="ar">آخر يوم عمل</span></div><div class="ep-val"><?= $lwd ? format_safe_date($lwd, 'd M, Y') : '-' ?></div></div>
+                                                </div>
+                                            </section>
+
+                                            <!-- Service Period -->
+                                            <section class="ep-sec">
+                                                <h4 class="ep-sec-title"><span>Service Period Summary</span><span class="ar">ملخص فترة الخدمة</span></h4>
+                                                <div class="ep-service">
+                                                    <div class="ep-stat"><b><?= $h($eosrow['t_years'] ?? '0') ?></b><span>Years <i>سنوات</i></span></div>
+                                                    <div class="ep-stat"><b><?= $h($eosrow['t_months'] ?? '0') ?></b><span>Months <i>أشهر</i></span></div>
+                                                    <div class="ep-stat"><b><?= $h($eosrow['t_days'] ?? '0') ?></b><span>Days <i>أيام</i></span></div>
+                                                    <div class="ep-reason">
+                                                        <div class="ep-lbl"><span>End of Service Reason</span><span class="ar">سبب نهاية الخدمة</span></div>
+                                                        <div class="ep-reason-txt">
+                                                            <span><?= $h($eosrow['leaving_reason'] ?? 'N/A') ?></span>
+                                                            <span class="ar"><?= $h($eosrow['leaving_reason_ar'] ?? '') ?></span>
+                                                        </div>
                                                     </div>
-                                                    <div class="grid-item">
-                                                        <p class="detail-line"><span><strong>Employee ID:</strong> <?=$emprow['empid']; ?></span><span class="arabic-label"><strong>الرقم الوظيفي</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Department:</strong> <?=$emprow['deptnme']; ?></span><span class="arabic-label"><strong>القسم</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Company:</strong> <?=$emprow['compnme']; ?></span><span class="arabic-label"><strong>الشركة</strong></span></p>
-                                                        <p class="detail-line"><span><strong>Date Hired:</strong> <?=format_safe_date($emprow['joining_date'] ?? null, 'M d, Y'); ?></span><span class="arabic-label"><strong>تاريخ التعيين</strong></span></p>
-                                                        <?php if($emprow['status'] == 0): ?>
-                                                        <p class="detail-line"><span><strong>Termination Date:</strong> <?=format_safe_date($emprow['ter_date'] ?? null, 'M d, Y');?></span><span class="arabic-label"><strong>تاريخ الإنهاء</strong></span></p>
-                                                        <?php endif; ?>
-                                                    </div>
                                                 </div>
-                                            </div>
+                                            </section>
 
-                                            <!-- Service Period Section -->
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Service Period Summary</span><span class="arabic-label">ملخص فترة الخدمة</span></h4>
-                                                <div class="details-grid-3">
-                                                    <p class="detail-line"><span><strong>Years:</strong> <?=isset($eosrow['t_years']) ? $eosrow['t_years'] : 'N/A'?></span><span class="arabic-label"><strong>سنوات</strong></span></p>
-                                                    <p class="detail-line"><span><strong>Months:</strong> <?=isset($eosrow['t_months']) ? $eosrow['t_months'] : 'N/A'?></span><span class="arabic-label"><strong>أشهر</strong></span></p>
-                                                    <p class="detail-line"><span><strong>Days:</strong> <?=isset($eosrow['t_days']) ? $eosrow['t_days'] : 'N/A'?></span><span class="arabic-label"><strong>أيام</strong></span></p>
-                                                </div>
-                                                <p class="service-reason detail-line"><span><strong>End of Service Reason:</strong> <?=isset($eosrow['leaving_reason']) ? $eosrow['leaving_reason'] : 'N/A'?></span><span class="arabic-label"> <?=isset($eosrow['leaving_reason_ar']) ? $eosrow['leaving_reason_ar'] : 'N/A'?><strong>سبب نهاية الخدمة</strong></span></p>
-                                            </div>
-
-                                            <?php /* ?>
-                                            <!-- Salary & Benefits Section -->
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Salary & Benefits</span><span class="arabic-label">الراتب والمستحقات</span></h4>
-                                                <div>
-                                                    <?php
-                                                        $benefits_map = [
-                                                            'basic'     => ['en' => 'Basic Salary', 'ar' => 'الراتب الأساسي'],
-                                                            'housing'   => ['en' => 'Housing Allowance', 'ar' => 'بدل سكن'],
-                                                            'transport' => ['en' => 'Transportation', 'ar' => 'بدل مواصلات'],
-                                                            'food'      => ['en' => 'Food Allowance', 'ar' => 'بدل طعام'],
-                                                            'misc'      => ['en' => 'Misc Allowance', 'ar' => 'بدل متنوع'],
-                                                            'cashier'   => ['en' => 'Cashier Allowance', 'ar' => 'بدل صراف'],
-                                                            'fuel'      => ['en' => 'Fuel Allowance', 'ar' => 'بدل وقود'],
-                                                            'tel'       => ['en' => 'Telephone Allowance', 'ar' => 'بدل هاتف'],
-                                                            'guard'     => ['en' => 'Guard Allowance', 'ar' => 'بدل حراسة'],
-                                                            'other'     => ['en' => 'Other Allowances', 'ar' => 'بدلات أخرى'],
-                                                        ];
-
-                                                        $active_benefits_en = [];
-                                                        $active_benefits_ar = [];
-
-                                                        if (!empty($salaryrow)) {
-                                                            foreach ($benefits_map as $key => $labels) {
-                                                                $value = (float)($salaryrow[$key] ?? 0);
-                                                                if ($value > 0) {
-                                                                    $active_benefits_en[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['en'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
-                                                                    $active_benefits_ar[] = '<div class="benefit-item"><div class="benefit-label">' . $labels['ar'] . '</div><div class="benefit-value">' . number_format($value, 2) . '</div></div>';
-                                                                }
-                                                            }
-                                                        }
-                                                    ?>
-                                                    <div class="detail-line">
-                                                        <div class="benefits-row"><?= implode('', $active_benefits_en) ?></div>
-                                                        <div class="benefits-row arabic-label" style="justify-content: flex-end;"><?= implode('', array_reverse($active_benefits_ar)) ?></div>
-                                                    </div>
-                                                    <p class="label-pair"><span><strong>TOTAL SALARY:</strong> <?=number_format($total_salary, 2)?></span><span class="arabic-label"><strong>إجمالي الراتب</strong></span></p>
-                                                </div>
-                                            </div>
-                                            <?php */ ?>
-
-
-                                            <!-- Assets for Clearance Section -->
                                             <?php if (!empty($assigned_assets)): ?>
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Assets for Clearance</span><span class="arabic-label">الأصول للتسليم</span></h4>
-                                                <table class="clearance-table">
+                                            <!-- Assets for Clearance -->
+                                            <section class="ep-sec">
+                                                <h4 class="ep-sec-title"><span>Assets for Clearance</span><span class="ar">الأصول للتسليم</span></h4>
+                                                <table class="ep-table">
                                                     <thead>
                                                         <tr>
-                                                            <th><span class="label-pair"><span>Asset Type</span><span class="arabic-label">نوع الأصل</span></span></th>
-                                                            <th><span class="label-pair"><span>Serial No.</span><span class="arabic-label">الرقم التسلسلي</span></span></th>
-                                                            <th><span class="label-pair"><span>Assigned Date</span><span class="arabic-label">تاريخ التعيين</span></span></th>
+                                                            <th>Asset Type <i>نوع الأصل</i></th>
+                                                            <th>Serial No. <i>الرقم التسلسلي</i></th>
+                                                            <th>Assigned Date <i>تاريخ التعيين</i></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         <?php foreach ($assigned_assets as $asset): ?>
                                                         <tr>
-                                                            <td><?= htmlspecialchars($asset['asset_name']); ?></td>
-                                                            <td><?= htmlspecialchars($asset['serial_number']); ?></td>
-                                                            <td><?= htmlspecialchars($asset['assigned_date']); ?></td>
+                                                            <td><?= $h($asset['asset_name']) ?></td>
+                                                            <td class="is-mono"><?= $h($asset['serial_number']) ?></td>
+                                                            <td><?= $h($asset['assigned_date']) ?></td>
                                                         </tr>
                                                         <?php endforeach; ?>
                                                     </tbody>
                                                 </table>
-                                            </div>
+                                            </section>
                                             <?php endif; ?>
 
-                                            <!-- Outstanding Loans Section -->
                                             <?php if (!empty($outstanding_loans)): ?>
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Outstanding Loans</span><span class="arabic-label">السلف المستحقة</span></h4>
-                                                <table class="clearance-table">
+                                            <!-- Outstanding Loans -->
+                                            <section class="ep-sec">
+                                                <h4 class="ep-sec-title"><span>Outstanding Loans</span><span class="ar">السلف المستحقة</span></h4>
+                                                <table class="ep-table">
                                                     <thead>
                                                         <tr>
-                                                            <th><span class="label-pair"><span>Loan Type</span><span class="arabic-label">نوع السلفة</span></span></th>
-                                                            <th><span class="label-pair"><span>Total Amount</span><span class="arabic-label">المبلغ الإجمالي</span></span></th>
-                                                            <th><span class="label-pair"><span>Remaining</span><span class="arabic-label">المتبقي</span></span></th>
-                                                            <th><span class="label-pair"><span>Status</span><span class="arabic-label">الحالة</span></span></th>
+                                                            <th>Loan Type <i>نوع السلفة</i></th>
+                                                            <th class="num">Total Amount <i>المبلغ الإجمالي</i></th>
+                                                            <th class="num">Remaining <i>المتبقي</i></th>
+                                                            <th>Status <i>الحالة</i></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         <?php foreach ($outstanding_loans as $loan): ?>
                                                         <tr>
-                                                            <td><?= htmlspecialchars(ucfirst($loan['loan_type'])); ?></td>
-                                                            <td class="text-right"><?= number_format($loan['total_payable'], 2); ?></td>
-                                                            <td class="text-right"><?= number_format($loan['remaining_balance'], 2); ?></td>
-                                                            <td><?= htmlspecialchars($loan['status']); ?></td>
+                                                            <td><?= $h(ucfirst($loan['loan_type'])) ?></td>
+                                                            <td class="num"><?= $money($loan['total_payable']) ?></td>
+                                                            <td class="num"><?= $money($loan['remaining_balance']) ?></td>
+                                                            <td><?= $h(ucwords(str_replace('_', ' ', $loan['status']))) ?></td>
                                                         </tr>
                                                         <?php endforeach; ?>
                                                     </tbody>
                                                 </table>
-                                            </div>
+                                            </section>
                                             <?php endif; ?>
 
-
-                                            <!-- Financial Settlement Section -->
-                                            <div class="section">
-                                                <h4 class="section-title"><span>Financial Settlement</span><span class="arabic-label">التسوية المالية</span></h4>
-                                                <table class="financial-table">
+                                            <!-- Financial Settlement -->
+                                            <section class="ep-sec">
+                                                <h4 class="ep-sec-title"><span>Financial Settlement</span><span class="ar">التسوية المالية</span></h4>
+                                                <table class="ep-fin">
+                                                    <thead>
+                                                        <tr><th>Description</th><th class="ar">البيان</th><th class="num">Amount (SAR)</th></tr>
+                                                    </thead>
                                                     <tbody>
-                                                        <tr>
-                                                            <td><span class="label-pair"><span>End of Service Amount (EOS)</span><span class="arabic-label">مبلغ نهاية الخدمة</span></span></td>
-                                                            <td class="text-right"><?=number_format((float)($eosrow['eos_amount'] ?? 0), 2)?></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="label-pair"><span>Vacation Balance (<?= number_format((float)($eosrow['anul_vac_days'] ?? 0), 2)?> days)</span><span class="arabic-label">(أيام <?= number_format((float)($eosrow['anul_vac_days'] ?? 0), 2)?>) رصيد الإجازات</span></span></td>
-                                                            <td class="text-right"><?=number_format((float)($eosrow['anul_vac_salry'] ?? 0), 2)?></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="label-pair"><span>Salary for Last Month (<?=($eosrow['curt_month_days'] ?? 'N/A')?> days)</span><span class="arabic-label">(أيام <?=($eosrow['curt_month_days'] ?? 'N/A')?>) راتب الشهر الأخير</span></span></td>
-                                                            <td class="text-right"><?=number_format($last_month_salary_paid, 2)?></td>
-                                                        </tr>
-                                                        
-                                                            <?php if ($overtime_hours > 0): ?>
-                                                            <tr>
-                                                                <td><span class="label-pair"><span>Overtime (Hours) - <?=number_format($overtime_hours, 2)?> hrs</span><span class="arabic-label">ساعات <?=number_format($overtime_hours, 2)?> - العمل الإضافي (ساعات)</span></span></td>
-                                                                <td class="text-right text-success">+<?=number_format($overtime_hourly_rate * $overtime_hours, 2)?></td>
-                                                            </tr>
-                                                            <?php endif; ?>
-                                                            
-                                                            <?php if ($overtime_days > 0): ?>
-                                                            <tr>
-                                                                <td><span class="label-pair"><span>Overtime (Days) - <?=number_format($overtime_days, 2)?> days</span><span class="arabic-label">أيام <?=number_format($overtime_days, 2)?> - العمل الإضافي (أيام)</span></span></td>
-                                                                <td class="text-right text-success">+<?=number_format($overtime_hourly_rate * 8 * $overtime_days, 2)?></td>
-                                                            </tr>
-                                                            <?php endif; ?>
+                                                        <tr class="grp is-earn"><td>Earnings</td><td class="ar">المستحقات</td><td></td></tr>
+                                                        <tr><td>End of Service Award</td><td class="ar">مكافأة نهاية الخدمة</td><td class="num"><?= $money($eosrow['eos_amount'] ?? 0) ?></td></tr>
+                                                        <tr><td>Vacation Balance <small>(<?= $vac_days ?> days)</small></td><td class="ar">رصيد الإجازات <small>(<?= $vac_days ?> يوم)</small></td><td class="num"><?= $money($eosrow['anul_vac_salry'] ?? 0) ?></td></tr>
+                                                        <tr><td>Salary for Last Month <small>(<?= $h($cm_days) ?> days)</small></td><td class="ar">راتب الشهر الأخير <small>(<?= $h($cm_days) ?> يوم)</small></td><td class="num"><?= $money($last_month_salary_paid) ?></td></tr>
+                                                        <?php if ($overtime_hours > 0): ?>
+                                                        <tr><td>Overtime <small>(<?= $money($overtime_hours) ?> hrs)</small></td><td class="ar">العمل الإضافي <small>(<?= $money($overtime_hours) ?> ساعة)</small></td><td class="num"><?= $money($overtime_hourly_rate * $overtime_hours) ?></td></tr>
+                                                        <?php endif; ?>
+                                                        <?php if ($overtime_days > 0): ?>
+                                                        <tr><td>Overtime <small>(<?= $money($overtime_days) ?> days)</small></td><td class="ar">العمل الإضافي <small>(<?= $money($overtime_days) ?> يوم)</small></td><td class="num"><?= $money($overtime_hourly_rate * 8 * $overtime_days) ?></td></tr>
+                                                        <?php endif; ?>
+                                                        <?php if ($other_earnings > 0): ?>
+                                                        <tr><td>Other Earnings</td><td class="ar">مستحقات أخرى</td><td class="num"><?= $money($other_earnings) ?></td></tr>
+                                                        <?php endif; ?>
+                                                        <tr class="sub is-earn"><td>Total Earnings</td><td class="ar">إجمالي المستحقات</td><td class="num"><?= $money($total_earnings) ?></td></tr>
 
-                                                            <?php if ($other_earnings > 0): ?>
-                                                            <tr>
-                                                                <td><span class="label-pair"><span>Other Earnings</span><span class="arabic-label">مكاسب أخرى</span></span></td>
-                                                                <td class="text-right text-success">+<?=number_format($other_earnings, 2)?></td>
-                                                            </tr>
-                                                            <?php endif; ?>
-                                                        
-                                                        <tr style="background-color: #f8f9fa !important;">
-                                                            <td colspan="2"><span class="label-pair"><span><strong>Deductions</strong></span><span class="arabic-label"><strong>الخصومات</strong></span></span></td>
-                                                        </tr>
-
+                                                        <tr class="grp is-deduct"><td>Deductions</td><td class="ar">الخصومات</td><td></td></tr>
                                                         <?php if ($gosi_deduction > 0.01): ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>GOSI Deduction</span><span class="arabic-label">خصم التأمينات</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($gosi_deduction, 2)?></td>
-                                                        </tr>
+                                                        <tr><td>GOSI Deduction</td><td class="ar">خصم التأمينات الاجتماعية</td><td class="num neg">(<?= $money($gosi_deduction) ?>)</td></tr>
                                                         <?php endif; ?>
-
                                                         <?php if ($absent_days > 0): ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Absent Days - <?=$absent_days?> days</span><span class="arabic-label">أيام <?=$absent_days?> - أيام الغياب</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($absent_deduction_amount, 2)?></td>
-                                                        </tr>
+                                                        <tr><td>Absent Days <small>(<?= (int)$absent_days ?> days)</small></td><td class="ar">أيام الغياب <small>(<?= (int)$absent_days ?> يوم)</small></td><td class="num neg">(<?= $money($absent_deduction_amount) ?>)</td></tr>
                                                         <?php endif; ?>
-                                                        
                                                         <?php if ($deduction_hours > 0): ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Deduction (Hours) - <?=number_format($deduction_hours, 2)?> hrs</span><span class="arabic-label">ساعات <?=number_format($deduction_hours, 2)?> - خصم (ساعات)</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($hourly_deduction_amount, 2)?></td>
-                                                        </tr>
+                                                        <tr><td>Deduction Hours <small>(<?= $money($deduction_hours) ?> hrs)</small></td><td class="ar">خصم ساعات <small>(<?= $money($deduction_hours) ?> ساعة)</small></td><td class="num neg">(<?= $money($hourly_deduction_amount) ?>)</td></tr>
                                                         <?php endif; ?>
-
                                                         <?php if ($loan_deduction > 0.01): ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Loan / Other Deductions</span><span class="arabic-label">خصم السلف / أخرى</span></span></td>
-                                                            <td class="text-right text-danger">-<?=number_format($loan_deduction, 2)?></td>
-                                                        </tr>
+                                                        <tr><td>Loan / Other Deductions</td><td class="ar">خصم السلف / أخرى</td><td class="num neg">(<?= $money($loan_deduction) ?>)</td></tr>
                                                         <?php endif; ?>
-                                                        
-                                                        <?php if ($gosi_deduction < 0.01 && $total_absence_deductions < 0.01 && $loan_deduction < 0.01) : ?>
-                                                        <tr>
-                                                            <td><span class="label-pair" style="padding-left: 15px;"><span>Total Deductions</span><span class="arabic-label">إجمالي الخصومات</span></span></td>
-                                                            <td class="text-right text-danger">-0.00</td>
-                                                        </tr>
+                                                        <?php if ($total_deductions < 0.01): ?>
+                                                        <tr class="is-none"><td>No deductions</td><td class="ar">لا توجد خصومات</td><td class="num">0.00</td></tr>
                                                         <?php endif; ?>
-
-                                                        <tr class="net-payment-row">
-                                                            <td><span class="label-pair"><strong>NET PAYMENT DUE</strong><strong class="arabic-label">صافي المبلغ المستحق</strong></span></td>
-                                                            <td class="text-right"><strong><?=number_format($net_payment, 2)?> SAR</strong></td>
-                                                        </tr>
+                                                        <tr class="sub is-deduct"><td>Total Deductions</td><td class="ar">إجمالي الخصومات</td><td class="num">(<?= $money($total_deductions) ?>)</td></tr>
                                                     </tbody>
                                                 </table>
-                                            </div>
-                                            
-                                            <!-- Acknowledgment Section -->
-                                            <div class="section acknowledgment-section">
-                                                <p>I acknowledge and undertake, the employee / <span class="text-danger"><?=$emprow['name']?></span> .ID No <span class="text-danger"><?=$emprow['iqama']?></span>. I have received all of my statutory dues from overtime and wages according to the Labor Law and the Workers from Al-Mutlak Trading from the beginning of their work until the date of leaving work.</p>
-                                                <p class="arabic-text">أقر وأتعهد أنا الموظف / <span class="text-danger"><?=$emprow['name']?></span>  برقم هوية اقامة / <span class="text-danger"><?=$emprow['iqama']?></span> لقد استلمت كافة مستحقاتي القانونية من أجور العمل الإضافي والأجور حسب قانون العمل والعمال في شركة المطلق للتجارة منذ بداية عملهم حتى تاريخ ترك العمل. </p>
-                                            </div>
+                                                <div class="ep-net">
+                                                    <div class="ep-net-lbl"><span>NET PAYMENT DUE</span><span class="ar">صافي المبلغ المستحق</span></div>
+                                                    <div class="ep-net-amt"><small>SAR</small> <?= $money($net_payment) ?></div>
+                                                </div>
+                                            </section>
+
+                                            <!-- Acknowledgment -->
+                                            <section class="ep-ack">
+                                                <p>I acknowledge and undertake, the employee / <b><?= $h($emprow['name']) ?></b>, ID No. <b><?= $h($emprow['iqama']) ?></b>, that I have received all of my statutory dues from overtime and wages according to the Labor Law and the Workers from Al-Mutlak Trading from the beginning of my work until the date of leaving work.</p>
+                                                <p class="ar">أقر وأتعهد أنا الموظف / <b><?= $h($emprow['name']) ?></b> برقم هوية / إقامة <b><?= $h($emprow['iqama']) ?></b> بأنني استلمت كافة مستحقاتي القانونية من أجور العمل الإضافي والأجور حسب نظام العمل والعمال في شركة المطلق للتجارة منذ بداية عملي حتى تاريخ ترك العمل.</p>
+                                            </section>
                                         </div>
-                                        <!-- Footer Section -->
-                                        <div class="footer-section">
-                                            <div class="signature-box">
-                                                <p class="signature-line">_________________________</p>
-                                                <p class="detail-line"><span><strong>Compensation Signature</strong></span><span class="arabic-label"><strong>توقيع التعويض</strong></span></p>
-                                                <p class="detail-line"><span><strong>Date</strong></span><span class="arabic-label"><strong>التاريخ</strong></span>:</p>
+
+                                        <!-- Signatures -->
+                                        <footer class="ep-foot">
+                                            <div class="ep-sign">
+                                                <div class="ep-sign-head"><span>Employee</span><span class="ar">الموظف</span></div>
+                                                <div class="ep-sign-row"><span>Name <i>الاسم</i></span><b><?= $h($emprow['name']) ?></b></div>
+                                                <div class="ep-sign-row"><span>Signature <i>التوقيع</i></span><b></b></div>
+                                                <div class="ep-sign-row"><span>Date <i>التاريخ</i></span><b></b></div>
                                             </div>
-                                            <div class="signature-box">
-                                                <p class="signature-line">_________________________</p>
-                                                <p class="detail-line"><span><strong>Company Representative</strong></span><span class="arabic-label"><strong>ممثل الشركة</strong></span></p>
-                                                <p class="detail-line"><span><strong>Date</strong></span><span class="arabic-label"><strong>التاريخ</strong></span>:</p>
+                                            <div class="ep-sign">
+                                                <div class="ep-sign-head"><span>Company Representative</span><span class="ar">ممثل الشركة</span></div>
+                                                <div class="ep-sign-row"><span>Name <i>الاسم</i></span><b></b></div>
+                                                <div class="ep-sign-row"><span>Signature <i>التوقيع</i></span><b></b></div>
+                                                <div class="ep-sign-row"><span>Date <i>التاريخ</i></span><b></b></div>
                                             </div>
-                                        </div>
+                                            <div class="ep-stamp"><span>Company Stamp</span><span class="ar">ختم الشركة</span></div>
+                                        </footer>
+                                        <div class="ep-docfoot"><span><?= $h($emprow['compnme'] ?? '') ?></span><span>Final Settlement &middot; <?= $h($eos_ref) ?> &middot; Page 1 of 1</span></div>
                                     </div>
                                 </div>
                             </div>
@@ -512,207 +563,55 @@
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
 		<script type="text/javascript">
+// Print only the A4 sheet in a hidden iframe. Same stylesheet as the screen preview; if the content is
+// still taller than one A4 page it is scaled down so the settlement never spills onto a 2nd page.
 function printDiv() {
     var divToPrint = document.getElementById('dvContents').innerHTML;
+    var css = document.getElementById('eospStyles').innerHTML;
     var printFrame = document.createElement('iframe');
-
-    printFrame.style.display = 'none';
+    printFrame.style.position = 'fixed';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
     document.body.appendChild(printFrame);
 
     var printDocument = printFrame.contentWindow.document;
     printDocument.open();
-    printDocument.write(`
-        <html>
-            <head>
-                <title>Print</title>
-                <style>
-                    body {
-                        -webkit-print-color-adjust: exact !important;
-                        color-adjust: exact !important;
-                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                        color: #333;
-                        line-height: 1.5;
-                    }
-                    .print-container {
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: space-between;
-                        min-height: 267mm; /* A4 height (297mm) minus margins */
-                    }
-                    .main-content {
-                        flex-grow: 1;
-                    }
-                    .header-section {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        border-bottom: 3px solid #4a4a4a;
-                        padding-bottom: 5px;
-                    }
-                    .logo {
-                        height: 60px;
-                    }
-                    .header-titles h2 {
-                        margin: 0;
-                        font-weight: bold;
-                        font-size: 22px;
-                        color: #000;
-                        text-align: left;
-                    }
-                    .header-titles .arabic-title {
-                        margin: 0;
-                        direction: rtl;
-                        font-size: 20px;
-                        text-align: right;
-                    }
-                    .section {
-                        margin-top: 5px;
-                    }
-                    .section-title {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: baseline;
-                        background-color: #343a40 !important;
-                        color: #fff !important;
-                        padding: 6px 6px;
-                        border-radius: 5px;
-                        font-weight: bold;
-                        font-size: 13px;
-                    }
-                    .arabic-label {
-                        direction: rtl;
-                        text-align: right;
-                    }
-                    .details-grid, .details-grid-3 {
-                        display: grid;
-                        gap: 5px 20px;
-                        margin-top: 5px;
-                        font-size: 13px;
-                    }
-                    .details-grid {
-                        grid-template-columns: 1fr 1fr;
-                    }
-                    .details-grid-3 {
-                        grid-template-columns: repeat(3, 1fr);
-                    }
-                    .details-grid p, .details-grid-3 p {
-                        margin-bottom: 3px;
-                    }
-                    .detail-line {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: baseline;
-                        border-bottom: 1px dotted #ccc;
-                        padding-bottom: 1px;
-                    }
-                    .service-reason {
-                        margin-top: 5px;
-                        font-size: 13px;
-                    }
-                    .financial-table, .clearance-table {
-                        width: 100%;
-                        margin-top: 5px;
-                        border-collapse: collapse;
-                        font-size: 13px;
-                    }
-                    .financial-table td, .clearance-table td, .clearance-table th {
-                        padding: 8px;
-                        border: 1px solid #dee2e6 !important;
-                    }
-                    .clearance-table th {
-                        background-color: #f8f9fa !important;
-                        text-align: left;
-                    }
-                    .label-pair {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: baseline;
-                        width: 100%;
-                    }
-                    .financial-table tbody tr:nth-child(odd) {
-                        background-color: #f8f9fa !important;
-                    }
-                    .net-payment-row {
-                        font-weight: bold;
-                        font-size: 15px;
-                        background-color: #e9ecef !important;
-                    }
-                    .text-right { text-align: right; }
-                    .text-danger { color: #dc3545 !important; }
-                    .acknowledgment-section {
-                        margin-top: 10px;
-                        border-top: 1px solid #dee2e6;
-                        padding-top: 10px;
-                        font-size: 12px;
-                        line-height: 1.4;
-                    }
-                    .arabic-text {
-                        direction: rtl;
-                        text-align: right;
-                        margin-top: 10px;
-                    }
-                    .footer-section {
-                        display: flex;
-                        justify-content: space-between;
-                        padding-top: 15px;
-                        page-break-inside: avoid;
-                        flex-shrink: 0;
-                    }
-                    .signature-box {
-                        text-align: center;
-                        width: 45%;
-                        font-size: 13px;
-                    }
-                    .signature-line {
-                        margin-bottom: 5px;
-                    }
-                    .benefits-row {
-                        display: flex;
-                        flex-wrap: nowrap;
-                        gap: 10px;
-                        align-items: stretch;
-                        width: 100%;
-                    }
-                    .benefit-item {
-                        text-align: center;
-                        padding: 2px 5px;
-                        font-size: 12px;
-                        line-height: 1.2;
-                        border: 1px solid #e9ecef !important;
-                        border-radius: 4px;
-                    }
-                    .benefit-label {
-                        font-weight: bold;
-                        font-size: 9px;
-                        color: #495057;
-                    }
-                    .benefit-value {
-                        font-weight: normal;
-                        border-top: 1px solid #e9ecef !important;
-                        margin-top: 2px;
-                        padding-top: 2px;
-                    }
-                    @page {
-                        size: A4;
-                        margin: 10mm;
-                    }
-                    @media print {
-                        html, body {
-                            width: 210mm;
-                            height: 297mm;
-                            margin: 0;
-                            padding: 0;
-                        }
-                    }
-                </style>
-            </head>
-            <body onload="window.focus(); window.print(); window.close();">
-                ${divToPrint}
-            </body>
-        </html>
-    `);
+    printDocument.write(
+        '<!doctype html><html><head><meta charset="utf-8"><title>Final Settlement</title>' +
+        '<style>' + css +
+        '@page { size: A4 portrait; margin: 0; }' +
+        'html, body { margin: 0; padding: 0; background: #fff; height: 296mm; overflow: hidden; }' +
+        '.eosp-sheet { margin: 0 !important; box-shadow: none !important; }' +
+        '</style></head><body>' + divToPrint + '</body></html>'
+    );
     printDocument.close();
+
+    var doPrint = function () {
+        eospFit(printDocument);
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+    };
+    if (printDocument.readyState === 'complete') {
+        setTimeout(doPrint, 300);
+    } else {
+        printFrame.onload = function () { setTimeout(doPrint, 300); };
+    }
 }
+
+// Shrink .eosp-body until the sheet fits its fixed A4 height (no-op when it already fits).
+function eospFit(doc) {
+    var sheet = doc.querySelector('.eosp-sheet');
+    var body = doc.querySelector('.eosp-body');
+    if (!sheet || !body) return;
+    body.style.zoom = 1;
+    for (var i = 0; i < 12 && sheet.scrollHeight > sheet.clientHeight + 1; i++) {
+        var ratio = sheet.clientHeight / sheet.scrollHeight;
+        body.style.zoom = Math.max(0.6, (parseFloat(body.style.zoom) || 1) * ratio * 0.99);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () { eospFit(document); });
 </script>
     </body>
 </html>
