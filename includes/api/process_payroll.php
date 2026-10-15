@@ -529,6 +529,8 @@ try {
         $vacationReturnDeductionDays = 0;
         $vacationReturnExcusedDays = 0;   // approved leave days inside a late-return gap
         $vacationReturnLateFrom = null;   // planned return date, when attendance showed a later one
+        $returnVacations = [];            // vacation row(s) ending this month (incl. back-to-back chain)
+        $vacationReturnSettledThrough = null; // settlement paid-through date, when it extends the deduction
 
         $joiningDateValue = $employeeStatus['joining_date'] ?? null;
         if (!empty($joiningDateValue)) {
@@ -569,6 +571,8 @@ try {
                         // deducted regardless of length). A short vacation under the threshold
                         // with no settlement must not touch payroll at all: full month's pay.
                         $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
+                                    v.id, v.request_inv_no, v.vac_type, v.fly_type, v.vacation_salary_type, v.vacdays, v.is_deductible,
+                                    v.start_date, v.return_date, v.overtime_amount, v.other_earnings, v.deduction_amount, v.auto_gosi_deduction,
                                     rr.final_approved_date
                                 FROM emp_vacation v
                                 LEFT JOIN (
@@ -617,6 +621,7 @@ try {
                 $effectiveReturnDate = new DateTime($vacationReturn['effective_return_date']);
                 $effectiveReturnDate->setTime(0, 0, 0);
                 $returnHasRejoin = !empty($vacationReturn['final_approved_date']);
+                $returnVacations[] = $vacationReturn;
 
                 // Chain forward through back-to-back vacation records (e.g. an Emergency
                 // vacation starting the day after an Annual vacation's return_date) - a
@@ -625,7 +630,9 @@ try {
                 // the unpaid span. Keep extending the effective return date as long as
                 // the next vacation starts on/right after the previous one's own return.
                 $stmtVacationChainNext = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
-                            rr.final_approved_date
+                            v.id, v.request_inv_no, v.vac_type, v.fly_type, v.vacation_salary_type, v.vacdays, v.is_deductible,
+                                    v.start_date, v.return_date, v.overtime_amount, v.other_earnings, v.deduction_amount, v.auto_gosi_deduction,
+                                    rr.final_approved_date
                         FROM emp_vacation v
                         LEFT JOIN (
                                 SELECT rr1.vacation_id, rr1.final_approved_date
@@ -666,6 +673,7 @@ try {
                     }
                     $effectiveReturnDate = $chainedReturnDate;
                     $returnHasRejoin = !empty($chainedVacation['final_approved_date']);
+                    $returnVacations[] = $chainedVacation;
                     $chainGuard++;
                 }
 
@@ -748,6 +756,25 @@ try {
             $prorationFactor = 1.0;
         }
 
+        // Days of this month already paid by a vacation settlement (vacation salary) must be
+        // deducted too, otherwise they are paid twice - by the settlement and by this payroll.
+        // Covers: no rejoin, where the "back" date used above is return_date, the settlement's
+        // last PAID vacation day (vacdays counts start_date .. return_date); a rejoin on or
+        // before return_date (early return / rejoin = return_date); and a settlement paying past
+        // month end. Never lowers the deduction - a late return stays deducted to the rejoin day.
+        foreach ($returnVacations as $returnVacation) {
+            $settledThrough = getVacationSalaryPaidThrough($pdo, $empId, $returnVacation);
+            if ($settledThrough === null || $settledThrough < $monthStartDate->format('Y-m-d')) {
+                continue;
+            }
+            $settledDays = $settledThrough > $monthEndDate->format('Y-m-d') ? 30 : min(30, (int) date('j', strtotime($settledThrough)));
+            if ($settledDays > $vacationReturnDeductionDays) {
+                $vacationReturnDeductionDays = $settledDays;
+                $vacationReturnSettledThrough = $settledThrough;
+                $prorationFactor = 1.0;
+            }
+        }
+
         foreach ($salaryComponents as $key => $value) {
             $salaryComponents[$key] = $value * $prorationFactor;
         }
@@ -772,7 +799,7 @@ try {
         if ($autoDeductionEnabled) {
             addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $joiningDeductionDays);
             addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays,
-                $vacationReturnDate, $vacationReturnLateFrom);
+                $vacationReturnDate, $vacationReturnLateFrom, $vacationReturnSettledThrough);
         }
 
         if ($autoBenefitEnabled) {
@@ -785,6 +812,11 @@ try {
             // Same every-generation rule: pays last month's post-rejoin days and vacation
             // public holidays the employee missed by being out of last month's payroll.
             addRejoinArrearsAndVacationHolidaySalary($pdo, $empId, $monthYear, $totalGrossSalary);
+
+            // Public holidays among THIS month's deducted vacation days (Vacation Return Deduction).
+            if ($autoDeductionEnabled && $vacationReturnDeductionDays > 0) {
+                addReturnMonthVacationHolidaySalary($pdo, $empId, $monthYear, $totalGrossSalary, $returnVacations, $vacationReturnDeductionDays);
+            }
 
             // Joined last month but missed last month's paid payroll (e.g. registered after HR
             // marked it paid) - pays those worked days here.
@@ -1304,7 +1336,7 @@ function addOrUpdateJoiningDateDeduction($pdo, $empId, $monthYear, $totalGrossSa
  * deducted rather than a silently shrunk gross salary.
  */
 function addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGrossSalary, $vacationReturnDeductionDays,
-        $returnDate = null, $lateFrom = null) {
+        $returnDate = null, $lateFrom = null, $settledThrough = null) {
     $stmtDelete = $pdo->prepare("DELETE FROM payroll_deductions
         WHERE emp_id = :emp_id AND month = :month_year AND deduction LIKE 'Vacation Return Deduction%'");
     $stmtDelete->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
@@ -1323,11 +1355,16 @@ function addOrUpdateVacationReturnDeduction($pdo, $empId, $monthYear, $totalGros
     // gross-minus-food rule the admin configured for manual day deductions, which doesn't
     // apply here. Day count is recorded in the label instead so HR can see it.
     // e.g. "Vacation Return Deduction (10 days) back 12 Oct by attendance, planned 5 Oct"
+    //      "Vacation Return Deduction (14 days) back 14 Oct, settlement paid to 14 Oct"
     $label = 'Vacation Return Deduction (' . $days . ' days)';
     if ($returnDate instanceof DateTime) {
         $label .= ' back ' . $returnDate->format('j M')
             . ($lateFrom ? ' by attendance, planned ' . date('j M', strtotime($lateFrom)) : '');
     }
+    if ($settledThrough) {
+        $label .= ($returnDate instanceof DateTime ? ',' : '') . ' settlement paid to ' . date('j M', strtotime($settledThrough));
+    }
+    $label = mb_substr($label, 0, 100);
     $stmtInsert = $pdo->prepare("INSERT INTO payroll_deductions
         (emp_id, deduction, note, month, status, calculation_type, hours, days)
         VALUES (:emp_id, :deduction, :amount, :month_year, 1, 'fixed', NULL, NULL)");
@@ -2015,23 +2052,10 @@ function addRejoinArrearsAndVacationHolidaySalary($pdo, $empId, $monthYear, $tot
         ]);
     };
 
-    $stmtEmp = $pdo->prepare("SELECT comp_no, country FROM employees WHERE emp_id = :emp_id LIMIT 1");
+    $stmtEmp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
     $stmtEmp->execute([':emp_id' => $empId]);
-    $emp = $stmtEmp->fetch(PDO::FETCH_ASSOC);
-    $compNo = (int) ($emp['comp_no'] ?? 0);
-    $countryId = $emp['country'] ?? 0;
+    $compNo = (int) $stmtEmp->fetchColumn();
 
-    $stmtSettlement = $pdo->prepare("SELECT settlement_amount FROM settlement_records
-        WHERE request_inv_no = :inv AND request_type = 'annual_vacation'
-            AND settlement_status IN ('completed', 'processed') AND payment_date IS NOT NULL
-        ORDER BY id DESC LIMIT 1");
-    $stmtSalary = $pdo->prepare("SELECT s.basic, s.housing,
-            s.basic + s.housing + s.transport + s.food + s.misc + s.cashier + s.fuel + s.tel + s.other + s.guard AS total,
-            e.gosi
-        FROM emp_salary s JOIN employees e ON e.emp_id = s.emp_id
-        WHERE s.emp_id = :emp_id AND s.status = 1 ORDER BY s.id DESC LIMIT 1");
-    $stmtSalary->execute([':emp_id' => $empId]);
-    $salaryRow = $stmtSalary->fetch(PDO::FETCH_ASSOC) ?: ['basic' => 0, 'housing' => 0, 'total' => 0, 'gosi' => null];
     $stmtHolidays = $pdo->prepare("SELECT DISTINCT h.id, h.holiday_name, h.start_date, h.end_date
         FROM emp_holidays h
         LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
@@ -2040,65 +2064,12 @@ function addRejoinArrearsAndVacationHolidaySalary($pdo, $empId, $monthYear, $tot
             AND (hcc.comp_id = :comp_no OR hc.holiday_id IS NULL)
         ORDER BY h.start_date");
 
-    // Last vacation day whose salary a paid settlement already covered, or null (none paid).
-    // The settlement stores only its total, and the vacation can be extended after it was
-    // paid (5150: settled for 34 days, vacation later 59 days), so the paid days are worked
-    // back from that total with settlement_handler.php's formula:
-    //   total = working days before departure + daily rate x vacation days + overtime
-    //           + other earnings - deductions - GOSI
-    $vacationSalaryPaidThrough = function ($vac) use ($stmtSettlement, $conDB, $empId, $countryId, $salaryRow) {
-        $stmtSettlement->execute([':inv' => 'SETL-' . $vac['request_inv_no']]);
-        $amount = $stmtSettlement->fetchColumn();
-        if ($amount === false || !function_exists('isSettlementPayableVacation') || !function_exists('resolveVacationSalaryType')) {
-            return null;
-        }
-        $vacDays = (float) $vac['vacdays'];
-        $vacStart = substr((string) $vac['start_date'], 0, 10);
-        $returnDate = substr((string) $vac['return_date'], 0, 10);
-        $allowBelowMin = function_exists('resolveSettlementVacSalaryOverride') && function_exists('employeeAllowsVacSalaryBelowMinDays')
-            ? resolveSettlementVacSalaryOverride($conDB, 'SETL-' . $vac['request_inv_no'], employeeAllowsVacSalaryBelowMinDays($conDB, $empId))
-            : false;
-        $salaryType = resolveVacationSalaryType($vac['fly_type'], $vacDays, $vac['vacation_salary_type'] ?: 'payroll', $allowBelowMin);
-        if ($salaryType !== 'payroll' || !isSettlementPayableVacation(
-            $vac['vac_type'], $vac['fly_type'], $countryId, $vacDays, $vac['is_deductible'] ?? 0, $salaryType, $allowBelowMin
-        )) {
-            return null; // settlement paid no vacation salary (e.g. emergency)
-        }
-
-        $total = (float) $salaryRow['total'];
-        $dailyRate = round($total / 30, 2);
-        if ($dailyRate <= 0) {
-            return $returnDate; // can't work it out - assume fully paid (never pay twice)
-        }
-        $startDay = (int) date('j', strtotime($vacStart));
-        $workingDays = $startDay - 1;
-        $workingSalary = $workingDays <= 0 ? 0
-            : ($workingDays >= (int) date('t', strtotime($vacStart)) ? round($total) : round($total / 30 * $workingDays));
-        $gosi = 0;
-        $isFlyAnnual = $vac['vac_type'] === 'Fly' && $vac['fly_type'] === 'annual';
-        $isLocalRemoved = function_exists('isLocalAnnualRemovedFromPayroll')
-            && isLocalAnnualRemovedFromPayroll($vac['vac_type'], $vac['fly_type'], $countryId, $vacDays, $vac['is_deductible'] ?? 0, $salaryType, $allowBelowMin);
-        if ((int) ($vac['auto_gosi_deduction'] ?? 1) && (string) $countryId === '191' && is_numeric($salaryRow['gosi']) && ($isFlyAnnual || $isLocalRemoved)) {
-            $gosi = round(((float) $salaryRow['basic'] + (float) $salaryRow['housing']) * (float) $salaryRow['gosi'] / 100, 2);
-        }
-        $vacationSalary = (float) $amount - $workingSalary - (float) $vac['overtime_amount'] - (float) $vac['other_earnings']
-            + (float) $vac['deduction_amount'] + $gosi;
-        $paidDays = (int) round($vacationSalary / $dailyRate);
-        if ($paidDays <= 0) {
-            return null;
-        }
-        if ($paidDays >= $vacDays - 1) {
-            return $returnDate; // within a day of the full vacation = rounding, treat as fully paid
-        }
-        return date('Y-m-d', strtotime($vacStart . ' +' . ($paidDays - 1) . ' days'));
-    };
-
     // Days of last month NOT payable as Rejoin Salary: still on vacation (start .. back - 1,
     // incl. a late-return gap), or already paid by a settlement's vacation salary (an early
     // return before return_date - the settlement paid through its paid-through date).
     $covered = [];
     foreach ($vacations as &$vac) {
-        $vac['salary_paid_through'] = $vacationSalaryPaidThrough($vac);
+        $vac['salary_paid_through'] = getVacationSalaryPaidThrough($pdo, $empId, $vac);
         $coverEnd = date('Y-m-d', strtotime(substr((string) $vac['back_date'], 0, 10) . ' -1 day'));
         if ($vac['salary_paid_through'] !== null) {
             $coverEnd = max($coverEnd, $vac['salary_paid_through']);
@@ -2209,6 +2180,84 @@ function addRejoinArrearsAndVacationHolidaySalary($pdo, $empId, $monthYear, $tot
                 $insertOnce('Vacation Holiday Salary: ', mb_substr($h['holiday_name'], 0, 30) . ' ' . $when . ', '
                     . $holidayDays . ' ' . ($holidayDays === 1 ? 'day' : 'days'), $holidayKey, $holidayDays);
             }
+        }
+    }
+}
+
+/**
+ * Public holidays inside the vacation days deducted THIS month by the Vacation Return
+ * Deduction (days 1 .. N of the return month). The deduction takes those days away, so a
+ * holiday among them is paid back as "Vacation Holiday Salary" - unless a paid settlement
+ * already paid that day as vacation salary. addRejoinArrearsAndVacationHolidaySalary() only
+ * pays holidays of months the employee was left out of, so the return month is handled here.
+ * Same "Vacation Holiday Salary: ... (VID: x, HID: y)" key as there - one payment per
+ * vacation + holiday across all months.
+ *   e.g. "Vacation Holiday Salary: Eid al-Fitr 1-3 Apr 2027, 3 days (VID: 2400, HID: 40)"
+ */
+function addReturnMonthVacationHolidaySalary($pdo, $empId, $monthYear, $totalGrossSalary, array $returnVacations, $deductionDays) {
+    $dailyRate = floatval($totalGrossSalary) / 30;
+    $deductionDays = min(30, (int) $deductionDays);
+    if ($dailyRate <= 0 || $deductionDays <= 0 || !$returnVacations) {
+        return;
+    }
+    $monthStart = $monthYear . '-01';
+    $deductedTo = date('Y-m-d', strtotime($monthStart . ' +' . ($deductionDays - 1) . ' days'));
+
+    $stmtComp = $pdo->prepare("SELECT comp_no FROM employees WHERE emp_id = :emp_id LIMIT 1");
+    $stmtComp->execute([':emp_id' => $empId]);
+    $compNo = (int) $stmtComp->fetchColumn();
+    $stmtHolidays = $pdo->prepare("SELECT DISTINCT h.id, h.holiday_name, h.start_date, h.end_date
+        FROM emp_holidays h
+        LEFT JOIN holiday_companies hc ON h.id = hc.holiday_id
+        LEFT JOIN companies hcc ON hcc.id = hc.company_id
+        WHERE h.is_active = 1 AND h.start_date <= :last_day AND h.end_date >= :first_day
+            AND (hcc.comp_id = :comp_no OR hc.holiday_id IS NULL)
+        ORDER BY h.start_date");
+    $stmtPaidBefore = $pdo->prepare("SELECT COUNT(*) FROM payroll_benefits WHERE emp_id = :emp_id AND benefit LIKE :pattern");
+    $stmtInsert = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, days, calculation_type, month, status)
+        VALUES (:emp_id, :benefit, :amount, :days, 'fixed', :month_year, 1)");
+
+    foreach ($returnVacations as $vac) {
+        // Last day ON vacation = day before the approved rejoin / planned return (same rule as
+        // addRejoinArrearsAndVacationHolidaySalary) - a late-return gap isn't vacation.
+        $plannedBack = substr((string) ($vac['final_approved_date'] ?: $vac['return_date']), 0, 10);
+        $firstDay = max(substr((string) $vac['start_date'], 0, 10), $monthStart);
+        $lastDay = min(date('Y-m-d', strtotime($plannedBack . ' -1 day')), $deductedTo);
+        if ($lastDay < $firstDay) {
+            continue;
+        }
+        $paidThrough = getVacationSalaryPaidThrough($pdo, $empId, $vac);
+        if ($paidThrough !== null && $paidThrough >= $lastDay) {
+            continue; // every deducted vacation day was paid by the settlement, holidays included
+        }
+
+        $stmtHolidays->execute([':last_day' => $lastDay, ':first_day' => $firstDay, ':comp_no' => $compNo]);
+        foreach ($stmtHolidays->fetchAll(PDO::FETCH_ASSOC) as $h) {
+            $dates = [];
+            $to = min($h['end_date'], $lastDay);
+            for ($d = max($h['start_date'], $firstDay); $d <= $to; $d = date('Y-m-d', strtotime($d . ' +1 day'))) {
+                if (($paidThrough === null || $d > $paidThrough) && (int) date('j', strtotime($d)) <= 30) {
+                    $dates[] = $d;
+                }
+            }
+            $days = count($dates);
+            $key = ' (VID: ' . (int) $vac['id'] . ', HID: ' . (int) $h['id'] . ')';
+            $stmtPaidBefore->execute([':emp_id' => $empId, ':pattern' => 'Vacation Holiday Salary: %' . $key]);
+            if ($days <= 0 || (int) $stmtPaidBefore->fetchColumn() > 0) {
+                continue;
+            }
+            $amount = round($dailyRate * $days, 2);
+            $firstH = reset($dates);
+            $lastH = end($dates);
+            $when = $firstH === $lastH ? date('j M Y', strtotime($firstH)) : date('j', strtotime($firstH)) . '-' . date('j M Y', strtotime($lastH));
+            $label = 'Vacation Holiday Salary: ' . mb_substr($h['holiday_name'], 0, 30) . ' ' . $when . ', ' . $days . ' ' . ($days === 1 ? 'day' : 'days');
+            $stmtInsert->execute([
+                ':emp_id' => $empId,
+                ':benefit' => mb_substr($label, 0, 100 - mb_strlen($key)) . $key,
+                ':amount' => number_format($amount, 2, '.', ''),
+                ':days' => $days,
+                ':month_year' => $monthYear,
+            ]);
         }
     }
 }

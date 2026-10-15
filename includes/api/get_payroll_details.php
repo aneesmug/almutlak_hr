@@ -322,7 +322,10 @@ try {
             // Mirrors the vacation-return lookup in process_payroll.php: preview the
             // deduction here too, so HR sees it before actually clicking Generate.
             if ($joiningDeductionPreviewDays === 0) {
-                $stmtVacationReturnPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                $stmtVacationReturnPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
+                            v.id, v.request_inv_no, v.vac_type, v.fly_type, v.vacation_salary_type, v.vacdays, v.is_deductible,
+                            v.start_date, v.return_date, v.overtime_amount, v.other_earnings, v.deduction_amount, v.auto_gosi_deduction,
+                            rr.final_approved_date
                         FROM emp_vacation v
                         LEFT JOIN (
                                 SELECT rr1.vacation_id, rr1.final_approved_date
@@ -354,12 +357,16 @@ try {
                 if ($vacationReturnPreview && !empty($vacationReturnPreview['effective_return_date'])) {
                     $effectiveReturnDatePreview = new DateTime($vacationReturnPreview['effective_return_date']);
                     $effectiveReturnDatePreview->setTime(0, 0, 0);
+                    $returnVacationsPreview = [$vacationReturnPreview];
 
                     // Mirrors the chaining fix in process_payroll.php - a back-to-back
                     // follow-on vacation (e.g. Emergency right after Annual) must extend
                     // the previewed return date too, otherwise the preview undercounts
                     // exactly like the un-chained generation logic used to.
-                    $stmtVacationChainNextPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
+                    $stmtVacationChainNextPreview = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
+                            v.id, v.request_inv_no, v.vac_type, v.fly_type, v.vacation_salary_type, v.vacdays, v.is_deductible,
+                            v.start_date, v.return_date, v.overtime_amount, v.other_earnings, v.deduction_amount, v.auto_gosi_deduction,
+                            rr.final_approved_date
                             FROM emp_vacation v
                             LEFT JOIN (
                                     SELECT rr1.vacation_id, rr1.final_approved_date
@@ -399,11 +406,23 @@ try {
                             break;
                         }
                         $effectiveReturnDatePreview = $chainedReturnDatePreview;
+                        $returnVacationsPreview[] = $chainedVacationPreview;
                         $chainGuardPreview++;
                     }
 
                     if ($effectiveReturnDatePreview >= $monthStartDate && $effectiveReturnDatePreview <= $monthEndDate) {
                         $vacationReturnDeductionPreviewDays = max(0, ((int)$effectiveReturnDatePreview->format('d')) - 1);
+                    }
+
+                    // Same rule as process_payroll.php: days a paid settlement already covered
+                    // this month are deducted too (never paid twice).
+                    foreach ($returnVacationsPreview as $returnVacationPreview) {
+                        $settledThroughPreview = getVacationSalaryPaidThrough($pdo, $empId, $returnVacationPreview);
+                        if ($settledThroughPreview === null || $settledThroughPreview < $monthStartDate->format('Y-m-d')) {
+                            continue;
+                        }
+                        $vacationReturnDeductionPreviewDays = max($vacationReturnDeductionPreviewDays,
+                            $settledThroughPreview > $monthEndDate->format('Y-m-d') ? 30 : min(30, (int) date('j', strtotime($settledThroughPreview))));
                     }
                 }
             }

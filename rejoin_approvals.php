@@ -461,17 +461,17 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 loading: <?= json_encode(__('loading', 'Loading...')) ?>,
                 selectVac: <?= json_encode(__('select_vacation', 'Select vacation')) ?>,
                 noVac: <?= json_encode(__('no_vacations_without_rejoin', 'No vacations without rejoin record')) ?>,
-                open: <?= json_encode(__('open_not_completed', 'Open (approved, not completed)')) ?>,
+                open: <?= json_encode(__('vacation_open_away', 'Open (employee still away)')) ?>,
                 openShort: <?= json_encode(__('open', 'Open')) ?>,
-                closed: <?= json_encode(__('completed', 'Completed')) ?>,
+                closed: <?= json_encode(__('closed', 'Closed')) ?>,
                 planned: <?= json_encode(__('planned_return_date', 'Planned return')) ?>,
                 requestNo: <?= json_encode(__('request_no', 'Request no.')) ?>,
                 type: <?= json_encode(__('type', 'Type')) ?>,
                 status: <?= json_encode(__('status', 'Status')) ?>,
                 start: <?= json_encode(__('start_date', 'Start date')) ?>,
                 days: <?= json_encode(__('days', 'Days')) ?>,
-                existingRejoin: <?= json_encode(__('existing_rejoin', 'Existing rejoin')) ?>,
-                existingNote: <?= json_encode(__('manual_rejoin_existing_note', 'This vacation already has an approved rejoin. Saving adds a newer one; payroll will use the new date.')) ?>,
+                settlement: <?= json_encode(__('settlement', 'Settlement')) ?>,
+                paidOn: <?= json_encode(__('paid', 'Paid')) ?>,
                 failed: <?= json_encode(__('request_failed', 'Request failed')) ?>
             };
             const html = '<form id="mrjForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
@@ -479,7 +479,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                     F.field({ col: 12, name: 'emp_id', id: 'mrjEmp', label: <?= json_encode(__('employee', 'Employee')) ?>, req: true,
                         html: F.select({ name: 'emp_id', id: 'mrjEmp', req: true, placeholder: MT.searchEmp,
                             msg: <?= json_encode(__('please_select_employee', 'Please select an employee')) ?> }),
-                        hint: esc(<?= json_encode(__('manual_rejoin_emp_hint', 'Only employees with a Fly vacation that has no rejoin record, or is still approved (not completed), are listed.')) ?>) })
+                        hint: esc(<?= json_encode(__('manual_rejoin_emp_hint', 'Only employees with a Fly vacation that has no rejoin record are listed.')) ?>) })
                 ) +
                 F.section('mdi-airplane', <?= json_encode(__('vacation', 'Vacation')) ?>,
                     F.field({ col: 12, name: 'vacation_id', id: 'mrjVac', label: <?= json_encode(__('applied_vacations', 'Applied vacations')) ?>, req: true,
@@ -510,7 +510,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                     const cap = t => String(t || '').replace(/^./, c => c.toUpperCase());
                     function showVacInfo(v) {
                         if (!v) { $('#mrjVacInfo').empty(); return; }
-                        const isOpen = v.current_status === 'approved';
+                        const isOpen = v.review === 'A';
                         const item = (k, val, cls) => `<div${cls ? ` class="${cls}"` : ''}><span class="k">${esc(k)}</span><span class="v">${val}</span></div>`;
                         $('#mrjVacInfo').html(
                             item(MT.requestNo, `<span class="sr-mono">${esc(v.request_inv_no || ('#' + v.id))}</span>`, 'wide') +
@@ -519,8 +519,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             item(MT.days, esc(v.vacdays || 0)) +
                             item(MT.start, esc(day(v.start_date))) +
                             item(MT.planned, esc(day(v.return_date))) +
-                            item(MT.existingRejoin, v.existing_rejoin_date ? `<span class="sr-pill sr-pill-xs tone-sky">${esc(day(v.existing_rejoin_date))}</span>` : '<span class="text-muted">&ndash;</span>') +
-                            (v.existing_rejoin_date ? `<div class="wide text-warning" style="font-size:12px;"><i class="mdi mdi-alert"></i> ${esc(MT.existingNote)}</div>` : '')
+                            item(MT.settlement, v.settlement_paid_on ? `<span class="sr-pill sr-pill-xs tone-green">${esc(MT.paidOn + ' ' + day(v.settlement_paid_on))}</span>` : '<span class="text-muted">&ndash;</span>')
                         );
                     }
                     F.liveClear($form);
@@ -552,7 +551,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             list.forEach(v => {
                                 vacs[v.id] = v;
                                 // Short label - full details show in #mrjVacInfo once picked
-                                const flag = v.current_status === 'approved' ? ' · ' + MT.openShort : '';
+                                const flag = v.review === 'A' ? ' · ' + MT.openShort : '';
                                 opts += `<option value="${esc(v.id)}">${esc(cap(v.fly_type || v.vac_type) + ' · ' + day(v.start_date) + ' – ' + day(v.return_date) + flag)}</option>`;
                             });
                             $vac.html(opts);

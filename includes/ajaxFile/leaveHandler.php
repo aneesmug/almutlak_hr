@@ -8087,11 +8087,8 @@ elseif ($ajaxType == 'directRejoinBypass') {
 elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVacations', 'addManualRejoin'], true)) {
     require_once __DIR__ . '/../special_access_helper.php';
 
-    // SQL fragment: started Fly annual/emergency vacation of employee "e" that is either
-    // - without rejoin history (no approved rejoin), or
-    // - still current_status 'approved' (never marked completed - normal rejoin approval
-    //   only flips review to 'C'), so the manual rejoin can close it.
-    // Vacations with a rejoin still in the approval flow (pending/adjusted) are left to that flow.
+    // SQL fragment: started Fly annual/emergency vacation of employee "e" without rejoin
+    // history - no approved rejoin, and none still in the approval flow (pending/adjusted).
     $manualRejoinEligibleVac = "
         v.emp_id = e.emp_id
         AND v.current_status IN ('approved', 'completed')
@@ -8100,14 +8097,7 @@ elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVaca
         AND v.start_date <= CURDATE()
         AND NOT EXISTS (
             SELECT 1 FROM rejoin_requests rx
-            WHERE rx.vacation_id = v.id AND rx.status IN ('pending', 'adjusted')
-        )
-        AND (
-            v.current_status = 'approved'
-            OR NOT EXISTS (
-                SELECT 1 FROM rejoin_requests rx
-                WHERE rx.vacation_id = v.id AND rx.status = 'approved'
-            )
+            WHERE rx.vacation_id = v.id AND rx.status IN ('pending', 'adjusted', 'approved')
         )
     ";
 
@@ -8153,8 +8143,9 @@ elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVaca
         if ($ajaxType === 'getManualRejoinVacations') {
             $stmt = $pdo->prepare("
                 SELECT v.id, v.request_inv_no, v.vac_type, v.fly_type, v.start_date, v.return_date, v.vacdays, v.review, v.current_status,
-                    (SELECT MAX(rx.final_approved_date) FROM rejoin_requests rx
-                     WHERE rx.vacation_id = v.id AND rx.status = 'approved') AS existing_rejoin_date
+                    (SELECT MAX(sr.payment_date) FROM settlement_records sr
+                     WHERE sr.request_inv_no = CONCAT('SETL-', v.request_inv_no) AND sr.request_type = 'annual_vacation'
+                       AND sr.settlement_status IN ('completed', 'processed')) AS settlement_paid_on
                 FROM emp_vacation v
                 JOIN employees e ON e.emp_id = v.emp_id
                 WHERE e.emp_id = :emp_id AND $manualRejoinEligibleVac
@@ -8228,13 +8219,12 @@ elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVaca
             ':final_date' => $rejoin_date
         ]);
 
-        // Vacation still 'approved' (not completed): mark it completed/closed
-        if ($vacation['current_status'] === 'approved' || $vacation['review'] === 'A') {
-            $pdo->prepare("UPDATE emp_vacation SET current_status = 'completed', review = 'C' WHERE id = :vacation_id")->execute([':vacation_id' => $vacation_id]);
-        }
-
-        // Still-open vacation: release it exactly like a final rejoin approval does
+        // Still-open vacation: close it exactly like a final rejoin approval does (review = 'C').
+        // current_status is left alone - 'completed' is set when HR saves the vacation's
+        // payments/adjustments (all_applied_vac.php), which the settlement needs; forcing it
+        // here would hide that Adjustments step.
         if ($vacation['review'] === 'A') {
+            $pdo->prepare("UPDATE emp_vacation SET review = 'C' WHERE id = :vacation_id")->execute([':vacation_id' => $vacation_id]);
             $closeResult = closeTemporaryRoleAssignment($conDB, $vacation_id, $current_user_id, 'expired');
             if (!$closeResult['success']) {
                 error_log('Manual rejoin ' . $request_inv_no . ': temporary role close failed - ' . $closeResult['message']);
@@ -8252,7 +8242,7 @@ elseif (in_array($ajaxType, ['searchManualRejoinEmployees', 'getManualRejoinVaca
             'rejoin_approvals.php',
             $request_inv_no,
             ['emp_id' => $emp_id, 'vacation_id' => $vacation_id, 'status' => 'approved', 'final_approved_date' => $rejoin_date],
-            "Manual rejoin record {$request_inv_no}: emp {$emp_id} rejoined on {$rejoin_date} for vacation {$vacation['request_inv_no']} (#{$vacation_id}, was current_status={$vacation['current_status']}/review={$vacation['review']}, now completed/C). Details: {$details}",
+            "Manual rejoin record {$request_inv_no}: emp {$emp_id} rejoined on {$rejoin_date} for vacation {$vacation['request_inv_no']} (#{$vacation_id}, review {$vacation['review']} -> C). Details: {$details}",
             'rejoin_requests'
         );
 

@@ -193,44 +193,9 @@ try {
         }
     }
 
-        if (!$joinedThisPayrollMonth) {
-                                $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date
-                        FROM emp_vacation v
-                        LEFT JOIN (
-                                SELECT rr1.vacation_id, rr1.final_approved_date
-                                FROM rejoin_requests rr1
-                                INNER JOIN (
-                                        SELECT vacation_id, MAX(id) AS latest_id
-                                        FROM rejoin_requests
-                                        WHERE status = 'approved'
-                                            AND final_approved_date IS NOT NULL
-                                        GROUP BY vacation_id
-                                ) rr_latest ON rr_latest.latest_id = rr1.id
-                        ) rr ON rr.vacation_id = v.id
-                        WHERE v.emp_id = :emp_id
-                            AND v.current_status = 'approved'
-                            AND v.is_deductible = 1
-                            AND v.start_date <= :month_start_upper
-                            AND COALESCE(rr.final_approved_date, v.return_date) >= :month_start_lower
-                            AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
-                        ORDER BY COALESCE(rr.final_approved_date, v.return_date) DESC
-                        LIMIT 1");
-        $stmtVacationReturn->execute([
-            ':emp_id' => $empId,
-                        ':month_start_upper' => $monthYear . '-01',
-                        ':month_start_lower' => $monthYear . '-01',
-            ':month_end' => $monthEndDate->format('Y-m-d')
-        ]);
-        $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
-
-        if ($vacationReturn && !empty($vacationReturn['effective_return_date'])) {
-            $returnDate = new DateTime($vacationReturn['effective_return_date']);
-            $returnDate->setTime(0, 0, 0);
-            if ($returnDate > $payableStartDate) {
-                $payableStartDate = clone $returnDate;
-            }
-        }
-    }
+    // Vacation return: gross stays FULL here, same as process_payroll.php - the missed days
+    // are already taken by the "Vacation Return Deduction" row. Prorating the gross as well
+    // took those days off twice whenever HR saved the payroll from the details modal.
 
     if ($payableStartDate > $monthEndDate) {
         $prorationFactor = 0.0;

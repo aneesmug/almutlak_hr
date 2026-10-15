@@ -555,3 +555,84 @@ if (!function_exists('removePayrollFinanceOfficerStep')) {
     }
 }
 
+if (!function_exists('getVacationSalaryPaidThrough')) {
+    /**
+     * Last vacation day whose salary a PAID settlement already covered, or null (no paid
+     * settlement, or it paid no vacation salary - e.g. emergency / non-payroll vacation).
+     * $vac needs: request_inv_no, vac_type, fly_type, vacation_salary_type, vacdays, is_deductible,
+     * start_date, return_date, overtime_amount, other_earnings, deduction_amount, auto_gosi_deduction.
+     *
+     * The settlement stores only its total, and the vacation can be extended after it was
+     * paid (5150: settled for 34 days, vacation later 59 days), so the paid days are worked
+     * back from that total with settlement_handler.php's formula:
+     *   total = working days before departure + daily rate x vacation days + overtime
+     *           + other earnings - deductions - GOSI
+     */
+    function getVacationSalaryPaidThrough($pdo, $empId, array $vac) {
+        global $conDB;
+        static $stmtSettlement = null, $stmtSalary = null, $salaryRows = [];
+        if ($stmtSettlement === null) {
+            $stmtSettlement = $pdo->prepare("SELECT settlement_amount FROM settlement_records
+                WHERE request_inv_no = :inv AND request_type = 'annual_vacation'
+                    AND settlement_status IN ('completed', 'processed') AND payment_date IS NOT NULL
+                ORDER BY id DESC LIMIT 1");
+            $stmtSalary = $pdo->prepare("SELECT s.basic, s.housing,
+                    s.basic + s.housing + s.transport + s.food + s.misc + s.cashier + s.fuel + s.tel + s.other + s.guard AS total,
+                    e.gosi, e.country
+                FROM emp_salary s JOIN employees e ON e.emp_id = s.emp_id
+                WHERE s.emp_id = :emp_id AND s.status = 1 ORDER BY s.id DESC LIMIT 1");
+        }
+
+        $stmtSettlement->execute([':inv' => 'SETL-' . $vac['request_inv_no']]);
+        $amount = $stmtSettlement->fetchColumn();
+        if ($amount === false || !function_exists('isSettlementPayableVacation') || !function_exists('resolveVacationSalaryType')) {
+            return null;
+        }
+        if (!isset($salaryRows[$empId])) {
+            $stmtSalary->execute([':emp_id' => $empId]);
+            $salaryRows[$empId] = $stmtSalary->fetch(PDO::FETCH_ASSOC) ?: ['basic' => 0, 'housing' => 0, 'total' => 0, 'gosi' => null, 'country' => 0];
+        }
+        $salaryRow = $salaryRows[$empId];
+        $countryId = $salaryRow['country'] ?? 0;
+
+        $vacDays = (float) $vac['vacdays'];
+        $vacStart = substr((string) $vac['start_date'], 0, 10);
+        $returnDate = substr((string) $vac['return_date'], 0, 10);
+        $allowBelowMin = function_exists('resolveSettlementVacSalaryOverride') && function_exists('employeeAllowsVacSalaryBelowMinDays')
+            ? resolveSettlementVacSalaryOverride($conDB, 'SETL-' . $vac['request_inv_no'], employeeAllowsVacSalaryBelowMinDays($conDB, $empId))
+            : false;
+        $salaryType = resolveVacationSalaryType($vac['fly_type'], $vacDays, $vac['vacation_salary_type'] ?: 'payroll', $allowBelowMin);
+        if ($salaryType !== 'payroll' || !isSettlementPayableVacation(
+            $vac['vac_type'], $vac['fly_type'], $countryId, $vacDays, $vac['is_deductible'] ?? 0, $salaryType, $allowBelowMin
+        )) {
+            return null; // settlement paid no vacation salary (e.g. emergency)
+        }
+
+        $total = (float) $salaryRow['total'];
+        $dailyRate = round($total / 30, 2);
+        if ($dailyRate <= 0) {
+            return $returnDate; // can't work it out - assume fully paid (never pay twice)
+        }
+        $startDay = (int) date('j', strtotime($vacStart));
+        $workingDays = $startDay - 1;
+        $workingSalary = $workingDays <= 0 ? 0
+            : ($workingDays >= (int) date('t', strtotime($vacStart)) ? round($total) : round($total / 30 * $workingDays));
+        $gosi = 0;
+        $isFlyAnnual = $vac['vac_type'] === 'Fly' && $vac['fly_type'] === 'annual';
+        $isLocalRemoved = function_exists('isLocalAnnualRemovedFromPayroll')
+            && isLocalAnnualRemovedFromPayroll($vac['vac_type'], $vac['fly_type'], $countryId, $vacDays, $vac['is_deductible'] ?? 0, $salaryType, $allowBelowMin);
+        if ((int) ($vac['auto_gosi_deduction'] ?? 1) && (string) $countryId === '191' && is_numeric($salaryRow['gosi']) && ($isFlyAnnual || $isLocalRemoved)) {
+            $gosi = round(((float) $salaryRow['basic'] + (float) $salaryRow['housing']) * (float) $salaryRow['gosi'] / 100, 2);
+        }
+        $vacationSalary = (float) $amount - $workingSalary - (float) $vac['overtime_amount'] - (float) $vac['other_earnings']
+            + (float) $vac['deduction_amount'] + $gosi;
+        $paidDays = (int) round($vacationSalary / $dailyRate);
+        if ($paidDays <= 0) {
+            return null;
+        }
+        if ($paidDays >= $vacDays - 1) {
+            return $returnDate; // within a day of the full vacation = rounding, treat as fully paid
+        }
+        return date('Y-m-d', strtotime($vacStart . ' +' . ($paidDays - 1) . ' days'));
+    }
+}
