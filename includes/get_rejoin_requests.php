@@ -45,6 +45,26 @@ try {
     // Build WHERE clause based on user role
     $supervisor_where = $is_all_visibility ? "1 = 1" : "(e.supervisor_id = :supervisor_id OR " . approverInSql('e.supervisor_id') . ")";
     $params = $is_all_visibility ? [] : [':supervisor_id' => $supervisor_id];
+
+    // Optional rejoin date range (rejoin_approvals.php toolbar): approved rejoin date, else the
+    // requested one. Applied to every query incl. counts, so the tile numbers follow the range.
+    $date_from = trim((string)($_POST['date_from'] ?? ''));
+    $date_to = trim((string)($_POST['date_to'] ?? ''));
+    $is_ymd = function ($d) {
+        $dt = DateTime::createFromFormat('!Y-m-d', $d);
+        return $dt && $dt->format('Y-m-d') === $d;
+    };
+    $date_sql = '';
+    $date_params = [];
+    if ($is_ymd($date_from) && $is_ymd($date_to)) {
+        if ($date_from > $date_to) {
+            [$date_from, $date_to] = [$date_to, $date_from];
+        }
+        $date_sql = " AND COALESCE(rr.final_approved_date, rr.requested_rejoin_date) BETWEEN :date_from AND :date_to";
+        $date_params = [':date_from' => $date_from, ':date_to' => $date_to];
+        $supervisor_where = "($supervisor_where)" . $date_sql;
+        $params += $date_params;
+    }
     $count_params = $params;
 
     // "All Requests" card - every rejoin request of every employee, any status (read-only reference).
@@ -67,16 +87,19 @@ try {
             LEFT JOIN emp_vacation v ON rr.vacation_id = v.id
             LEFT JOIN employees ab ON ab.emp_id = rr.approved_by_emp_id
         ";
-        $where = '';
-        $search_params = [];
+        $base_where = " WHERE 1 = 1" . $date_sql;
+        $where = $base_where;
+        $search_params = $date_params;
         if ($search !== '') {
-            $where = " WHERE (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3 OR rr.status LIKE :search4)";
+            $where .= " AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR rr.requested_reason LIKE :search3 OR rr.status LIKE :search4)";
             for ($i = 1; $i <= 4; $i++) {
                 $search_params[':search' . $i] = '%' . $search . '%';
             }
         }
 
-        $total_records = (int)$pdo->query("SELECT COUNT(*) FROM rejoin_requests rr JOIN employees e ON rr.emp_id = e.emp_id")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM rejoin_requests rr JOIN employees e ON rr.emp_id = e.emp_id $base_where");
+        $stmt->execute($date_params);
+        $total_records = (int)$stmt->fetchColumn();
         $filtered_records = $total_records;
         if ($search !== '') {
             $stmt = $pdo->prepare("SELECT COUNT(*) $from $where");

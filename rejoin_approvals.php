@@ -60,6 +60,7 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
         .rj-diff { font-size: 11px; font-weight: 700; }
+        .sr-toolbar .sr-search.rj-range { flex: 0 1 280px; }
         .mrj-vinfo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; margin-top: 10px; padding: 12px 14px;
             border: 1px solid var(--sr-border); border-radius: 10px; background: var(--sr-surface-2, rgba(99, 102, 241, .04)); }
         .mrj-vinfo:empty { display: none; }
@@ -130,6 +131,13 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             <div class="sr-search">
                                 <i class="mdi mdi-magnify"></i>
                                 <input type="search" id="rjSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+                            </div>
+                            <div class="sr-toolbar-right">
+                                <div class="sr-search rj-range" title="<?= __('rejoin_date_range_hint', 'Filter by rejoin date (approved date, else requested date)') ?>">
+                                    <i class="mdi mdi-calendar-range"></i>
+                                    <input type="text" id="rjDateRange" placeholder="<?= __('rejoin_date_range', 'Rejoin date range') ?>" autocomplete="off" readonly aria-label="<?= __('rejoin_date_range', 'Rejoin date range') ?>">
+                                </div>
+                                <button type="button" class="sr-btn" id="rjDateClear" style="display:none;"><i class="mdi mdi-close"></i> <?= __('clear', 'Clear') ?></button>
                             </div>
                         </div>
 
@@ -272,13 +280,21 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
             zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
             processing: __('processing', 'Processing...')
         };
+        // Rejoin date range filter (project AppDate picker); empty = no filter
+        function dateRange() {
+            return ($('#rjDateRange').val() && window.AppDate) ? AppDate.rangeValues('#rjDateRange') : ['', ''];
+        }
         function makeTable(sel, status, columns, order) {
             return $(sel).DataTable({
                 dom: 'rtip', processing: true, serverSide: true, responsive: true, pageLength: 10, order: order,
                 ajax: {
                     url: './includes/get_rejoin_requests.php',
                     type: 'POST',
-                    data: d => { d.status = status; },
+                    data: d => {
+                        d.status = status;
+                        const [from, to] = dateRange();
+                        if (from && to) { d.date_from = from; d.date_to = to; }
+                    },
                     dataSrc: json => { $('#' + status + '-count').text(Number((json && json.recordsTotal) || 0)); return json.data || []; }
                 },
                 columns: columns,
@@ -371,6 +387,25 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 viewAndApproveRequest(d.id, d.emp, d.date, d.name, d.vac);
             });
             $('#btnManualRejoin').on('click', addManualRejoin);
+
+            let lastRange = '';
+            function applyRange() {
+                const key = dateRange().join('|');
+                $('#rjDateClear').toggle(!!$('#rjDateRange').val());
+                if (key === lastRange) return;
+                lastRange = key;
+                allTables().forEach(t => t.ajax.reload()); // back to page 1 for the new range
+            }
+            if (window.AppDate) {
+                AppDate.range('#rjDateRange', {
+                    onClose: function(dates) { if (dates.length === 2) applyRange(); }
+                });
+            }
+            $('#rjDateClear').on('click', function() {
+                const fp = window.AppDate && AppDate.get('#rjDateRange');
+                if (fp) fp.clear(); else $('#rjDateRange').val('');
+                applyRange();
+            });
             $(document).on('click', '.js-cancel', function() {
                 cancelRejoinRequestAdmin($(this).data('id'), $(this).data('name'));
             });
