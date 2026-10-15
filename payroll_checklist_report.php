@@ -2623,7 +2623,7 @@ foreach ($employees as $employee) {
         }
 
         function buildSalaryAllowancesGrid(emp) {
-            // Bank / IBAN moved to the employee details panel; zero amounts are dimmed
+            // Bank / IBAN moved to the employee details panel
             const items = [
                 { label: '<?= addslashes(__('basic_salary_label', 'Basic Salary')) ?>', value: emp.basic_salary },
                 { label: '<?= addslashes(__('housing_allowance_label', 'Housing')) ?>', value: emp.housing_allowance },
@@ -2636,10 +2636,14 @@ foreach ($employees as $employee) {
                 { label: '<?= addslashes(__('other_allowance_label', 'Other')) ?>', value: emp.other_allowance },
                 { label: '<?= addslashes(__('guard_allowance_label', 'Guard')) ?>', value: emp.guard_allowance }
             ];
-            return '<div class="pc-sal">' + items.map(item => {
-                const zero = Math.abs(Number(item.value || 0)) < 0.005;
-                return `<div class="pc-sal-row${zero ? ' is-zero' : ''}"><span>${esc(item.label)}</span><b><i class="icon-saudi_riyal"></i> ${fmt(item.value)}</b></div>`;
-            }).join('') + '</div>';
+            // Components with a 0 amount are not shown
+            const shown = items.filter(item => Math.abs(Number(item.value || 0)) >= 0.005);
+            if (shown.length === 0) {
+                return `<div class="pc-items-empty"><i class="mdi mdi-inbox"></i><?= addslashes(__('no_salary_components', 'No salary components')) ?></div>`;
+            }
+            return '<div class="pc-sal">' + shown.map(item =>
+                `<div class="pc-sal-row"><span>${esc(item.label)}</span><b><i class="icon-saudi_riyal"></i> ${fmt(item.value)}</b></div>`
+            ).join('') + '</div>';
         }
 
         function buildFeedbackHtml(feedbacks) {

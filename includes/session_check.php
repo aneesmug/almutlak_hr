@@ -629,11 +629,12 @@ require_once __DIR__ . '/D365/d365_feature.php'; // d365_enabled(): Microsoft Dy
 $current_page_special_key = 'access_' . strtolower(pathinfo($current_page, PATHINFO_FILENAME));
 $has_current_page_special_access = user_has_special_access($conDB, $empid ?? '', $current_page_special_key, '', $user_type ?? '', false);
 
-// Direct supervisors (of at least one active employee) may open Rejoin Approvals whatever
-// their account type - they only see their own team's requests there.
-$is_supervisor_on_rejoin_page = ($current_page === 'rejoin_approvals.php') && user_is_direct_supervisor($conDB, $empid ?? '');
+// Direct supervisors (of at least one active employee) may open these pages whatever
+// their account type - they only see / act on their own team there.
+const SUPERVISOR_ALLOWED_PAGES = ['rejoin_approvals.php', 'employee_evaluation.php'];
+$is_supervisor_on_team_page = in_array($current_page, SUPERVISOR_ALLOWED_PAGES, true) && user_is_direct_supervisor($conDB, $empid ?? '');
 
-if (!$is_ajax_file && ($user_type ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true) && !$has_current_page_special_access && !$is_supervisor_on_rejoin_page) {
+if (!$is_ajax_file && ($user_type ?? null) === 'employee' && !in_array($current_page, EMPLOYEE_ALLOWED_PAGES, true) && !$has_current_page_special_access && !$is_supervisor_on_team_page) {
     header("Location: ./profile.php");
     exit();
 }
