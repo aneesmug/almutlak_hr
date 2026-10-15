@@ -45,6 +45,8 @@ try {
     // Build WHERE clause based on user role
     $supervisor_where = $is_all_visibility ? "1 = 1" : "(e.supervisor_id = :supervisor_id OR " . approverInSql('e.supervisor_id') . ")";
     $params = $is_all_visibility ? [] : [':supervisor_id' => $supervisor_id];
+    $scope_where = $supervisor_where; // employee scope only, before the rejoin-date filter
+    $scope_params = $params;
 
     // Optional rejoin date range (rejoin_approvals.php toolbar): approved rejoin date, else the
     // requested one. Applied to every query incl. counts, so the tile numbers follow the range.
@@ -66,6 +68,113 @@ try {
         $params += $date_params;
     }
     $count_params = $params;
+
+    // "Missing Rejoin" card - every vacation ELIGIBLE for a rejoin request (same rule as
+    // leaveHandler.php getAllActiveVacationsForRejoin / submitRejoinRequest: approved/completed,
+    // still open review 'A', Fly annual/emergency, any request number incl. legacy) of an active
+    // employee, whose return date has passed or is within the next 7 days, with no rejoin request
+    // in the approval flow or approved (a rejected/cancelled one counts as missing). HR uses it to
+    // ask the employee or the direct manager to submit the rejoin request. Same employee scope as
+    // the other tabs; users with 'view_all_rejoin_requests' see every employee.
+    // Date range filter (if any) applies to the vacation return date.
+    if (($_POST['status'] ?? '') === 'missing') {
+        require_once __DIR__ . '/special_access_helper.php';
+        $see_all = $is_all_visibility
+            || user_has_special_access($conDB, $supervisor_id, 'view_all_rejoin_requests', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        $m_where = "
+            v.review = 'A'
+            AND v.current_status IN ('approved', 'completed')
+            AND LOWER(v.vac_type) = 'fly'
+            AND LOWER(COALESCE(v.fly_type, '')) IN ('annual', 'emergency')
+            AND e.status = 1
+            AND v.return_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            AND NOT EXISTS (
+                SELECT 1 FROM rejoin_requests rx
+                WHERE rx.vacation_id = v.id AND rx.status IN ('pending', 'adjusted', 'approved')
+            )
+            AND " . ($see_all ? '1 = 1' : $scope_where);
+        $m_params = $see_all ? [] : $scope_params;
+        if ($date_params) {
+            $m_where .= " AND v.return_date BETWEEN :date_from AND :date_to";
+            $m_params += $date_params;
+        }
+        $m_from = "
+            FROM emp_vacation v
+            JOIN employees e ON e.emp_id = v.emp_id
+            LEFT JOIN employees sup ON sup.emp_id = e.supervisor_id
+        ";
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) $m_from WHERE $m_where");
+        $stmt->execute($m_params);
+        $total_records = (int)$stmt->fetchColumn();
+
+        $search = trim((string)($_POST['search']['value'] ?? ''));
+        $filtered_records = $total_records;
+        if ($search !== '') {
+            $m_where .= " AND (e.name LIKE :search1 OR e.emp_id LIKE :search2 OR sup.name LIKE :search3)";
+            for ($i = 1; $i <= 3; $i++) {
+                $m_params[':search' . $i] = '%' . $search . '%';
+            }
+            $stmt = $pdo->prepare("SELECT COUNT(*) $m_from WHERE $m_where");
+            $stmt->execute($m_params);
+            $filtered_records = (int)$stmt->fetchColumn();
+        }
+
+        // Keep in sync with the #missingRequestsTable columns in rejoin_approvals.php
+        $sort_columns = ['e.name', 'e.emp_id', 'v.fly_type', 'v.start_date', 'v.return_date', 'v.return_date', 'sup.name', 'last_rejoin_status'];
+        $order_sql = 'v.return_date ASC';
+        if (!empty($_POST['order'])) {
+            $col = intval($_POST['order'][0]['column'] ?? -1);
+            $dir = strtoupper($_POST['order'][0]['dir'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+            if (isset($sort_columns[$col])) {
+                $order_sql = $sort_columns[$col] . ' ' . $dir . ', v.id ASC';
+            }
+        }
+        $start = max(0, intval($_POST['start'] ?? 0));
+        $length = intval($_POST['length'] ?? 10);
+        $length = ($length < 1 || $length > 500) ? 10 : $length;
+
+        $stmt = $pdo->prepare("
+            SELECT
+                v.id AS vacation_id,
+                v.request_inv_no,
+                v.emp_id,
+                e.name AS emp_name,
+                v.vac_type,
+                v.fly_type,
+                v.start_date,
+                v.return_date,
+                DATEDIFF(CURDATE(), v.return_date) AS days_overdue,
+                e.supervisor_id,
+                sup.name AS supervisor_name,
+                (SELECT rx.status FROM rejoin_requests rx WHERE rx.vacation_id = v.id ORDER BY rx.id DESC LIMIT 1) AS last_rejoin_status
+            $m_from
+            WHERE $m_where
+            ORDER BY $order_sql
+            LIMIT :start, :length
+        ");
+        foreach ($m_params as $k => $val) {
+            $stmt->bindValue($k, $val);
+        }
+        $stmt->bindValue(':start', $start, PDO::PARAM_INT);
+        $stmt->bindValue(':length', $length, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Employee blocked from rejoin requests (Special Access request block) can't submit one -
+        // flagged so HR knows to unblock or use a manual rejoin instead of chasing the employee.
+        foreach ($rows as &$row) {
+            $row['rejoin_blocked'] = !empty(is_employee_request_blocked($conDB, $row['emp_id'], 'rejoin_request')['blocked']);
+        }
+        unset($row);
+
+        echo json_encode([
+            'draw' => intval($_POST['draw'] ?? 1),
+            'recordsTotal' => $total_records,
+            'recordsFiltered' => $filtered_records,
+            'data' => $rows
+        ]);
+        exit;
+    }
 
     // "All Requests" card - every rejoin request of every employee, any status (read-only reference).
     // Granted via App Settings > Special Access > 'view_all_rejoin_requests' (administrators always have it).

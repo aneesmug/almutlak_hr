@@ -53,9 +53,10 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .sr-page .sr-tiles.rj-tiles.rj-tiles-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles.rj-tiles-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        @media (max-width: 991px) { .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles, .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .rj-pane { display: none; }
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
@@ -105,13 +106,17 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                         <?php endif; ?>
                     </div>
 
-                    <div class="sr-tiles rj-tiles<?= $can_view_all_rejoin_requests ? ' rj-tiles-4' : '' ?>" id="rjTiles">
+                    <div class="sr-tiles rj-tiles<?= $can_view_all_rejoin_requests ? ' rj-tiles-5' : '' ?>" id="rjTiles">
                         <?php if ($can_view_all_rejoin_requests): ?>
                         <button type="button" class="sr-tile" data-pane="all">
                             <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all_requests', 'All Requests') ?></span>
                             <span class="sr-tile-value" id="all-count">&ndash;</span>
                         </button>
                         <?php endif; ?>
+                        <button type="button" class="sr-tile" data-pane="missing" title="<?= __('missing_rejoin_hint', 'Return date passed or within 7 days, and no rejoin request submitted yet') ?>">
+                            <span class="sr-tile-label"><span class="sr-dot dot-indigo"></span><?= __('missing_rejoin_requests', 'Missing Rejoin') ?></span>
+                            <span class="sr-tile-value" id="missing-count">&ndash;</span>
+                        </button>
                         <button type="button" class="sr-tile active" data-pane="pending">
                             <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('pending_requests', 'Pending') ?></span>
                             <span class="sr-tile-value" id="pending-count">&ndash;</span>
@@ -164,6 +169,29 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                             </div>
                         </div>
                         <?php endif; ?>
+                        <div class="rj-pane" id="missing">
+                            <div class="sr-notice tone-indigo" style="margin: 0 0 12px;">
+                                <i class="mdi mdi-information-outline"></i>
+                                <div><?= __('missing_rejoin_notice', 'Employees whose vacation return date has passed or is within the next 7 days, but no rejoin request has been submitted. Ask the employee or the direct manager to submit it.') ?></div>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table id="missingRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                    <thead>
+                                        <tr>
+                                            <th><?= __('employee_name', 'Employee') ?></th>
+                                            <th>ID</th>
+                                            <th><?= __('vacation_type', 'Vacation type') ?></th>
+                                            <th><?= __('start_date', 'Start date') ?></th>
+                                            <th><?= __('return_date', 'Return date') ?></th>
+                                            <th><?= __('status', 'Status') ?></th>
+                                            <th><?= __('direct_manager', 'Direct manager') ?></th>
+                                            <th><?= __('last_rejoin_request', 'Last rejoin request') ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
                         <div class="rj-pane active" id="pending">
                             <div class="sr-table-wrap">
                                 <table id="pendingRequestsTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
@@ -249,6 +277,11 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
             daysLate: <?= json_encode(__('days_after_plan', 'd after plan')) ?>,
             daysEarly: <?= json_encode(__('days_before_plan', 'd before plan')) ?>,
             onTime: <?= json_encode(__('on_time', 'On time')) ?>,
+            overdue: <?= json_encode(__('overdue_days', 'Overdue %d d')) ?>,
+            dueToday: <?= json_encode(__('due_today', 'Due today')) ?>,
+            dueIn: <?= json_encode(__('due_in_days', 'Due in %d d')) ?>,
+            noRequest: <?= json_encode(__('no_request_yet', 'None')) ?>,
+            rejoinBlocked: <?= json_encode(__('rejoin_request_blocked', 'Rejoin requests blocked')) ?>,
             status: {
                 pending: <?= json_encode(__('pending', 'Pending')) ?>,
                 approved: <?= json_encode(__('approved', 'Approved')) ?>,
@@ -259,7 +292,8 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         };
         const STATUS_TONE = { pending: 'tone-amber', approved: 'tone-green', adjusted: 'tone-sky', rejected: 'tone-red', cancelled: 'tone-slate' };
         let pendingTable, approvedTable, rejectedTable, allTable;
-        const allTables = () => [allTable, pendingTable, approvedTable, rejectedTable].filter(Boolean);
+        let missingTable;
+        const allTables = () => [allTable, missingTable, pendingTable, approvedTable, rejectedTable].filter(Boolean);
 
         function fmtDate(d) {
             if (!d) return '<span class="text-muted">&ndash;</span>';
@@ -347,6 +381,26 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                 { data: 'rejection_reason', orderable: false, render: longText },
                 { data: 'approved_at', render: fmtDate }
             ], [[3, 'desc']]);
+
+            // Column order must match $sort_columns in includes/get_rejoin_requests.php (status=missing)
+            missingTable = makeTable('#missingRequestsTable', 'missing', [
+                { data: 'emp_name', render: (d, t, r) => person(d, r.emp_id) },
+                { data: 'emp_id', visible: false },
+                { data: 'fly_type', render: (d, t, r) => `<span class="sr-chip"><i class="mdi mdi-airplane"></i>${esc(String(d || r.vac_type || '').replace(/^./, c => c.toUpperCase()))}</span>` },
+                { data: 'start_date', render: fmtDate },
+                { data: 'return_date', render: fmtDate },
+                { data: 'days_overdue', render: function(d, t, r) {
+                    const n = parseInt(d, 10) || 0;
+                    const blocked = r.rejoin_blocked ? `<br><small class="text-danger"><i class="mdi mdi-block-helper"></i> ${esc(T.rejoinBlocked)}</small>` : '';
+                    if (n > 0) return `<span class="sr-pill sr-pill-xs tone-red"><span class="sr-dot"></span>${esc(T.overdue.replace('%d', n))}</span>${blocked}`;
+                    if (n === 0) return `<span class="sr-pill sr-pill-xs tone-amber"><span class="sr-dot"></span>${esc(T.dueToday)}</span>${blocked}`;
+                    return `<span class="sr-pill sr-pill-xs tone-sky"><span class="sr-dot"></span>${esc(T.dueIn.replace('%d', -n))}</span>${blocked}`;
+                } },
+                { data: 'supervisor_name', render: (d, t, r) => d ? person(d, r.supervisor_id) : '<span class="text-muted">&ndash;</span>' },
+                { data: 'last_rejoin_status', render: d => d
+                    ? `<span class="sr-pill sr-pill-xs ${STATUS_TONE[String(d).toLowerCase()] || 'tone-slate'}"><span class="sr-dot"></span>${esc(T.status[String(d).toLowerCase()] || d)}</span>`
+                    : `<span class="text-muted">${esc(T.noRequest)}</span>` }
+            ], [[4, 'asc']]);
 
             if (window.canViewAllRejoinRequests) {
                 // Column order must match $sort_columns in includes/get_rejoin_requests.php (status=all)
