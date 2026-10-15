@@ -29,8 +29,9 @@
  * 10. Initiative and cooperation (المبادرة والتعاون)
  * 
  * ACCESS CONTROL:
- * - Only managers (emptype='Manager' or user_type='dept_user') can access
- * - Regular employees are redirected
+ * - Any account whose user_type is not 'employee' can access
+ * - 'employee' accounts can access only if they are a direct supervisor
+ * - Everyone (except system admins) sees only their own direct reports
  * 
  * CREATED: November 9, 2025
  * ================================================================
@@ -42,11 +43,12 @@ require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/helper_functions.php';
 
 // ================================================================
-// ACCESS CONTROL - Only Managers Allowed
+// ACCESS CONTROL - every non-'employee' account
 // ================================================================
-// (or an explicit 'Access Page: Employee Evaluation' Special Access grant)
-// Direct supervisors (anyone set as supervisor_id of an active employee) always get access.
-if (empty($is_system_admin) && !$isDeptManager && empty($isSupervisor) && !user_has_special_access($conDB, $empid ?? '', 'access_employee_evaluation', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+// Not role-gated in App Settings > Page Access / Special Access. Plain 'employee' accounts
+// get in only as a direct supervisor (anyone set as supervisor_id of an active employee).
+// The dropdown below is scoped to the user's own direct reports either way.
+if (empty($is_system_admin) && ($user_type ?? '') === 'employee' && empty($isSupervisor)) {
     header("Location: ./dashboard.php");
     exit();
 }

@@ -279,7 +279,7 @@ function __(key, def) {
         function getPageAccessSubgroups() {
             return [
                 { name: 'Dashboard', icon: 'fa-gauge-high', keys: ['access_dashboard', 'access_dashboardgm'] },
-                { name: 'Employee Management', icon: 'fa-users', keys: ['access_add_new_employee', 'access_reg_employee', 'access_edit_employee', 'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors', 'access_all_applied_employee_transfers', 'access_employee_evaluation', 'access_all_employee_evaluations', 'access_employee_memos'] },
+                { name: 'Employee Management', icon: 'fa-users', keys: ['access_add_new_employee', 'access_reg_employee', 'access_edit_employee', 'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors', 'access_all_applied_employee_transfers', 'access_all_employee_evaluations', 'access_employee_memos'] },
                 { name: 'Vacation & Leave', icon: 'fa-umbrella-beach', keys: ['access_all_applied_vac', 'access_vacation_status_history', 'access_manual_vacation', 'access_vacation_dates_by_inv', 'access_manage_holidays'] },
                 { name: 'Payroll & Salary', icon: 'fa-money-bill-wave', keys: ['access_all_payroll_approvals', 'access_payroll_checklist_report', 'access_payroll_status_history', 'access_generate_payroll', 'access_employee_salary_report', 'access_all_applied_salary_increment', 'access_salary_increment_status_history', 'access_diagnose_double_deduction', 'access_fix_double_deduction'] },
                 { name: 'Loan', icon: 'fa-hand-holding-usd', keys: ['access_all_applied_loan', 'access_loan_report_details', 'access_add_manual_loan'] },

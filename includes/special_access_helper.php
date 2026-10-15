@@ -314,7 +314,7 @@ if (!function_exists('get_page_access_subgroups')) {
                 'keys' => [
                     'access_add_new_employee', 'access_reg_employee', 'access_edit_employee',
                     'access_emp_temp_contant', 'access_employee_audit_gen', 'access_manage_employee_supervisors',
-                    'access_all_applied_employee_transfers', 'access_employee_evaluation', 'access_all_employee_evaluations',
+                    'access_all_applied_employee_transfers', 'access_all_employee_evaluations',
                     'access_employee_memos',
                 ],
             ],

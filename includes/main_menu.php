@@ -202,8 +202,9 @@ $can_see_smart_requests_page = $page_roles['all_requests.php'] ?? [];
 $can_see_general_requests_page = $page_roles['all_general_requests.php'] ?? [];
 $can_see_announcement_page = $page_roles['send_announcement.php'] ?? [];
 $can_see_vouchers_page = $page_roles['vouchers.php'] ?? [];
-$can_see_employee_evaluation_page = $page_roles['employee_evaluation.php'] ?? [];
 $can_see_all_evaluations_report = $page_roles['all_employee_evaluations.php'] ?? [];
+// Employee Evaluation: every non-'employee' account, plus any direct supervisor (page lists only their own reports)
+$can_open_employee_evaluation = !empty($is_system_admin) || !empty($isSupervisor) || ($user_type ?? '') !== 'employee';
 $can_see_reports_page = $page_roles['reports.php'] ?? [];
 $can_see_asstet_inventory_page = $page_roles['asset_inventory.php'] ?? [];
 $can_see_cars_management_page = $page_roles['all_cars.php'] ?? [];
@@ -223,8 +224,7 @@ $show_employees_menu = !empty(array_intersect([$user_role, $user_type], $can_see
                        !empty(array_intersect([$user_role, $user_type], $can_see_new_employee_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employees_payroll_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_import_iqama_page)) ||
-                       !empty(array_intersect([$user_role, $user_type], $can_see_employee_evaluation_page)) ||
-                       !empty($isSupervisor) ||
+                       $can_open_employee_evaluation ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['employee_memos.php'] ?? [])) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['manage_holidays.php'] ?? [])) ||
                        !empty(array_intersect([$user_role, $user_type], $page_roles['document_expiry.php'] ?? [])) ||
@@ -884,7 +884,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                     </ul>
                 </li>
                 <?php */ ?>
-                <?php if (!empty($is_system_admin) || !empty($isSupervisor) || in_array($user_role, $can_see_employee_evaluation_page) || in_array($user_type, $can_see_employee_evaluation_page)): ?>
+                <?php if ($can_open_employee_evaluation): ?>
                     <li><a href="<?= $employeeEvaluationLink ?>"><i class="fa-duotone fa-chart-line" style="--fa-primary-color:#a78bfa;--fa-secondary-color:#a78bfa;--fa-secondary-opacity:.4"></i><span><?=__('employee_evaluation', 'Employee Evaluation') ?></span></a></li>
                 <?php endif; ?>
 

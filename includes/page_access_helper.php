@@ -69,7 +69,8 @@ if (!function_exists('get_default_page_access_roles')) {
             'view_activity_logs.php' => ['Administrator'],
             'manual_vacation.php' => ['Administrator', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'IT_Team', 'IT_Team_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
             'import_iqama_exp.php' => ['Administrator', 'HR_Operations', 'HR_Payroll'],
-            'employee_evaluation.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager', 'IT_Team_Manager'],
+            // employee_evaluation.php is intentionally not role-gated: every non-'employee'
+            // account plus any direct supervisor may open it (it lists only their own reports).
             'all_employee_evaluations.php' => ['Administrator', 'GM', 'HR_Senior_BP', 'HR_Operations', 'HR_Supervisor', 'HR_Recruitment', 'HR_Payroll', 'DPT_Manager', 'HR_Team', 'HR_Team_Manager', 'HR_Manager'],
             'reports.php' => ['Administrator', 'GM', 'Auditor', 'HR_Senior_BP', 'HR_Payroll', 'HR_Operations', 'HR_Supervisor', 'Finance_Officer', 'DPT_Manager', 'HR_Manager', 'Finance_Manager', 'HR_Recruitment', 'IT_Team_Manager'],
             'manage_employee_supervisors.php' => ['Administrator', 'HR_Senior_BP'],
@@ -128,7 +129,6 @@ if (!function_exists('get_page_access_labels')) {
             'view_activity_logs.php' => 'Activity Logs',
             'manual_vacation.php' => 'Import Vacation Balance',
             'import_iqama_exp.php' => 'Import Iqama Expiry',
-            'employee_evaluation.php' => 'Employee Evaluation',
             'all_employee_evaluations.php' => 'All Employee Evaluations',
             'reports.php' => 'Reports',
             'manage_employee_supervisors.php' => 'Manage Employee Supervisors',
