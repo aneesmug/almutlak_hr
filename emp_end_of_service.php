@@ -704,7 +704,7 @@
                     }
                 }
 
-                $error_1 = "<div class='alert alert-success'><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.').$settlementMsg.$ccMsg."</div>";
+                $error_1 = "<div><strong>".__('Successfully!')."</strong> ".__('Employee End of Service has been registered.').$settlementMsg.$ccMsg."</div>";
                 
                 // CRITICAL FIX: Do NOT redirect immediately - wait for settlement to complete
                 // Use JavaScript to delay redirect and show proper feedback
@@ -728,6 +728,11 @@
         });
     }
 
+    $empIdParam = htmlspecialchars($_GET['emp_id'] ?? '', ENT_QUOTES);
+    $clearance_pending = $assigned_assets_count + $assigned_cars_count;
+    $form_blocked = $clearance_pending > 0;
+    $other_allowances = ($salaryrow['cashier'] ?? 0) + ($salaryrow['fuel'] ?? 0) + ($salaryrow['tel'] ?? 0) + ($salaryrow['guard'] ?? 0) + ($salaryrow['other'] ?? 0);
+    $housing_is_zero = ($salaryrow['housing'] ?? 0) == 0;
 ?>
 	<!doctype html>
 	<html lang="<?=$current_lang?>" dir="<?=($is_rtl) ? 'rtl' : 'ltr'?>">
@@ -738,19 +743,7 @@
 		<meta content="Anees Afzal" name="author" />
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 		<link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-		<link href="./plugins/bootstrap-timepicker/bootstrap-timepicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-colorpicker/css/bootstrap-colorpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-datepicker/css/bootstrap-datepicker.min.css" rel="stylesheet">
-        <link href="./plugins/clockpicker/css/bootstrap-clockpicker.min.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
-		
-		<link rel="stylesheet" href="./plugins/croppie/croppie.css">
-		
-		<link rel="stylesheet" href="./plugins/bootstrap-select/css/bootstrap-select.min.css">
-		<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
-		
-        <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.css" rel="stylesheet">
-        <link href="./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.min.css" rel="stylesheet">
+		<link href="./plugins/select2/css/select2.min.css" rel="stylesheet" />
 
         <!-- App css -->
         <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -758,10 +751,70 @@
         <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
         <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
 		<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+        <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
 		<script src="assets/js/modernizr.min.js"></script>
         <?php if ($is_rtl): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
         <?php endif; ?>
+        <style>
+            .eos-page .sr-head h1 i { color: var(--sr-accent); margin-inline-end: 6px; }
+            .eos-page .eos-person { display: flex; align-items: center; gap: 16px; min-width: 0; }
+            .eos-page .eos-avatar {
+                width: 68px; height: 68px; flex: 0 0 auto; border-radius: 50%; object-fit: cover;
+                border: 3px solid var(--sr-surface); box-shadow: 0 0 0 1px var(--sr-border), 0 4px 14px rgba(15, 23, 42, .08);
+            }
+            .eos-page .eos-person .sr-hero-title { margin: 0 0 6px; }
+            .eos-page .sr-hero-amount .sr-amount-value.is-neg { color: var(--tone-red-fg); }
+            .eos-page .sr-hero-amount .sr-amount-sub { margin-top: 2px; font-size: 12px; color: var(--sr-muted); }
+            .eos-page .sr-stats { margin: 0 0 20px; }
+            .eos-page .sr-stat-value small { font-size: 12px; font-weight: 600; color: var(--sr-muted); }
+            .eos-page .sr-stat.is-green .sr-stat-value { color: var(--tone-green-fg); }
+            .eos-page .sr-card + .sr-card, .eos-page .sr-card + .sr-notice, .eos-page .sr-notice + .sr-card { margin-top: 20px; }
+            .eos-page .sr-notice .sr-btn { margin-inline-start: auto; flex: 0 0 auto; }
+            .eos-page .sr-notice > div { flex: 1 1 auto; }
+            .eos-page fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+            .eos-page fieldset[disabled] .sr-fsec { opacity: .55; }
+            .eos-page .eos-contract { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+            .eos-page .sr-form .sr-choice span { padding: 8px 12px; height: 38px; }
+            .eos-page .eos-fsec-earn .sr-fsec-head i { color: var(--tone-green-fg); }
+            .eos-page .eos-fsec-deduct .sr-fsec-head i { color: var(--tone-red-fg); }
+            .eos-page .eos-amt { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+            .eos-page .eos-amt.is-plus { color: var(--tone-green-fg); }
+            .eos-page .eos-amt.is-minus { color: var(--tone-red-fg); }
+            .eos-page .sr-form .form-control.text-danger { color: var(--tone-red-fg) !important; }
+            .eos-page .sr-fhint.is-warn { color: var(--tone-red-fg); }
+            .eos-page .sr-kv .row-kv.is-flag { margin: 0 -8px; padding-inline: 8px; border-radius: 8px; background: var(--tone-amber-bg); }
+            .eos-page .sr-kv .row-kv.is-total { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--sr-border-strong); border-bottom: 0; }
+            .eos-page .sr-kv .row-kv.is-total dt { color: var(--sr-text); font-weight: 700; }
+            .eos-page .sr-kv .row-kv.is-total dd { color: var(--tone-green-fg); font-weight: 800; }
+            .eos-page .sr-kv dd small { font-weight: 600; color: var(--sr-muted); }
+            .eos-page .eos-sum input {
+                width: 150px; padding: 0; border: 0; outline: 0; background: transparent; text-align: end;
+                font: inherit; font-weight: 700; color: inherit; font-variant-numeric: tabular-nums;
+            }
+            .eos-page .eos-sum .row-kv.is-earn dd { color: var(--tone-green-fg); }
+            .eos-page .eos-sum .row-kv.is-deduct dd { color: var(--tone-red-fg); }
+            .eos-page .eos-net { margin-top: 14px; }
+            .eos-page .eos-net input { width: 170px; font-size: 20px; font-weight: 800; }
+            .eos-page .eos-submit { margin-top: 14px; }
+            .eos-page .eos-submit .sr-btn { width: 100%; justify-content: center; height: 44px; font-size: 14px; }
+            .eos-page .eos-submit .sr-btn[disabled] { opacity: .5; cursor: not-allowed; }
+            .eos-page .eos-submit .sr-fhint { text-align: center; }
+            .eos-page .sr-form .select2-container--default .select2-selection--multiple {
+                min-height: 38px; border-radius: 9px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); padding: 2px 6px;
+            }
+            .eos-page .sr-form .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+            .eos-page .sr-form .select2-container--default .select2-selection--multiple .select2-selection__choice {
+                background: var(--sr-accent-soft); border: 1px solid transparent; color: var(--sr-accent-strong); border-radius: 7px; font-size: 12px; font-weight: 600; padding: 1px 8px; margin-top: 4px;
+            }
+            .eos-page .sr-form .select2-search--inline .select2-search__field { color: var(--sr-text); margin-top: 6px; font-size: 13px; height: 24px; }
+            .eos-page .eos-actions-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+            .eos-page .eos-actions-cell .sr-btn[disabled] { opacity: .5; cursor: not-allowed; }
+            .eos-sub-popup .eos-sub-scroll { max-height: 340px; overflow-y: auto; border: 1px solid var(--sr-border); border-radius: 12px; }
+            .eos-sub-popup .eos-sub-scroll thead th { position: sticky; top: 0; z-index: 1; }
+            .eos-sub-popup .eos-sub-scroll input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--sr-accent); }
+            .eos-sub-popup .sr-fsec { margin: 14px 0 0; }
+        </style>
 		<script> window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;</script>
 	</head>
 	<body class="enlarged" data-keep-enlarged="true">
@@ -780,426 +833,488 @@
 			</div>
 			<div class="content-page">
 				<?php include("./includes/topbar.php"); ?>
-				<div class="content">
+				<div class="content sr-page eos-page">
 					<div class="container-fluid">
-                        <div class="row">
-                            <div class="col-12">
-                                <?=$error_1 ?? ''?>
-                                <div class="card-box">
-                                    <div class="text-center">
-                                        <img src="<?=get_setting($conDB, 'logo')?>" alt="" height="60">
-                                        <h3 class="mt-2"><?=__('FINAL SETTLEMENT');?></h3>
-                                        <h4><?=__('Final Settlement Subheading');?></h4>
-                                    </div>
-                                    <hr>
-                                    <?php if($eos_id){ ?>
-                                        <div class="alert alert-danger text-center">
-                                            <strong><?=__('Terminated on:');?></strong> <?= format_safe_date($terminationDate ?? null, 'd M, Y') ?> | 
-                                            <strong><?=__('Reason:');?></strong> <?= htmlspecialchars($eos_reason); ?>
-                                        </div>
-                                    <?php } ?>
 
-                                    <div class="row mt-4">
-                                        <div class="col-12">
-                                            <div class="card">
-                                                <div class="card-header bg-light">
-                                                    <h4 class="m-0"><?=__('Employee Information');?></h4>
+                        <div class="sr-head">
+                            <div>
+                                <h1><i class="mdi mdi-exit-to-app"></i><?=__('FINAL SETTLEMENT');?></h1>
+                                <p><?=__('Final Settlement Subheading');?></p>
+                            </div>
+                            <div class="sr-head-actions">
+                                <a href="./view_employee.php?emp_id=<?= $empIdParam ?>" class="sr-btn sr-btn-ghost"><i class="mdi mdi-arrow-left"></i> <?=__('employee_profile', 'Employee Profile');?></a>
+                                <?php if ($eos_id): ?>
+                                    <a href="./end_of_service_print.php?emp_id=<?= $empIdParam ?>" target="_blank" class="sr-btn sr-btn-primary"><i class="mdi mdi-printer"></i> <?=__('Print Report');?></a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <?php if ($eos_id): ?>
+                            <div class="sr-notice tone-red">
+                                <i class="mdi mdi-account-off"></i>
+                                <div>
+                                    <strong><?=__('Terminated on:');?></strong> <?= format_safe_date($terminationDate ?? null, 'd M, Y') ?>
+                                    &nbsp;&middot;&nbsp; <strong><?=__('Reason:');?></strong> <?= htmlspecialchars($eos_reason ?? ''); ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Employee hero -->
+                        <div class="sr-card sr-hero">
+                            <div class="sr-hero-top">
+                                <div class="eos-person">
+                                    <img class="eos-avatar" src="<?= getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1); ?>" alt="<?= htmlspecialchars($emprow['name'] ?? ''); ?>">
+                                    <div style="min-width: 0;">
+                                        <h2 class="sr-hero-title"><?= htmlspecialchars($emprow['name'] ?? ''); ?></h2>
+                                        <div class="sr-hero-tags">
+                                            <span class="sr-chip sr-mono"><i class="mdi mdi-account-card-details"></i> <?= htmlspecialchars($emprow['empid'] ?? ''); ?></span>
+                                            <?php if ($eos_id): ?>
+                                                <span class="sr-pill tone-red"><span class="sr-dot"></span><?=__('terminated', 'Terminated');?></span>
+                                            <?php else: ?>
+                                                <span class="sr-pill tone-amber"><span class="sr-dot"></span><?=__('eos_pending_settlement', 'Pending settlement');?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php if (!$eos_id): ?>
+                                    <div class="sr-hero-amount">
+                                        <div class="sr-amount-label"><?=__('Total Net Payment');?></div>
+                                        <div class="sr-amount-value"><span id="net_payment_hero">0.00</span> <small><?=__('SAR');?></small></div>
+                                        <div class="sr-amount-sub"><?=__('eos_live_estimate', 'Live estimate - updates as you fill the form');?></div>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="sr-meta">
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-briefcase"></i> <?=__('Department');?></div>
+                                    <div class="sr-meta-value"><?= htmlspecialchars($emprow['deptnme'] ?? '-'); ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-account-circle"></i> <?=__('Job Title');?></div>
+                                    <div class="sr-meta-value"><?= htmlspecialchars($emprow['jobname'] ?? '-'); ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-calendar-check"></i> <?=__('Joining Date');?></div>
+                                    <div class="sr-meta-value"><?= format_safe_date($emprow['joining_date'] ?? null, 'd M, Y'); ?></div>
+                                </div>
+                                <div class="sr-meta-item">
+                                    <div class="sr-meta-label"><i class="mdi mdi-account-card-details"></i> <?=__('Iqama / ID');?></div>
+                                    <div class="sr-meta-value sr-mono"><?= htmlspecialchars($emprow['iqama'] ?? '-'); ?></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick stats -->
+                        <div class="sr-stats" style="margin-top: 20px;">
+                            <div class="sr-stat is-sky">
+                                <div class="sr-stat-label"><?=__('Total Remaining Vacation Days');?> <i class="mdi mdi-beach"></i></div>
+                                <div class="sr-stat-value"><span id="vacation_days_summary"><?= htmlspecialchars(number_format($current_vacation_balance, 2, '.', '')); ?></span> <small><?=__('days');?></small></div>
+                                <div class="sr-stat-sub"><?=__('eos_vac_to_lwd', 'Projected to last working day');?></div>
+                            </div>
+                            <div class="sr-stat <?= $outstanding_loan > 0 ? 'is-red' : 'is-green' ?>">
+                                <div class="sr-stat-label"><?=__('Outstanding Loan Balance');?> <i class="mdi mdi-cash-multiple"></i></div>
+                                <div class="sr-stat-value"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <small><?=__('SAR');?></small></div>
+                                <div class="sr-stat-sub"><?=__('eos_loan_prefilled', 'Pre-filled into deductions');?></div>
+                            </div>
+                            <div class="sr-stat is-green">
+                                <div class="sr-stat-label"><?=__('Total Salary Base (for EOS calculation)');?> <i class="mdi mdi-wallet"></i></div>
+                                <div class="sr-stat-value"><?= htmlspecialchars(number_format($actual_salary_base, 2)); ?> <small><?=__('SAR');?></small></div>
+                                <div class="sr-stat-sub"><?=__('eos_monthly_package', 'Monthly package');?></div>
+                            </div>
+                            <?php if ($clearance_pending > 0): ?>
+                                <div class="sr-stat is-red">
+                                    <div class="sr-stat-label"><?=__('eos_clearance', 'Clearance');?> <i class="mdi mdi-alert-octagon"></i></div>
+                                    <div class="sr-stat-value"><?= (int) $clearance_pending ?> <small><?=__('eos_items_pending', 'item(s) pending');?></small></div>
+                                    <div class="sr-stat-sub"><?=__('eos_return_before_eos', 'Return assets / vehicles first');?></div>
+                                </div>
+                            <?php elseif ($has_subordinates): ?>
+                                <div class="sr-stat is-amber">
+                                    <div class="sr-stat-label"><?=__('eos_clearance', 'Clearance');?> <i class="mdi mdi-account-switch"></i></div>
+                                    <div class="sr-stat-value"><?= count($subordinates) ?> <small><?=__('eos_subordinates', 'subordinate(s)');?></small></div>
+                                    <div class="sr-stat-sub"><?=__('Employee(s) need supervisor reassignment');?></div>
+                                </div>
+                            <?php else: ?>
+                                <div class="sr-stat is-green">
+                                    <div class="sr-stat-label"><?=__('eos_clearance', 'Clearance');?> <i class="mdi mdi-check-circle"></i></div>
+                                    <div class="sr-stat-value"><?=__('eos_cleared', 'Cleared');?></div>
+                                    <div class="sr-stat-sub"><?=__('eos_no_pending_items', 'No assets or vehicles pending');?></div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php ob_start(); ?>
+                        <!-- Salary components -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-cash-usd"></i> <?=__('Salary Components');?></h2>
+                                <span class="sr-card-sub"><?=__('SAR');?></span>
+                            </div>
+                            <div class="sr-card-body">
+                                <dl class="sr-kv">
+                                    <div class="row-kv"><dt><?=__('Basic Salary');?></dt><dd><?= htmlspecialchars(number_format($salaryrow['basic'] ?? 0, 2)); ?></dd></div>
+                                    <div class="row-kv<?= $housing_is_zero ? ' is-flag' : '' ?>"><dt><?=__('Housing Allowance');?></dt><dd><?= htmlspecialchars(number_format($salaryrow['housing'] ?? 0, 2)); ?></dd></div>
+                                    <div class="row-kv"><dt><?=__('Food Allowance');?></dt><dd><?= htmlspecialchars(number_format($salaryrow['food'] ?? 0, 2)); ?></dd></div>
+                                    <div class="row-kv"><dt><?=__('Transport Allowance');?></dt><dd><?= htmlspecialchars(number_format($salaryrow['transport'] ?? 0, 2)); ?></dd></div>
+                                    <div class="row-kv"><dt><?=__('Miscellaneous');?></dt><dd><?= htmlspecialchars(number_format($salaryrow['misc'] ?? 0, 2)); ?></dd></div>
+                                    <div class="row-kv"><dt><?=__('Other Allowances');?></dt><dd><?= htmlspecialchars(number_format($other_allowances, 2)); ?></dd></div>
+                                    <div class="row-kv is-total"><dt><?=__('Total Salary Base (for EOS calculation)');?></dt><dd><?= htmlspecialchars(number_format($actual_salary_base, 2)); ?></dd></div>
+                                </dl>
+                                <?php if ($housing_is_zero && ($salaryrow['basic'] ?? 0) > 0): ?>
+                                    <div class="sr-notice tone-sky" style="margin: 14px 0 0;">
+                                        <i class="mdi mdi-information-outline"></i>
+                                        <div><strong><?=__('Note');?>:</strong> Housing allowance is 0 in salary record. Calculated housing (Basic / 12) &times; 2 = <strong><?= htmlspecialchars(number_format($calculated_housing, 2)); ?> SAR</strong> has been included in the total package above for EOS calculation.</div>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php $salaryCardHtml = ob_get_clean(); ?>
+
+                        <?php ob_start(); ?>
+                        <?php if ($assigned_assets_count > 0): ?>
+                        <!-- Assigned Assets -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-laptop"></i> <?=__('Assigned Assets for Clearance');?></h2>
+                                <span class="sr-pill tone-red"><span class="sr-dot"></span><?= (int) $assigned_assets_count ?></span>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table class="sr-table">
+                                    <thead>
+                                        <tr>
+                                            <th><?=__('Asset Type');?></th>
+                                            <th><?=__('Serial Number');?></th>
+                                            <th><?=__('Description');?></th>
+                                            <th><?=__('Assigned Date');?></th>
+                                            <th class="text-right"><?=__('Action');?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php
+                                        $assets_query_display = mysqli_query($conDB, "SELECT ea.*, a.name AS asset_name FROM `employee_assets` ea JOIN `assets` a ON ea.asset_id = a.id WHERE ea.emp_id = '{$emprow['empid']}' AND ea.status = 'Assigned'");
+                                        if(mysqli_num_rows($assets_query_display) > 0):
+                                            while($asset_row = mysqli_fetch_assoc($assets_query_display)):
+                                    ?>
+                                        <tr>
+                                            <td><div class="sr-cell-title"><?= htmlspecialchars($asset_row['asset_name']); ?></div></td>
+                                            <td><span class="sr-mono"><?= htmlspecialchars($asset_row['serial_number']); ?></span></td>
+                                            <td><?= htmlspecialchars($asset_row['description']); ?></td>
+                                            <td><?= htmlspecialchars($asset_row['assigned_date']); ?></td>
+                                            <td>
+                                                <div class="eos-actions-cell">
+                                                    <a href="asset_return_report.php?asset_id=<?= (int)$asset_row['id']; ?>" target="_blank" class="sr-btn sr-btn-ghost sr-btn-sm eos-print-return-btn" data-asset-id="<?= (int)$asset_row['id']; ?>">
+                                                        <i class="mdi mdi-printer"></i> <?= __('print_for_return'); ?>
+                                                    </a>
+                                                    <button type="button" class="sr-btn sr-btn-danger sr-btn-sm" id="eos-submit-return-btn-<?= (int)$asset_row['id']; ?>" onclick="unassignAsset(<?= (int)$asset_row['id']; ?>)" disabled>
+                                                        <i class="mdi mdi-check-circle"></i> <?= __('submit_return'); ?>
+                                                    </button>
                                                 </div>
-                                                <div class="card-body">
-                                                    <div class="row">
-                                                        <div class="col-md-2 text-center">
-                                                            <img src="<?= getAvatarImagePath($emprow['avatar'] ?? '', $emprow['sex'] ?? 1); ?>" alt="<?= htmlspecialchars($emprow['name']); ?>" class="rounded-circle img-thumbnail" width="120">
-                                                        </div>
-                                                        <div class="col-md-10">
-                                                            <div class="row">
-                                                                <div class="col-md-4"><p><strong><?=__('Name');?>:</strong><br><?= htmlspecialchars($emprow['name'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Employee ID');?>:</strong><br><?= htmlspecialchars($emprow['empid'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Iqama / ID');?>:</strong><br><?= htmlspecialchars($emprow['iqama'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Department');?>:</strong><br><?= htmlspecialchars($emprow['deptnme'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Job Title');?>:</strong><br><?= htmlspecialchars($emprow['jobname'] ?? ''); ?></p></div>
-                                                                <div class="col-md-4"><p><strong><?=__('Joining Date');?>:</strong><br><?= format_safe_date($emprow['joining_date'] ?? null, 'd M, Y'); ?></p></div>
-                                                            </div>
-                                                        </div>
+                                            </td>
+                                        </tr>
+                                    <?php
+                                            endwhile;
+                                        else:
+                                    ?>
+                                        <tr><td colspan="5"><div class="sr-empty"><i class="mdi mdi-laptop"></i><?=__('No assets are currently assigned to this employee.');?></div></td></tr>
+                                    <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
+                        <?php if ($assigned_cars_count > 0): ?>
+                        <!-- Assigned Vehicles -->
+                        <div class="sr-card">
+                            <div class="sr-card-head">
+                                <h2 class="sr-card-title"><i class="mdi mdi-car-convertable"></i> <?=__('Assigned Vehicles for Clearance', 'Assigned Vehicles for Clearance');?></h2>
+                                <span class="sr-pill tone-red"><span class="sr-dot"></span><?= (int) $assigned_cars_count ?></span>
+                            </div>
+                            <div class="sr-table-wrap">
+                                <table class="sr-table">
+                                    <thead>
+                                        <tr>
+                                            <th><?=__('plate_no_label', 'Plate No');?></th>
+                                            <th><?=__('Description');?></th>
+                                            <th><?=__('receive_date_label', 'Receive Date');?></th>
+                                            <th class="text-right"><?=__('Action');?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php foreach ($assigned_cars as $car_row): ?>
+                                        <tr>
+                                            <td><span class="sr-chip sr-mono"><?= htmlspecialchars($car_row['plate_no']); ?></span></td>
+                                            <td><?= htmlspecialchars(trim(($car_row['maker_name'] ?? '') . ' - ' . ($car_row['model'] ?? '')), ENT_QUOTES); ?></td>
+                                            <td><?= htmlspecialchars($car_row['rcv_date'] ?? ''); ?></td>
+                                            <td>
+                                                <div class="eos-actions-cell">
+                                                    <a href="javascript:void(0);" class="sr-btn sr-btn-danger sr-btn-sm addRtrnDrvrAtter" data-id="<?= (int)$car_row['id']; ?>" data-cid="<?= (int)$car_row['car_id']; ?>">
+                                                        <i class="mdi mdi-car-convertable"></i> <?= __('return_car_button', 'Return Car'); ?>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        <?php $clearanceHtml = ob_get_clean(); ?>
+
+                        <?php if ($eos_id): ?>
+                            <div class="sr-import">
+                                <div>
+                                    <?= $clearanceHtml ?>
+                                    <?php if ($clearanceHtml === '' || trim($clearanceHtml) === ''): ?>
+                                        <div class="sr-card">
+                                            <div class="sr-card-body">
+                                                <div class="sr-empty">
+                                                    <i class="mdi mdi-check-circle"></i>
+                                                    <?=__('Employee End of Service has been registered.');?>
+                                                    <div style="margin-top: 14px;">
+                                                        <a href="./end_of_service_print.php?emp_id=<?= $empIdParam ?>" target="_blank" class="sr-btn sr-btn-primary"><i class="mdi mdi-printer"></i> <?=__('Print Report');?></a>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <aside class="sr-sticky"><?= $salaryCardHtml ?></aside>
+                            </div>
+                        <?php else: ?>
+                        <form id="calculatorForm" class="sr-form" action="emp_end_of_service.php?emp_id=<?= $empIdParam ?>" method="post" autocomplete="off">
+                            <div class="sr-import">
+                                <div>
+                                    <?php if ($assigned_assets_count > 0): ?>
+                                        <div class="sr-notice tone-red">
+                                            <i class="mdi mdi-alert-octagon"></i>
+                                            <div><strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('This employee has {count} outstanding asset(s). Please ensure all assets are returned before proceeding with termination.')) ?></div>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($assigned_cars_count > 0): ?>
+                                        <div class="sr-notice tone-red">
+                                            <i class="mdi mdi-car-convertable"></i>
+                                            <div><strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_cars_count, __('This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.', 'This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.')) ?></div>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($has_subordinates): ?>
+                                        <div class="sr-notice tone-amber" id="subordinates-warning-alert">
+                                            <i class="mdi mdi-account-switch"></i>
+                                            <div><strong><?=__('Action Required:');?></strong> <?= count($subordinates) . ' ' . __('Employee(s) need supervisor reassignment') ?></div>
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="show-subordinates-btn" onclick="showSubordinatesModal()">
+                                                <i class="mdi mdi-account-multiple"></i> <?=__('reassign_supervisors');?>
+                                            </button>
+                                        </div>
+                                    <?php endif; ?>
+                                    <?php if ($general_error_message): ?>
+                                        <div class="sr-notice tone-red"><i class="mdi mdi-alert-circle-outline"></i><div><?=htmlspecialchars($general_error_message); ?></div></div>
+                                    <?php endif; ?>
+                                    <?php foreach (['assets', 'subordinates', 'country', 'duplicate_eos'] as $errKey): ?>
+                                        <?php if (!empty($errors[$errKey])): ?>
+                                            <div class="sr-notice tone-red"><i class="mdi mdi-alert-circle-outline"></i><div><?=htmlspecialchars($errors[$errKey]); ?></div></div>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
 
-                                    <!-- Financial Summary Section -->
-                                    <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Financial Summary');?></h5></div>
-                                        <div class="card-body">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <p><strong><?=__('Total Remaining Vacation Days');?>:</strong><br><span id="vacation_days_summary">0.00</span> <?=__('days');?></p>
+                                    <?= $clearanceHtml ?>
+                                    <?php if (trim($clearanceHtml) !== ''): ?><div style="height: 20px;"></div><?php endif; ?>
+
+                                    <fieldset <?= $form_blocked ? 'disabled' : '' ?>>
+                                        <!-- Hidden fields for subordinates tracking -->
+                                        <input type="hidden" id="subordinates_updated" name="subordinates_updated" value="<?= $has_subordinates ? 'false' : 'true' ?>">
+                                        <input type="hidden" id="subordinates_json" value='<?= htmlspecialchars(json_encode($subordinates), ENT_QUOTES, 'UTF-8'); ?>'>
+                                        <input type="hidden" id="has_subordinates" value="<?= $has_subordinates ? '1' : '0' ?>">
+
+                                        <!-- Termination details -->
+                                        <div class="sr-fsec">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-file-document"></i><?=__('eos_termination_details', 'Termination Details');?></span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-5">
+                                                    <label><?=__('Type of Contract');?> <span class="text-danger">*</span></label>
+                                                    <div class="eos-contract">
+                                                        <label class="sr-choice"><input type="radio" id="contract-limited" name="contract_type" value="1" <?=($contractType == "1") ? "checked" : ""; ?>><span><i class="mdi mdi-calendar-range"></i> <?=__('Limited Period');?></span></label>
+                                                        <label class="sr-choice"><input type="radio" id="contract-unlimited" name="contract_type" value="2" <?=($contractType == "2") ? "checked" : ""; ?>><span><i class="mdi mdi-calendar-clock"></i> <?=__('Unlimited Period');?></span></label>
+                                                    </div>
+                                                    <?php if (!empty($errors['contract_type'])): ?><small class="sr-fhint is-warn"><?=htmlspecialchars($errors['contract_type']); ?></small><?php endif; ?>
                                                 </div>
-                                                <div class="col-md-6">
-                                                    <p><strong><?=__('Outstanding Loan Balance');?>:</strong><br><span class="text-danger"><?= htmlspecialchars(number_format($outstanding_loan, 2)); ?> <?=__('SAR');?></span></p>
+                                                <div class="sr-fcol c-7">
+                                                    <label for="eos_reason"><?=__('End of Service Reason');?> <span class="text-danger">*</span></label>
+                                                    <select id="eos_reason" required class="form-control<?= !empty($errors['eos_reason']) ? ' is-invalid' : '' ?>" name="eos_reason" <?php if(empty($filteredReasons) && empty($general_error_message)) echo 'disabled';?>>
+                                                        <option value=""><?=__('Choose a reason');?></option>
+                                                        <?php foreach ($filteredReasons as $reason): ?>
+                                                            <option value="<?=htmlspecialchars($reason['ContractEndReasonCode']); ?>" <?=($selectedReasonCode == $reason['ContractEndReasonCode']) ? "selected" : ""; ?>>
+                                                                <?= ($current_lang === 'ar' && !empty($reason['ArDescription'])) ? htmlspecialchars($reason['ArDescription']) : htmlspecialchars($reason['EnDescription']); ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <?php if (!empty($preFillReasonLabel)): ?>
+                                                        <small class="sr-fhint"><i class="mdi mdi-information-outline"></i> <?=__('Pre-filled from resignation');?>: <?=htmlspecialchars($preFillReasonLabel); ?></small>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($errors['eos_reason'])): ?><small class="sr-fhint is-warn"><?=htmlspecialchars($errors['eos_reason']); ?></small><?php endif; ?>
                                                 </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="joining_date"><?=__('joining_date_label');?></label>
+                                                    <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date'] ?? '');?>" readonly>
+                                                </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="end_date"><?=__('last_working_day');?> <span class="text-danger">*</span></label>
+                                                    <input type="text" name="end_date" class="form-control<?= !empty($errors['end_date']) ? ' is-invalid' : '' ?>" id="end_date" value="<?=htmlspecialchars($endDateStr); ?>" required autocomplete="off" placeholder="YYYY-MM-DD">
+                                                    <?php if (!empty($errors['end_date'])): ?><small class="sr-fhint is-warn"><?=htmlspecialchars($errors['end_date']); ?></small><?php endif; ?>
+                                                </div>
+                                                <div class="sr-fcol c-2">
+                                                    <label for="vac_days_delta" id="vac_days_delta_label"><?=__('Accrued days (to LWD)');?></label>
+                                                    <input type="number" class="form-control" value="0.00" id="vac_days_delta" name="vac_days_delta" step="any" placeholder="0.00" readonly>
+                                                    <small class="sr-fhint is-warn d-none" id="vac_days_delta_hint"><?=__('eos_vac_after_lwd_hint', 'Accrued after LWD until today - removed from balance');?></small>
+                                                </div>
+                                                <div class="sr-fcol c-2">
+                                                    <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
+                                                    <input type="number" class="form-control" value="<?= htmlspecialchars(number_format($current_vacation_balance, 2, '.', '')); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="0.00" readonly>
+                                                </div>
+                                                <div class="sr-fcol c-2">
+                                                    <label for="curt_month_days_display"><?=__('Working Days');?></label>
+                                                    <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days" value="0" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Earnings -->
+                                        <div class="sr-fsec eos-fsec-earn">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-plus-circle"></i><?=__('eos_earnings', 'Earnings');?></span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-3">
+                                                    <label for="curt_month_salry"><?=__('Resignation Month Salary');?></label>
+                                                    <input type="text" class="form-control" value="0.00" id="curt_month_salry" name="curt_month_salry" readonly>
+                                                    <small class="eos-amt is-plus" id="curt_month_salry_calc">0.00 SAR</small>
+                                                </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="overtime_hours"><?=__('Overtime (Hours)');?></label>
+                                                    <input type="number" class="form-control calculation-trigger" id="overtime_hours" name="overtime_hours" value="0" min="0" step="0.5">
+                                                    <small class="eos-amt is-plus" id="overtime_hours_calc">0.00 SAR</small>
+                                                </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="overtime_days"><?=__('Overtime (Days)');?></label>
+                                                    <input type="number" class="form-control calculation-trigger" id="overtime_days" name="overtime_days" value="0" min="0" step="0.5">
+                                                    <small class="eos-amt is-plus" id="overtime_days_calc">0.00 SAR</small>
+                                                </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="other_earnings"><?=__('Other Earnings');?></label>
+                                                    <input type="number" class="form-control calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
+                                                    <small class="eos-amt is-plus" id="other_earnings_calc">0.00 SAR</small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Deductions -->
+                                        <div class="sr-fsec eos-fsec-deduct">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-minus-circle"></i><?=__('eos_deductions', 'Deductions');?></span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-3">
+                                                    <label for="absent_days"><?=__('Absent Days');?></label>
+                                                    <input type="number" class="form-control calculation-trigger" id="absent_days" name="absent_days" value="0" min="0">
+                                                    <small class="eos-amt is-minus" id="absent_days_calc">0.00 SAR</small>
+                                                </div>
+                                                <div class="sr-fcol c-3">
+                                                    <label for="deduction_hours"><?=__('Deduction (Hours)');?></label>
+                                                    <input type="number" class="form-control calculation-trigger" id="deduction_hours" name="deduction_hours" value="0" min="0">
+                                                    <small class="eos-amt is-minus" id="deduction_hours_calc">0.00 SAR</small>
+                                                </div>
+                                                <?php if ($emprow['country'] == 191 && floatval($emprow['gosi']) > 0): ?>
+                                                    <div class="sr-fcol c-3">
+                                                        <label for="gosi_deduction"><?=__('GOSI Deduction');?></label>
+                                                        <input type="number" class="form-control calculation-trigger" id="gosi_deduction" name="gosi_deduction" value="0.00" step="any">
+                                                        <small class="eos-amt is-minus" id="gosi_deduction_calc">0.00 SAR</small>
+                                                    </div>
+                                                    <div class="sr-fcol c-3">
+                                                        <label for="deduct"><?=__('Other Deductions (Loan, etc.)');?></label>
+                                                        <input type="number" class="form-control calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
+                                                        <small class="eos-amt is-minus" id="deduct_calc">0.00 SAR</small>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="sr-fcol c-3">
+                                                        <label for="deduct"><?=__('Deduct (Loan, etc.)');?></label>
+                                                        <input type="number" class="form-control calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
+                                                        <small class="eos-amt is-minus" id="deduct_calc">0.00 SAR</small>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+
+                                        <!-- Notes & notification -->
+                                        <div class="sr-fsec">
+                                            <div class="sr-fsec-head"><span><i class="mdi mdi-email-outline"></i><?=__('eos_notes_notify', 'Notes & Notification');?></span></div>
+                                            <div class="sr-fgrid">
+                                                <div class="sr-fcol c-6">
+                                                    <label for="notes"><?=__('Notes');?> <span class="text-danger">*</span></label>
+                                                    <textarea class="form-control<?= !empty($errors['notes']) ? ' is-invalid' : '' ?>" id="notes" name="notes" rows="3" required><?= htmlspecialchars($notesPrefill); ?></textarea>
+                                                    <?php if (!empty($errors['notes'])): ?><small class="sr-fhint is-warn"><?=htmlspecialchars($errors['notes']); ?></small><?php endif; ?>
+                                                </div>
+                                                <div class="sr-fcol c-6">
+                                                    <label for="cc_emails"><?=__('eos_cc_label', 'CC to Notify (Direct Manager)');?></label>
+                                                    <select id="cc_emails" name="cc_users[]" class="form-control" multiple style="width: 100%;">
+                                                        <?php foreach ($ccSelected as $ccId => $ccInfo): ?>
+                                                            <option value="<?= (int) $ccId; ?>" selected><?= htmlspecialchars($ccInfo['name'] . ' (' . $ccInfo['emp_id'] . ') - ' . $ccInfo['email']); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <small class="sr-fhint"><?=__('eos_cc_hint', 'Optional - search by name or Emp ID. They will be emailed to print the EOS report, get it signed by the employee and upload it to the master file.');?></small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </fieldset>
+                                </div>
+
+                                <aside class="sr-sticky">
+                                    <!-- Settlement summary -->
+                                    <div class="sr-card">
+                                        <div class="sr-card-head">
+                                            <h2 class="sr-card-title"><i class="mdi mdi-calculator"></i> <?=__('eos_settlement_summary', 'Settlement Summary');?></h2>
+                                            <span class="sr-card-sub"><?=__('SAR');?></span>
+                                        </div>
+                                        <div class="sr-card-body">
+                                            <dl class="sr-kv eos-sum">
+                                                <div class="row-kv"><dt><?=__('EOS Amount (from API)');?></dt><dd><input type="text" id="eos_amount_display" value="0.00" readonly tabindex="-1"></dd></div>
+                                                <div class="row-kv"><dt><?=__('Vacation Salary');?></dt><dd><input type="text" id="vacation_salary_display" value="0.00" readonly tabindex="-1"></dd></div>
+                                                <div class="row-kv is-earn"><dt><?=__('Total Earnings');?></dt><dd><input type="text" id="total_earnings_display" value="0.00" readonly tabindex="-1"></dd></div>
+                                                <div class="row-kv is-deduct"><dt><?=__('Total Deductions');?></dt><dd><input type="text" id="total_deductions_display" value="0.00" readonly tabindex="-1"></dd></div>
+                                            </dl>
+                                            <div class="sr-ftotal eos-net eos-sum">
+                                                <span><?=__('Total Net Payment');?></span>
+                                                <input type="text" id="net_payment_display" value="0.00" readonly tabindex="-1">
+                                            </div>
+                                            <div class="eos-submit">
+                                                <button type="submit" name="submit" class="sr-btn sr-btn-danger" <?= $form_blocked ? 'disabled' : '' ?>><i class="mdi mdi-account-remove"></i> <?=__('Register EOS');?></button>
+                                                <?php if ($form_blocked): ?>
+                                                    <small class="sr-fhint is-warn"><?=__('eos_return_before_eos', 'Return assets / vehicles first');?></small>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Salary Components Section -->
-                                    <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Salary Components');?></h5></div>
-                                        <div class="card-body">
-                                            <table class="table table-sm">
-                                                <tbody>
-                                                    <tr>
-                                                        <td><strong><?=__('Basic Salary');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['basic'] ?? 0, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr <?= ($salaryrow['housing'] ?? 0) == 0 ? 'style="background-color:#fff3cd;"' : '' ?>>
-                                                        <td><strong><?=__('Housing Allowance');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['housing'] ?? 0, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong><?=__('Food Allowance');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['food'] ?? 0, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong><?=__('Transport Allowance');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['transport'] ?? 0, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong><?=__('Miscellaneous');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format($salaryrow['misc'] ?? 0, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong><?=__('Other Allowances');?>:</strong></td>
-                                                        <td class="text-right"><?= htmlspecialchars(number_format(($salaryrow['cashier'] ?? 0) + ($salaryrow['fuel'] ?? 0) + ($salaryrow['tel'] ?? 0) + ($salaryrow['guard'] ?? 0) + ($salaryrow['other'] ?? 0), 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                    <tr style="border-top: 2px solid #ddd; font-weight: bold;">
-                                                        <td><strong><?=__('Total Salary Base (for EOS calculation)');?>:</strong></td>
-                                                        <td class="text-right text-success"><?= htmlspecialchars(number_format($actual_salary_base, 2)); ?> <?=__('SAR');?></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                            <?php if (($salaryrow['housing'] ?? 0) == 0 && ($salaryrow['basic'] ?? 0) > 0): ?>
-                                                <div class="alert alert-info mt-3">
-                                                    <strong><?=__('Note');?>:</strong> Housing allowance is 0 in salary record. <strong>Calculated housing (Basic / 12) × 2 = <?= htmlspecialchars(number_format($calculated_housing, 2)); ?> SAR has been included in the total package above for EOS calculation.</strong>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-
-                                    <?php if ($assigned_assets_count > 0): ?>
-                                    <!-- Assigned Assets Section -->
-                                    <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Assigned Assets for Clearance');?></h5></div>
-                                        <div class="card-body">
-                                            <table class="table table-sm table-bordered">
-                                                <thead>
-                                                    <tr>
-                                                        <th><?=__('Asset Type');?></th>
-                                                        <th><?=__('Serial Number');?></th>
-                                                        <th><?=__('Description');?></th>
-                                                        <th><?=__('Assigned Date');?></th>
-                                                        <th><?=__('Action');?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                <?php
-                                                    $assets_query_display = mysqli_query($conDB, "SELECT ea.*, a.name AS asset_name FROM `employee_assets` ea JOIN `assets` a ON ea.asset_id = a.id WHERE ea.emp_id = '{$emprow['empid']}' AND ea.status = 'Assigned'");
-                                                    if(mysqli_num_rows($assets_query_display) > 0):
-                                                        while($asset_row = mysqli_fetch_assoc($assets_query_display)):
-                                                ?>
-                                                    <tr>
-                                                        <td><?= htmlspecialchars($asset_row['asset_name']); ?></td>
-                                                        <td><?= htmlspecialchars($asset_row['serial_number']); ?></td>
-                                                        <td><?= htmlspecialchars($asset_row['description']); ?></td>
-                                                        <td><?= htmlspecialchars($asset_row['assigned_date']); ?></td>
-                                                        <td>
-                                                            <div class="btn-group">
-                                                                <a href="asset_return_report.php?asset_id=<?= (int)$asset_row['id']; ?>" target="_blank" class="btn btn-sm btn-primary eos-print-return-btn" data-asset-id="<?= (int)$asset_row['id']; ?>">
-                                                                    <?= __('print_for_return'); ?>
-                                                                </a>
-                                                                <button type="button" class="btn btn-sm btn-danger" id="eos-submit-return-btn-<?= (int)$asset_row['id']; ?>" onclick="unassignAsset(<?= (int)$asset_row['id']; ?>)" disabled>
-                                                                    <?= __('submit_return'); ?>
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                <?php
-                                                        endwhile;
-                                                    else:
-                                                ?>
-                                                    <tr><td colspan="5" class="text-center"><?=__('No assets are currently assigned to this employee.');?></td></tr>
-                                                <?php endif; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                    <?php endif; ?>
-
-                                    <?php if ($assigned_cars_count > 0): ?>
-                                    <!-- Assigned Cars Section -->
-                                    <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('Assigned Vehicles for Clearance', 'Assigned Vehicles for Clearance');?></h5></div>
-                                        <div class="card-body">
-                                            <table class="table table-sm table-bordered">
-                                                <thead>
-                                                    <tr>
-                                                        <th><?=__('plate_no_label', 'Plate No');?></th>
-                                                        <th><?=__('Description');?></th>
-                                                        <th><?=__('receive_date_label', 'Receive Date');?></th>
-                                                        <th><?=__('Action');?></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                <?php foreach ($assigned_cars as $car_row): ?>
-                                                    <tr>
-                                                        <td><?= htmlspecialchars($car_row['plate_no']); ?></td>
-                                                        <td><?= htmlspecialchars(trim(($car_row['maker_name'] ?? '') . ' - ' . ($car_row['model'] ?? '')), ENT_QUOTES); ?></td>
-                                                        <td><?= htmlspecialchars($car_row['rcv_date'] ?? ''); ?></td>
-                                                        <td>
-                                                            <a href="javascript:void(0);" class="btn btn-sm btn-danger addRtrnDrvrAtter" data-id="<?= (int)$car_row['id']; ?>" data-cid="<?= (int)$car_row['car_id']; ?>">
-                                                                <i class="mdi mdi-car-convertable"></i> <?= __('return_car_button', 'Return Car'); ?>
-                                                            </a>
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                    <?php endif; ?>
-
-                                    <!-- EOS Calculation Section -->
-                                    <div class="card mt-4">
-                                        <div class="card-header bg-light"><h5 class="m-0"><?=__('End of Service Calculation');?></h5></div>
-                                        <div class="card-body">
-                                            <?php if ($assigned_assets_count > 0): ?>
-                                                <div class="alert alert-danger text-center">
-                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_assets_count, __('This employee has {count} outstanding asset(s). Please ensure all assets are returned before proceeding with termination.')) ?>
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <?php if ($assigned_cars_count > 0): ?>
-                                                <div class="alert alert-danger text-center">
-                                                    <strong><?=__('Action Required:');?></strong> <?= str_replace('{count}', $assigned_cars_count, __('This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.', 'This employee has {count} outstanding vehicle(s) assigned. Please return the vehicle(s) before proceeding with termination.')) ?>
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <?php if ($has_subordinates): ?>
-                                                <div class="alert alert-warning text-center" id="subordinates-warning-alert">
-                                                    <strong><?=__('Action Required:');?></strong> 
-                                                    <button type="button" class="btn btn-sm btn-warning" id="show-subordinates-btn" onclick="showSubordinatesModal()">
-                                                        <i class="fa fa-users"></i> <?= count($subordinates) . ' ' . __('Employee(s) need supervisor reassignment') ?>
-                                                    </button>
-                                                </div>
-                                            <?php endif; ?>
-
-                                            <?php if ($eos_id == ""): ?>
-                                                <form id="calculatorForm" action="emp_end_of_service.php?emp_id=<?=$_GET['emp_id']?>" method="post">
-                                                    <fieldset <?= ($assigned_assets_count > 0 || $assigned_cars_count > 0) ? 'disabled' : '' ?>>
-                                                        <?php if ($general_error_message): ?>
-                                                            <div class="alert alert-danger"><?=htmlspecialchars($general_error_message); ?></div>
-                                                        <?php endif; ?>
-                                                        <?php if (!empty($errors['assets'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['assets']); ?></div><?php endif; ?>
-                                                        <?php if (!empty($errors['subordinates'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['subordinates']); ?></div><?php endif; ?>
-                                                        <?php if (!empty($errors['country'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['country']); ?></div><?php endif; ?>
-                                                        <?php if (!empty($errors['duplicate_eos'])): ?><div class="alert alert-danger"><?=htmlspecialchars($errors['duplicate_eos']); ?></div><?php endif; ?>
-                                                        
-                                                        <!-- Hidden fields for subordinates tracking -->
-                                                        <input type="hidden" id="subordinates_updated" name="subordinates_updated" value="<?= $has_subordinates ? 'false' : 'true' ?>">
-                                                        <input type="hidden" id="subordinates_json" value='<?= htmlspecialchars(json_encode($subordinates), ENT_QUOTES, 'UTF-8'); ?>'>
-                                                        <input type="hidden" id="has_subordinates" value="<?= $has_subordinates ? '1' : '0' ?>">
-                                                        
-                                                        <div class="form-row align-items-end">
-                                                            <div class="form-group col-lg-6">
-                                                                <label><strong><?=__('Type of Contract');?>:</strong></label>
-                                                                <div>
-                                                                    <div class="custom-control custom-radio custom-control-inline">
-                                                                        <input type="radio" id="contract-limited" name="contract_type" value="1" class="custom-control-input" <?=($contractType == "1") ? "checked" : ""; ?>>
-                                                                        <label class="custom-control-label" for="contract-limited"><?=__('Limited Period');?></label>
-                                                                    </div>
-                                                                    <div class="custom-control custom-radio custom-control-inline">
-                                                                        <input type="radio" id="contract-unlimited" name="contract_type" value="2" class="custom-control-input" <?=($contractType == "2") ? "checked" : ""; ?>>
-                                                                        <label class="custom-control-label" for="contract-unlimited"><?=__('Unlimited Period');?></label>
-                                                                    </div>
-                                                                </div>
-                                                                <?php if (!empty($errors['contract_type'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['contract_type']); ?></small></div><?php endif; ?>
-                                                            </div>
-                                                            <div class="form-group col-lg-6">
-                                                                <label for="eos_reason"><strong><?=__('End of Service Reason');?>:</strong><span class="text-danger">*</span></label>
-                                                                <select id="eos_reason" required class="form-control" name="eos_reason" <?php if(empty($filteredReasons) && empty($general_error_message)) echo 'disabled';?>>
-                                                                    <option value=""><?=__('Choose a reason');?></option>
-                                                                    <?php if (!empty($filteredReasons)): ?>
-                                                                        <?php foreach ($filteredReasons as $reason): ?>
-                                                                            <option value="<?=htmlspecialchars($reason['ContractEndReasonCode']); ?>" <?=($selectedReasonCode == $reason['ContractEndReasonCode']) ? "selected" : ""; ?>>
-                                                                                <?= ($current_lang === 'ar' && !empty($reason['ArDescription'])) ? htmlspecialchars($reason['ArDescription']) : htmlspecialchars($reason['EnDescription']); ?>
-                                                                            </option>
-                                                                        <?php endforeach; ?>
-                                                                    <?php endif; ?>
-                                                                </select>
-                                                                                                                                <?php if (!empty($preFillReasonLabel)): ?>
-                                                                                                                                    <small class="form-text text-muted d-block mt-1"><i class="fas fa-info-circle"></i> <?=__('Pre-filled from resignation');?>: <?=htmlspecialchars($preFillReasonLabel); ?></small>
-                                                                                                                                <?php endif; ?>
-                                                                <?php if (!empty($errors['eos_reason'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['eos_reason']); ?></small></div><?php endif; ?>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="joining_date"><?=__('joining_date_label');?>:</label>
-                                                                <input type="text" name="joining_date" class="form-control" id="joining_date" value="<?=htmlspecialchars($emprow['joining_date'] ?? '');?>" readonly>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="end_date"><?=__('last_working_day');?>:<span class="text-danger">*</span></label>
-                                                                <input type="text" name="end_date" class="form-control datepicker" id="end_date" value="<?=htmlspecialchars($endDateStr); ?>" required autocomplete="off">
-                                                                <?php if (!empty($errors['end_date'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['end_date']); ?></small></div><?php endif; ?>
-                                                            </div>
-
-                                                            <!-- Calculation Row 1 -->
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="vac_days_delta" id="vac_days_delta_label"><?=__('Accrued days (to LWD)');?></label>
-                                                                <input type="number" class="form-control" value="0.00" id="vac_days_delta" name="vac_days_delta" step="any" placeholder="0.00" readonly>
-                                                                <small class="form-text text-danger d-none" id="vac_days_delta_hint"><?=__('eos_vac_after_lwd_hint', 'Accrued after LWD until today - removed from balance');?></small>
-                                                            </div>
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="anul_vac_days"><?=__('Annual vacation days');?></label>
-                                                                <input type="number" class="form-control" value="<?= htmlspecialchars(number_format($current_vacation_balance, 2, '.', '')); ?>" id="anul_vac_days" name="anul_vac_days" step="any" placeholder="0.00" readonly>
-                                                            </div>
-                                                            <div class="form-group col-lg-2">
-                                                                <label for="curt_month_days_display"><?=__('Working Days');?></label>
-                                                                <input type="number" class="form-control" id="curt_month_days_display" name="curt_month_days" value="0" readonly>
-                                                            </div>
-
-                                                            <!-- EARNINGS SECTION -->
-                                                            <div class="col-12"><strong class="text-success">EARNINGS:</strong><hr style="margin: 5px 0;"/></div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="curt_month_salry" class="text-success"><?=__('Resignation Month Salary');?></label>
-                                                                <input type="text" class="form-control" value="0.00" id="curt_month_salry" name="curt_month_salry" readonly>
-                                                                <small class="text-success font-weight-bold" id="curt_month_salry_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="overtime_hours" class="text-success"><?=__('Overtime (Hours)');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="overtime_hours" name="overtime_hours" value="0" min="0" step="0.5">
-                                                                <small class="text-success font-weight-bold" id="overtime_hours_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="overtime_days" class="text-success"><?=__('Overtime (Days)');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="overtime_days" name="overtime_days" value="0" min="0" step="0.5">
-                                                                <small class="text-success font-weight-bold" id="overtime_days_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="other_earnings" class="text-success"><?=__('Other Earnings');?></label>
-                                                                <input type="number" class="form-control text-success calculation-trigger" id="other_earnings" name="other_earnings" value="0.00" step="any">
-                                                                <small class="text-success font-weight-bold" id="other_earnings_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>  
-                                                            </div>
-
-                                                            <!-- DEDUCTIONS SECTION -->
-                                                            <div class="col-12"><strong class="text-danger">DEDUCTIONS:</strong><hr style="margin: 5px 0;"/></div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="absent_days" class="text-danger"><?=__('Absent Days');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="absent_days" name="absent_days" value="0" min="0">
-                                                                <small class="text-danger font-weight-bold" id="absent_days_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label for="deduction_hours" class="text-danger"><?=__('Deduction (Hours)');?></label>
-                                                                <input type="number" class="form-control calculation-trigger" id="deduction_hours" name="deduction_hours" value="0" min="0">
-                                                                <small class="text-danger font-weight-bold" id="deduction_hours_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                            </div>
-
-                                                            <!-- Calculation Row 2 (Deductions) -->
-                                                            <?php if ($emprow['country'] == 191 && floatval($emprow['gosi']) > 0): ?>
-                                                                <div class="form-group col-lg-3">
-                                                                    <label for="gosi_deduction" class="text-danger"><?=__('GOSI Deduction');?></label>
-                                                                    <input type="number" class="form-control text-danger calculation-trigger" id="gosi_deduction" name="gosi_deduction" value="0.00" step="any">
-                                                                    <small class="text-danger font-weight-bold" id="gosi_deduction_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                                </div>
-                                                                <div class="form-group col-lg-3">
-                                                                    <label for="deduct" class="text-danger"><?=__('Other Deductions (Loan, etc.)');?></label>
-                                                                    <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
-                                                                    <small class="text-danger font-weight-bold" id="deduct_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                                </div>
-                                                            <?php else: ?>
-                                                                <div class="form-group col-lg-2">
-                                                                    <label for="deduct" class="text-danger"><?=__('Deduct (Loan, etc.)');?></label>
-                                                                    <input type="number" class="form-control text-danger calculation-trigger" value="<?= htmlspecialchars($outstanding_loan); ?>" id="deduct" name="deduct" step="any">
-                                                                    <small class="text-danger font-weight-bold" id="deduct_calc" style="display:block; margin-top: 3px;">0.00 SAR</small>
-                                                                </div>
-                                                            <?php endif; ?>
-                                                            
-                                                            <div class="col-12"><hr/></div>
-                                                            
-                                                            <!-- Final Summary Row -->
-                                                            <div class="form-group col-lg-3">
-                                                                <label><?=__('EOS Amount (from API)');?></label>
-                                                                <input type="text" class="form-control" id="eos_amount_display" value="0.00" readonly style="background-color: #e9ecef;">
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label><?=__('Vacation Salary');?></label>
-                                                                <input type="text" class="form-control" id="vacation_salary_display" value="0.00" readonly style="background-color: #e9ecef;">
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label class="text-success font-weight-bold"><?=__('Total Earnings');?></label>
-                                                                <input type="text" class="form-control text-success font-weight-bold" id="total_earnings_display" value="0.00" readonly style="background-color: #d4edda;">
-                                                            </div>
-                                                            <div class="form-group col-lg-3">
-                                                                <label class="text-danger font-weight-bold"><?=__('Total Deductions');?></label>
-                                                                <input type="text" class="form-control text-danger font-weight-bold" id="total_deductions_display" value="0.00" readonly style="background-color: #f8d7da;">
-                                                            </div>
-                                                            <div class="form-group col-lg-4">
-                                                                <label class="font-weight-bold"><?=__('Total Net Payment');?></label>
-                                                                <input type="text" class="form-control font-weight-bold" id="net_payment_display" value="0.00" readonly style="background-color: #dff0d8; font-size: 1.2em;">
-                                                            </div>
-                                                            
-                                                            <div class="col-12"><hr/></div>
-
-                                                            <div class="form-group col-lg-5 align-self-start">
-                                                                <label for="cc_emails"><i class="mdi mdi-email-outline"></i> <?=__('eos_cc_label', 'CC to Notify (Direct Manager)');?>:</label>
-                                                                <select id="cc_emails" name="cc_users[]" class="form-control" multiple style="width: 100%;">
-                                                                    <?php foreach ($ccSelected as $ccId => $ccInfo): ?>
-                                                                        <option value="<?= (int) $ccId; ?>" selected><?= htmlspecialchars($ccInfo['name'] . ' (' . $ccInfo['emp_id'] . ') - ' . $ccInfo['email']); ?></option>
-                                                                    <?php endforeach; ?>
-                                                                </select>
-                                                                <small class="form-text text-muted"><?=__('eos_cc_hint', 'Optional - search by name or Emp ID. They will be emailed to print the EOS report, get it signed by the employee and upload it to the master file.');?></small>
-                                                            </div>
-
-                                                            <div class="form-group col-lg-5 align-self-start">
-                                                                <label for="notes"><?=__('Notes');?>:<span class="text-danger">*</span></label>
-                                                                <input type="text" class="form-control" id="notes" name="notes" value="<?= htmlspecialchars($notesPrefill); ?>" required />
-                                                                <?php if (!empty($errors['notes'])): ?><div class="text-danger"><small><?=htmlspecialchars($errors['notes']); ?></small></div><?php endif; ?>
-                                                            </div>
-                                                            <div class="form-group col-lg-2 align-self-start">
-                                                                <label class="d-none d-lg-block">&nbsp;</label>
-                                                                <button type="submit" name="submit" class="btn btn-danger btn-block"><i class="mdi mdi-settings"></i> <?=__('Register EOS');?></button>
-                                                            </div>
-                                                        </div>
-
-                                                        <!-- Hidden fields for calculation and submission -->
-                                                        <input type="hidden" name="request_inv_no" id="request_inv_no" value="<?= htmlspecialchars($requestInvNo); ?>">
-                                                        <input type="hidden" name="eos_amount" id="eos_amount_hidden" value="">
-                                                        <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden" value="">
-                                                        <input type="hidden" name="net_payment" id="net_payment_hidden" value="">
-                                                        <input type="hidden" id="total_salary" value="<?= htmlspecialchars($total_salary); ?>">
-                                                        <input type="hidden" id="employee_master_total_salary" value="<?= htmlspecialchars($employee_master_total_salary); ?>">
-                                                        <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
-                                                        <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
-                                                        <input type="hidden" id="calculated_housing" value="<?= htmlspecialchars($calculated_housing); ?>">
-                                                        <input type="hidden" id="two_month_housing_benefit" value="<?= htmlspecialchars($two_month_housing); ?>">
-                                                        <input type="hidden" id="actual_salary_base" value="<?= htmlspecialchars($actual_salary_base); ?>">
-                                                        <input type="hidden" id="vacation_salary_base" value="<?= htmlspecialchars($vacation_salary_base); ?>">
-                                                        <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
-                                                        <input type="hidden" id="current_vacation_balance" value="<?= htmlspecialchars($current_vacation_balance); ?>">
-                                                        <input type="hidden" id="balance_period_end" value="<?= htmlspecialchars($balance_period_end ?? ''); ?>">
-                                                        <input type="hidden" id="is_two_year_contract" value="<?= htmlspecialchars($is_two_year_contract); ?>">
-                                                        <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country'] ?? ''); ?>">
-                                                        <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi'] ?? 0); ?>">
-                                                        <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type'] ?? ''); ?>">
-                                                    </fieldset>
-                                                </form>
-                                            <?php else: ?>
-                                                <div class="text-right">
-                                                    <a href="./end_of_service_print.php?emp_id=<?=$_GET['emp_id'];?>" target="_blank" class="btn btn-primary"><i class="mdi mdi-printer"></i> <?=__('Print Report');?></a>
-                                                </div>
-                                            <?php endif ?>
-                                        </div>
-                                    </div>
-                                </div>
+                                    <div style="height: 20px;"></div>
+                                    <?= $salaryCardHtml ?>
+                                </aside>
                             </div>
-                        </div>
+
+                            <!-- Hidden fields for calculation and submission -->
+                            <input type="hidden" name="request_inv_no" id="request_inv_no" value="<?= htmlspecialchars($requestInvNo); ?>">
+                            <input type="hidden" name="eos_amount" id="eos_amount_hidden" value="">
+                            <input type="hidden" name="anul_vac_salry" id="anul_vac_salry_hidden" value="">
+                            <input type="hidden" name="net_payment" id="net_payment_hidden" value="">
+                            <input type="hidden" id="total_salary" value="<?= htmlspecialchars($total_salary); ?>">
+                            <input type="hidden" id="employee_master_total_salary" value="<?= htmlspecialchars($employee_master_total_salary); ?>">
+                            <input type="hidden" id="basic_salary" value="<?= htmlspecialchars($salaryrow['basic'] ?? 0); ?>">
+                            <input type="hidden" id="housing_allowance" value="<?= htmlspecialchars($salaryrow['housing'] ?? 0); ?>">
+                            <input type="hidden" id="calculated_housing" value="<?= htmlspecialchars($calculated_housing); ?>">
+                            <input type="hidden" id="two_month_housing_benefit" value="<?= htmlspecialchars($two_month_housing); ?>">
+                            <input type="hidden" id="actual_salary_base" value="<?= htmlspecialchars($actual_salary_base); ?>">
+                            <input type="hidden" id="vacation_salary_base" value="<?= htmlspecialchars($vacation_salary_base); ?>">
+                            <input type="hidden" id="annual_vacation_entitlement" value="<?= htmlspecialchars($annual_vacation_entitlement); ?>">
+                            <input type="hidden" id="current_vacation_balance" value="<?= htmlspecialchars($current_vacation_balance); ?>">
+                            <input type="hidden" id="balance_period_end" value="<?= htmlspecialchars($balance_period_end ?? ''); ?>">
+                            <input type="hidden" id="is_two_year_contract" value="<?= htmlspecialchars($is_two_year_contract); ?>">
+                            <input type="hidden" id="emp_country" value="<?= htmlspecialchars($emprow['country'] ?? ''); ?>">
+                            <input type="hidden" id="emp_gosi_percent" value="<?= htmlspecialchars($emprow['gosi'] ?? 0); ?>">
+                            <input type="hidden" id="emp_contract_type" value="<?= htmlspecialchars($emprow['contract_type'] ?? ''); ?>">
+                        </form>
+                        <?php endif; ?>
 					</div>
 				</div>
 				<footer class="footer"><?= $site_footer ?></footer>
@@ -1211,8 +1326,7 @@
 		<script src="assets/js/waves.js"></script>
 		<script src="assets/js/jquery.slimscroll.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-		<script src="./plugins/bootstrap-datepicker/js/bootstrap-datepicker.min.js"></script>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+		<script src="./plugins/select2/js/select2.min.js"></script>
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
         <script type="text/javascript">
             /**
@@ -1335,19 +1449,19 @@
 
                 Swal.fire({
                     title: __('return_date'),
-                    html: '<input type="text" id="eos-return-date-input" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '">',
+                    html: '<form class="sr-form" onsubmit="return false;"><div class="sr-fsec" style="margin: 0;"><div class="sr-fgrid"><div class="sr-fcol c-12">' +
+                          '<label for="eos-return-date-input">' + (__('return_date') || 'Return Date') + '</label>' +
+                          '<input type="text" id="eos-return-date-input" class="form-control" value="' + new Date().toISOString().slice(0, 10) + '">' +
+                          '</div></div></div></form>',
                     showCancelButton: true,
-                    confirmButtonText: __('print_for_return'),
+                    confirmButtonText: '<i class="mdi mdi-printer"></i> ' + __('print_for_return'),
                     cancelButtonText: __('cancel'),
-                    confirmButtonColor: APP_COLORS.primary,
-                    cancelButtonColor: APP_COLORS.danger,
+                    customClass: { popup: 'sr-addline-popup sr-page' },
                     allowOutsideClick: false,
-                    willOpen: function() {
-                        $('#eos-return-date-input').datepicker({
-                            format: "yyyy-mm-dd",
-                            todayHighlight: true,
-                            autoclose: true
-                        });
+                    didOpen: function() {
+                        if (window.AppDate) {
+                            AppDate.single('#eos-return-date-input', { static: true });
+                        }
                     },
                     preConfirm: () => {
                         const selectedDate = $('#eos-return-date-input').val();
@@ -1546,7 +1660,9 @@
                     const roundedNetPayment = Math.ceil(netPayment);
                     
                     $('#net_payment_display').val(roundedNetPayment.toFixed(2));
-                    
+                    $('#net_payment_hero').text(roundedNetPayment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                        .parent().toggleClass('is-neg', roundedNetPayment < 0);
+
                     $('#net_payment_hidden').val(roundedNetPayment.toFixed(2));
                     // --- END MODIFICATION ---
                     
@@ -1634,11 +1750,11 @@
                     performApiCalculation();
                 }
 
-                $('.datepicker').datepicker({
-                    format: "yyyy-mm-dd",
-                    todayHighlight: true,
-                    autoclose: true
-                }).on('changeDate', masterCalculationTrigger);
+                if (window.AppDate && $('#end_date').length) {
+                    AppDate.single('#end_date', { onChange: masterCalculationTrigger });
+                } else {
+                    $('#end_date').on('change', masterCalculationTrigger);
+                }
 
                 $('input[name="contract_type"]').on('change', performApiCalculation);
                 $('#eos_reason').on('change', performApiCalculation);
@@ -1702,16 +1818,25 @@
                     return;
                 }
 
+                const esc = function(v) {
+                    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                };
+                const initials = function(name) {
+                    return String(name || '').trim().split(/\s+/).slice(0, 2).map(function(p) { return p.charAt(0); }).join('').toUpperCase();
+                };
+
                 // Build table HTML for subordinates with checkboxes
                 let tableHtml = `
-                    <div style="text-align: left; max-height: 350px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #dee2e6; border-radius: 4px;">
-                        <table class="table table-sm table-bordered" style="margin-bottom: 0;">
-                            <thead class="bg-light" style="position: sticky; top: 0;">
+                    <form class="sr-form" onsubmit="return false;">
+                    <div class="eos-sub-scroll">
+                        <table class="sr-table" style="margin: 0;">
+                            <thead>
                                 <tr>
-                                    <th style="width: 50px; text-align: center;">
-                                        <input type="checkbox" id="select-all-subordinates" style="cursor: pointer;" title="<?= __('select_all') ?>">
+                                    <th style="width: 44px; text-align: center;">
+                                        <input type="checkbox" id="select-all-subordinates" title="<?= __('select_all') ?>">
                                     </th>
-                                    <th><?= __('employee_id') ?></th>
                                     <th><?= __('name') ?></th>
                                     <th><?= __('department') ?></th>
                                 </tr>
@@ -1719,15 +1844,19 @@
                             <tbody>
                 `;
 
-                subordinates.forEach(function(sub, index) {
+                subordinates.forEach(function(sub) {
                     tableHtml += `
                         <tr class="subordinate-row">
                             <td style="text-align: center;">
-                                <input type="checkbox" class="subordinate-checkbox" data-emp-id="${sub.emp_id}" data-emp-name="${sub.name}" style="cursor: pointer;">
+                                <input type="checkbox" class="subordinate-checkbox" data-emp-id="${esc(sub.emp_id)}" data-emp-name="${esc(sub.name)}">
                             </td>
-                            <td><strong>${sub.emp_id}</strong></td>
-                            <td>${sub.name}</td>
-                            <td>${sub.department || '-'}</td>
+                            <td>
+                                <div class="sr-person">
+                                    <span class="sr-avatar sr-avatar-sm">${esc(initials(sub.name))}</span>
+                                    <div><div class="sr-cell-title">${esc(sub.name)}</div><div class="sr-cell-sub sr-mono">${esc(sub.emp_id)}</div></div>
+                                </div>
+                            </td>
+                            <td>${esc(sub.department || '-')}</td>
                         </tr>
                     `;
                 });
@@ -1736,19 +1865,18 @@
                             </tbody>
                         </table>
                     </div>
-                        
-                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff;">
-                            <label style="margin: 0 0 10px 0; display: block; font-weight: 600;">
-                                <i class="fa fa-users"></i> <?= __('select_new_supervisor_for_all') ?>
-                            </label>
-                            <select id="bulk-supervisor-select" class="form-control" style="width: 100%;">
-                                <option value="">-- <?= __('select_supervisor') ?> --</option>
-                            </select>
-                            <small style="color: #6c757d; margin-top: 5px; display: block;">
-                                <i class="fa fa-info-circle"></i> <?= __('selected_employees_will_assigned_this_supervisor') ?>
-                            </small>
+                    <div class="sr-fsec">
+                        <div class="sr-fsec-head"><span><i class="mdi mdi-account-switch"></i><?= __('select_new_supervisor_for_all') ?></span></div>
+                        <div class="sr-fgrid">
+                            <div class="sr-fcol c-12">
+                                <select id="bulk-supervisor-select" class="form-control" style="width: 100%;">
+                                    <option value="">-- <?= __('select_supervisor') ?> --</option>
+                                </select>
+                                <small class="sr-fhint"><i class="mdi mdi-information-outline"></i> <?= __('selected_employees_will_assigned_this_supervisor') ?></small>
+                            </div>
                         </div>
                     </div>
+                    </form>
                 `;
 
                 // Show SweetAlert modal
@@ -1757,11 +1885,10 @@
                     html: tableHtml,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: '<?= __('save_and_update') ?>',
+                    confirmButtonText: '<i class="mdi mdi-content-save"></i> <?= __('save_and_update') ?>',
                     cancelButtonText: '<?= __('cancel') ?>',
-                    cancelButtonColor: '#d33',
-                    confirmButtonColor: '#3085d6',
-                    width: '55%',
+                    customClass: { popup: 'sr-addline-popup sr-page eos-sub-popup' },
+                    width: 720,
                     allowOutsideClick: false,
                     didOpen: function(modal) {
                         // Load available employees for supervisor selection
@@ -1782,7 +1909,8 @@
                                         })),
                                         placeholder: '<?= __("start_typing_to_search") ?>',
                                         allowClear: true,
-                                        width: '100%'
+                                        width: '100%',
+                                        dropdownParent: $(Swal.getPopup())
                                     });
                                     
                                     // Prevent select2 dropdown from being hidden by SweetAlert
@@ -1878,8 +2006,8 @@
                 }).then(function(result) {
                     if (result.isConfirmed && result.value && result.value.success) {
                         // Update hidden field to mark as updated
-                        $('#subordinates_updated').val('true');
-                        
+                        $('#subordinates_updated').val('true').trigger('change');
+
                         // Show success message
                         Swal.fire({
                             title: '<?= __("success") ?>',
@@ -1891,7 +2019,8 @@
                             // Enable the Register EOS button
                             $('#show-subordinates-btn').prop('disabled', true);
                             $('#subordinates-warning-alert').fadeOut(function() {
-                                $(this).html('<div class="alert alert-success"><i class="fa fa-check"></i> <?= __("all_supervisors_reassigned") ?></div>').fadeIn();
+                                $(this).removeClass('tone-amber').addClass('tone-green')
+                                    .html('<i class="mdi mdi-check-circle"></i><div><?= __("all_supervisors_reassigned") ?></div>').fadeIn();
                             });
                         });
                     }
