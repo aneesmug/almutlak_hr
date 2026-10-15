@@ -53,10 +53,37 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-        @media (max-width: 991px) { .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles, .sr-page .sr-tiles.rj-tiles.rj-tiles-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* Status tiles - icon chip, label + hint, count; each tile carries its own tone */
+        .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(var(--rj-cols, 4), minmax(0, 1fr)); gap: 12px; }
+        @media (max-width: 1199px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 767px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 420px) { .sr-page .sr-tiles.rj-tiles { grid-template-columns: 1fr; } }
+        .rj-tile { --rj-fg: var(--tone-slate-fg); --rj-bg: var(--tone-slate-bg); --rj-bd: var(--tone-slate-bd);
+            display: flex; align-items: center; gap: 12px; padding-block: 14px; padding-inline: 18px 16px; overflow: hidden; }
+        .rj-tile.t-indigo { --rj-fg: var(--tone-indigo-fg); --rj-bg: var(--tone-indigo-bg); --rj-bd: var(--tone-indigo-bd); }
+        .rj-tile.t-red    { --rj-fg: var(--tone-red-fg);    --rj-bg: var(--tone-red-bg);    --rj-bd: var(--tone-red-bd); }
+        .rj-tile.t-amber  { --rj-fg: var(--tone-amber-fg);  --rj-bg: var(--tone-amber-bg);  --rj-bd: var(--tone-amber-bd); }
+        .rj-tile.t-green  { --rj-fg: var(--tone-green-fg);  --rj-bg: var(--tone-green-bg);  --rj-bd: var(--tone-green-bd); }
+        .rj-tile::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px;
+            border-radius: 3px; background: var(--rj-fg); opacity: 0; transition: opacity .15s; }
+        .rj-tile-icon { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+            width: 40px; height: 40px; border-radius: 11px; background: var(--rj-bg); color: var(--rj-fg); font-size: 20px; }
+        .rj-tile-body { flex: 1 1 auto; min-width: 0; }
+        .rj-tile-label { display: block; font-size: 13px; font-weight: 700; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rj-tile-hint { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rj-tile .sr-tile-value { flex: 0 0 auto; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+        .rj-tile:hover { border-color: var(--rj-bd); }
+        .rj-tile.active { background: var(--rj-bg); border-color: var(--rj-bd); box-shadow: 0 0 0 1px var(--rj-bd) inset, var(--sr-shadow); }
+        .rj-tile.active::after { display: none; }
+        .rj-tile.active::before { opacity: 1; }
+        .rj-tile.active .rj-tile-icon { background: var(--rj-fg); color: var(--sr-surface); }
+        .rj-tile.active .sr-tile-value { color: var(--rj-fg); }
+        /* Missing Rejoin with open items: count in tone + pulsing marker on the icon */
+        .rj-tile.rj-alert .sr-tile-value { color: var(--rj-fg); }
+        .rj-tile.rj-alert .rj-tile-icon::after { content: ''; position: absolute; top: -3px; inset-inline-end: -3px; width: 10px; height: 10px;
+            border-radius: 50%; background: var(--rj-fg); border: 2px solid var(--sr-surface); animation: rj-pulse 1.6s ease-out infinite; }
+        @keyframes rj-pulse { 0% { box-shadow: 0 0 0 0 var(--rj-bd); } 100% { box-shadow: 0 0 0 7px transparent; } }
+        @media (prefers-reduced-motion: reduce) { .rj-tile.rj-alert .rj-tile-icon::after { animation: none; } }
         .rj-pane { display: none; }
         .rj-pane.active { display: block; }
         .rj-reason { max-width: 280px; white-space: normal; font-size: 12.5px; color: var(--sr-text-2); }
@@ -106,29 +133,28 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                         <?php endif; ?>
                     </div>
 
-                    <div class="sr-tiles rj-tiles<?= $can_view_all_rejoin_requests ? ' rj-tiles-5' : '' ?>" id="rjTiles">
-                        <?php if ($can_view_all_rejoin_requests): ?>
-                        <button type="button" class="sr-tile" data-pane="all">
-                            <span class="sr-tile-label"><span class="sr-dot dot-all"></span><?= __('all_requests', 'All Requests') ?></span>
-                            <span class="sr-tile-value" id="all-count">&ndash;</span>
+                    <?php
+                    // [pane, tone, icon, label, hint, active] - pane id doubles as the count element prefix
+                    $rj_tiles = [];
+                    if ($can_view_all_rejoin_requests) {
+                        $rj_tiles[] = ['all', 't-indigo', 'mdi-format-list-bulleted', __('all_requests', 'All Requests'), __('all_requests_hint', 'Every employee, any status'), false];
+                    }
+                    $rj_tiles[] = ['missing', 't-red', 'mdi-clock-alert', __('missing_rejoin_requests', 'Missing Rejoin'), __('missing_rejoin_short_hint', 'Return due, no request yet'), false];
+                    $rj_tiles[] = ['pending', 't-amber', 'mdi-timer-sand', __('pending_requests', 'Pending'), __('pending_rejoin_hint', 'Waiting for approval'), true];
+                    $rj_tiles[] = ['approved', 't-green', 'mdi-check-circle-outline', __('approved_requests', 'Approved'), __('approved_rejoin_hint', 'Rejoin confirmed'), false];
+                    $rj_tiles[] = ['rejected', 't-slate', 'mdi-close-circle-outline', __('rejected_requests', 'Rejected'), __('rejected_rejoin_hint', 'Not accepted'), false];
+                    ?>
+                    <div class="sr-tiles rj-tiles" id="rjTiles" style="--rj-cols: <?= count($rj_tiles) ?>;">
+                        <?php foreach ($rj_tiles as [$pane, $tone, $icon, $label, $hint, $active]): ?>
+                        <button type="button" class="sr-tile rj-tile <?= $tone ?><?= $active ? ' active' : '' ?>" data-pane="<?= $pane ?>" title="<?= htmlspecialchars($hint, ENT_QUOTES) ?>">
+                            <span class="rj-tile-icon"><i class="mdi <?= $icon ?>"></i></span>
+                            <span class="rj-tile-body">
+                                <span class="rj-tile-label"><?= htmlspecialchars($label) ?></span>
+                                <span class="rj-tile-hint"><?= htmlspecialchars($hint) ?></span>
+                            </span>
+                            <span class="sr-tile-value" id="<?= $pane ?>-count">&ndash;</span>
                         </button>
-                        <?php endif; ?>
-                        <button type="button" class="sr-tile" data-pane="missing" title="<?= __('missing_rejoin_hint', 'Return date passed or within 7 days, and no rejoin request submitted yet') ?>">
-                            <span class="sr-tile-label"><span class="sr-dot dot-indigo"></span><?= __('missing_rejoin_requests', 'Missing Rejoin') ?></span>
-                            <span class="sr-tile-value" id="missing-count">&ndash;</span>
-                        </button>
-                        <button type="button" class="sr-tile active" data-pane="pending">
-                            <span class="sr-tile-label"><span class="sr-dot dot-amber"></span><?= __('pending_requests', 'Pending') ?></span>
-                            <span class="sr-tile-value" id="pending-count">&ndash;</span>
-                        </button>
-                        <button type="button" class="sr-tile" data-pane="approved">
-                            <span class="sr-tile-label"><span class="sr-dot dot-green"></span><?= __('approved_requests', 'Approved') ?></span>
-                            <span class="sr-tile-value" id="approved-count">&ndash;</span>
-                        </button>
-                        <button type="button" class="sr-tile" data-pane="rejected">
-                            <span class="sr-tile-label"><span class="sr-dot dot-red"></span><?= __('rejected_requests', 'Rejected') ?></span>
-                            <span class="sr-tile-value" id="rejected-count">&ndash;</span>
-                        </button>
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="sr-card">
@@ -329,7 +355,12 @@ $is_rejoin_elevated = in_array(strtolower(trim((string)($user_type ?? ''))), $re
                         const [from, to] = dateRange();
                         if (from && to) { d.date_from = from; d.date_to = to; }
                     },
-                    dataSrc: json => { $('#' + status + '-count').text(Number((json && json.recordsTotal) || 0)); return json.data || []; }
+                    dataSrc: json => {
+                        const n = Number((json && json.recordsTotal) || 0);
+                        $('#' + status + '-count').text(n);
+                        if (status === 'missing') $('#missing-count').closest('.rj-tile').toggleClass('rj-alert', n > 0);
+                        return json.data || [];
+                    }
                 },
                 columns: columns,
                 language: language

@@ -973,16 +973,24 @@
             }
 
             /* ---------- New GUI (sr-* design system) overrides ---------- */
-            /* Summary count tiles (click = filter table, click again = clear) */
+            /* Summary count tiles (click = filter table, click again = clear) - same look as the
+               rejoin / employee tiles: icon chip, label + share hint, count, share bar; one row */
             .sr-page .pg-tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+            @media (max-width: 1399px) {
+                .sr-page .pg-tiles { gap: 10px; }
+                .sr-page .pg-tile { gap: 9px; padding-inline: 14px 12px; }
+                .sr-page .pg-tile-ico { width: 34px; height: 34px; border-radius: 10px; font-size: 15px; }
+                .sr-page .pg-tile-value { font-size: 22px; }
+            }
             @media (max-width: 1199px) { .sr-page .pg-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-            @media (max-width: 575px) { .sr-page .pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            @media (max-width: 767px) { .sr-page .pg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+            @media (max-width: 420px) { .sr-page .pg-tiles { grid-template-columns: 1fr; } }
             .sr-page .pg-tile {
                 --t-bg: var(--tone-slate-bg); --t-fg: var(--tone-slate-fg); --t-bd: var(--tone-slate-bd);
-                position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px;
-                padding: 16px 16px 20px; border-radius: var(--sr-radius); cursor: pointer; user-select: none;
+                position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+                padding-block: 14px 12px; padding-inline: 18px 16px; border-radius: 12px; cursor: pointer; user-select: none;
                 background: var(--sr-surface); border: 1px solid var(--sr-border); box-shadow: var(--sr-shadow);
-                transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease, opacity .15s ease;
+                transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease, opacity .15s ease, background-color .15s ease;
             }
             .sr-page .pg-tile.tone-indigo { --t-bg: var(--tone-indigo-bg); --t-fg: var(--tone-indigo-fg); --t-bd: var(--tone-indigo-bd); }
             .sr-page .pg-tile.tone-amber { --t-bg: var(--tone-amber-bg); --t-fg: var(--tone-amber-fg); --t-bd: var(--tone-amber-bd); }
@@ -990,25 +998,26 @@
             .sr-page .pg-tile.tone-green { --t-bg: var(--tone-green-bg); --t-fg: var(--tone-green-fg); --t-bd: var(--tone-green-bd); }
             .sr-page .pg-tile.tone-red { --t-bg: var(--tone-red-bg); --t-fg: var(--tone-red-fg); --t-bd: var(--tone-red-bd); }
             .sr-page .pg-skip-note { font-size: 11.5px; line-height: 1.35; color: var(--sr-muted); white-space: normal; }
-            .sr-page .pg-tile:hover { border-color: var(--t-bd); transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
+            .sr-page .pg-tile::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px;
+                border-radius: 3px; background: var(--t-fg); opacity: 0; transition: opacity .15s ease; }
+            .sr-page .pg-tile:hover { border-color: var(--t-bd); transform: translateY(-1px); }
             .sr-page .pg-tile:focus-visible { outline: 2px solid var(--t-fg); outline-offset: 2px; }
             .sr-page .pg-tile-ico {
-                flex-shrink: 0; width: 46px; height: 46px; border-radius: 13px;
-                display: flex; align-items: center; justify-content: center;
-                background: var(--t-bg); color: var(--t-fg); font-size: 19px;
+                flex: 0 0 auto; width: 40px; height: 40px; border-radius: 11px;
+                display: inline-flex; align-items: center; justify-content: center;
+                background: var(--t-bg); color: var(--t-fg); font-size: 17px;
             }
-            .sr-page .pg-tile-body { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
-            .sr-page .pg-tile-label { font-size: 12px; font-weight: 600; color: var(--sr-muted); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .sr-page .pg-tile-value { margin-top: 4px; font-size: 26px; font-weight: 800; color: var(--sr-text); font-variant-numeric: tabular-nums; }
-            .sr-page .pg-tile-sub { margin-top: 3px; font-size: 11.5px; font-weight: 500; color: var(--sr-muted); white-space: nowrap; }
-            .sr-page .pg-tile-bar { position: absolute; inset-inline: 0; bottom: 0; height: 4px; background: var(--t-bg); }
-            .sr-page .pg-tile-bar i { display: block; height: 100%; width: 0; background: var(--t-fg); border-radius: 0 4px 4px 0; transition: width .5s ease; }
-            .sr-page .pg-tile-flag { position: absolute; top: 12px; inset-inline-end: 12px; font-size: 11px; color: var(--t-fg); opacity: 0; transition: opacity .15s ease; }
-            .sr-page .pg-tile:hover .pg-tile-flag { opacity: .45; }
-            .sr-page .pg-tile.active { background: var(--t-bg); border-color: var(--t-fg); box-shadow: 0 0 0 1px var(--t-fg) inset, 0 10px 24px rgba(15, 23, 42, .08); }
-            .sr-page .pg-tile.active .pg-tile-ico { background: var(--t-fg); color: #fff; }
-            .sr-page .pg-tile.active .pg-tile-label, .sr-page .pg-tile.active .pg-tile-value { color: var(--t-fg); }
-            .sr-page .pg-tile.active .pg-tile-flag { opacity: 1; }
+            .sr-page .pg-tile-body { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+            .sr-page .pg-tile-label { font-size: 13px; font-weight: 700; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .sr-page .pg-tile-sub { margin-top: 2px; font-size: 11.5px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .sr-page .pg-tile-value { flex: 0 0 auto; font-size: 26px; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; color: var(--sr-text); font-variant-numeric: tabular-nums; }
+            .sr-page .pg-tile-bar { flex: 0 0 100%; display: block; height: 4px; border-radius: 999px; background: var(--sr-surface-3); overflow: hidden; }
+            .sr-page .pg-tile-bar i { display: block; height: 100%; width: 0; background: var(--t-fg); border-radius: inherit; transition: width .5s ease; }
+            .sr-page .pg-tile.active { background: var(--t-bg); border-color: var(--t-bd); box-shadow: 0 0 0 1px var(--t-bd) inset, var(--sr-shadow); }
+            .sr-page .pg-tile.active::before { opacity: 1; }
+            .sr-page .pg-tile.active .pg-tile-ico { background: var(--t-fg); color: var(--sr-surface); }
+            .sr-page .pg-tile.active .pg-tile-value { color: var(--t-fg); }
+            .sr-page .pg-tile.active .pg-tile-bar { background: var(--sr-surface); }
             .sr-page .pg-tiles.has-filter .pg-tile:not(.active) { opacity: .55; }
             .sr-page .pg-tiles.has-filter .pg-tile:not(.active):hover { opacity: 1; }
             .sr-page .payroll-toolbar { background: var(--sr-surface-2); border: 1px solid var(--sr-border); border-radius: var(--sr-radius); box-shadow: none; }
@@ -1207,10 +1216,9 @@
                                                 <span class="pg-tile-ico"><i class="fa fa-solid <?= $pgIcon ?>"></i></span>
                                                 <div class="pg-tile-body">
                                                     <span class="pg-tile-label"><?= htmlspecialchars($pgLabel) ?></span>
-                                                    <span class="pg-tile-value" id="<?= $pgId ?>Count">0</span>
                                                     <span class="pg-tile-sub" id="<?= $pgId ?>Pct">&nbsp;</span>
                                                 </div>
-                                                <i class="fa fa-solid fa-filter pg-tile-flag"></i>
+                                                <span class="pg-tile-value" id="<?= $pgId ?>Count">0</span>
                                                 <span class="pg-tile-bar"><i id="<?= $pgId ?>Bar"></i></span>
                                             </div>
                                             <?php endforeach; ?>

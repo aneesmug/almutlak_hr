@@ -5,6 +5,32 @@ if (defined('SPECIAL_ACCESS_HELPER_INCLUDED')) {
 }
 define('SPECIAL_ACCESS_HELPER_INCLUDED', true);
 
+if (!function_exists('user_is_direct_supervisor')) {
+    /**
+     * True when $empId is the direct supervisor (employees.supervisor_id) of at least one
+     * active employee - directly, or while covering that supervisor through a temporary role
+     * transfer (effectiveApproverIds). Used to open rejoin_approvals.php to every direct
+     * supervisor whatever their role; the page itself only shows their own team.
+     */
+    function user_is_direct_supervisor($conDB, $empId) {
+        static $cache = [];
+        $key = trim((string)$empId);
+        if ($key === '' || !$conDB) {
+            return false;
+        }
+        if (!array_key_exists($key, $cache)) {
+            $ids = function_exists('effectiveApproverIds') ? effectiveApproverIds($conDB, $key) : [(int)$key];
+            $ids = implode(',', array_map('intval', $ids));
+            $res = mysqli_query($conDB, "SELECT 1 FROM employees WHERE status = 1 AND supervisor_id IN ($ids) LIMIT 1");
+            $cache[$key] = $res && mysqli_num_rows($res) > 0;
+            if ($res) {
+                mysqli_free_result($res);
+            }
+        }
+        return $cache[$key];
+    }
+}
+
 if (!function_exists('get_special_access_labels')) {
     function get_special_access_labels() {
         return [

@@ -182,27 +182,35 @@ $can_add_employee = in_array($user_role, $new_employee_roles) || in_array($user_
     <script src="assets/js/modernizr.min.js"></script>
 
     <style>
-        .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        /* Employee stat tiles - one row: icon chip, label + share hint, count, share bar */
+        .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(var(--et-cols, 4), minmax(0, 1fr)); gap: 12px; }
+        @media (max-width: 1199px) { .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
         @media (max-width: 767px) { .sr-page .sr-tiles.emp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        /* Employee stat tiles: tone-colored icon, count + share of total, progress bar */
-        .emp-tile { --et-fg: var(--tone-indigo-fg); --et-bg: var(--tone-indigo-bg); --et-bar: #6366f1; padding: 16px 18px 14px; }
-        .emp-tile.et-green { --et-fg: var(--tone-green-fg); --et-bg: var(--tone-green-bg); --et-bar: #22c55e; }
-        .emp-tile.et-sky   { --et-fg: var(--tone-sky-fg);   --et-bg: var(--tone-sky-bg);   --et-bar: #0ea5e9; }
-        .emp-tile.et-slate { --et-fg: var(--tone-slate-fg); --et-bg: var(--tone-slate-bg); --et-bar: #94a3b8; }
-        .emp-tile .et-top { display: flex; align-items: center; gap: 10px; }
-        .emp-tile .et-icon {
-            width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto;
-            display: inline-flex; align-items: center; justify-content: center;
-            background: var(--et-bg); color: var(--et-fg); font-size: 16px;
-        }
-        .emp-tile .et-label { font-size: 13px; font-weight: 600; color: var(--sr-muted); }
-        .emp-tile .et-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; }
-        .emp-tile .sr-tile-value { margin-top: 0; font-size: 26px; }
-        .emp-tile .et-pct { font-size: 12px; font-weight: 700; color: var(--et-fg); background: var(--et-bg); padding: 2px 8px; border-radius: 999px; }
-        .emp-tile .et-bar { display: block; height: 5px; margin-top: 12px; border-radius: 999px; background: var(--sr-surface-3); overflow: hidden; }
+        @media (max-width: 420px) { .sr-page .sr-tiles.emp-tiles { grid-template-columns: 1fr; } }
+        .emp-tile { --et-fg: var(--tone-indigo-fg); --et-bg: var(--tone-indigo-bg); --et-bd: var(--tone-indigo-bd); --et-bar: #6366f1;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 14px 12px; padding-inline: 18px 16px; overflow: hidden; }
+        .emp-tile.et-green { --et-fg: var(--tone-green-fg); --et-bg: var(--tone-green-bg); --et-bd: var(--tone-green-bd); --et-bar: #22c55e; }
+        .emp-tile.et-sky   { --et-fg: var(--tone-sky-fg);   --et-bg: var(--tone-sky-bg);   --et-bd: var(--tone-sky-bd);   --et-bar: #0ea5e9; }
+        .emp-tile.et-amber { --et-fg: var(--tone-amber-fg); --et-bg: var(--tone-amber-bg); --et-bd: var(--tone-amber-bd); --et-bar: #f59e0b; }
+        .emp-tile.et-slate { --et-fg: var(--tone-slate-fg); --et-bg: var(--tone-slate-bg); --et-bd: var(--tone-slate-bd); --et-bar: #94a3b8; }
+        .emp-tile::before { content: ''; position: absolute; inset-block: 10px; inset-inline-start: 0; width: 3px;
+            border-radius: 3px; background: var(--et-bar); opacity: 0; transition: opacity .15s; }
+        .emp-tile .et-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+            width: 40px; height: 40px; border-radius: 11px; background: var(--et-bg); color: var(--et-fg); font-size: 17px; }
+        .emp-tile .et-body { flex: 1 1 0; min-width: 0; }
+        .emp-tile .et-label { display: block; font-size: 13px; font-weight: 700; color: var(--sr-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .emp-tile .et-hint { display: block; margin-top: 2px; font-size: 11.5px; color: var(--sr-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .emp-tile .et-hint b { color: var(--et-fg); font-weight: 700; }
+        .emp-tile .sr-tile-value { flex: 0 0 auto; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
+        .emp-tile .et-bar { flex: 0 0 100%; display: block; height: 4px; border-radius: 999px; background: var(--sr-surface-3); overflow: hidden; }
         .emp-tile .et-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--et-bar); transition: width .4s; }
-        .emp-tile.active { border-color: var(--et-bar); box-shadow: 0 0 0 1px var(--et-bar) inset, var(--sr-shadow); }
+        .emp-tile:hover { border-color: var(--et-bd); }
+        .emp-tile.active { background: var(--et-bg); border-color: var(--et-bd); box-shadow: 0 0 0 1px var(--et-bd) inset, var(--sr-shadow); }
         .emp-tile.active::after { display: none; }
+        .emp-tile.active::before { opacity: 1; }
+        .emp-tile.active .et-icon { background: var(--et-fg); color: var(--sr-surface); }
+        .emp-tile.active .sr-tile-value { color: var(--et-fg); }
+        .emp-tile.active .et-bar { background: var(--sr-surface); }
         #employeesCardsContainer { transition: opacity .15s; }
         .emp-pager { margin-top: 4px; }
     </style>
@@ -256,19 +264,17 @@ $can_add_employee = in_array($user_role, $new_employee_roles) || in_array($user_
                         $emp_tiles[] = ['key' => 'inactive', 'tone' => 'slate', 'icon' => 'fa-user-times', 'label' => __('inactive', 'Inactive'), 'count' => $emp_counts['inactive']];
                     }
                     ?>
-                    <div class="sr-tiles emp-tiles" id="empTiles">
+                    <div class="sr-tiles emp-tiles" id="empTiles" style="--et-cols: <?= count($emp_tiles) ?>;">
                         <?php foreach ($emp_tiles as $t):
                             $pct = $emp_counts['all'] > 0 ? round($t['count'] / $emp_counts['all'] * 100) : 0; ?>
                         <button type="button" class="sr-tile emp-tile et-<?= $t['tone'] ?><?= $status_filter === $t['key'] ? ' active' : '' ?>" data-key="<?= $t['key'] ?>">
-                            <span class="et-top">
-                                <span class="et-icon"><i class="fa <?= $t['icon'] ?>"></i></span>
+                            <span class="et-icon"><i class="fa <?= $t['icon'] ?>"></i></span>
+                            <span class="et-body">
                                 <span class="et-label"><?= $t['label'] ?></span>
+                                <span class="et-hint"><?php if ($t['key'] === ''): ?><?= __('everyone_you_can_access', 'Everyone you can access') ?><?php else: ?><b><?= $pct ?>%</b> <?= __('of_all_employees', 'of all') ?><?php endif; ?></span>
                             </span>
-                            <span class="et-row">
-                                <span class="sr-tile-value"><?= number_format($t['count']) ?></span>
-                                <?php if ($t['key'] !== ''): ?><span class="et-pct"><?= $pct ?>%</span><?php endif; ?>
-                            </span>
-                            <span class="et-bar"><span style="width: <?= $pct ?>%"></span></span>
+                            <span class="sr-tile-value"><?= number_format($t['count']) ?></span>
+                            <span class="et-bar"><span style="width: <?= $t['key'] === '' ? 100 : $pct ?>%"></span></span>
                         </button>
                         <?php endforeach; ?>
                     </div>

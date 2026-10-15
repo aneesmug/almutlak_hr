@@ -165,6 +165,8 @@ if ($user_type != 'administrator') {
         // intentionally bypass role-based restriction
     } elseif ($current_page_name === 'all_applied_employee_transfers.php' && function_exists('employee_transfer_user_has_stake') && employee_transfer_user_has_stake($conDB, $empid ?? '')) {
         // intentionally bypass role-based restriction: requester or approver in this request's chain
+    } elseif ($current_page_name === 'rejoin_approvals.php' && user_is_direct_supervisor($conDB, $empid ?? '')) {
+        // intentionally bypass role-based restriction: direct supervisor - sees only own team
     } elseif ($has_page_special_access_bypass) {
         // intentionally bypass role-based restriction: explicit special-access grant
     } elseif (isset($page_roles[$current_page_name])) {
@@ -189,6 +191,8 @@ $can_see_business_trip_page = $page_roles['all_applied_business_trip.php'] ?? []
 $can_see_employee_transfers_page = $page_roles['all_applied_employee_transfers.php'] ?? [];
 $can_see_salary_increment_page = $page_roles['all_applied_salary_increment.php'] ?? [];
 $can_see_rejoin_approvals_page = $page_roles['rejoin_approvals.php'] ?? [];
+// Every direct supervisor gets the Rejoin Approvals link, whatever the role list says.
+$is_direct_supervisor_user = user_is_direct_supervisor($conDB, $empid ?? '');
 $can_see_loan_approvals_page = $page_roles['all_applied_loan.php'] ?? [];
 $can_see_settlements_page = $page_roles['all_settlements.php'] ?? [];
 $can_see_payroll_approvals_page = $page_roles['all_payroll_approvals.php'] ?? [];
@@ -234,7 +238,7 @@ $show_approvals_menu = !empty($is_system_admin) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_settlements_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_payroll_approvals_page)) ||
                        (!$isResignationMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_resignations_page))) ||
-                       (!$isRejoinMenuBlocked && !empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page))) ||
+                       (!$isRejoinMenuBlocked && (!empty(array_intersect([$user_role, $user_type], $can_see_rejoin_approvals_page)) || $is_direct_supervisor_user)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_employee_transfers_page)) ||
                        !empty(array_intersect([$user_role, $user_type], $can_see_content_approvals_page));
 
@@ -883,7 +887,7 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
                 <?php if (!empty($is_system_admin) || (!$isSalaryIncrementMenuBlocked && (in_array($user_role, $can_see_salary_increment_page) || in_array($user_type, $can_see_salary_increment_page)))): ?>
                     <li><a href="<?= $appliedSalaryIncrementLink ?>"><i class="fa-duotone fa-arrow-trend-up" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('salary_increment', 'Salary Increment') ?></span><?= ($salary_increment_pending_count > 0) ? "<span class='badgez badge-danger'>$salary_increment_pending_count</span>" : "" ?></a></li>
                 <?php endif; ?>
-                <?php if (!empty($is_system_admin) || (!$isRejoinMenuBlocked && (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page)))): ?>
+                <?php if (!empty($is_system_admin) || (!$isRejoinMenuBlocked && (in_array($user_role, $can_see_rejoin_approvals_page) || in_array($user_type, $can_see_rejoin_approvals_page) || $is_direct_supervisor_user))): ?>
                     <li><a href="<?= $rejoinApprovalsLink ?>"><i class="fa-duotone fa-plane-arrival" style="--fa-primary-color:#34d399;--fa-secondary-color:#34d399;--fa-secondary-opacity:.4"></i><span><?=__('rejoin_approvals', 'Rejoin Approvals') ?> <?= ($rejoin_pending_count > 0) ? "<span class='badgez badge-danger'>$rejoin_pending_count</span>" : "" ?></span></a></li>
                 <?php endif; ?>
                 <?php if (!empty($is_system_admin) || (!$isLoanMenuBlocked && (in_array($user_role, $can_see_loan_approvals_page) || in_array($user_type, $can_see_loan_approvals_page)))): ?>
