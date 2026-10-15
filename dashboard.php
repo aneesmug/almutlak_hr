@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 	// require_once __DIR__ . '/includes/db.php';
 	// Initialize the application and load translations
 	require_once __DIR__ . '/includes/session_check.php';	
@@ -1458,7 +1458,7 @@ if(isset($_POST['submit'])){
 			function buildDocExpiryListHtml(level) {
 				var rows = (docExpiryBandData && docExpiryBandData[level]) ? docExpiryBandData[level] : [];
 				if (!rows.length) {
-					return '<div class="dex-empty"><i class="mdi mdi-file-check-outline"></i><?= getDisplayName('No employees found in this range.') ?></div>';
+					return '<div class="dex-empty"><i class="mdi mdi-file-check"></i><?= getDisplayName('No employees found in this range.') ?></div>';
 				}
 
 				var docCount = 0, expiredCount = 0, types = {};
@@ -1490,7 +1490,7 @@ if(isset($_POST['submit'])){
 						+ '</div></div>'
 						+ '<div class="dex-docs">' + docsHtml + '</div>'
 						+ '<a href="' + viewUrl + '" class="dex-view" target="_blank" rel="noopener" title="<?= getDisplayName('View Employee') ?>">'
-						+ '<i class="mdi mdi-account-eye"></i><span><?= getDisplayName('View') ?></span></a>'
+						+ '<i class="mdi mdi-eye"></i><span><?= getDisplayName('View') ?></span></a>'
 						+ '</div>';
 				}).join('');
 
@@ -1511,7 +1511,7 @@ if(isset($_POST['submit'])){
 					+ '<div class="dex-chips">' + typeChips + '</div>'
 					+ '</div>'
 					+ '<div class="dex-list" id="dexList">' + cards
-					+ '<div class="dex-empty" id="dexNoMatch" style="display:none;"><i class="mdi mdi-magnify-close"></i><?= getDisplayName('No matching employees.') ?></div>'
+					+ '<div class="dex-empty" id="dexNoMatch" style="display:none;"><i class="mdi mdi-magnify-minus"></i><?= getDisplayName('No matching employees.') ?></div>'
 					+ '</div>'
 					+ '</div>';
 			}
@@ -1694,7 +1694,7 @@ if(isset($_POST['submit'])){
 				var level = $(this).data('level');
 				var tone = level === 'danger' ? 'red' : (level === 'warning' ? 'amber' : 'sky');
 				Swal.fire({
-					title: '<span class="dex-title"><span class="dex-title-icon tone-' + tone + '"><i class="mdi mdi-file-clock-outline"></i></span>' + getDocExpiryTitle(level) + '</span>',
+					title: '<span class="dex-title"><span class="dex-title-icon tone-' + tone + '"><i class="mdi mdi-file-document"></i></span>' + getDocExpiryTitle(level) + '</span>',
 					html: buildDocExpiryListHtml(level),
 					width: '1000px',
 					customClass: { popup: 'dex-popup' },

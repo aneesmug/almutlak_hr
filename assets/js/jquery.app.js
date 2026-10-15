@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Theme: Highdmin - Responsive Bootstrap 4 Admin Dashboard
  * Author: Coderthemes
  * Module/App: Main Js
@@ -69,7 +69,11 @@ loadResource('./plugins/bootstrap-timepicker/hijri_css/bootstrap-datetimepicker.
 
 //Sweet Alert v2.0
 // $("head").append($("<script type='text/javascript'></script>").attr("src", "https://cdn.jsdelivr.net/npm/sweetalert2@11"));
-loadResource('https://cdn.jsdelivr.net/npm/sweetalert2@11', 'js', { async: true, defer: true }, 'head');
+// Only when the page didn't already load SweetAlert2 itself - a second copy replaces
+// window.Swal mid-page (and doubles the download on every page).
+if (typeof window.Swal === 'undefined') {
+    loadResource('https://cdn.jsdelivr.net/npm/sweetalert2@11', 'js', { async: true, defer: true }, 'head');
+}
 // Avatar Cropie
 loadResource('./plugins/croppie/croppie.js', 'js', { async: true, defer: true }, 'head');
 loadResource('./plugins/croppie/croppie.min.js', 'js', { async: true, defer: true }, 'head');
@@ -748,8 +752,7 @@ function showCustomAlert(iconD, titleD, textD, locationD){
         text: textD,
         icon: iconD,
         allowOutsideClick:false,
-        confirmButtonClass: "btn btn-lg btn-danger",
-        buttonsStyling: false,
+        confirmButtonColor: '#dc2626',
     }).then(function(isConfirm){(isConfirm)?window.location = locationD:""});
 }$(function(){
     $('div[onload]').trigger('onload');
@@ -760,10 +763,7 @@ function showSweetAlert(title, message, type = 'success', redirectUrl = '') {
         text: message,
         icon: type,
         allowOutsideClick: false,
-        customClass: {
-            confirmButton: 'btn btn-lg btn-primary'
-        },
-        buttonsStyling: false
+        confirmButtonColor: '#6366f1'
     }).then((result) => {
         if (result.isConfirmed && redirectUrl) {
             window.location.href = redirectUrl;
@@ -3483,11 +3483,7 @@ function showUpdateRequestModal(empid, avatarLoad, mobile, email, address, passp
         inputPlaceholder: __('select_an_item_placeholder'),
         showCancelButton: true,
         confirmButtonText: __('next'),
-        customClass: {
-            confirmButton: 'btn btn-primary waves-effect waves-light',
-            cancelButton: 'btn btn-secondary waves-effect waves-light ml-2'
-        },
-        buttonsStyling: false,
+        confirmButtonColor: '#6366f1',
         inputValidator: (value) => {
             if (!value) {
                 return __('you_need_to_select_something_validation')
@@ -3665,11 +3661,8 @@ function proceedWithFieldUpdate(field, empid, avatarLoad, mobile, email, address
                                 <input type="${inputType}" id="swal-input" name="new_value" class="form-control" placeholder="${__('enter_new_field_placeholder')} ${field.toLowerCase()}" required>
                         </form>`,
                     confirmButtonText: __('submit_request'),
-                    customClass: {
-                        confirmButton: 'btn btn-success waves-effect waves-light',
-                        cancelButton: 'btn btn-danger waves-effect waves-light ml-2'
-                    },
-                    buttonsStyling: false,
+                    confirmButtonColor: '#16a34a',
+                    cancelButtonColor: '#64748b',
                     showCancelButton: true,
                     focusConfirm: false,
                     showLoaderOnConfirm: true,
@@ -6006,8 +5999,8 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         </div>
                         
                         <!-- EARNINGS SECTION -->
-                        <div style="padding: 12px; background-color: #d4edda; border: 2px solid #28a745; border-radius: 6px; margin-bottom: 20px;">
-                            <h5 style="color: #155724; margin-bottom: 15px; font-weight: bold;">
+                        <div class="srs-box tone-green">
+                            <h5 class="srs-box-title">
                                 <i class="fa fa-plus-circle"></i> ${__('earnings') || 'Earnings'}
                             </h5>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -6027,8 +6020,8 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         </div>
                         
                         <!-- DEDUCTIONS SECTION -->
-                        <div style="padding: 12px; background-color: #f8d7da; border: 2px solid #dc3545; border-radius: 6px; margin-bottom: 20px;">
-                            <h5 style="color: #721c24; margin-bottom: 15px; font-weight: bold;">
+                        <div class="srs-box tone-red">
+                            <h5 class="srs-box-title">
                                 <i class="fa fa-minus-circle"></i> ${__('deductions') || 'Deductions'}
                             </h5>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -6054,7 +6047,7 @@ if (typeof window.addVacationAdjustments === 'undefined') {
                         </div>
 
                         <!-- AUTO GOSI DEDUCTION SECTION -->
-                        <div style="padding: 12px; background-color: #d1ecf1; border: 2px solid #17a2b8; border-radius: 6px; margin-bottom: 20px;">
+                        <div class="srs-box tone-sky">
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="adj_auto_gosi_deduction" checked>
                                 <label class="custom-control-label" for="adj_auto_gosi_deduction">
@@ -7350,16 +7343,15 @@ function vacationApply_HTML(country) {
                 <div class="vacation-card-header">
                     <i class="fa fa-coins"></i> ${__('vacation_balance') || 'Vacation Balance'}
                 </div>
-                <div style="margin-bottom:8px; color:#4e73df; font-weight:600;">
-                    <span id="vacation_balance_display">0</span> ${__('days') || 'days'}
-                </div>
+                <div class="srs-stat" style="margin:0 0 10px;"><span class="srs-stat-label">${__('available_balance', 'Available')}</span><span class="srs-stat-value" style="font-size:18px;">
+                    <span id="vacation_balance_display">0</span> ${__('days') || 'days'}</span></div>
                 <div class="form-group">
                     <label for="encash_days">${__('enter_days_to_encash') || 'Enter number of days to encash'}<span class="text-danger">*</span></label>
                     <input type="text" inputmode="numeric" min="1" max="999" class="form-control" id="encash_days" name="encash_days" placeholder="${__('enter_days_to_encash_placeholder') || 'Days'}">
                 </div>
                 <div class="form-group">
                     <label>${__('encashment_salary_label') || 'Encashment Salary'}:</label>
-                    <div style="font-weight:600; color:#28a745;" id="encashment_salary_display">0</div>
+                    <div class="srs-stat-value" style="font-size:18px;color:#15803d;" id="encashment_salary_display">0</div>
                 </div>
             </div>
 
@@ -7403,11 +7395,9 @@ function vacationApply_HTML(country) {
                         <input type="text" name="end_date" placeholder="${__('select_return_date_placeholder')}" class="form-control form-control-modern" id="end_date">
                     </div>
                 </div>
-                <div id="vacation_days_display" class="d-none" style="margin-top: 15px; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; text-align: center;">
-                    <div style="color: white; font-size: 14px; font-weight: 500; margin-bottom: 5px;">
-                        <i class="fa fa-calendar-check"></i> ${__('vacation_days') || 'Vacation Days'}
-                    </div>
-                    <div style="color: white; font-size: 24px; font-weight: 700;" id="vacation_days_count">0</div>
+                <div id="vacation_days_display" class="d-none srs-stat">
+                    <span class="srs-stat-label"><i class="fa fa-calendar-check"></i> ${__('vacation_days') || 'Vacation Days'}</span>
+                    <span class="srs-stat-value" id="vacation_days_count">0</span>
                 </div>
             </div>
 
@@ -9063,32 +9053,13 @@ $(document).on('click', '.submitRejoinRequest', function(e) {
                     icon: 'warning',
                     title: dismissReason.title || __('active_rejoin_request_exists'),
                     html: `
-                        <div style="background-color: #e3f2fd; border-left: 4px solid ${APP_COLORS.primary}; padding: 15px; text-align: left; margin-top: 15px; border-radius: 4px;">
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('request_number')}:</strong> 
-                                <span style="color: ${APP_COLORS.danger_dark};">${dismissReason.active_request.request_inv_no}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('status')}:</strong> 
-                                <span style="color: ${APP_COLORS.danger_dark}; font-weight: bold;">${dismissReason.active_request.status.toUpperCase()}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('requested_rejoin_date')}:</strong> 
-                                <span>${dismissReason.active_request.requested_rejoin_date}</span>
-                            </div>
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('submitted_at')}:</strong> 
-                                <span>${dismissReason.active_request.requested_at}</span>
-                            </div>
-                            <hr style="margin: 10px 0;">
-                            <div style="margin-bottom: 10px;">
-                                <strong>${__('associated_vacation')}:</strong> 
-                                <span>${dismissReason.active_request.vacation_inv_no}</span>
-                            </div>
-                            <div>
-                                <strong>${__('vacation_type')}:</strong> 
-                                <span>${dismissReason.active_request.vac_type}</span>
-                            </div>
+                        <div class="srs-kv">
+                            <div><span>${__('request_number')}</span><strong class="srs-mono">${dismissReason.active_request.request_inv_no}</strong></div>
+                            <div><span>${__('status')}</span><strong><span class="srs-pill tone-amber">${dismissReason.active_request.status.toUpperCase()}</span></strong></div>
+                            <div><span>${__('requested_rejoin_date')}</span><strong>${dismissReason.active_request.requested_rejoin_date}</strong></div>
+                            <div><span>${__('submitted_at')}</span><strong>${dismissReason.active_request.requested_at}</strong></div>
+                            <div><span>${__('associated_vacation')}</span><strong class="srs-mono">${dismissReason.active_request.vacation_inv_no}</strong></div>
+                            <div><span>${__('vacation_type')}</span><strong>${dismissReason.active_request.vac_type}</strong></div>
                         </div>
                     `,
                     allowOutsideClick: false,
@@ -9488,33 +9459,33 @@ function openFinanceManagerApprovalModal(requestId, requestType, requestedAmount
                 </div>
                 
                 <div class="form-group">
-                    <label style="color: ${APP_COLORS.danger};">` + __('select_payer') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('select_payer') + `: <span class="srs-req">*</span></label>
                     <div style="margin: 10px 0;">
-                        <label style="display: block; margin: 8px 0;">
+                        <label class="srs-choice">
                             <input type="radio" name="payerType_${modalId}" value="self" checked> ` + __('myself') + `
                         </label>
-                        <label style="display: block; margin: 8px 0;">
+                        <label class="srs-choice">
                             <input type="radio" name="payerType_${modalId}" value="other"> ` + __('other_finance_employee') + `
                         </label>
                     </div>
                 </div>
                 
                 <div class="form-group" id="otherPayerGroup_${modalId}" style="display: none;">
-                    <label style="color: ${APP_COLORS.danger};">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('finance_department_employee') + `: <span class="srs-req">*</span></label>
                     <select id="payerSelect_${modalId}" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
                         <option value="">` + __('select_finance_employee') + `</option>
                     </select>
                 </div>
                 
                 <div class="form-group" id="approvedAmountGroup_${modalId}" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
-                    <label style="color: ${APP_COLORS.danger};">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('approved_amount_sar') + `: <span class="srs-req">*</span></label>
                     <input type="number" id="approvedAmount_${modalId}" class="form-control" step="0.01" value="${parseFloat(requestedAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(requestedAmount).toFixed(2)}</small>
-                    <div id="amountError_${modalId}" style="color: ${APP_COLORS.danger}; font-size: 12px; margin-top: 5px; display: none;">Amount must match exactly</div>
+                    <div id="amountError_${modalId}" class="srs-err" style="display: none;">Amount must match exactly</div>
                 </div>
                 
                 <div class="form-group" id="paymentProofGroup_${modalId}">
-                    <label style="color: ${APP_COLORS.danger};">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('payment_proof') + `: <span class="srs-req">*</span></label>
                     <input type="file" id="paymentProof_${modalId}" class="form-control-file" accept="image/*,application/pdf">
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>
@@ -9701,30 +9672,30 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
             if (isFinalApproval && isFinanceManager) {
                 formHtml += `
                 <div class="form-group">
-                    <label class="text-danger">` + __('select_payer') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('select_payer') + `: <span class="srs-req">*</span></label>
                     <div style="margin: 10px 0;">
-                        <label style="display: block; margin: 8px 0;">
+                        <label class="srs-choice">
                             <input type="radio" name="payerType" value="self" checked> ` + __('myself') + `
                         </label>
-                        <label style="display: block; margin: 8px 0;">
+                        <label class="srs-choice">
                             <input type="radio" name="payerType" value="other"> ` + __('other_finance_employee') + `
                         </label>
                     </div>
                 </div>
                 <div class="form-group" id="otherPayerGroup" style="display: none;">
-                    <label class="text-danger">` + __('finance_department_employee') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('finance_department_employee') + `: <span class="srs-req">*</span></label>
                     <select id="payerSelect" class="form-control form-control-lg select2-hidden-accessible" style="width: 100%;" required>
                         <option value="">` + __('select_finance_employee') + `</option>
                     </select>
                 </div>
                 <div class="form-group" id="approvedAmountGroup" style="text-align: ` + (isRtl ? 'right' : 'left') + `;">
-                    <label class="text-danger">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('approved_amount_sar') + `: <span class="srs-req">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
-                    <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
+                    <div id="amountError" class="srs-err" style="display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label class="text-danger">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('payment_proof') + `: <span class="srs-req">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
@@ -9732,13 +9703,13 @@ function approveSettlement(settlementId, settlementInvNo, empId) {
                 // Finance Officer - show payment form (at final approval or when they need to process payment)
                 formHtml += `
                 <div class="form-group" id="approvedAmountGroup">
-                    <label class="text-danger">` + __('approved_amount_sar') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('approved_amount_sar') + `: <span class="srs-req">*</span></label>
                     <input type="number" id="approvedAmount" class="form-control" step="0.01" value="${parseFloat(settlementAmount).toFixed(2)}" required>
                     <small class="text-muted">` + __('settlement_amount_sar') + ` ${parseFloat(settlementAmount).toFixed(2)}</small>
-                    <div id="amountError" style="color: red; font-size: 12px; margin-top: 5px; display: none;">Amount must match settlement amount exactly</div>
+                    <div id="amountError" class="srs-err" style="display: none;">Amount must match settlement amount exactly</div>
                 </div>
                 <div class="form-group" id="paymentProofGroup">
-                    <label class="text-danger">` + __('payment_proof') + `: <span style="color: red;">*</span></label>
+                    <label class="srs-label">` + __('payment_proof') + `: <span class="srs-req">*</span></label>
                     <input type="file" id="paymentProof" class="form-control-file" accept="image/*,application/pdf" required>
                     <small class="text-muted">` + __('attach_payment_receipt_proof') + `</small>
                 </div>`;
@@ -10096,13 +10067,13 @@ function processSettlementPayment(settlementId, settlementInvNo) {
             <div style="text-align: left;">
                 <p>` + __('select_payment_method') + `</p>
                 <div style="margin: 15px 0;">
-                    <label style="display: block; margin: 8px 0;">
+                    <label class="srs-choice">
                         <input type="radio" name="paymentMethod" value="bank_transfer" checked> ` + __('bank_transfer') + `
                     </label>
-                    <label style="display: block; margin: 8px 0;">
+                    <label class="srs-choice">
                         <input type="radio" name="paymentMethod" value="check"> ` + __('check') + `
                     </label>
-                    <label style="display: block; margin: 8px 0;">
+                    <label class="srs-choice">
                         <input type="radio" name="paymentMethod" value="cash"> ` + __('cash') + `
                     </label>
                 </div>

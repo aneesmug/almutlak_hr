@@ -20,6 +20,49 @@ if (!function_exists('ensurePayrollPaidDateColumn')) {
     }
 }
 
+if (!function_exists('getPayrollApprovalSummary')) {
+    /**
+     * Display details for an existing payroll approval request: who started it and when,
+     * chain progress, and whose turn it is now. Read-only - used by the "already in
+     * process" views so a second request for the same month is never created.
+     */
+    function getPayrollApprovalSummary(PDO $pdo, string $requestInvNo): array
+    {
+        $summary = ['requested_by' => null, 'requested_by_name' => null, 'created_at' => null,
+            'total_levels' => 0, 'approved_levels' => 0, 'current_approver_name' => null];
+
+        $stmt = $pdo->prepare("SELECT r.requested_by, r.created_at, e.name
+            FROM payroll_approval_requests r LEFT JOIN employees e ON e.emp_id = r.requested_by
+            WHERE r.request_inv_no = :inv LIMIT 1");
+        $stmt->execute([':inv' => $requestInvNo]);
+        if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $summary['requested_by'] = $row['requested_by'];
+            $summary['requested_by_name'] = $row['name'] ?: $row['requested_by'];
+            $summary['created_at'] = $row['created_at'];
+        }
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) AS total, SUM(status = 'approved') AS approved
+            FROM request_approvers WHERE request_inv_no = :inv");
+        $stmt->execute([':inv' => $requestInvNo]);
+        if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $summary['total_levels'] = (int) $row['total'];
+            $summary['approved_levels'] = (int) $row['approved'];
+        }
+
+        // First level that hasn't approved yet = whose turn it is
+        $stmt = $pdo->prepare("SELECT e.name, ra.approver_id
+            FROM request_approvers ra LEFT JOIN employees e ON e.emp_id = ra.approver_id
+            WHERE ra.request_inv_no = :inv AND ra.status NOT IN ('approved', 'rejected')
+            ORDER BY ra.approval_level ASC LIMIT 1");
+        $stmt->execute([':inv' => $requestInvNo]);
+        if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $summary['current_approver_name'] = $row['name'] ?: $row['approver_id'];
+        }
+
+        return $summary;
+    }
+}
+
 if (!function_exists('ensurePayrollApprovalTable')) {
     function ensurePayrollApprovalTable(PDO $pdo): void
     {

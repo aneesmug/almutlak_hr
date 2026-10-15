@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/evaluation_acknowledgment_handler.php';
 require_once __DIR__ . '/includes/report_permissions_helper.php';
@@ -4009,7 +4009,7 @@ if (mysqli_num_rows($query) == 1) {
                                                 ${eval.manager_acknowledgment_status === 'acknowledged' ? __('acknowledgment', 'Acknowledgment') : eval.manager_acknowledgment_status === 'objected' ? __('objection', 'Objection') : __('acknowledgment_status', 'Acknowledgment Status')}
                                             </h5>
                                             ${eval.manager_acknowledgment_status === 'pending' 
-                                                ? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock-outline"></i> <strong>${__('status', 'Status')}:</strong> ${__('pending_acknowledgment', 'Pending Acknowledgment')}</div>`
+                                                ? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock"></i> <strong>${__('status', 'Status')}:</strong> ${__('pending_acknowledgment', 'Pending Acknowledgment')}</div>`
                                                 : eval.manager_acknowledgment_status === 'acknowledged'
                                                     ? `<div class="alert alert-success" style="border-left: 4px solid #28a745;">
                                                         <p style="margin-bottom: 5px;"><i class="mdi mdi-check-circle"></i> <strong>${__('status', 'Status')}:</strong> ${__('acknowledged', 'Acknowledged')}</p>

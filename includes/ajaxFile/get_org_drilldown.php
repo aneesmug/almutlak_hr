@@ -77,7 +77,7 @@ if ($level === 'employees' && $subdept_raw !== '') {
     $segments[] = ['label' => $current_label, 'level' => null, 'data' => []];
 }
 
-$breadcrumb_html = '<span class="drilldown-crumb drilldown-crumb-root" data-level="companies"><i class="mdi mdi-home-variant-outline"></i> ' . htmlspecialchars(__('companies'), ENT_QUOTES) . '</span>';
+$breadcrumb_html = '<span class="drilldown-crumb drilldown-crumb-root" data-level="companies"><i class="mdi mdi-home"></i> ' . htmlspecialchars(__('companies'), ENT_QUOTES) . '</span>';
 $last_index = count($segments) - 1;
 foreach ($segments as $index => $segment) {
     $breadcrumb_html .= ' <i class="mdi mdi-chevron-right"></i> ';
@@ -136,7 +136,7 @@ if ($level === 'cities') {
         $tiles_html .= generate_drilldown_tile(
             $row['cnt'],
             $label ?: ('City #' . $city_id_val),
-            $is_unlisted ? 'mdi mdi-map-marker-question-outline' : 'mdi mdi-city-variant-outline',
+            $is_unlisted ? 'mdi mdi-map-marker' : 'mdi mdi-city',
             $is_unlisted ? 'dark' : $colorArr[$index % count($colorArr)],
             $percentage,
             ['next-level' => 'locations', 'company' => $company_id, 'company-name' => $company_name, 'city' => $city_id_val, 'city-name' => $label],
@@ -188,7 +188,7 @@ if ($level === 'locations') {
         $tiles_html .= generate_drilldown_tile(
             $row['cnt'],
             $label ?: ('Location #' . $location_id_val),
-            $is_unlisted ? 'mdi mdi-map-marker-question-outline' : 'mdi mdi-map-marker-outline',
+            $is_unlisted ? 'mdi mdi-map-marker' : 'mdi mdi-map-marker-outline',
             $is_unlisted ? 'dark' : $colorArr[$index % count($colorArr)],
             $percentage,
             ['next-level' => 'departments', 'company' => $company_id, 'company-name' => $company_name, 'city' => $city_id, 'city-name' => $city_name, 'location' => $location_id_val, 'location-name' => $label],
@@ -334,7 +334,7 @@ if ($level === 'subdepts') {
         $tiles_html .= generate_drilldown_tile(
             $row['cnt'],
             $label ?: ('Sub-department #' . $row['sub_dept_id']),
-            'mdi mdi-sitemap-outline',
+            'mdi mdi-sitemap',
             $colorArr[$index % count($colorArr)],
             $percentage,
             [
@@ -353,7 +353,7 @@ if ($level === 'subdepts') {
         $tiles_html .= generate_drilldown_tile(
             $unassigned_count,
             __('unassigned', 'Unassigned'),
-            'mdi mdi-account-question-outline',
+            'mdi mdi-account-alert',
             'dark',
             $percentage,
             [

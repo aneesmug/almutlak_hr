@@ -105,6 +105,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         <script src="https://cdn.tailwindcss.com"></script>
         <!-- SweetAlert2 -->
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="assets/css/sr_swal_theme.css">
+    <script src="assets/js/sr_swal_theme.js"></script>
         <!-- flatpickr Date Picker -->
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
         <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>

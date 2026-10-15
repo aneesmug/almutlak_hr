@@ -57,11 +57,25 @@ try {
         $insertRequest = $pdo->prepare("INSERT INTO payroll_approval_requests
             (request_inv_no, payroll_month, requested_by, status)
             VALUES (:request_inv_no, :payroll_month, :requested_by, 'pending_approval')");
-        $insertRequest->execute([
-            ':request_inv_no' => $requestInvNo,
-            ':payroll_month' => $monthYear,
-            ':requested_by' => (string)$requestedBy
-        ]);
+        try {
+            $insertRequest->execute([
+                ':request_inv_no' => $requestInvNo,
+                ':payroll_month' => $monthYear,
+                ':requested_by' => (string)$requestedBy
+            ]);
+        } catch (PDOException $dup) {
+            // Two clicks/tabs at once: the other request won the UNIQUE(payroll_month) race
+            if ($dup->getCode() === '23000') {
+                echo json_encode([
+                    'status' => 'exists',
+                    'message' => __('payroll_approval_already_started', 'Payroll approval is already in process for this month.'),
+                    'payroll_month' => $monthYear,
+                    'approval_status' => 'pending_approval',
+                ]);
+                exit();
+            }
+            throw $dup;
+        }
 
         $chainManager->createApprovalChain('payroll_request', $requestInvNo, (string)$requestedBy, $departmentId);
         if (function_exists('removePayrollFinanceOfficerStep')) {
@@ -110,37 +124,21 @@ try {
         exit();
     }
 
-    if (($approvalStatus['status'] ?? '') === 'approved') {
-        echo json_encode([
-            'status' => 'info',
-            'message' => __('payroll_approval_already_approved', 'Payroll approval is already completed for this month.'),
-            'request_inv_no' => $requestInvNo,
-            'payroll_month' => $monthYear,
-            'approval_status' => 'approved'
-        ]);
-        exit();
-    }
-
-    if (($approvalStatus['status'] ?? '') === 'rejected') {
-        echo json_encode([
-            'status' => 'info',
-            'message' => __('payroll_approval_rejected', 'Payroll approval request is rejected. Please update approvers or open payroll approvals.'),
-            'request_inv_no' => $requestInvNo,
-            'payroll_month' => $monthYear,
-            'approval_status' => 'rejected'
-        ]);
-        exit();
-    }
-
-    $notificationSent = notifyPayrollApprovalApprover($conDB, $pdo, $requestInvNo, $monthYear);
-
+    // A request already exists for this month - never create another one (or re-send
+    // emails); just report where it stands. status 'exists' tells the UI to show the
+    // "already in process" view instead of a success message.
+    $existing = (string)($approvalStatus['status'] ?? 'pending');
+    $messages = [
+        'approved' => __('payroll_approval_already_approved', 'Payroll approval is already completed for this month.'),
+        'rejected' => __('payroll_approval_rejected', 'Payroll approval request is rejected. Please update approvers or open payroll approvals.'),
+    ];
     echo json_encode([
-        'status' => 'info',
-        'message' => __('payroll_approval_already_started', 'Payroll approval is already started for this month.') . ($notificationSent ? ' Reminder email sent to current approver.' : ''),
+        'status' => 'exists',
+        'message' => $messages[$existing] ?? __('payroll_approval_already_started', 'Payroll approval is already in process for this month.'),
         'request_inv_no' => $requestInvNo,
         'payroll_month' => $monthYear,
-        'approval_status' => $approvalStatus['status'] ?? 'pending_approval',
-        'notification_sent' => (bool)$notificationSent
+        'approval_status' => $existing === 'pending' ? 'pending_approval' : $existing,
+        'summary' => getPayrollApprovalSummary($pdo, $requestInvNo),
     ]);
 } catch (Exception $e) {
     echo json_encode([

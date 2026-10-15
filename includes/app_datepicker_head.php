@@ -39,7 +39,18 @@ if (!function_exists('app_sr_table_scroll_tag')) {
             $rel = trim(substr($scriptDir, strlen($root)), '\\/');
             $prefix = $rel === '' ? '' : str_repeat('../', count(preg_split('~[\\\\/]+~', $rel)));
         }
-        return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>';
+        return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>'
+            . app_sr_swal_theme_tags($prefix);
+    }
+}
+
+if (!function_exists('app_sr_swal_theme_tags')) {
+    // Global SweetAlert2 theme (assets/js/sr_swal_theme.js + css) - every Swal.fire() on
+    // every page gets the redesigned modal look. Also linked directly by the login pages.
+    function app_sr_swal_theme_tags($prefix = '') {
+        $base = __DIR__ . '/..';
+        return '<link rel="stylesheet" href="' . $prefix . 'assets/css/sr_swal_theme.css?v=' . (int) @filemtime($base . '/assets/css/sr_swal_theme.css') . '">'
+            . '<script src="' . $prefix . 'assets/js/sr_swal_theme.js?v=' . (int) @filemtime($base . '/assets/js/sr_swal_theme.js') . '"></script>';
     }
 }
 

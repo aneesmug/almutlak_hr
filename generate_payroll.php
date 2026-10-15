@@ -1134,6 +1134,65 @@
             .sr-page .pg-dt-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
             .sr-page #employeeTable tbody tr { cursor: default; }
             .sr-page #employeeTable input[type=checkbox], .sr-page #selectAllEmployees { width: 16px; height: 16px; accent-color: var(--sr-accent); }
+
+            /* Payroll approval modals (Swal popup sits outside .sr-page - literal colors + app-dark overrides) */
+            .swal2-popup.pa-popup { padding: 22px 22px 18px; border-radius: 16px; }
+            .swal2-popup.pa-popup .swal2-title { padding: 0; margin: 0 0 14px; text-align: start; }
+            .swal2-popup.pa-popup .swal2-html-container { margin: 0; padding: 0; text-align: start; overflow: visible; }
+            .swal2-popup.pa-popup .swal2-actions { margin-top: 18px; }
+            .swal2-popup.pa-popup-sm { width: 380px !important; }
+            .pa-title { display: flex; align-items: center; gap: 12px; }
+            .pa-title-icon { width: 42px; height: 42px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; flex: 0 0 auto; }
+            .pa-title-text { display: block; font-size: 18px; font-weight: 700; color: #0f172a; line-height: 1.25; }
+            .pa-title-sub { display: block; font-size: 12.5px; font-weight: 500; color: #64748b; margin-top: 2px; }
+            .pa-title-icon.tone-indigo { background: #eef2ff; color: #4f46e5; }
+            .pa-title-icon.tone-green { background: #dcfce7; color: #16a34a; }
+            .pa-title-icon.tone-amber { background: #fef3c7; color: #d97706; }
+            .pa-body { font-size: 13.5px; color: #334155; }
+            .pa-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-bottom: 6px; }
+            .pa-months { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 12px; }
+            .pa-month { position: relative; display: flex; align-items: center; gap: 10px; margin: 0; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; cursor: pointer; transition: border-color .15s, background .15s; }
+            .pa-month:hover { border-color: #c7d2fe; }
+            .pa-month.is-selected { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 1px #6366f1 inset; }
+            .pa-month input { position: absolute; opacity: 0; pointer-events: none; }
+            .pa-month-icon { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: #f1f5f9; color: #6366f1; font-size: 16px; flex: 0 0 auto; }
+            .pa-month-label { flex: 1; font-weight: 600; color: #0f172a; }
+            .pa-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+            .pa-badge.tone-slate { background: #f1f5f9; color: #64748b; }
+            .pa-badge.tone-amber { background: #fffbeb; color: #b45309; }
+            .pa-badge.tone-green { background: #f0fdf4; color: #15803d; }
+            .pa-badge.tone-red { background: #fef2f2; color: #b91c1c; }
+            .pa-hint { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; color: #64748b; padding: 8px 10px; border-radius: 8px; background: #f8fafc; margin-top: 10px; }
+            .pa-msg { margin-bottom: 12px; line-height: 1.55; }
+            .pa-card { border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; padding: 4px 14px 12px; }
+            .pa-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; font-size: 13px; }
+            .pa-row:last-of-type { border-bottom: 0; }
+            .pa-row-label { color: #64748b; }
+            .pa-row-value { color: #0f172a; font-weight: 600; text-align: end; }
+            .pa-mono { font-family: "SFMono-Regular", Consolas, monospace; }
+            .pa-muted { color: #94a3b8; font-weight: 500; }
+            .pa-ok { color: #15803d; }
+            .pa-progress-head { display: flex; justify-content: space-between; font-size: 12px; color: #64748b; margin: 8px 0 5px; }
+            .pa-progress-head strong { color: #0f172a; }
+            .pa-progress { height: 7px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+            .pa-progress > span { display: block; height: 100%; border-radius: inherit; background: #f59e0b; }
+            .pa-progress.tone-green > span { background: #22c55e; }
+            .pa-progress.tone-red > span { background: #ef4444; }
+            .pa-loading { display: flex; align-items: center; gap: 14px; padding: 4px 2px; }
+            .pa-loading strong { display: block; font-size: 15px; color: #0f172a; }
+            .pa-loading span:not(.pa-spinner) { display: block; font-size: 12.5px; color: #64748b; }
+            .pa-spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid #e0e7ff; border-top-color: #6366f1; animation: paSpin .8s linear infinite; flex: 0 0 auto; }
+            @keyframes paSpin { to { transform: rotate(360deg); } }
+            html.app-dark .pa-title-text, html.app-dark .pa-month-label, html.app-dark .pa-row-value, html.app-dark .pa-loading strong, html.app-dark .pa-progress-head strong { color: #f1f5f9; }
+            html.app-dark .pa-body { color: #d8dee9; }
+            html.app-dark .pa-month { background: #1d2436; border-color: #2a3348; }
+            html.app-dark .pa-month.is-selected { background: #252b4a; border-color: #818cf8; box-shadow: 0 0 0 1px #818cf8 inset; }
+            html.app-dark .pa-month-icon, html.app-dark .pa-badge.tone-slate, html.app-dark .pa-progress { background: #252e44; }
+            html.app-dark .pa-card, html.app-dark .pa-hint { background: #161c2a; border-color: #2a3348; }
+            html.app-dark .pa-row { border-color: #2a3348; }
+            html.app-dark .pa-badge.tone-amber { background: #3a2e12; color: #fcd34d; }
+            html.app-dark .pa-badge.tone-green { background: #12301f; color: #86efac; }
+            html.app-dark .pa-badge.tone-red { background: #3a1717; color: #fca5a5; }
         </style>
         <?php if ($is_rtl ?? false): ?>
             <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
@@ -1293,7 +1352,7 @@
                                                         <label class="payroll-month-label"><?= __('actions_label') ?: 'Actions' ?></label>
                                                     </div>
                                                     <button id="payrollActionsToggle" class="btn" type="button" aria-haspopup="dialog" disabled>
-                                                        <span><i class="mdi mdi-clipboard-list-outline"></i> <?= __('more', 'More') ?></span>
+                                                        <span><i class="mdi mdi-clipboard-text"></i> <?= __('more', 'More') ?></span>
                                                     </button>
                                                     <!-- Real action buttons stay here (hidden) so all existing JS bindings/visibility/disabled logic
                                                          keep working untouched; the SweetAlert2 "More Actions" modal below just mirrors their state
@@ -5559,18 +5618,18 @@ async function showPayrollApprovalRequired(result) {
         : '';
 
     const infoHtml = `
-        <div style="text-align:left;line-height:1.6;">
-            <p>${(result.message || 'Payroll generation requires chain approval first.').replace(/\n/g, '<br>')}</p>
-            ${requestInvNo ? `<p><strong>${__('request_id') || 'Request ID'}:</strong> ${requestInvNo}</p>` : ''}
-            ${approverName ? `<p><strong>${__('pending_with') || 'Pending With'}:</strong> ${approverName}</p>` : ''}
-            <p class="mb-0">${__('open_payroll_approvals_hint') || 'Open payroll approvals page to approve or track this request.'}</p>
+        <div class="pa-body">
+            <div class="pa-msg">${escapePaHtml(result.message || 'Payroll generation requires chain approval first.').replace(/\n/g, '<br>')}</div>
+            ${paSummaryHtml('pending_approval', requestInvNo, { current_approver_name: approverName })}
+            <div class="pa-hint"><i class="mdi mdi-information-outline"></i> ${__('open_payroll_approvals_hint') || 'Open payroll approvals page to approve or track this request.'}</div>
         </div>
     `;
 
     const res = await Swal.fire({
-        icon: 'info',
-        title: __('payroll_approval_required_title') || 'Payroll Approval Required',
+        title: paTitleHtml('mdi-shield-outline', 'amber', __('payroll_approval_required_title') || 'Payroll Approval Required', ''),
         html: infoHtml,
+        customClass: { popup: 'pa-popup' },
+        width: '520px',
         showCancelButton: true,
         confirmButtonColor: '#6366f1',
         cancelButtonColor: '#6c757d',
@@ -5602,32 +5661,79 @@ async function startPayrollApproval(monthOverride = null) {
         ? monthOverride
         : (generatedMonths.some(m => m.value === $('#payrollMonth').val()) ? $('#payrollMonth').val() : generatedMonths[0].value);
 
-    const monthOptionsHtml = generatedMonths.map(month => (
-        `<option value="${month.value}" ${month.value === defaultMonth ? 'selected' : ''}>${month.label}</option>`
-    )).join('');
+    // Approval state of every generated month up front, so a month that already has a
+    // request shows its status and can't start a second one.
+    Swal.fire({
+        title: '',
+        html: `<div class="pa-loading"><span class="pa-spinner"></span><div><strong>${__('start_approval', 'Start Approval')}</strong><span>${__('checking_approval_status', 'Checking approval status...')}</span></div></div>`,
+        customClass: { popup: 'pa-popup pa-popup-sm' },
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false
+    });
+    const statusByMonth = {};
+    await Promise.all(generatedMonths.map(async (m) => {
+        try {
+            const r = await fetch(`./includes/api/get_payroll_approval_status.php?month=${encodeURIComponent(m.value)}`);
+            const d = await r.json();
+            statusByMonth[m.value] = d.status === 'success' ? d : { approval_status: 'none' };
+        } catch (e) {
+            statusByMonth[m.value] = { approval_status: 'none' };
+        }
+    }));
+
+    const monthCardsHtml = generatedMonths.map(month => {
+        const st = (statusByMonth[month.value] || {}).approval_status || 'none';
+        const meta = paStatusMeta()[st] || paStatusMeta().none;
+        return `<label class="pa-month${month.value === defaultMonth ? ' is-selected' : ''}" data-month="${escapePaHtml(month.value)}">
+                <input type="radio" name="paMonth" value="${escapePaHtml(month.value)}" ${month.value === defaultMonth ? 'checked' : ''}>
+                <span class="pa-month-icon"><i class="mdi mdi-calendar"></i></span>
+                <span class="pa-month-label">${escapePaHtml(month.label)}</span>
+                <span class="pa-badge tone-${meta.tone}"><i class="mdi ${meta.icon}"></i> ${meta.label}</span>
+            </label>`;
+    }).join('');
 
     const monthSelection = await Swal.fire({
-        title: __('start_approval', 'Start Approval'),
-        html: `
-            <div style="text-align:left;">
-                <label for="startApprovalMonthSelect" style="font-weight:600; margin-bottom:8px; display:block;">${__('select_month_label') || 'Select Month'}</label>
-                <select id="startApprovalMonthSelect" class="form-control">${monthOptionsHtml}</select>
-            </div>
-        `,
-        icon: 'question',
+        title: paTitleHtml('mdi-send', 'indigo', __('start_approval', 'Start Approval'), __('start_approval_sub', 'Send the generated payroll through the approval chain.')),
+        html: `<div class="pa-body">
+                <div class="pa-label">${__('select_month_label') || 'Select Month'}</div>
+                <div class="pa-months">${monthCardsHtml}</div>
+                <div id="paMonthDetail"></div>
+            </div>`,
+        customClass: { popup: 'pa-popup' },
+        width: '520px',
         showCancelButton: true,
-        confirmButtonColor: '#2563eb',
+        confirmButtonColor: '#6366f1',
         cancelButtonColor: '#6c757d',
-        confirmButtonText: __('start_approval', 'Start Approval'),
+        confirmButtonText: `<i class="mdi mdi-send"></i> ${__('start_approval', 'Start Approval')}`,
         cancelButtonText: __('cancel') || 'Cancel',
         allowOutsideClick: false,
+        didOpen: (popup) => {
+            const confirmBtn = Swal.getConfirmButton();
+            const detail = popup.querySelector('#paMonthDetail');
+            const sync = () => {
+                const checked = popup.querySelector('input[name="paMonth"]:checked');
+                popup.querySelectorAll('.pa-month').forEach(el => el.classList.toggle('is-selected', !!checked && el.dataset.month === checked.value));
+                const info = checked ? (statusByMonth[checked.value] || {}) : {};
+                const st = info.approval_status || 'none';
+                if (st === 'none') {
+                    detail.innerHTML = `<div class="pa-hint"><i class="mdi mdi-information-outline"></i> ${__('start_approval_hint', 'The first approver will be notified by email.')}</div>`;
+                    confirmBtn.innerHTML = `<i class="mdi mdi-send"></i> ${__('start_approval', 'Start Approval')}`;
+                } else {
+                    detail.innerHTML = paSummaryHtml(st, info.request_inv_no, info.summary);
+                    confirmBtn.innerHTML = `<i class="mdi mdi-open-in-new"></i> ${__('open_payroll_approvals') || 'Open Payroll Approvals'}`;
+                }
+            };
+            popup.querySelectorAll('input[name="paMonth"]').forEach(r => r.addEventListener('change', sync));
+            sync();
+        },
         preConfirm: () => {
-            const selectedMonth = $('#startApprovalMonthSelect').val();
-            if (!selectedMonth) {
+            const checked = document.querySelector('input[name="paMonth"]:checked');
+            if (!checked) {
                 Swal.showValidationMessage(__('please_select_month_for_report_validation') || 'Please select a month');
                 return false;
             }
-            return selectedMonth;
+            return checked.value;
         }
     });
 
@@ -5637,10 +5743,17 @@ async function startPayrollApproval(monthOverride = null) {
 
     const payrollMonth = monthSelection.value;
 
+    // Month already has a request - the button was "Open Payroll Approvals"
+    if (((statusByMonth[payrollMonth] || {}).approval_status || 'none') !== 'none') {
+        window.location.href = './all_payroll_approvals.php';
+        return;
+    }
+
     Swal.fire({
-        title: __('start_approval', 'Start Approval'),
-        html: __('please_wait_fetching_data') || 'Please wait...',
-        didOpen: () => Swal.showLoading(),
+        title: '',
+        html: `<div class="pa-loading"><span class="pa-spinner"></span><div><strong>${__('start_approval', 'Start Approval')}</strong><span>${__('starting_approval_for', 'Starting approval for')} ${escapePaHtml(formatPayrollMonthValue(payrollMonth) || payrollMonth)}...</span></div></div>`,
+        customClass: { popup: 'pa-popup pa-popup-sm' },
+        showConfirmButton: false,
         allowOutsideClick: false,
         allowEscapeKey: false
     });
@@ -5656,25 +5769,32 @@ async function startPayrollApproval(monthOverride = null) {
 
         const result = await response.json();
 
-        if (result.status === 'success' || result.status === 'info') {
-            await Swal.fire({
-                icon: result.status === 'success' ? 'success' : 'info',
-                title: __('payroll_approval_required_title') || 'Payroll Approval',
-                html: `${(result.message || '').replace(/\n/g, '<br>')}${result.request_inv_no ? `<br><br><strong>${__('request_id') || 'Request ID'}:</strong> ${result.request_inv_no}` : ''}`,
+        if (result.status === 'success' || result.status === 'exists' || result.status === 'info') {
+            const started = result.status === 'success';
+            const st = started ? 'pending_approval' : (result.approval_status || 'pending_approval');
+            const res = await Swal.fire({
+                title: started
+                    ? paTitleHtml('mdi-check-circle', 'green', __('payroll_approval_started_title', 'Approval Started'), escapePaHtml(formatPayrollMonthValue(payrollMonth) || payrollMonth))
+                    : paTitleHtml('mdi-timer-sand', 'amber', __('payroll_approval_exists_title', 'Approval Already In Process'), escapePaHtml(formatPayrollMonthValue(payrollMonth) || payrollMonth)),
+                html: `<div class="pa-body">
+                        <div class="pa-msg">${escapePaHtml(result.message || '').replace(/\n/g, '<br>')}</div>
+                        ${paSummaryHtml(st, result.request_inv_no, result.summary, started ? result.notification_sent : null)}
+                    </div>`,
+                customClass: { popup: 'pa-popup' },
+                width: '520px',
                 showCancelButton: true,
                 confirmButtonColor: '#6366f1',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: __('open_payroll_approvals') || 'Open Payroll Approvals',
+                confirmButtonText: `<i class="mdi mdi-open-in-new"></i> ${__('open_payroll_approvals') || 'Open Payroll Approvals'}`,
                 cancelButtonText: __('close') || 'Close',
                 allowOutsideClick: false
-            }).then((res) => {
-                if (res.isConfirmed) {
-                    window.location.href = './all_payroll_approvals.php';
-                }
             });
             // Reflect the now-pending approval immediately, without a page reload,
             // so the button disables and shows "Approval Under Process" right away.
             updateStartApprovalButtonLabel(payrollMonth);
+            if (res.isConfirmed) {
+                window.location.href = './all_payroll_approvals.php';
+            }
             return;
         }
 
@@ -5683,6 +5803,42 @@ async function startPayrollApproval(monthOverride = null) {
         console.error('Error starting payroll approval:', error);
         showError(__('error') || 'Error', error.message || 'Failed to start payroll approval.');
     }
+}
+
+function paStatusMeta() { return {
+    none: { label: __('not_started', 'Not started'), tone: 'slate', icon: 'mdi-circle-outline' },
+    pending_approval: { label: __('in_process', 'In process'), tone: 'amber', icon: 'mdi-timer-sand' },
+    approved: { label: __('approved', 'Approved'), tone: 'green', icon: 'mdi-check-circle' },
+    rejected: { label: __('rejected', 'Rejected'), tone: 'red', icon: 'mdi-close-circle' }
+}; }
+
+function escapePaHtml(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function paTitleHtml(icon, tone, title, sub) {
+    return `<span class="pa-title"><span class="pa-title-icon tone-${tone}"><i class="mdi ${icon}"></i></span><span><span class="pa-title-text">${title}</span>${sub ? `<span class="pa-title-sub">${sub}</span>` : ''}</span></span>`;
+}
+
+// Details card for a month that already has an approval request
+function paSummaryHtml(status, requestInvNo, summary, notificationSent = null) {
+    const meta = paStatusMeta()[status] || paStatusMeta().pending_approval;
+    const s = summary || {};
+    const total = s.total_levels || 0;
+    const done = s.approved_levels || 0;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const rows = [];
+    if (requestInvNo) rows.push([__('request_id') || 'Request ID', `<span class="pa-mono">${escapePaHtml(requestInvNo)}</span>`]);
+    rows.push([__('status', 'Status'), `<span class="pa-badge tone-${meta.tone}"><i class="mdi ${meta.icon}"></i> ${meta.label}</span>`]);
+    if (status === 'pending_approval' && s.current_approver_name) rows.push([__('pending_with') || 'Pending With', escapePaHtml(s.current_approver_name)]);
+    if (s.requested_by_name) rows.push([__('started_by', 'Started by'), escapePaHtml(s.requested_by_name) + (s.created_at ? ` <span class="pa-muted">· ${escapePaHtml(String(s.created_at).slice(0, 16))}</span>` : '')]);
+    if (notificationSent !== null) rows.push([__('notification', 'Notification'), notificationSent ? `<span class="pa-ok"><i class="mdi mdi-email-open"></i> ${__('email_sent_to_approver', 'Email sent to approver')}</span>` : `<span class="pa-muted">${__('no_email_sent', 'No email sent')}</span>`]);
+
+    return `<div class="pa-card">
+            ${rows.map(r => `<div class="pa-row"><span class="pa-row-label">${r[0]}</span><span class="pa-row-value">${r[1]}</span></div>`).join('')}
+            ${total ? `<div class="pa-progress-head"><span>${__('approval_progress', 'Approval progress')}</span><strong>${done} / ${total}</strong></div>
+                <div class="pa-progress tone-${meta.tone}"><span style="width:${pct}%"></span></div>` : ''}
+        </div>`;
 }
 
 async function regeneratePayroll() {

@@ -1523,7 +1523,7 @@ function __(key, def) {
                 <td>
                     <div class="input-group input-group-sm clockpicker" style="min-width: 92px; ${disabled ? 'opacity: 0.5; pointer-events: none;' : ''}">
                         <input type="text" class="form-control ${cls} tt-time-input" autocomplete="off" ${disabled ? 'disabled' : ''} value="${d[cls.replace('tt-', '')] || ''}">
-                        <span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+                        <span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
                     </div>
                 </td>`;
             let dayRowsHtml = '';

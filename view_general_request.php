@@ -638,7 +638,7 @@ $status_classes = [
                                         <?php foreach ($items as $it): ?>
                                             <?php
                                                 $status = $it['delivery_status'] ?? 'pending';
-                                                $statusIcon = $status === 'delivered' ? 'mdi-check-circle' : ($status === 'pending' ? 'mdi-clock-outline' : 'mdi-close-circle');
+                                                $statusIcon = $status === 'delivered' ? 'mdi-check-circle' : ($status === 'pending' ? 'mdi-clock' : 'mdi-close-circle');
                                                 $statusColor = $status === 'delivered' ? '#28a745' : ($status === 'pending' ? '#ffc107' : '#dc3545');
                                             ?>
                                             <div style="padding: 12px; background-color: #fff; border-radius: 4px; margin-bottom: 10px; border-left: 4px solid <?= $statusColor ?>;">
@@ -789,7 +789,7 @@ $status_classes = [
                             <!-- BUTTON: Show Deliver button when waiting for delivery -->
                             <div class="content-card" style="background-color: #fff3e0; border-left: 4px solid #ff9800;">
                                 <div class="card-header-custom" style="color: #ff9800;">
-                                    <i class="mdi mdi-clock-outline"></i>
+                                    <i class="mdi mdi-clock"></i>
                                     <?= __('waiting_for_delivery', 'Waiting for Delivery') ?>
                                 </div>
                                 <div class="card-body-custom">
@@ -951,7 +951,7 @@ $status_classes = [
                                 <?php if (!empty($approval_chain)): ?>
                                 <div class="content-card">
                                     <div class="card-header-custom">
-                                        <i class="mdi mdi-timeline-check"></i>
+                                        <i class="mdi mdi-check-all"></i>
                                         <?= __('approval_timeline', 'Approval Timeline') ?>
                                     </div>
                                     <div class="card-body-custom">
@@ -1756,7 +1756,7 @@ $status_classes = [
                         statusText = __('delivered');
                         statusColor = '#28a745';
                     } else if (item.delivery_status === 'pending') {
-                        statusIcon = 'mdi-clock-outline';
+                        statusIcon = 'mdi-clock';
                         statusText = __('pending');
                         statusColor = '#ffc107';
                     } else if (item.delivery_status === 'canceled') {
@@ -1812,7 +1812,7 @@ $status_classes = [
                                 </label>
                                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
                                     <input type="radio" name="modal_item_status[${item.id}]" value="pending">
-                                    <span style="color: #ffc107; font-size: 13px;"><i class="mdi mdi-clock-outline"></i> <?= __('pending') ?></span>
+                                    <span style="color: #ffc107; font-size: 13px;"><i class="mdi mdi-clock"></i> <?= __('pending') ?></span>
                                 </label>
                                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0;">
                                     <input type="radio" name="modal_item_status[${item.id}]" value="canceled">

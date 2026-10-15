@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
@@ -1485,7 +1485,7 @@ if (mysqli_num_rows($query) == 1) {
 											<?php endif; ?>
 											<?php /*if (empty($emprow['has_active_regular_loan'])) : ?>
 											    <button type="button" class="btn btn-success waves-effect waves-light applyLoan" data-emp_id="<?= $emprow['empid'] ?>">
-												    <i class="mdi mdi-cash-plus"></i> Apply for Loan<?=__('flys') ?>
+												    <i class="mdi mdi-cash"></i> Apply for Loan<?=__('flys') ?>
 											    </button>
                                             <?php endif; ?>
                                             <?php if (empty($emprow['has_active_emergency_loan'])) : ?>
@@ -1558,7 +1558,7 @@ if (mysqli_num_rows($query) == 1) {
 										<?php if ($direct_reports_count > 1): ?>
 										<li class="nav-item">
 											<a href="#directreports" data-toggle="tab" aria-expanded="false" class="nav-link" id="directReportsTabLink">
-												<i class="mdi mdi-account-group"></i> <?= __('direct_reports', 'Direct Reports') ?> <span class="badge-count"><?= $direct_reports_count ?></span>
+												<i class="mdi mdi-account-multiple"></i> <?= __('direct_reports', 'Direct Reports') ?> <span class="badge-count"><?= $direct_reports_count ?></span>
 											</a>
 										</li>
 										<?php endif; ?>
@@ -2985,7 +2985,7 @@ if (mysqli_num_rows($query) == 1) {
 													<h4 class="header-title mb-0"><?= __('memos', 'Memos') ?></h4>
 													<div class="ve-head-tools">
 														<div class="sr-search"><i class="mdi mdi-magnify"></i><input type="search" data-dt-search="#memos_tbl" placeholder="<?= __('search', 'Search') ?>" autocomplete="off"></div>
-														<a href="employee_memos.php?emp_id=<?= urlencode($emprow['emp_id']) ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-email-send-outline"></i> <?= __('send_memo', 'Send Memo') ?></a>
+														<a href="employee_memos.php?emp_id=<?= urlencode($emprow['emp_id']) ?>" class="btn btn-sm btn-primary"><i class="mdi mdi-send"></i> <?= __('send_memo', 'Send Memo') ?></a>
 													</div>
 												</div>
 												<table id="memos_tbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
@@ -3164,7 +3164,7 @@ if (mysqli_num_rows($query) == 1) {
 																		<p class="mb-0 mt-2"><?= nl2br(htmlspecialchars($eval['manager_objection_note'])) ?></p>
 																		<?php if (!empty($eval['acknowledgment_date'])): ?>
 																			<small class="text-muted">
-																				<i class="mdi mdi-clock-outline"></i> <?= __('objected_on', 'Objected on') ?>: <?= htmlspecialchars($eval['acknowledgment_date']) ?>
+																				<i class="mdi mdi-clock"></i> <?= __('objected_on', 'Objected on') ?>: <?= htmlspecialchars($eval['acknowledgment_date']) ?>
 																				<?php if (!empty($eval['acknowledged_by_name'])): ?>
 																					<?= __('by', 'by') ?> <?= getDisplayName($eval['acknowledged_by_name']) ?>
 																				<?php endif; ?>
@@ -4945,14 +4945,14 @@ if (mysqli_num_rows($query) == 1) {
 						<label>${__('check_in', 'Check In')} *</label>
 						<div class="input-group clockpicker">
 							<input type="text" id="pAttTimeIn" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeIn || ''}">
-							<span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+							<span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
 						</div>
 					</div>
 					<div class="form-group text-left" id="pAttTimeOutGroup">
 						<label>${__('check_out', 'Check Out')} *</label>
 						<div class="input-group clockpicker">
 							<input type="text" id="pAttTimeOut" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeOut || ''}">
-							<span class="input-group-addon"><i class="mdi mdi-clock-outline"></i></span>
+							<span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
 						</div>
 					</div>
 					<div class="form-group text-left">
@@ -5361,7 +5361,7 @@ if (mysqli_num_rows($query) == 1) {
 											${eval.manager_acknowledgment_status === 'acknowledged' ? '<?= __('acknowledgment') ?>' : eval.manager_acknowledgment_status === 'objected' ? '<?= __('objection') ?>' : '<?= __('acknowledgment_status') ?>'}
 										</h5>
 										${eval.manager_acknowledgment_status === 'pending' 
-											? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock-outline"></i> <strong><?= __('status') ?>:</strong> <?= __('pending_acknowledgments') ?></div>`
+											? `<div class="alert alert-warning" style="border-left: 4px solid #ffc107;"><i class="mdi mdi-clock"></i> <strong><?= __('status') ?>:</strong> <?= __('pending_acknowledgments') ?></div>`
 											: eval.manager_acknowledgment_status === 'acknowledged'
 												? `<div class="alert alert-success" style="border-left: 4px solid #28a745;">
 													<p style="margin-bottom: 5px;"><i class="mdi mdi-check-circle"></i> <strong><?= __('status') ?>:</strong> <?= __('acknowledged') ?></p>

@@ -101,7 +101,7 @@ if (!isset($_GET['id'])) {
                         <div class="col-12">
                             <div class="card-box">
                                 <h4 class="header-title mb-4">
-                                    <i class="mdi mdi-file-document-box-plus-outline mr-2"></i>
+                                    <i class="mdi mdi-file-plus mr-2"></i>
                                     <?=__('create_general_request', 'Create General Request')?>
                                 </h4>
                                 

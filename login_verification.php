@@ -175,6 +175,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             </head>
             <body>
                 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="assets/css/sr_swal_theme.css">
+    <script src="assets/js/sr_swal_theme.js"></script>
                 <script src="https://cdn.tailwindcss.com"></script>
                 <style>
                     body { 

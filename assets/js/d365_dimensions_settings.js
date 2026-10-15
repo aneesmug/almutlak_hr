@@ -83,7 +83,7 @@
                     '<td>' + structure + '</td>' +
                     '<td class="text-center">' + count + '</td>' +
                     '<td class="text-right" style="white-space:nowrap"><button type="button" class="sr-btn sr-btn-sm sr-btn-ghost js-edit-tpl" data-company="' + esc(c.code) + '"><i class="mdi mdi-pencil"></i> ' + esc(t('edit', 'Edit')) + '</button>' +
-                    '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost text-danger js-remove-co" data-company="' + esc(c.code) + '" data-count="' + count + '" title="' + esc(t('d365_remove_company_hint', 'Remove (closed company) - hidden in the app, D365 is not changed')) + '"><i class="mdi mdi-delete-outline"></i> ' + esc(t('remove', 'Remove')) + '</button></td>' +
+                    '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost text-danger js-remove-co" data-company="' + esc(c.code) + '" data-count="' + count + '" title="' + esc(t('d365_remove_company_hint', 'Remove (closed company) - hidden in the app, D365 is not changed')) + '"><i class="mdi mdi-delete"></i> ' + esc(t('remove', 'Remove')) + '</button></td>' +
                     '</tr>';
             }).join('');
 
@@ -349,8 +349,8 @@
                 esc(t('d365_missing', 'Missing')) + ': <b class="js-n">0</b></span>' +
                 (state.allEmployees ? '' : '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimAdd"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-account-plus"></i> ' +
                 esc(t('d365_add_employees', 'Add employees')) + ' <span class="sr-chip" style="margin-left:4px" title="' + esc(t('d365_not_applied', 'Without an applied template')) + '">' + unapplied + '</span></button>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="dimFill"><i class="mdi mdi-cloud-download-outline"></i> ' + esc(t('d365_fill_blanks', 'Fill blanks from D365')) + '</button>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimExcel"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-file-excel-outline"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + '</button>') +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="dimFill"><i class="mdi mdi-cloud-download"></i> ' + esc(t('d365_fill_blanks', 'Fill blanks from D365')) + '</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dimExcel"' + (tplCodes.length ? '' : ' disabled') + '><i class="mdi mdi-file-excel"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + '</button>') +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="dimSaveAll" disabled><i class="mdi mdi-content-save"></i> ' + esc(t('d365_save_changed', 'Save changed')) + ' (<span id="dimDirtyCount">0</span>)</button>' +
                 '</div><div id="dimGrid"></div>';
             var go = host.querySelector('#dimGoTemplates');
@@ -931,7 +931,7 @@
             '<input type="file" id="xlFile" accept=".xlsx,.xls,.csv" style="display:none">' +
             '</div></div>';
         Swal.fire({
-            title: '<i class="mdi mdi-file-excel-outline" style="color:#1d6f42"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + ' - ' + esc(t('d365_employee_dimensions', 'Employee Dimensions')),
+            title: '<i class="mdi mdi-file-excel" style="color:#1d6f42"></i> ' + esc(t('d365_excel_import', 'Excel Import')) + ' - ' + esc(t('d365_employee_dimensions', 'Employee Dimensions')),
             html: html,
             width: 860,
             showConfirmButton: false,
@@ -1044,9 +1044,9 @@
                 (j.can_write ? '' : ' - <span class="text-danger">' + esc(t('d365_writes_off', 'writes are OFF, creating departments is disabled')) + '</span>') + '</small></div>' +
                 '<div class="sr-toolbar mb-2" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="deptSave"><i class="mdi mdi-content-save"></i> ' + esc(t('d365_save_mapping', 'Save mapping')) + '</button>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="deptCreate"' + (j.can_write ? '' : ' disabled') + '><i class="mdi mdi-cloud-upload-outline"></i> ' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="deptCreate"' + (j.can_write ? '' : ' disabled') + '><i class="mdi mdi-cloud-upload"></i> ' +
                 esc(t('d365_create_in_d365', 'Create in D365')) + ' (<span id="deptNewCount">0</span>)</button>' +
-                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="deptAssign"><i class="mdi mdi-account-multiple-check"></i> ' + esc(t('d365_assign_employees', 'Assign to employees')) + '</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="deptAssign"><i class="mdi mdi-account-multiple"></i> ' + esc(t('d365_assign_employees', 'Assign to employees')) + '</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="deptRefresh"><i class="mdi mdi-refresh"></i> ' + esc(t('d365_refresh_d365', 'Reload D365 list')) + '</button>' +
                 '</div>' +
                 '<div class="sr-table-wrap"><table class="sr-table"><thead><tr><th>' + esc(t('app_department', 'App department')) + '</th><th class="text-center">' +

@@ -26,6 +26,8 @@
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <!-- SweetAlert2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="../../assets/css/sr_swal_theme.css">
+    <script src="../../assets/js/sr_swal_theme.js"></script>
 
     <!-- <style>
         body {

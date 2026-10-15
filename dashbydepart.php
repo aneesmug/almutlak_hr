@@ -669,7 +669,7 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                     </div>
                                     <div class="tab-pane active show dbd-pad" id="bycompany-b1">
                                         <div id="drilldownBreadcrumb" class="drilldown-breadcrumb mb-3">
-                                            <span class="drilldown-crumb drilldown-crumb-root drilldown-crumb-current" data-level="companies"><i class="mdi mdi-home-variant-outline"></i> <?= __('companies') ?></span>
+                                            <span class="drilldown-crumb drilldown-crumb-root drilldown-crumb-current" data-level="companies"><i class="mdi mdi-home"></i> <?= __('companies') ?></span>
                                         </div>
 
                                         <div class="row text-center" id="drilldownTilesContainer">

@@ -39,10 +39,12 @@ try {
     $approvalStatus = $chainManager->getApprovalStatus($requestInvNo);
     $status = $approvalStatus['status'] ?? 'not_found';
 
+    $mapped = $status === 'not_found' ? 'none' : ($status === 'pending' ? 'pending_approval' : $status);
     echo json_encode([
         'status' => 'success',
-        'approval_status' => $status === 'not_found' ? 'none' : ($status === 'pending' ? 'pending_approval' : $status),
+        'approval_status' => $mapped,
         'request_inv_no' => $requestInvNo,
+        'summary' => $mapped === 'none' ? null : getPayrollApprovalSummary($pdo, $requestInvNo),
     ]);
 } catch (Exception $e) {
     echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);

@@ -484,8 +484,8 @@ $state = $_SESSION['lpr'] ?? null;
 $rows = $state ? lpr_compare($pdo, $state['month'], $state['hr']) : [];
 $states = [
     'ready' => ['Ready to add', 'green', 'mdi-check-circle-outline'],
-    'not_hr' => ['Not in HR file', 'sky', 'mdi-file-question-outline'],
-    'diff' => ['Amount different', 'amber', 'mdi-scale-unbalanced'],
+    'not_hr' => ['Not in HR file', 'sky', 'mdi-file'],
+    'diff' => ['Amount different', 'amber', 'mdi-scale-balance'],
     'missing' => ['Not deducted in payroll', 'red', 'mdi-alert-circle-outline'],
     'blocked' => ['Cannot add', 'red', 'mdi-cancel'],
     'done' => ['Already added', 'indigo', 'mdi-check-all'],
@@ -560,7 +560,7 @@ $money = fn($v) => $v === null ? '<span class="sr-num is-muted">-</span>' : numb
                 <input type="text" name="column" class="form-control" maxlength="3" placeholder="Auto, e.g. J">
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <a href="?template=1&amp;month=<?= $h($month) ?>" id="lprTemplate" class="sr-btn sr-btn-ghost"><i class="mdi mdi-file-download-outline"></i> Download template</a>
+                <a href="?template=1&amp;month=<?= $h($month) ?>" id="lprTemplate" class="sr-btn sr-btn-ghost"><i class="mdi mdi-download"></i> Download template</a>
                 <button type="submit" name="upload" value="1" class="sr-btn sr-btn-primary"><i class="mdi mdi-upload"></i> Upload &amp; Compare</button>
             </div>
         </form>
@@ -571,7 +571,7 @@ $money = fn($v) => $v === null ? '<span class="sr-num is-muted">-</span>' : numb
 
     <?php if ($state): $info = $state['info']; ?>
     <div class="sr-notice tone-sky">
-        <i class="mdi mdi-file-excel-outline"></i>
+        <i class="mdi mdi-file-excel"></i>
         <div>
             <b><?= $h($info['file']) ?></b> - sheet "<?= $h($info['sheet']) ?>", employee column <?= $h($info['emp_col']) ?>, amount column <?= $h($info['amount_col']) ?>
             - <?= count($state['hr']) ?> employee(s), total <?= number_format(array_sum($state['hr']), 2) ?>
