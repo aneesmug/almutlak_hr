@@ -148,9 +148,11 @@ function calculateBusinessTripAllowanceBreakdown($conDB, array $trip)
  * Older trips were double-escaped on submit, so line breaks/quotes were stored as literal
  * backslash sequences (backslash-r backslash-n, backslash-quote). Return the real text.
  */
-function cleanBusinessTripText($value)
-{
-    return trim(str_replace(['\\r\\n', '\\n', '\\r', "\\'", '\\"'], ["\n", "\n", "\n", "'", '"'], (string)$value));
+if (!function_exists('cleanBusinessTripText')) {
+    function cleanBusinessTripText($value)
+    {
+        return trim(str_replace(['\\r\\n', '\\n', '\\r', "\\'", '\\"'], ["\n", "\n", "\n", "'", '"'], (string)$value));
+    }
 }
 
 /**

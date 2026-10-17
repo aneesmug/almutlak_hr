@@ -3,6 +3,14 @@ require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
 require_once __DIR__ . '/includes/business_trip_settlement_helper.php';
 
+// Fallback for servers still on an older business_trip_settlement_helper.php.
+if (!function_exists('cleanBusinessTripText')) {
+    function cleanBusinessTripText($value)
+    {
+        return trim(str_replace(['\\r\\n', '\\n', '\\r', "\\'", '\\"'], ["\n", "\n", "\n", "'", '"'], (string)$value));
+    }
+}
+
 // Restrict access: Employees cannot view this detailed report page,
 // unless explicitly granted via app_settings -> Special Access.
 if (
