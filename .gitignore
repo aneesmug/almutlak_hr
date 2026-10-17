@@ -7,6 +7,7 @@
 # Local-only FTP credentials for pulling backups down to this machine
 /tools/ftp_pull_config.ps1
 /sql/
+/.archify/
 
 # D365 F&O credentials (client secret) - local only
 /includes/D365/d365_config.ini
