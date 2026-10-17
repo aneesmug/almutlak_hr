@@ -26,6 +26,19 @@ if (!function_exists('app_bootstrap_session_gc')) {
         $applied = true;
 
         @ini_set('session.gc_maxlifetime', 86400); // 24h ceiling
+
+        // Session cookie hardening: no JS access, not sent on cross-site POSTs,
+        // HTTPS-only when served over HTTPS, and reject unknown session IDs.
+        if (session_status() === PHP_SESSION_NONE) {
+            $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+                || (($_SERVER['SERVER_PORT'] ?? '') == 443)
+                || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+            @ini_set('session.cookie_httponly', '1');
+            @ini_set('session.cookie_samesite', 'Lax');
+            @ini_set('session.cookie_secure', $isHttps ? '1' : '0');
+            @ini_set('session.use_strict_mode', '1');
+            @ini_set('session.use_only_cookies', '1');
+        }
     }
 }
 

@@ -28,6 +28,8 @@ if (isset($_COOKIE[$sessionCookieName]) && !preg_match('/^[A-Za-z0-9,\-]{1,128}$
 }
 require_once __DIR__ . '/includes/session_bootstrap.php';
 session_start();
+require_once __DIR__ . '/includes/login_security.php';
+$csrfToken = login_sec_csrf_token(); // checked by login.php and the login AJAX endpoints
 // Security headers
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
@@ -55,8 +57,14 @@ if (!isset($_SESSION['auth_user']) && isset($_COOKIE['remember_me'])) {
         if ($user && hash_equals($user['remember_token'], $hashed_token)) {
             session_regenerate_id(true);
             $_SESSION['auth_user'] = [ 'user_id' => $user['id_iqama'], 'fullname' => $user['fullname'], 'email' => $user['email'], 'user_type' => $user['user_type'], 'dept' => $user['dept'] ];
+            // Rotate the token on every use so a stolen cookie stops working once the real user returns
+            $token = bin2hex(random_bytes(32));
+            $rotate_stmt = mysqli_prepare($conDB, "UPDATE `admin_login` SET `remember_token` = ? WHERE `id_iqama` = ?");
+            $rotated_hash = hash('sha256', $token);
+            mysqli_stmt_bind_param($rotate_stmt, "ss", $rotated_hash, $user['id_iqama']);
+            mysqli_stmt_execute($rotate_stmt);
             $cookie_value = $id_iqama . ':' . $token;
-            $expiry = time() + (30 * 24 * 60 * 60);
+            $expiry = strtotime($user['remember_token_expiry']) ?: (time() + (30 * 24 * 60 * 60));
             setcookie('remember_me', $cookie_value, $expiry, '/', '', isset($_SERVER['HTTPS']), true);
             header("Location: ./dashboard.php");
             exit();
@@ -337,6 +345,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     <h2 class="text-3xl font-bold text-white mb-2">Login to Your Account</h2>
                     <p class="text-gray-400 mb-8">Enter your credentials to access the portal.</p>
                     <form id="login-form" action="./login.php" method="post" class="space-y-6">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
                         <div class="form-field">
                             <label for="id_iqama" class="field-label block text-sm font-medium mb-1">رقم الهوية (ID / Iqama)</label>
                             <div class="field-wrap">
@@ -357,7 +366,21 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                         <div id="new-password-container" class="space-y-4 form-field">
                             <div class="bg-blue-500/10 border-l-4 border-blue-400 text-blue-300 p-4 rounded-md" role="alert">
                                 <p class="font-bold">Welcome!</p>
-                                <p>Please set a new password to activate your account.</p>
+                                <p>Verify your identity with the Date of Birth and Mobile Number registered with HR, then set a password to activate your account.</p>
+                            </div>
+                            <div>
+                                <label for="reg_dob" class="field-label block text-sm font-medium mb-1">Date of Birth</label>
+                                <div class="field-wrap">
+                                    <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>
+                                    <input class="field-input" type="text" name="reg_dob" id="reg_dob" placeholder="Select your date of birth" autocomplete="off">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="reg_mobile" class="field-label block text-sm font-medium mb-1">Registered Mobile Number</label>
+                                <div class="field-wrap">
+                                    <svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+                                    <input class="field-input saudi-mobile-number" type="tel" inputmode="numeric" name="reg_mobile" id="reg_mobile" placeholder="05XXXXXXXX" maxlength="14">
+                                </div>
                             </div>
                             <div>
                                 <label for="new_password" class="field-label block text-sm font-medium mb-1">Set New Password</label>
@@ -479,6 +502,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
         </script>
         <script>
         $(document).ready(function() {
+            // Every login AJAX call carries the session's CSRF token
+            $.ajaxSetup({ headers: { 'X-CSRF-Token': <?= json_encode($csrfToken) ?> } });
             const iqamaInput = $('#id_iqama');
 
             // Restore ID/Iqama from localStorage if form value is empty
@@ -496,6 +521,9 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             const passwordInput = $('#password');
             const newPasswordInput = $('#new_password');
             const confirmPasswordInput = $('#confirm_password');
+            const regDobInput = $('#reg_dob');
+            const regMobileInput = $('#reg_mobile');
+            flatpickr('#reg_dob', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', maxDate: 'today' });
 
             const spinnerIcon = `<svg class="animate-spin h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
             const originalButtonContent = submitBtn.html();
@@ -511,6 +539,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 passwordInput.prop('required', false);
                 newPasswordInput.prop('required', false);
                 confirmPasswordInput.prop('required', false);
+                regDobInput.prop('required', false);
+                regMobileInput.prop('required', false);
                 submitBtn.prop('disabled', false).removeClass('bg-gray-400 cursor-not-allowed');
             }
 
@@ -561,9 +591,11 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                             newPasswordContainer.slideDown();
                             newPasswordInput.prop('required', true);
                             confirmPasswordInput.prop('required', true);
-                            newPasswordInput.focus();
+                            regDobInput.prop('required', true);
+                            regMobileInput.prop('required', true);
+                            regMobileInput.focus();
                             applyLoginError([newPasswordInput, confirmPasswordInput]);
-                        } else if (response.status === 'not_found') {
+                        } else if (response.status === 'not_found' || response.message) {
                             feedbackContainer.addClass('bg-red-500/10 border border-red-500/30 text-red-400').text(response.message).slideDown();
                         }
                     },
@@ -605,6 +637,21 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     e.preventDefault();
                     feedbackContainer.addClass('bg-red-500/10 border border-red-500/30 text-red-400').text('ID/Iqama must be exactly 10 digits.').slideDown();
                     return;
+                }
+                if (newPasswordContainer.is(':visible')) {
+                    let regError = '';
+                    if (!regDobInput.val() || !regMobileInput.val()) {
+                        regError = 'Please enter your Date of Birth and Mobile Number.';
+                    } else if (newPasswordInput.val().length < 8) {
+                        regError = 'Password must be at least 8 characters long.';
+                    } else if (newPasswordInput.val() !== confirmPasswordInput.val()) {
+                        regError = 'Passwords do not match.';
+                    }
+                    if (regError) {
+                        e.preventDefault();
+                        feedbackContainer.removeClass('bg-green-500/10 border-green-500/30 text-green-400').addClass('bg-red-500/10 border border-red-500/30 text-red-400').text(regError).slideDown();
+                        return;
+                    }
                 }
                 // If validation passes, show loading state
                 submitBtn.prop('disabled', true).addClass('bg-gray-400 cursor-not-allowed').html(spinnerIcon + '<span>Logging In...</span>');
@@ -696,8 +743,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     preConfirm: () => {
                         const newPassword = document.getElementById('swal-new-password').value;
                         const confirmPassword = document.getElementById('swal-confirm-password').value;
-                        if (newPassword.length < 5) {
-                            Swal.showValidationMessage('Password must be at least 5 characters long.');
+                        if (newPassword.length < 8) {
+                            Swal.showValidationMessage('Password must be at least 8 characters long.');
                             return false;
                         }
                         if (newPassword !== confirmPassword) {

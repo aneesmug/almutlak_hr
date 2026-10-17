@@ -1,5 +1,16 @@
 <?php
 /********************************************************************************
+ * MODIFICATION SUMMARY (v017-login.php - Oct 17, 2026) - SECURITY HARDENING
+ * - REGISTRATION NOW VERIFIES IDENTITY: knowing an ID/Iqama is no longer enough to
+ *   claim an account. Normal employees (who usually have no email) must also enter
+ *   the Date of Birth and Mobile Number on file before the account is created.
+ * - CSRF: the login form carries a per-session token that is checked here.
+ * - BRUTE-FORCE PROTECTION: failed attempts are recorded and the ID/IP is locked
+ *   after repeated failures (includes/login_security.php).
+ * - OTP: generated with random_int(); OTP emails limited to one per minute.
+ * - Minimum password length raised to 8 characters.
+ * - Session cookie hardening via includes/session_bootstrap.php.
+ ********************************************************************************
  * MODIFICATION SUMMARY (v016-login.php - Nov 5, 2025)
  * - DEPARTMENT-BASED ROLE SYSTEM: Updated to work with new user_type values
  * - PASSWORD vs OTP LOGIN:
@@ -16,8 +27,10 @@
  * - Language is determined and saved to session BEFORE OTP redirect
  * - Email templates are fully dynamic and translatable with company logo
  ********************************************************************************/
+require_once __DIR__ . '/includes/session_bootstrap.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
+require_once __DIR__ . '/includes/login_security.php';
 require_once __DIR__ . '/includes/vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -28,47 +41,78 @@ if (session_status() == PHP_SESSION_NONE) { session_start(); }
 
 $resp = ['status' => 'error', 'message' => '', 'redirect_url' => './index.php'];
 
+$noEmailMessage =
+    "Authentication System Notice: No registered email address found for this account.<br><br>" .
+    "To maintain account security, we are unable to issue a One-Time Password (OTP) at this time.<br>" .
+    "Please contact our Support Team for assistance:<br>" .
+    "• Email: it@almutlak.com<br>" .
+    "• Phone: 01-2644-4426 Ext: 310<br><br>" .
+    "Our team will verify your identity and help restore account access.";
+
 try {
     $id_iqama = $_POST['id_iqama'] ?? '';
     if (empty($id_iqama)) { throw new Exception('ID or Iqama number is required.'); }
     $id_iqama = mysqli_real_escape_string($conDB, filter_var($id_iqama, FILTER_SANITIZE_NUMBER_INT));
 
-    // === FLOW 1: NEW USER REGISTRATION ===
+    if (!login_sec_csrf_valid()) {
+        throw new Exception(login_sec_csrf_message());
+    }
+    if (login_sec_is_locked($conDB, $id_iqama)) {
+        throw new Exception(login_sec_locked_message());
+    }
+
+    // === FLOW 1: NEW USER REGISTRATION (normal employees; identity verified by DOB + registered mobile) ===
     if (!empty($_POST['new_password'])) {
         $new_password = $_POST['new_password'];
-        $confirm_password = $_POST['confirm_password'];
+        $confirm_password = $_POST['confirm_password'] ?? '';
+        $reg_dob = trim((string) ($_POST['reg_dob'] ?? ''));
+        $reg_mobile = login_sec_normalize_mobile($_POST['reg_mobile'] ?? '');
 
+        if ($reg_dob === '' || $reg_mobile === '') { throw new Exception('Date of Birth and Mobile Number are required.'); }
         if ($new_password !== $confirm_password) { throw new Exception('Passwords do not match.'); }
-        if (strlen($new_password) < 5) { throw new Exception('Password must be at least 5 characters long.'); }
+        $passwordError = login_sec_password_error($new_password);
+        if ($passwordError) { throw new Exception($passwordError); }
 
-        $emp_check_query = "SELECT * FROM `employees` WHERE `iqama` = ? LIMIT 1";
+        $emp_check_query = "SELECT * FROM `employees` WHERE BINARY TRIM(`iqama`) = BINARY TRIM(?) AND DATE(`dob`) = ? AND BINARY TRIM(`mobile`) = BINARY TRIM(?) LIMIT 1";
         $emp_stmt = mysqli_prepare($conDB, $emp_check_query);
-        mysqli_stmt_bind_param($emp_stmt, "s", $id_iqama);
+        mysqli_stmt_bind_param($emp_stmt, "sss", $id_iqama, $reg_dob, $reg_mobile);
         mysqli_stmt_execute($emp_stmt);
         $employee_data = mysqli_fetch_assoc(mysqli_stmt_get_result($emp_stmt));
 
-        if (!$employee_data) { throw new Exception('Invalid registration attempt. Employee not found.'); }
-        
+        if (!$employee_data) {
+            login_sec_record($conDB, $id_iqama, 'register', false);
+            throw new Exception('The details provided do not match our records. Please check your Date of Birth and Mobile Number.');
+        }
+
+        // An existing login account must never be overwritten through registration
+        $exists_stmt = mysqli_prepare($conDB, "SELECT `id` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1");
+        mysqli_stmt_bind_param($exists_stmt, "s", $id_iqama);
+        mysqli_stmt_execute($exists_stmt);
+        if (mysqli_fetch_assoc(mysqli_stmt_get_result($exists_stmt))) {
+            login_sec_record($conDB, $id_iqama, 'register', false);
+            throw new Exception('This ID is already registered. Please log in or use "Forgot Password".');
+        }
+
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-        
+
         $emp_id = $employee_data['emp_id'] ?? null;
         $fullname = $employee_data['name'] ?? 'N/A';
         $email = $employee_data['email'] ?? null;
         $dept = $employee_data['dept'] ?? null;
-        
+
         $insert_query = "INSERT INTO `admin_login` (emp_id, id_iqama, fullname, user_type, dept, email, password, status, created_at, updated_at) VALUES (?, ?, ?, 'employee', ?, ?, ?, 1, NOW(), NOW())";
         $insert_stmt = mysqli_prepare($conDB, $insert_query);
         mysqli_stmt_bind_param($insert_stmt, "ssssss", $emp_id, $id_iqama, $fullname, $dept, $email, $hashed_password);
-        
+
         if (!mysqli_stmt_execute($insert_stmt)) { throw new Exception('Database error: Could not create user account.'); }
-        
+        login_sec_record($conDB, $id_iqama, 'register', true);
+
         session_regenerate_id(true);
         $_SESSION['auth_user'] = [
             'user_id' => $id_iqama, 'fullname' => $fullname, 'email' => $email, 'user_type' => 'employee', 'dept' => $dept
         ];
         $resp['status'] = 'success';
         $resp['redirect_url'] = './dashboard.php';
-
 
     } else {
         // === FLOW 2: EXISTING USER LOGIN ===
@@ -78,7 +122,10 @@ try {
         mysqli_stmt_execute($stmt);
         $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
 
-        if (!$user) { throw new Exception('This ID is not registered. Please contact support.'); }
+        if (!$user) {
+            login_sec_record($conDB, $id_iqama, 'login', false);
+            throw new Exception('This ID is not registered. Please contact support.');
+        }
         if ($user['status'] != 1) { throw new Exception('Your account is inactive. Please contact support.'); }
         if (!empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
@@ -94,105 +141,37 @@ try {
             }
 
             // Load the appropriate translations.
-            load_language($user_lang); 
+            load_language($user_lang);
             $_SESSION['lang'] = $user_lang;
             // ---> END: LANGUAGE LOADING <---
 
             // Non-Employee OTP Login
-            // if (empty($user['email'])) { throw new Exception("Our system could not send a One-Time Password (OTP) as there is no email address on file for this account.<br /> To authenticate and regain access, you must contact our support department."); }
             if (empty($user['email'])) {
-                $supportEmail = "it@almutlak.com";
-                $supportPhone = "01-2644-4426 Ext: 310";
-                throw new Exception(
-                    "Authentication System Notice: No registered email address found for this account.<br><br>" .
-                    "To maintain account security, we are unable to issue a One-Time Password (OTP) at this time.<br>" .
-                    "Please contact our Support Team for assistance:<br>" .
-                    "• Email: {$supportEmail}<br>" .
-                    "• Phone: {$supportPhone}<br><br>" .
-                    "Our team will verify your identity and help restore account access."
-                );
+                throw new Exception($noEmailMessage);
             }
 
+            // Limit OTP emails to one per minute per account
+            if (login_sec_otp_recently_sent($user['otp_expiration'] ?? null)) {
+                throw new Exception('A verification code was just sent. Please wait a minute before requesting another.');
+            }
 
-            $otp = sprintf("%'.06d", mt_rand(0, 999999));
+            $otp = login_sec_generate_otp();
             $otp_hash = password_hash($otp, PASSWORD_DEFAULT);
-            $otp_expiry = date('Y-m-d H:i:s', time() + 120);
+            $otp_expiry = date('Y-m-d H:i:s', time() + LOGIN_SEC_OTP_TTL);
 
             $update_sql = "UPDATE `admin_login` SET `otp`=?, `otp_expiration`=? WHERE `id_iqama`=?";
             $update_stmt = mysqli_prepare($conDB, $update_sql);
             mysqli_stmt_bind_param($update_stmt, "sss", $otp_hash, $otp_expiry, $user['id_iqama']);
             mysqli_stmt_execute($update_stmt);
 
-            $mail = new PHPMailer(true);
-            $mail->isSMTP();
-            $mail->Host = get_setting($conDB, 'smtp_host');
-            $mail->SMTPAuth = true;
-            $mail->Username = get_setting($conDB, 'smtp_user');
-            $mail->Password = get_setting($conDB, 'smtp_pass'); //'u&)HM(,Ld9XLVX,c';
-            $encryption_setting = get_setting($conDB, 'smtp_encryption');
-            switch (strtolower($encryption_setting)) {
-                case 'tls':
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    break;
-                case 'ssl':
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-                    break;
-            }
-            $mail->Port = get_setting($conDB, 'smtp_port');
-            $mail->CharSet = 'UTF-8';
-            $mail->setFrom(get_setting($conDB, 'smtp_user'), get_setting($conDB, 'application_name'));
-            $mail->addAddress($user['email'], $user['fullname']);
-            $mail->isHTML(true);
-            $mail->Subject = __("email_otp_subject"); // Use translation
-            
-            if (file_exists(__DIR__ . '/includes/PHPMailerMaster/otp_email_template_dark.html')) {
-                $emailBody = file_get_contents(__DIR__ . '/includes/PHPMailerMaster/otp_email_template_dark.html');
+            login_send_otp_mail($conDB, $user['email'], $user['fullname'], $otp);
 
-                // Define variables
-                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
-                $domainName = $_SERVER['HTTP_HOST'];
-                $logoUrl = 'https://hr.almutlaksystem.com/assets/logo/logo_color_sm.png'; // Use white logo for dark theme
-                // $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
-                
-                // Build per-digit boxes so the code is easy to read/select in any mail client (Outlook's Word engine ignores <input>)
-                $otpDigitCells = '';
-                $otpDigits = str_split((string)$otp);
-                foreach ($otpDigits as $i => $digit) {
-                    if ($i > 0) {
-                        $otpDigitCells .= '<td style="width:10px;font-size:0;line-height:0;">&nbsp;</td>';
-                    }
-                    $otpDigitCells .= '<td style="background-color:#2a2a2a;border:1px solid #444444;border-radius:6px;width:40px;height:52px;text-align:center;vertical-align:middle;font-family:\'Inter\',Arial,sans-serif;font-size:30px;font-weight:700;color:#ffffff;">' . htmlspecialchars($digit) . '</td>';
-                }
+            $_SESSION['otp_verification'] = ['user_id' => $user['id_iqama'], 'expires' => time() + LOGIN_SEC_OTP_TTL];
 
-                // Replace placeholders with variables
-                $replacements = [
-                    '{{LOGO_URL}}' => $logoUrl,
-                    '{{USER_FULLNAME}}' => htmlspecialchars($user['fullname']),
-                    '{{OTP_CODE}}' => $otp,
-                    '{{OTP_DIGIT_CELLS}}' => $otpDigitCells,
-                    '{{EMAIL_HEADING}}' => __('email_heading'),
-                    '{{EMAIL_GREETING}}' => __('email_greeting'),
-                    '{{EMAIL_VERIFICATION_CODE_LABEL}}' => __('email_verification_code_label'),
-                    // '{{VERIFICATION_CODE}}' => __('verification_code'),
-                    '{{EMAIL_EXPIRATION_NOTICE}}' => __('email_expiration_notice'),
-                    '{{EMAIL_SECURITY_NOTICE}}' => __('email_security_notice'),
-                ];
-                $emailBody = str_replace(array_keys($replacements), array_values($replacements), $emailBody);
-                // Add schema.org microdata for Outlook's "Copy Code" feature
-                $schemaMarkup = '<div style="display:none; max-height:0; overflow:hidden;"><div itemscope itemtype="http://schema.org/EmailMessage"><div itemprop="potentialAction" itemscope itemtype="http://schema.org/ViewAction"><div itemprop="result" itemscope itemtype="http://schema.org/OneTimeCode"><meta itemprop="code" content="' . $otp . '"/></div></div></div></div>';
-                $mail->Body = $emailBody . $schemaMarkup;
-            } else {
-                $mail->Body = "Your one-time password (OTP) is: <strong>$otp</strong>";
-            }
-            
-            $mail->send();
-
-            $_SESSION['otp_verification'] = ['user_id' => $user['id_iqama'], 'expires' => time() + 120];
-            
             if (isset($_POST['remember_me'])) {
                 $_SESSION['otp_verification']['remember_me'] = true;
             }
-            
+
             session_write_close(); // Force session save before redirecting.
 
             $resp['status'] = 'success';
@@ -201,7 +180,11 @@ try {
         } else { // Assumes 'employee' user type
             $password_input = $_POST['password'] ?? '';
             if (empty($password_input)) { throw new Exception('Password is required.'); }
-            if (!password_verify($password_input, $user['password'])) { throw new Exception('Invalid password provided.'); }
+            if (!password_verify($password_input, $user['password'])) {
+                login_sec_record($conDB, $id_iqama, 'login', false);
+                throw new Exception('Invalid password provided.');
+            }
+            login_sec_record($conDB, $id_iqama, 'login', true);
 
             session_regenerate_id(true);
             $_SESSION['auth_user'] = [
@@ -209,11 +192,21 @@ try {
             ];
             $resp['status'] = 'success';
             $resp['redirect_url'] = './dashboard.php';
+
+            // Temporary password issued by HR: the employee must choose a new one before anything else
+            if (!empty($user['must_change_password'])) {
+                $_SESSION['must_change_password'] = true;
+                $resp['redirect_url'] = './change_password.php';
+            }
         }
     }
 } catch (Exception $e) {
     $resp['message'] = $e->getMessage();
     $_SESSION['error_message'] = $e->getMessage();
+} catch (\Throwable $e) {
+    error_log('[LOGIN] ' . $e->getMessage());
+    $resp['message'] = 'Unable to process your request right now. Please try again.';
+    $_SESSION['error_message'] = $resp['message'];
 }
 
 // Final response
@@ -222,4 +215,3 @@ if (!empty($resp['redirect_url'])) {
 } else {
     header("Location: ./index.php"); // Fallback
 }
-exit();

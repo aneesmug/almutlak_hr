@@ -247,6 +247,19 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 		&& user_has_special_access($conDB, $logged_in_empid ?? ($empid ?? ''), 'd365_sync_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
 		$ma['manage'][] = "<div class=\"menu-item text-teal d365MenuAction\" role=\"button\"><i class=\"fa fa-sync-alt\"></i><span>" . __('sync_to_d365', 'Sync to D365') . "</span></div>";
 	}
+	// Reset Login Password (view_employee.php only) - normal employees with a password login;
+	// system admins + 'reset_employee_password' special access. resetEmployeePassword() lives in view_employee.php.
+	if ($current_page_name === 'view_employee.php' && !empty($emprow['iqama'])
+		&& user_has_special_access($conDB, $logged_in_empid ?? ($empid ?? ''), 'reset_employee_password', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
+		$pwStmt = mysqli_prepare($conDB, "SELECT `user_type` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1");
+		$pwIqama = (string)$emprow['iqama'];
+		mysqli_stmt_bind_param($pwStmt, "s", $pwIqama);
+		mysqli_stmt_execute($pwStmt);
+		$pwAccount = mysqli_fetch_assoc(mysqli_stmt_get_result($pwStmt));
+		if ($pwAccount && $pwAccount['user_type'] === 'employee') {
+			$ma['manage'][] = "<div class=\"menu-item text-danger\" onclick=\"Swal.close(); setTimeout(function(){ resetEmployeePassword(" . htmlspecialchars(json_encode($pwIqama), ENT_QUOTES) . ", " . htmlspecialchars(json_encode((string)($emprow['name'] ?? '')), ENT_QUOTES) . "); }, 100);\" role=\"button\"><i class=\"fa fa-key\"></i><span>" . __('reset_login_password', 'Reset Login Password') . "</span></div>";
+		}
+	}
 	// Print Profile (openPrintProfileOptions() lives in view_employee.php)
 	if (basename($_SERVER['PHP_SELF']) === 'view_employee.php') {
 		$ma['manage'][] = "<div class=\"menu-item text-primary\" onclick=\"Swal.close(); setTimeout(openPrintProfileOptions, 100);\" role=\"button\"><i class=\"fa fa-print\"></i><span>" . __('print_profile', 'Print Profile') . "</span></div>";

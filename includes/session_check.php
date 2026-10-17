@@ -72,6 +72,20 @@ if (!isset($_SESSION['auth_user']) || !is_array($_SESSION['auth_user'])) {
     exit();
 }
 
+// --- 1b. Temporary password from an HR reset: block every page until a new password is set ---
+if (!empty($_SESSION['must_change_password'])
+    && !in_array(basename($_SERVER['PHP_SELF']), ['change_password.php', 'logout.php', 'signout.php'], true)) {
+    $isAjaxRequest = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+    if ($isAjaxRequest) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'error', 'message' => 'Please set a new password first.']);
+    } else {
+        header("Location: ./change_password.php");
+    }
+    exit();
+}
+
 // --- 2. Initialize Database Connection (needed for timeout logging) ---
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/init.php';

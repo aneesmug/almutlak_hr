@@ -1,7 +1,13 @@
 <?php
 // This script now checks both the login and employee tables.
 
+require_once __DIR__ . '/session_bootstrap.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/login_security.php';
+
+if (session_status() == PHP_SESSION_NONE) { session_start(); }
+$csrf_ok = login_sec_csrf_valid();
+session_write_close(); // read-only from here; don't block parallel requests
 
 // Set the response content type to JSON
 header('Content-Type: application/json');
@@ -10,6 +16,9 @@ header('Content-Type: application/json');
 $response = ['status' => 'error', 'user_type' => null, 'message' => ''];
 
 try {
+    if (!$csrf_ok) {
+        throw new Exception(login_sec_csrf_message());
+    }
     if (empty($_POST['id_iqama'])) {
         throw new Exception('ID/Iqama not provided.');
     }
@@ -18,6 +27,11 @@ try {
 
     if (strlen($id_iqama) < 10) {
         throw new Exception('Invalid ID/Iqama format.');
+    }
+
+    // Slow down scanning of ID numbers from one IP
+    if (login_sec_ip_rate_limited($conDB, 'lookup', 300)) {
+        throw new Exception(login_sec_locked_message());
     }
 
     // --- Step 1: Check if user already exists in admin_login ---

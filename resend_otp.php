@@ -1,13 +1,21 @@
 <?php
+/********************************************************************************
+ * MODIFICATION SUMMARY (Oct 17, 2026) - SECURITY HARDENING
+ * - REMOVED hardcoded SMTP credentials; mail now uses the SMTP settings from
+ *   app_settings through login_send_otp_mail() (includes/login_security.php).
+ * - OTP generated with random_int(); resends limited to one per minute.
+ * - CSRF: requests must carry the session token in the X-CSRF-Token header.
+ ********************************************************************************/
 // Set response header to JSON
 header('Content-Type: application/json');
 
 // Include dependencies
+require_once __DIR__ . '/includes/session_bootstrap.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
+require_once __DIR__ . '/includes/login_security.php';
 require_once __DIR__ . '/includes/vendor/autoload.php';
 
-use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
@@ -20,11 +28,18 @@ try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         throw new Exception('Invalid request method.');
     }
+    if (!login_sec_csrf_valid()) {
+        throw new Exception(login_sec_csrf_message());
+    }
     if (!isset($_SESSION['otp_verification'], $_SESSION['otp_verification']['user_id'])) {
         throw new Exception('Authentication session not found. Please log in again.');
     }
 
     $user_id = $_SESSION['otp_verification']['user_id'];
+
+    if (login_sec_otp_recently_sent($_SESSION['otp_verification']['expires'] ?? 0)) {
+        throw new Exception('Please wait a minute before requesting another code.');
+    }
 
     // 2. Fetch User's Email from Database
     $query = "SELECT a.`fullname`, a.`email`, e.`name` AS employee_name FROM `admin_login` a LEFT JOIN `employees` e ON a.emp_id = e.emp_id WHERE a.`id_iqama`=? LIMIT 1";
@@ -41,10 +56,10 @@ try {
     }
 
     // 3. Generate and Store New OTP
-    $otp = sprintf("%'.06d", mt_rand(0, 999999));
+    $otp = login_sec_generate_otp();
     $otp_hash = password_hash($otp, PASSWORD_DEFAULT);
-    $otp_expiry = date('Y-m-d H:i:s', time() + 120); // New 2-minute expiration
 
+    $otp_expiry = date('Y-m-d H:i:s', time() + LOGIN_SEC_OTP_TTL);
     $update_sql = "UPDATE `admin_login` SET `otp`=?, `otp_expiration`=? WHERE `id_iqama`=?";
     $update_stmt = mysqli_prepare($conDB, $update_sql);
     mysqli_stmt_bind_param($update_stmt, "sss", $otp_hash, $otp_expiry, $user_id);
@@ -53,75 +68,23 @@ try {
     }
 
     // 4. Send the New OTP via Email
-    $mail = new PHPMailer(true);
-    $mail->isSMTP();
-    $mail->Host = 'smtp.office365.com';
-    $mail->SMTPAuth = true;
-    $mail->Username = 'noreply@almutlak.com';
-    $mail->Password = 'HO@66887';
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port = 587;
-    $mail->CharSet = 'UTF-8';
-    $mail->setFrom("noreply@almutlak.com", "Al Mutlak System");
-    $mail->addAddress($user['email'], $user['fullname']);
-    $mail->isHTML(true);
-    $mail->Subject = __("email_otp_subject");
-
-    if (file_exists(__DIR__ . '/includes/PHPMailerMaster/otp_email_template_dark.html')) {
-        $emailBody = file_get_contents(__DIR__ . '/includes/PHPMailerMaster/otp_email_template_dark.html');
-
-        // Define variables
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
-        $domainName = $_SERVER['HTTP_HOST'];
-        $logoUrl = $protocol . $domainName . '/assets/images/logo.png'; // Use white logo for dark theme
-        
-        // Build per-digit boxes so the code is easy to read/select in any mail client (Outlook's Word engine ignores <input>)
-        $otpDigitCells = '';
-        $otpDigits = str_split((string)$otp);
-        foreach ($otpDigits as $i => $digit) {
-            if ($i > 0) {
-                $otpDigitCells .= '<td style="width:10px;font-size:0;line-height:0;">&nbsp;</td>';
-            }
-            $otpDigitCells .= '<td style="background-color:#2a2a2a;border:1px solid #444444;border-radius:6px;width:40px;height:52px;text-align:center;vertical-align:middle;font-family:\'Inter\',Arial,sans-serif;font-size:30px;font-weight:700;color:#ffffff;">' . htmlspecialchars($digit) . '</td>';
-        }
-
-        // Replace placeholders with variables
-        $replacements = [
-            '{{LOGO_URL}}' => $logoUrl,
-            '{{USER_FULLNAME}}' => htmlspecialchars($user['fullname']),
-            '{{OTP_CODE}}' => $otp,
-            '{{OTP_DIGIT_CELLS}}' => $otpDigitCells,
-            '{{EMAIL_HEADING}}' => __('email_heading'),
-            '{{EMAIL_GREETING}}' => __('email_greeting'),
-            '{{EMAIL_VERIFICATION_CODE_LABEL}}' => __('email_verification_code_label'),
-            // '{{VERIFICATION_CODE}}' => __('verification_code'),
-            '{{EMAIL_EXPIRATION_NOTICE}}' => __('email_expiration_notice'),
-            '{{EMAIL_SECURITY_NOTICE}}' => __('email_security_notice'),
-        ];
-        $emailBody = str_replace(array_keys($replacements), array_values($replacements), $emailBody);
-        // Add schema.org microdata for Outlook's "Copy Code" feature
-        $schemaMarkup = '<div style="display:none; max-height:0; overflow:hidden;"><div itemscope itemtype="http://schema.org/EmailMessage"><div itemprop="potentialAction" itemscope itemtype="http://schema.org/ViewAction"><div itemprop="result" itemscope itemtype="http://schema.org/OneTimeCode"><meta itemprop="code" content="' . $otp . '"/></div></div></div></div>';
-        $mail->Body = $emailBody . $schemaMarkup;
-    } else {
-        $mail->Body = "Your one-time password (OTP) is: <strong>$otp</strong>";
-    }
-    
-    $mail->send();
+    login_send_otp_mail($conDB, $user['email'], $user['fullname'], $otp);
 
     // 5. Update the session expiration time
-    $_SESSION['otp_verification']['expires'] = time() + 120;
-    
+    $_SESSION['otp_verification']['expires'] = time() + LOGIN_SEC_OTP_TTL;
+
     $resp['status'] = 'success';
     $resp['message'] = __('a_new_otp_has_been_sent_to_your_email');
 
 } catch (Exception $e) {
-    // Catch any exception and set it as the error message
     $resp['message'] = $e->getMessage();
-    // Log detailed mailer errors for debugging, but don't show them to the user
-    if ($e instanceof \PHPMailer\PHPMailer\Exception) {
+    if (stripos($e->getMessage(), 'SMTP') !== false || stripos($e->getMessage(), 'mail') !== false) {
         error_log("Mailer Error on Resend: " . $e->getMessage());
         $resp['message'] = 'Failed to send email. Please try again later.';
     }
+} catch (\Throwable $e) {
+    error_log("Resend OTP error: " . $e->getMessage());
+    $resp['message'] = 'Failed to send a new code. Please try again later.';
 }
 
 // Return the final JSON response

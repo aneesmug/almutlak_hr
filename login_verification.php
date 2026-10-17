@@ -46,6 +46,7 @@ if (!function_exists('mask_email_for_display')) {
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php';
+require_once __DIR__ . '/includes/login_security.php';
 
 $current_lang = 'en'; // Default language
 
@@ -110,8 +111,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
     $user_id = $_SESSION['otp_verification']['user_id'];
     $submitted_otp = $_POST['full_otp'];
 
-    if (strlen($submitted_otp) !== 6) {
+    if (!login_sec_csrf_valid()) {
+        $error_message = login_sec_csrf_message();
+    } elseif (strlen($submitted_otp) !== 6) {
         $error_message = __('otp_error_invalid_format');
+    } elseif (login_sec_is_locked($conDB, $user_id)) {
+        unset($_SESSION['otp_verification']);
+        $_SESSION['error_message'] = login_sec_locked_message();
+        header("Location: ./index.php");
+        exit();
     } else {
         $query = "SELECT a.*, e.name AS employee_name FROM `admin_login` a LEFT JOIN `employees` e ON a.emp_id = e.emp_id WHERE a.`id_iqama`=? LIMIT 1";
         $stmt = mysqli_prepare($conDB, $query);
@@ -122,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
         if ($user && !empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
         if ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp'])) {
+            login_sec_record($conDB, $user_id, 'otp', true);
             session_regenerate_id(true);
             $safe_fullname = htmlspecialchars($user['fullname'] ?? '', ENT_QUOTES, 'UTF-8');
             $_SESSION['auth_user'] = [
@@ -251,6 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             <?php
             exit();
         } else {
+            login_sec_record($conDB, $user_id, 'otp', false);
             $_SESSION['otp_verification']['attempts'] = ($_SESSION['otp_verification']['attempts'] ?? 0) + 1;
             if ($_SESSION['otp_verification']['attempts'] >= 3) {
                 unset($_SESSION['otp_verification']);
@@ -453,6 +463,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
                         <?php endfor; ?>
                     </div>
                     <input type="hidden" id="fullOtp" name="full_otp">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(login_sec_csrf_token(), ENT_QUOTES) ?>">
                 </form>
 
                 <p id="statusText" class="status-text<?= !empty($error_message) ? ' is-error' : '' ?> text-sm text-gray-500 mb-6">
@@ -615,6 +626,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
             $.ajax({
                 url: './resend_otp.php',
                 type: 'POST',
+                headers: { 'X-CSRF-Token': <?= json_encode(login_sec_csrf_token()) ?> },
                 dataType: 'json',
                 success: function(response) {
                     if (response.status === 'success') {

@@ -3349,6 +3349,54 @@ if (mysqli_num_rows($query) == 1) {
 			const PRINT_PROFILE_OPTIONS = <?= json_encode($printProfileOptions, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 			const PRINT_PROFILE_STORE = 'employeeProfilePrintHidden';
 
+			// More Actions > Reset Login Password (button built in includes/emp_top_info.php).
+			// Issues a one-time temporary password; the employee must change it at the next login.
+			function resetEmployeePassword(iqama, name) {
+				Swal.fire({
+					icon: 'warning',
+					title: <?= json_encode(__('reset_login_password', 'Reset Login Password')) ?>,
+					html: 'Reset the login password for <b>' + $('<div>').text(name).html() + '</b>?<br><br>'
+						+ 'A temporary password will be shown once. The employee must change it at the next login, '
+						+ 'and any "remember me" sign-ins will be ended.',
+					showCancelButton: true,
+					confirmButtonText: 'Reset Password',
+					confirmButtonColor: '#d33',
+					showLoaderOnConfirm: true,
+					allowOutsideClick: () => !Swal.isLoading(),
+					preConfirm: () => {
+						return $.ajax({
+							url: 'includes/ajaxFile/ajaxEmployeePasswordReset.php',
+							type: 'POST',
+							dataType: 'json',
+							data: { iqama: iqama }
+						}).then(res => {
+							if (!res || !res.ok) {
+								Swal.showValidationMessage((res && res.message) || 'Reset failed.');
+								return false;
+							}
+							return res;
+						}, xhr => {
+							Swal.showValidationMessage((xhr.responseJSON && xhr.responseJSON.message) || 'Reset failed.');
+							return false;
+						});
+					}
+				}).then(result => {
+					if (!result.isConfirmed || !result.value) return;
+					const temp = result.value.temp_password;
+					Swal.fire({
+						icon: 'success',
+						title: 'Temporary Password',
+						html: 'Give this password to <b>' + $('<div>').text(name).html() + '</b>. It is shown only once.'
+							+ '<div style="margin:16px auto 6px;padding:12px;border-radius:8px;background:#111827;color:#fff;font:700 22px/1.2 monospace;letter-spacing:2px;user-select:all;">'
+							+ $('<div>').text(temp).html() + '</div>',
+						confirmButtonText: 'Copy & Close',
+						allowOutsideClick: false
+					}).then(() => {
+						if (navigator.clipboard) { navigator.clipboard.writeText(temp).catch(() => {}); }
+					});
+				});
+			}
+
 			function openPrintProfileOptions() {
 				const empId = <?= json_encode((string)$emprow['empid']) ?>;
 				let hidden = null;
