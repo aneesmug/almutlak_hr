@@ -129,7 +129,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['full_otp'])) {
 
         if ($user && !empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
 
-        if ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp'])) {
+        if ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp']) && !empty($_SESSION['otp_verification']['gauth_enroll'])) {
+            // Google Authenticator not set up yet: the email code proved who this is, now
+            // google_authenticator.php shows the QR code. Signing in happens only there.
+            require_once __DIR__ . '/includes/GoogleAuth/google_auth.php';
+            login_sec_record($conDB, $user_id, 'otp', true);
+            $clear = mysqli_prepare($conDB, "UPDATE `admin_login` SET `otp`=NULL, `otp_expiration`=NULL WHERE `id_iqama`=?");
+            mysqli_stmt_bind_param($clear, "s", $user_id);
+            mysqli_stmt_execute($clear);
+            session_regenerate_id(true);
+            $_SESSION['gauth_flow'] = [
+                'mode' => 'enroll',
+                'id_iqama' => (string) $user_id,
+                'remember_me' => !empty($_SESSION['otp_verification']['remember_me']),
+                'expires' => time() + GAUTH_FLOW_TTL,
+                'attempts' => 0,
+                'secret' => gauth_new_secret(),
+            ];
+            unset($_SESSION['otp_verification']);
+            header("Location: ./google_authenticator.php");
+            exit();
+        } elseif ($user && !empty($user['otp']) && password_verify($submitted_otp, $user['otp'])) {
             login_sec_record($conDB, $user_id, 'otp', true);
             session_regenerate_id(true);
             $safe_fullname = htmlspecialchars($user['fullname'] ?? '', ENT_QUOTES, 'UTF-8');

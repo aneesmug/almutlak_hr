@@ -69,6 +69,8 @@ function __(key, def) {
         const ATTENDANCE_ON = (window.APP_SETTINGS_PERMISSIONS || {}).attendanceEnabled !== false;
         // Microsoft Sign-in switch (Integrations tab): off hides the Microsoft Sign In config tab (settings kept)
         const MSAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).msauthEnabled === true;
+        // Google Authenticator switch (Integrations tab): off hides the Google Authenticator tab (settings kept)
+        const GAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).gauthEnabled === true;
         const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
         // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
         const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
@@ -139,6 +141,7 @@ function __(key, def) {
             announcement_config: { icon: 'mdi-send', sub: __('settings_announcement_config_sub', 'Separate SMTP account used only to send announcements.') },
             D365_Config: { icon: 'mdi-cloud', sub: __('settings_d365_sub', 'Microsoft Dynamics 365 connection, templates and dimension mapping.') },
             Microsoft_Sign_In: { icon: 'mdi-microsoft', sub: __('settings_msauth_sub', 'Microsoft Entra ID sign-in (password + MFA) for staff who use email OTP.') },
+            Google_Authenticator: { icon: 'mdi-google', sub: __('settings_gauth_sub', 'Google Authenticator 6-digit codes (2FA) for staff who use email OTP.') },
             approval: { icon: 'mdi-sitemap' },
             asset_clearance: { icon: 'mdi-package-variant-closed' },
             attendance_config: { icon: 'mdi-fingerprint', sub: __('settings_attendance_sub', 'Timetables and biometric device monitoring.') },
@@ -1087,6 +1090,263 @@ function __(key, def) {
                     } finally {
                         btn.disabled = false;
                     }
+                });
+                return;
+            }
+
+            // Google Authenticator: the plain app_settings fields (issuer, mode - outer Save button), a
+            // how-it-works card and the users card (same layout as Microsoft Sign In > Users).
+            if (normalizedGroupName === 'Google_Authenticator' && hostEl === settingsContainer) {
+                const gaMeta = groupMeta('Google_Authenticator');
+                settingsContainer.innerHTML = `
+                    <div class="tab-pane active" id="group-Google_Authenticator" role="tabpanel">
+                        ${srTabHead(gaMeta.icon, __('Google_Authenticator', 'Google Authenticator'), gaMeta.sub || '')}
+                        <div class="sr-card as-section">
+                            <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-qrcode"></i> ${__('gauth_how_title', 'How it works')}</div></div>
+                            <ol class="as-int-hint" style="padding-inline-start:18px;margin-bottom:0;">
+                                <li>${__('gauth_how_add', 'Add the users below (or force it for all OTP users).')}</li>
+                                <li>${__('gauth_how_enroll', 'At their next sign-in they confirm the email code once, then scan a QR code with Google Authenticator (any authenticator app works).')}</li>
+                                <li>${__('gauth_how_use', 'From then on they type the 6-digit code from the app. Users who also have Microsoft Sign-in choose which one on the login page.')}</li>
+                                <li>${__('gauth_how_reset', 'Lost or new phone: press "Reset" - the user confirms the email code again and scans a new QR code.')}</li>
+                            </ol>
+                        </div>
+                        <div id="gauth-fields"></div>
+                        <div class="sr-card as-section ms2fa">
+                            <div class="sr-card-head">
+                                <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('gauth_users_title', 'Who uses Google Authenticator (2FA)')}</div>
+                            </div>
+                            <div class="ms2fa-scope" role="radiogroup">
+                                <label class="ms2fa-opt">
+                                    <input type="radio" name="gauth-scope" id="gauth-scope-selected" value="selected">
+                                    <span class="ms2fa-opt-ico"><i class="mdi mdi-account-check"></i></span>
+                                    <span class="ms2fa-opt-text"><b>${__('msauth_scope_selected', 'Selected users only')}</b><small>${__('gauth_scope_selected_hint', 'Only the users you add below use Google Authenticator. Everyone else keeps their current sign-in.')}</small></span>
+                                </label>
+                                <label class="ms2fa-opt">
+                                    <input type="radio" name="gauth-scope" id="gauth-scope-all" value="all">
+                                    <span class="ms2fa-opt-ico tone-red"><i class="mdi mdi-security"></i></span>
+                                    <span class="ms2fa-opt-text"><b>${__('msauth_scope_all', 'Force all OTP users')}</b><small>${__('gauth_scope_all_hint', 'Every staff user who would get an email OTP must use Google Authenticator.')}</small></span>
+                                </label>
+                            </div>
+                            <div class="ms2fa-bar">
+                                <span class="ms2fa-count" id="gauth-selected-count"></span>
+                                <div class="ms2fa-tools">
+                                    <input type="search" class="form-control form-control-sm ms2fa-search" id="gauth-list-search" placeholder="${__('msauth_search_list', 'Search name, ID, email...')}">
+                                    <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="gauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
+                                </div>
+                            </div>
+                            <p class="ms2fa-note" id="gauth-all-note" style="display:none"><i class="mdi mdi-information-outline"></i> ${__('gauth_all_note', 'All active OTP users use Google Authenticator. Users who already linked a phone are listed below so you can reset them. Normal employees still use ID + password.')}</p>
+                            <div class="sr-table-wrap ms2fa-table">
+                                <table class="sr-table table mb-0">
+                                    <thead><tr>
+                                        <th>${__('user', 'User')}</th>
+                                        <th>${__('id_iqama', 'ID / Iqama')}</th>
+                                        <th>${__('email', 'Email')}</th>
+                                        <th>${__('status', 'Status')}</th>
+                                        <th>${__('gauth_last_login', 'Last authenticator sign-in')}</th>
+                                        <th class="text-right">${__('actions', 'Actions')}</th>
+                                    </tr></thead>
+                                    <tbody id="gauth-users-body"><tr><td colspan="6" class="ms2fa-empty-cell">${__('loading', 'Loading')}...</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="sr-pager ms2fa-pager" id="gauth-pager"></div>
+                        </div>
+                    </div>
+                `;
+                renderSettingsGroup('Google_Authenticator', document.getElementById('gauth-fields'));
+                const gaBody = document.getElementById('gauth-users-body');
+                const GA_PAGE_SIZE = 10;
+                let gaUsers = [];
+                let gaScope = 'selected';
+                let gaPage = 1;
+                const postGa = (params) => fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(params)
+                }).then(r => r.json());
+                const gaToast = () => Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: __('saved', 'Saved'), showConfirmButton: false, timer: 1500 });
+                const gaInitials = name => String(name || '').trim().split(/\s+/).filter(Boolean)
+                    .filter((w, i, all) => i === 0 || i === all.length - 1).map(w => w.charAt(0)).join('').toUpperCase() || '?';
+                const renderGaUsers = () => {
+                    const isAll = gaScope === 'all';
+                    document.getElementById('gauth-scope-' + gaScope).checked = true;
+                    document.querySelectorAll('input[name="gauth-scope"]').forEach(r => r.closest('.ms2fa-opt').classList.toggle('is-active', r.checked));
+                    document.getElementById('gauth-add-user').style.display = isAll ? 'none' : '';
+                    document.getElementById('gauth-all-note').style.display = isAll ? '' : 'none';
+                    // Selected: the users added. Forced for all: everyone who has already linked a phone.
+                    const allRows = gaUsers.filter(u => isAll ? u.enrolled : u.assigned);
+                    const q = (document.getElementById('gauth-list-search').value || '').trim().toLowerCase();
+                    const rows = q ? allRows.filter(u => [u.name, u.id_iqama, u.emp_id, u.email, u.user_type].join(' ').toLowerCase().includes(q)) : allRows;
+                    document.getElementById('gauth-selected-count').innerHTML = `<b>${allRows.length}</b> ${isAll ? __('gauth_users_linked', 'user(s) with a linked phone') : __('msauth_users_added', 'user(s) added')}`;
+
+                    const pages = Math.max(1, Math.ceil(rows.length / GA_PAGE_SIZE));
+                    gaPage = Math.min(Math.max(1, gaPage), pages);
+                    const pageRows = rows.slice((gaPage - 1) * GA_PAGE_SIZE, gaPage * GA_PAGE_SIZE);
+                    const emptyText = q ? __('no_records_found', 'No records found')
+                        : (isAll ? __('gauth_no_linked', 'Nobody has linked a phone yet.') : __('gauth_no_users', 'No users added yet.'));
+
+                    gaBody.innerHTML = pageRows.length ? pageRows.map(u => `
+                        <tr>
+                            <td>
+                                <div class="ms2fa-user">
+                                    <span class="ms2fa-avatar">${escapeHtml(gaInitials(u.name))}</span>
+                                    <span class="ms2fa-who"><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.emp_id ? u.emp_id + ' · ' : '')}${escapeHtml(u.user_type)}</small></span>
+                                </div>
+                            </td>
+                            <td class="sr-mono">${escapeHtml(u.id_iqama)}</td>
+                            <td>${escapeHtml(u.email || '-')}</td>
+                            <td>
+                                <div class="ms2fa-tags">
+                                    ${u.enrolled
+                                        ? `<span class="sr-pill tone-green" title="${escapeHtml(u.enrolled_at)}"><span class="sr-dot"></span>${__('gauth_enrolled', 'Phone linked')}</span>`
+                                        : `<span class="sr-pill tone-slate"><span class="sr-dot"></span>${__('gauth_not_enrolled', 'Not set up yet')}</span>`}
+                                    ${u.email ? '' : `<span class="sr-pill tone-red"><span class="sr-dot"></span>${__('gauth_no_email', 'No email - cannot set up')}</span>`}
+                                    ${u.active_sessions > 0 ? `<span class="sr-pill tone-sky"><span class="sr-dot"></span>${u.active_sessions} ${__('msauth_active_sessions', 'active session(s)')}</span>` : ''}
+                                </div>
+                            </td>
+                            <td class="sr-mono ms2fa-nowrap">${u.last_login ? escapeHtml(u.last_login) : '<span class="text-muted">-</span>'}</td>
+                            <td class="text-right ms2fa-nowrap">
+                                ${u.enrolled ? `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm msauth-revoke gauth-reset" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('gauth_reset_hint', 'Lost / new phone: unlink it - the next sign-in confirms the email code and shows a new QR code (does not sign the user out)')}"><i class="mdi mdi-lock-reset"></i> ${__('gauth_reset', 'Reset')}</button>` : ''}
+                                ${isAll ? '' : `<button type="button" class="sr-btn sr-btn-icon sr-btn-sm ms2fa-remove gauth-remove" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('gauth_remove_hint', 'Remove - back to the previous sign-in (linked phone is kept)')}"><i class="mdi mdi-close"></i></button>`}
+                            </td>
+                        </tr>`).join('') : `<tr><td colspan="6" class="ms2fa-empty-cell"><i class="mdi mdi-account-multiple-outline"></i>${emptyText}</td></tr>`;
+
+                    const pager = document.getElementById('gauth-pager');
+                    if (rows.length <= GA_PAGE_SIZE) { pager.innerHTML = ''; return; }
+                    const from = (gaPage - 1) * GA_PAGE_SIZE + 1, to = Math.min(gaPage * GA_PAGE_SIZE, rows.length);
+                    let nums = [];
+                    for (let p = 1; p <= pages; p++) {
+                        if (p === 1 || p === pages || Math.abs(p - gaPage) <= 1) nums.push(p);
+                        else if (nums[nums.length - 1] !== '…') nums.push('…');
+                    }
+                    const li = (label, page, disabled, active) => `<li class="page-item${disabled ? ' disabled' : ''}${active ? ' active' : ''}"><a class="page-link" href="#" data-page="${page}">${label}</a></li>`;
+                    pager.innerHTML = `
+                        <div class="ms2fa-pager-row">
+                            <span>${__('showing', 'Showing')} ${from}-${to} ${__('of', 'of')} ${rows.length}</span>
+                            <ul class="pagination pagination-sm mb-0">
+                                ${li('&lsaquo;', gaPage - 1, gaPage === 1, false)}
+                                ${nums.map(n => n === '…' ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : li(n, n, false, n === gaPage)).join('')}
+                                ${li('&rsaquo;', gaPage + 1, gaPage === pages, false)}
+                            </ul>
+                        </div>`;
+                };
+                const loadGaUsers = () => postGa({ action: 'get_gauth_users' }).then(data => {
+                    gaUsers = data.success ? data.users : [];
+                    gaScope = data.scope === 'all' ? 'all' : 'selected';
+                    renderGaUsers();
+                }).catch(() => { gaBody.innerHTML = `<tr><td colspan="6" class="ms2fa-empty-cell text-danger">${__('error', 'Error')}</td></tr>`; });
+                const setGaAssigned = async (iqama, assigned) => {
+                    const data = await postGa({ action: 'set_gauth_user', id_iqama: iqama, assigned: assigned ? '1' : '0' });
+                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                    const user = gaUsers.find(u => u.id_iqama === iqama);
+                    if (user) user.assigned = assigned;
+                    renderGaUsers();
+                    gaToast();
+                };
+                loadGaUsers();
+                document.getElementById('gauth-list-search').addEventListener('input', () => { gaPage = 1; renderGaUsers(); });
+                document.getElementById('gauth-pager').addEventListener('click', function (e) {
+                    const link = e.target.closest('a.page-link');
+                    e.preventDefault();
+                    if (!link || link.closest('.disabled')) return;
+                    gaPage = parseInt(link.dataset.page, 10) || 1;
+                    renderGaUsers();
+                });
+                gaBody.addEventListener('click', async function (e) {
+                    const resetBtn = e.target.closest('.gauth-reset');
+                    const removeBtn = e.target.closest('.gauth-remove');
+                    if (removeBtn) {
+                        removeBtn.disabled = true;
+                        try { await setGaAssigned(removeBtn.dataset.iqama, false); } catch (err) { removeBtn.disabled = false; Swal.fire(__('error', 'Error'), err.message, 'error'); }
+                        return;
+                    }
+                    if (!resetBtn) return;
+                    const user = gaUsers.find(u => u.id_iqama === resetBtn.dataset.iqama);
+                    const answer = await Swal.fire({
+                        icon: 'warning',
+                        title: __('gauth_reset_q', 'Reset Google Authenticator?'),
+                        html: `<b>${escapeHtml(user ? user.name : resetBtn.dataset.iqama)}</b><br>${__('gauth_reset_text', 'The linked phone stops working for this account. The user stays signed in now; at the next sign-in they confirm the email code and scan a new QR code. "Remember me" is cleared.')}`,
+                        showCancelButton: true,
+                        confirmButtonColor: '#dc2626',
+                        confirmButtonText: __('gauth_reset', 'Reset'),
+                        cancelButtonText: __('cancel', 'Cancel')
+                    });
+                    if (!answer.isConfirmed) return;
+                    resetBtn.disabled = true;
+                    try {
+                        const data = await postGa({ action: 'reset_gauth_user', id_iqama: resetBtn.dataset.iqama });
+                        if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                        await loadGaUsers();
+                        Swal.fire(__('gauth_reset_done', 'Authenticator reset'), data.message || '', 'success');
+                    } catch (err) {
+                        resetBtn.disabled = false;
+                        Swal.fire(__('error', 'Error'), err.message, 'error');
+                    }
+                });
+                document.querySelectorAll('input[name="gauth-scope"]').forEach(radio => radio.addEventListener('change', async function () {
+                    const scope = this.value;
+                    if (scope === 'all') {
+                        const answer = await Swal.fire({
+                            icon: 'warning',
+                            title: __('gauth_force_all_q', 'Force Google Authenticator for all OTP users?'),
+                            text: __('gauth_force_all_text', 'Every staff user who now gets an email OTP will have to set up and use Google Authenticator. Test with a few selected users first.'),
+                            showCancelButton: true,
+                            confirmButtonColor: '#dc2626',
+                            confirmButtonText: __('msauth_force_all_btn', 'Force for all'),
+                            cancelButtonText: __('cancel', 'Cancel')
+                        });
+                        if (!answer.isConfirmed) { renderGaUsers(); return; }
+                    }
+                    try {
+                        const data = await postGa({ action: 'set_gauth_scope', scope: scope });
+                        if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                        gaScope = scope;
+                        renderGaUsers();
+                        gaToast();
+                    } catch (err) {
+                        renderGaUsers();
+                        Swal.fire(__('error', 'Error'), err.message, 'error');
+                    }
+                }));
+                document.getElementById('gauth-add-user').addEventListener('click', async function () {
+                    const candidates = gaUsers.filter(u => !u.assigned);
+                    if (!candidates.length) {
+                        Swal.fire(__('msauth_add_user', 'Add user'), __('msauth_all_added', 'All OTP users are already added.'), 'info');
+                        return;
+                    }
+                    const result = await Swal.fire({
+                        title: __('msauth_add_user', 'Add user'),
+                        html: `<div style="text-align:start"><select id="gauth-pick" style="width:100%"></select></div>`,
+                        showCancelButton: true,
+                        confirmButtonText: __('add', 'Add'),
+                        cancelButtonText: __('cancel', 'Cancel'),
+                        didOpen: () => {
+                            // Nothing is listed until something is typed: matches emp ID, ID/Iqama, name or email
+                            $('#gauth-pick').select2({
+                                dropdownParent: $(Swal.getPopup()),
+                                width: '100%',
+                                placeholder: __('msauth_search_user', 'Type emp ID, ID/Iqama or name...'),
+                                minimumInputLength: 1,
+                                data: candidates.map(u => ({
+                                    id: u.id_iqama,
+                                    text: `${u.emp_id ? u.emp_id + ' - ' : ''}${u.name} (${u.id_iqama})${u.email ? ' - ' + u.email : ''}`
+                                })),
+                                matcher: (params, item) => {
+                                    const q = String(params.term || '').trim().toLowerCase();
+                                    if (!q) return null;
+                                    return item.text && item.text.toLowerCase().includes(q) ? item : null;
+                                }
+                            }).val(null).trigger('change');
+                            setTimeout(() => $('#gauth-pick').select2('open'), 50);
+                        },
+                        willClose: () => { try { $('#gauth-pick').select2('destroy'); } catch (e) {} },
+                        preConfirm: () => {
+                            const value = document.getElementById('gauth-pick').value;
+                            if (!value) { Swal.showValidationMessage(__('msauth_pick_user', 'Select a user')); return false; }
+                            return value;
+                        }
+                    });
+                    if (!result.isConfirmed) return;
+                    try { await setGaAssigned(result.value, true); } catch (err) { Swal.fire(__('error', 'Error'), err.message, 'error'); }
                 });
                 return;
             }
@@ -4064,6 +4324,16 @@ function __(key, def) {
                     confirmOn: __('msauth_enable_confirm_text', 'The Microsoft Sign In tab appears. Sign-in switches to Microsoft as soon as Tenant ID, Client ID and Client Secret are saved there.'),
                     confirmOff: __('msauth_disable_confirm_text', 'Staff go back to receiving the email OTP and the Microsoft Sign In tab is hidden. Settings are kept.'),
                 },
+                {
+                    setting: 'gauth_enabled', on: GAUTH_ON,
+                    icon: '<span class="as-ga-logo" aria-hidden="true"><svg viewBox="0 0 48 48" width="22" height="22"><circle cx="24" cy="24" r="20" fill="none" stroke="#1a73e8" stroke-width="5"/><path d="M24 4a20 20 0 0 1 17.3 10" fill="none" stroke="#ea4335" stroke-width="5"/><path d="M41.3 34A20 20 0 0 1 24 44" fill="none" stroke="#34a853" stroke-width="5"/><path d="M24 14v10l7 5" fill="none" stroke="#5f6368" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
+                    name: __('gauth_name', 'Google Authenticator (2FA)'),
+                    label: __('gauth_enable_label', 'Enable Google Authenticator'),
+                    onHint: __('gauth_enabled_hint', 'On - staff added in the Google Authenticator tab sign in with the 6-digit code from the app on their phone. Normal employees keep ID + password.'),
+                    offHint: __('gauth_disabled_hint', 'Off - staff receive the email OTP (or Microsoft sign-in) as before and the Google Authenticator tab is hidden. Settings and linked phones are kept.'),
+                    confirmOn: __('gauth_enable_confirm_text', 'The Google Authenticator tab appears. Users you add there scan a QR code at their next sign-in (after confirming the email code), then use the app codes.'),
+                    confirmOff: __('gauth_disable_confirm_text', 'Staff go back to the email OTP (or Microsoft sign-in) and the Google Authenticator tab is hidden. Settings and linked phones are kept.'),
+                },
             ];
             const meta = groupMeta('integrations');
             settingsContainer.innerHTML = `
@@ -6751,7 +7021,7 @@ function __(key, def) {
                 // outer nav so they don't also show up as their own top-level tabs.
                 const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
                 // D365 Config is hidden while Microsoft Dynamics 365 is switched off (Integrations tab)
-                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config') && (MSAUTH_ON || g !== 'Microsoft_Sign_In')).sort(); // Sort groups alphabetically
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config') && (MSAUTH_ON || g !== 'Microsoft_Sign_In') && (GAUTH_ON || g !== 'Google_Authenticator')).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {

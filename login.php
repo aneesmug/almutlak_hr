@@ -31,7 +31,7 @@ require_once __DIR__ . '/includes/session_bootstrap.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
 require_once __DIR__ . '/includes/login_security.php';
-require_once __DIR__ . '/includes/microsoft_auth.php';
+require_once __DIR__ . '/includes/two_factor.php'; // Microsoft Sign-in + Google Authenticator
 require_once __DIR__ . '/includes/vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -146,24 +146,51 @@ try {
             $_SESSION['lang'] = $user_lang;
             // ---> END: LANGUAGE LOADING <---
 
-            // Microsoft Sign-in (App Settings > Integrations): only users assigned 'Microsoft' in
-            // App Settings > Microsoft Sign In > Users sign in with Microsoft (password + MFA);
-            // everyone else keeps receiving the email OTP.
-            if (msauth_enabled($conDB) && msauth_user_assigned($conDB, $user['id_iqama'])) {
-                $msSettings = msauth_settings($conDB);
-                $msEmailOk = msauth_email_allowed($user['email'] ?? '', $msSettings['domains']);
-                $wantsEmailOtp = !empty($_POST['use_email_otp']) && $msSettings['mode'] === 'fallback';
-
-                if (!$msEmailOk && $msSettings['mode'] === 'required') {
-                    throw new Exception('Your account email is not a company Microsoft account, so you cannot sign in. Please contact IT support.');
+            // Second factor (App Settings > Integrations): users assigned Microsoft Sign-in and/or
+            // Google Authenticator use it instead of the email OTP. With both, the login page asks
+            // which one (posted as 'second_factor'); everyone else keeps receiving the email OTP.
+            $gauthEnroll = false;
+            $twoFactor = login_second_factors($conDB, $user);
+            if ($twoFactor['blocked'] !== null) {
+                throw new Exception($twoFactor['blocked']);
+            }
+            $wantsEmailOtp = !empty($_POST['use_email_otp']) && $twoFactor['email_fallback'];
+            if ($twoFactor['methods'] && !$wantsEmailOtp) {
+                $choice = (string) ($_POST['second_factor'] ?? '');
+                if (!in_array($choice, $twoFactor['methods'], true)) {
+                    $choice = $twoFactor['methods'][0];
                 }
-                if ($msEmailOk && !$wantsEmailOtp) {
+
+                if ($choice === 'microsoft') {
                     $resp['status'] = 'success';
                     $resp['redirect_url'] = msauth_begin($conDB, $user['id_iqama'], $user['email'], isset($_POST['remember_me']));
                     session_write_close();
                     header("Location: " . $resp['redirect_url']);
                     exit();
                 }
+
+                // Google Authenticator: enrolled users type the 6-digit code from the app
+                if (gauth_user_enrolled($conDB, $user['id_iqama'])) {
+                    unset($_SESSION['gauth_flow']);
+                    $_SESSION['gauth_flow'] = [
+                        'mode' => 'verify',
+                        'id_iqama' => (string) $user['id_iqama'],
+                        'remember_me' => isset($_POST['remember_me']),
+                        'expires' => time() + GAUTH_FLOW_TTL,
+                        'attempts' => 0,
+                    ];
+                    session_write_close();
+                    $resp['status'] = 'success';
+                    $resp['redirect_url'] = './google_authenticator.php';
+                    header("Location: " . $resp['redirect_url']);
+                    exit();
+                }
+                // Not set up yet: the email OTP below proves who they are, then
+                // login_verification.php shows the QR code instead of signing in
+                if (empty($user['email'])) {
+                    throw new Exception('Google Authenticator is not set up for your account yet and no email address is on file to verify you. Please contact IT support.');
+                }
+                $gauthEnroll = true;
             }
 
             // Non-Employee OTP Login
@@ -173,6 +200,14 @@ try {
 
             // Limit OTP emails to one per minute per account
             if (login_sec_otp_recently_sent($user['otp_expiration'] ?? null)) {
+                // Sending the email takes a few seconds; if the page was reloaded meanwhile, the code
+                // went out but the redirect was lost. Same user in this browser: open the code page again.
+                $pendingOtp = $_SESSION['otp_verification'] ?? null;
+                if (!empty($pendingOtp['user_id']) && (string) $pendingOtp['user_id'] === (string) $user['id_iqama'] && time() <= (int) ($pendingOtp['expires'] ?? 0)) {
+                    session_write_close();
+                    header("Location: ./login_verification.php");
+                    exit();
+                }
                 throw new Exception('A verification code was just sent. Please wait a minute before requesting another.');
             }
 
@@ -191,6 +226,9 @@ try {
 
             if (isset($_POST['remember_me'])) {
                 $_SESSION['otp_verification']['remember_me'] = true;
+            }
+            if ($gauthEnroll) {
+                $_SESSION['otp_verification']['gauth_enroll'] = true;
             }
 
             session_write_close(); // Force session save before redirecting.

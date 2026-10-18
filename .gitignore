@@ -11,3 +11,6 @@
 
 # D365 F&O credentials (client secret) - local only
 /includes/D365/d365_config.ini
+
+# Google Authenticator secret encryption key (generated on first use) - back up, never commit
+/includes/GoogleAuth/gauth_secret_key.php

@@ -2,7 +2,8 @@
     require_once __DIR__ . '/includes/session_check.php';
     require_once __DIR__ . '/includes/special_access_helper.php';
     require_once __DIR__ . '/includes/screen_settings_helper.php';
-    require_once __DIR__ . '/includes/microsoft_auth.php';
+    require_once __DIR__ . '/includes/MicrosoftAuth/microsoft_auth.php';
+    require_once __DIR__ . '/includes/GoogleAuth/google_auth.php';
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLocationsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_location_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -634,6 +635,7 @@
         .as-int-foot { padding-top: 10px; border-top: 1px solid var(--sr-border); }
         .as-ms-logo { display: grid; grid-template-columns: 13px 13px; gap: 2px; padding: 4px; flex: none; }
         .as-ms-logo i { width: 13px; height: 13px; display: block; }
+        .as-ga-logo { width: 34px; height: 34px; border-radius: 10px; background: #fff; border: 1px solid var(--sr-border); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 
         /* License */
         .as-license-status { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 16px; border: 1px solid; border-radius: 12px; }
@@ -822,6 +824,8 @@
             'attendanceEnabled' => attendance_enabled($conDB),
             // Microsoft Sign-in switch (Integrations tab) - off hides the Microsoft Sign In config tab
             'msauthEnabled' => msauth_switch_on($conDB),
+            // Google Authenticator switch (Integrations tab) - off hides the Google Authenticator tab
+            'gauthEnabled' => gauth_enabled($conDB),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

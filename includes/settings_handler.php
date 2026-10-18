@@ -11,7 +11,8 @@ require_once(__DIR__ . "/special_access_helper.php");
 require_once(__DIR__ . "/page_access_helper.php");
 require_once(__DIR__ . "/screen_settings_helper.php");
 require_once(__DIR__ . "/zk_helpers.php");
-require_once(__DIR__ . "/microsoft_auth.php");
+require_once(__DIR__ . "/MicrosoftAuth/microsoft_auth.php");
+require_once(__DIR__ . "/GoogleAuth/google_auth.php");
 require_once(__DIR__ . "/../vendor/autoload.php");
 
 if ($conDB->connect_error) {
@@ -118,6 +119,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['success' => $msOk, 'message' => $msMessage]);
             }
             break;
+        case 'get_gauth_users':
+        case 'set_gauth_user':
+        case 'set_gauth_scope':
+        case 'reset_gauth_user':
+            // Assigning Google Authenticator per user: system admins only
+            if (!($is_system_admin ?? false)) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Access denied.']);
+                break;
+            }
+            if ($action === 'get_gauth_users') {
+                echo json_encode(['success' => true, 'scope' => gauth_settings($conDB)['scope'], 'users' => gauth_list_users($conDB)]);
+            } elseif ($action === 'reset_gauth_user') {
+                [$gaOk, $gaMessage] = gauth_reset_user($conDB, (string)($_POST['id_iqama'] ?? ''));
+                echo json_encode(['success' => $gaOk, 'message' => $gaMessage]);
+            } elseif ($action === 'set_gauth_scope') {
+                [$gaOk, $gaMessage] = gauth_set_scope($conDB, (string)($_POST['scope'] ?? ''));
+                echo json_encode(['success' => $gaOk, 'message' => $gaMessage]);
+            } else {
+                [$gaOk, $gaMessage] = gauth_set_user_assigned($conDB, (string)($_POST['id_iqama'] ?? ''), ($_POST['assigned'] ?? '') === '1');
+                echo json_encode(['success' => $gaOk, 'message' => $gaMessage]);
+            }
+            break;
         case 'test_msauth':
             // Microsoft Sign-in config is system-admin only (it holds the client secret)
             if (!($is_system_admin ?? false)) {
@@ -162,6 +186,7 @@ function get_all_settings($conDB) {
     ensure_theme_config_settings($conDB);
     ensure_d365_settings($conDB);
     msauth_ensure_settings($conDB);
+    gauth_ensure_settings($conDB);
     global $is_system_admin;
 
     $settings = [];
@@ -175,7 +200,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -187,7 +212,7 @@ function get_all_settings($conDB) {
             }
             // Microsoft Sign In holds the client secret - only system admins may see it
             // (shown masked in a password field with an eye toggle, same as the D365 secret)
-            if ($row['setting_group'] === 'Microsoft_Sign_In' && !($is_system_admin ?? false)) {
+            if (in_array($row['setting_group'], ['Microsoft_Sign_In', 'Google_Authenticator'], true) && !($is_system_admin ?? false)) {
                 continue;
             }
             $settings[] = $row;
@@ -212,6 +237,7 @@ function update_all_settings($conDB) {
     ensure_screen_settings_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
     msauth_ensure_settings($conDB);
+    gauth_ensure_settings($conDB);
 
     // IMPORTANT: Make sure this path is correct and writable by your web server.
     $upload_dir = __DIR__ . '/../assets/logo/'; // Assumes 'assets/logo/' is one level up from this script's directory.
@@ -261,7 +287,7 @@ function update_all_settings($conDB) {
         $text_inputs = array_diff_key($_POST, ['action' => '']);
         global $is_system_admin;
         foreach ($text_inputs as $setting_name => $value) {
-            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || $setting_name === 'attendance_enabled') && !($is_system_admin ?? false)) {
+            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled') && !($is_system_admin ?? false)) {
                 continue; // D365 Config, Microsoft Sign In and the Integrations switches are system-admin only (see get_all_settings)
             }
             if ($setting_name === 'msauth_client_secret' && trim((string)$value) === '') {

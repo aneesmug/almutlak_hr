@@ -114,7 +114,7 @@ if (!function_exists('msauth_settings')) {
         return in_array(substr($email, $at + 1), $domains, true);
     }
 
-    /** Absolute URL of microsoft_callback.php in the app root (this file lives in includes/). */
+    /** Absolute URL of microsoft_callback.php in the app root (this file lives in includes/MicrosoftAuth/). */
     function msauth_redirect_uri()
     {
         $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -122,7 +122,7 @@ if (!function_exists('msauth_settings')) {
             || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
         $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
 
-        $appRoot = str_replace('\\', '/', dirname(__DIR__));
+        $appRoot = str_replace('\\', '/', dirname(__DIR__, 2));
         $docRoot = rtrim(str_replace('\\', '/', (string) realpath($_SERVER['DOCUMENT_ROOT'] ?? '')), '/');
         if ($docRoot !== '' && stripos($appRoot, $docRoot) === 0) {
             $basePath = substr($appRoot, strlen($docRoot));

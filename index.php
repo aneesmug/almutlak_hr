@@ -309,6 +309,22 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 to { transform: rotate(360deg); }
             }
 
+            /* ---------- 2FA method choice (Microsoft / Google Authenticator) ---------- */
+            .tf-choices { display: grid; gap: 10px; margin-top: 4px; text-align: start; }
+            .tf-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border: 1.5px solid #e2e8f0; border-radius: 14px; background: #fff; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s; text-align: start; }
+            .tf-choice:hover, .tf-choice:focus-visible { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .15); outline: none; }
+            .tf-choice:active { transform: scale(.99); }
+            .tf-choice-ico { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 12px; background: #f1f5f9; display: inline-flex; align-items: center; justify-content: center; }
+            .tf-ms { display: grid; grid-template-columns: 9px 9px; gap: 2px; }
+            .tf-ms i { width: 9px; height: 9px; display: block; }
+            .tf-choice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+            .tf-choice-text b { font-size: 14.5px; color: #0f172a; }
+            .tf-choice-text small { font-size: 12.5px; color: #64748b; line-height: 1.4; }
+            .tf-choice-arrow { color: #94a3b8; font-size: 18px; }
+            .tf-remember { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; font-size: 13px; color: #475569; }
+            .tf-change { color: #60a5fa; font-size: 13px; }
+            .tf-change:hover { text-decoration: underline; }
+
             @media (prefers-reduced-motion: reduce) {
                 .auth-shell, .glow-blob, .auth-hero::before, .hero-logo, .form-field, .shake { animation: none !important; }
                 .submit-btn::after { display: none; }
@@ -346,6 +362,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     <p class="text-gray-400 mb-8">Enter your credentials to access the portal.</p>
                     <form id="login-form" action="./login.php" method="post" class="space-y-6">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
+                        <input type="hidden" name="second_factor" id="second_factor" value="">
+                        <input type="hidden" name="use_email_otp" id="use_email_otp" value="">
                         <div class="form-field">
                             <label for="id_iqama" class="field-label block text-sm font-medium mb-1">رقم الهوية (ID / Iqama)</label>
                             <div class="field-wrap">
@@ -402,6 +420,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                                 <input class="remember-check" id="remember_me" name="remember_me" type="checkbox" value="1">
                                 <label for="remember_me" class="ml-2 block text-sm text-gray-300">Remember me on this device</label>
                             </div>
+                            <p id="second-factor-info" class="text-sm text-gray-400 mt-3" style="display:none;"></p>
                         </div>
                         <div id="user-feedback-container" class="p-3 rounded-lg text-sm"></div>
                         <div>
@@ -523,6 +542,11 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             const confirmPasswordInput = $('#confirm_password');
             const regDobInput = $('#reg_dob');
             const regMobileInput = $('#reg_mobile');
+            const secondFactorInput = $('#second_factor');
+            const secondFactorInfo = $('#second-factor-info');
+            const useEmailOtpInput = $('#use_email_otp');
+            let secondFactors = []; // 2FA methods of the staff user typed in (from check_user_type.php)
+            let emailFallback = false; // email code may be picked instead (no phone at hand)
             flatpickr('#reg_dob', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', maxDate: 'today' });
 
             const spinnerIcon = `<svg class="animate-spin h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
@@ -542,6 +566,84 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 regDobInput.prop('required', false);
                 regMobileInput.prop('required', false);
                 submitBtn.prop('disabled', false).removeClass('bg-gray-400 cursor-not-allowed');
+                secondFactors = [];
+                emailFallback = false;
+                secondFactorInput.val('');
+                useEmailOtpInput.val('');
+                secondFactorInfo.hide().empty();
+            }
+
+            function restoreSubmitButton() {
+                submitBtn.prop('disabled', false).removeClass('bg-gray-400 cursor-not-allowed').html(originalButtonContent);
+            }
+
+            // Back button from Microsoft / Google Authenticator: the browser restores this page from its
+            // back-forward cache with the button still "Logging In..." - unlock it and allow a new choice
+            window.addEventListener('pageshow', function (e) {
+                if (e.persisted) {
+                    restoreSubmitButton();
+                    if (secondFactors.length > 1) { secondFactorInput.val(''); useEmailOtpInput.val(''); }
+                }
+            });
+
+            // --- Two-factor method (Microsoft Sign-in / Google Authenticator) ---
+            const SECOND_FACTOR_LABELS = { microsoft: 'Microsoft', google: 'Google Authenticator', email: 'Email code' };
+            function showSecondFactor(method) {
+                // 'email' = skip Microsoft / Google this time and send the email OTP (login.php checks it is allowed)
+                secondFactorInput.val(method === 'email' ? '' : method);
+                useEmailOtpInput.val(method === 'email' ? '1' : '');
+                const label = $('<b class="text-gray-200"></b>').text(SECOND_FACTOR_LABELS[method] || method);
+                secondFactorInfo.empty().append('Verification: ', label);
+                if (secondFactors.length > 1) {
+                    secondFactorInfo.append(' &middot; ', $('<a href="#" class="tf-change">Change</a>').on('click', function (e) {
+                        e.preventDefault();
+                        chooseSecondFactor();
+                    }));
+                }
+                secondFactorInfo.show();
+            }
+
+            // Users assigned both methods pick one; choosing submits the login right away
+            function chooseSecondFactor() {
+                const msLogo = '<span class="tf-ms" aria-hidden="true"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>';
+                const gaLogo = '<svg viewBox="0 0 48 48" width="26" height="26" aria-hidden="true"><circle cx="24" cy="24" r="20" fill="none" stroke="#1a73e8" stroke-width="5"/><path d="M24 4a20 20 0 0 1 17.3 10" fill="none" stroke="#ea4335" stroke-width="5"/><path d="M41.3 34A20 20 0 0 1 24 44" fill="none" stroke="#34a853" stroke-width="5"/><path d="M24 14v10l7 5" fill="none" stroke="#5f6368" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                const emailLogo = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#0284c7" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/></svg>';
+                const cards = {
+                    microsoft: { logo: msLogo, title: 'Microsoft', hint: 'Sign in with your company Microsoft account (password + MFA).' },
+                    google: { logo: gaLogo, title: 'Google Authenticator', hint: 'Enter the 6-digit code from the app on your phone.' },
+                    email: { logo: emailLogo, title: 'Email code', hint: "No phone with you? We'll email a 6-digit code to your registered address." }
+                };
+                const choices = secondFactors.concat(emailFallback ? ['email'] : []);
+                let chosen = null;
+                Swal.fire({
+                    title: '<span class="srs-head"><span class="srs-icon tone-indigo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg></span>'
+                        + '<span class="srs-head-text">Choose verification<small class="srs-head-sub">How do you want to confirm it is you?</small></span></span>',
+                    html: '<div class="tf-choices">' + choices.filter(m => cards[m]).map(m =>
+                        '<button type="button" class="tf-choice" data-method="' + m + '">'
+                        + '<span class="tf-choice-ico">' + cards[m].logo + '</span>'
+                        + '<span class="tf-choice-text"><b>' + cards[m].title + '</b><small>' + cards[m].hint + '</small></span>'
+                        + '<span class="tf-choice-arrow">&rsaquo;</span></button>').join('') + '</div>'
+                        + '<label class="tf-remember"><input type="checkbox" id="tf-remember"' + ($('#remember_me').is(':checked') ? ' checked' : '') + '> Remember me on this device</label>',
+                    width: 460,
+                    showConfirmButton: false,
+                    showCancelButton: true,
+                    cancelButtonText: 'Cancel',
+                    didOpen: function (popup) {
+                        popup.querySelectorAll('.tf-choice').forEach(btn => btn.addEventListener('click', function () {
+                            chosen = btn.dataset.method;
+                            $('#remember_me').prop('checked', popup.querySelector('#tf-remember').checked);
+                            Swal.close();
+                        }));
+                    }
+                }).then(function () {
+                    if (!chosen) return;
+                    showSecondFactor(chosen);
+                    // Click the real button: the submit button is named "submit", which hides
+                    // form.submit(), so loginForm.trigger('submit') ran the handler but never posted.
+                    // Re-enable first - a disabled button ignores click() (e.g. "Change" after a submit).
+                    restoreSubmitButton();
+                    submitBtn[0].click();
+                });
             }
 
             // Flags the given password field(s) red with a shake, and surfaces the
@@ -586,6 +688,18 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                                 applyLoginError([passwordInput]);
                             } else {
                                 rememberMeContainer.slideDown();
+                                secondFactors = Array.isArray(response.second_factors) ? response.second_factors : [];
+                                emailFallback = response.email_fallback === true;
+                                if (window.loginErrorMessage) {
+                                    // Came back from a failed attempt: show why first, ask again on Log In
+                                    feedbackContainer.addClass('bg-red-500/10 border border-red-500/30 text-red-400').text(window.loginErrorMessage).slideDown();
+                                    window.loginErrorMessage = null;
+                                    if (secondFactors.length === 1) showSecondFactor(secondFactors[0]);
+                                } else if (secondFactors.length === 1) {
+                                    showSecondFactor(secondFactors[0]);
+                                } else if (secondFactors.length > 1) {
+                                    chooseSecondFactor();
+                                }
                             }
                         } else if (response.status === 'needs_registration') {
                             newPasswordContainer.slideDown();
@@ -653,8 +767,16 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                         return;
                     }
                 }
+                // Both 2FA methods and none picked yet: ask first
+                if (secondFactors.length > 1 && !secondFactorInput.val() && !useEmailOtpInput.val()) {
+                    e.preventDefault();
+                    chooseSecondFactor();
+                    return;
+                }
                 // If validation passes, show loading state
-                submitBtn.prop('disabled', true).addClass('bg-gray-400 cursor-not-allowed').html(spinnerIcon + '<span>Logging In...</span>');
+                // Email codes take a few seconds to send - say so, so nobody reloads the page meanwhile
+                const sendsEmail = useEmailOtpInput.val() === '1' || (rememberMeContainer.is(':visible') && !secondFactorInput.val());
+                submitBtn.prop('disabled', true).addClass('bg-gray-400 cursor-not-allowed').html(spinnerIcon + '<span>' + (sendsEmail ? 'Sending email code...' : 'Logging In...') + '</span>');
             });
 
             // Clear the red/shake state as soon as the user starts retyping a password field

@@ -1,5 +1,5 @@
 -- Microsoft Sign-in (Entra ID) for OTP users (Oct 2026)
--- Both changes are also applied automatically (includes/microsoft_auth.php) the first time
+-- Both changes are also applied automatically (includes/MicrosoftAuth/microsoft_auth.php) the first time
 -- App Settings or the login page loads; run this manually only if you prefer to apply them up front.
 
 -- 1. Microsoft object ID bound to the login account at first Microsoft sign-in (skip if the column exists)

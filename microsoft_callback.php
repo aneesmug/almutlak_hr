@@ -1,7 +1,7 @@
 <?php
 /********************************************************************************
  * Microsoft Sign-in callback (redirect URI registered in the Entra app).
- * login.php starts the sign-in (includes/microsoft_auth.php::msauth_begin); Microsoft
+ * login.php starts the sign-in (includes/MicrosoftAuth/microsoft_auth.php::msauth_begin); Microsoft
  * returns here with ?code&state. The account must be the same one whose ID/Iqama was
  * typed on the login page: matched by the bound Microsoft object ID (ms_oid), or on
  * first sign-in by email, which then binds ms_oid.
@@ -10,7 +10,7 @@ require_once __DIR__ . '/includes/session_bootstrap.php';
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/login_security.php';
-require_once __DIR__ . '/includes/microsoft_auth.php';
+require_once __DIR__ . '/includes/two_factor.php'; // Microsoft Sign-in + Google Authenticator
 
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
@@ -122,7 +122,20 @@ try {
 }
 
 // --- Failure page ---
-$canUseEmail = $iqama !== '' && msauth_enabled($conDB) && msauth_settings($conDB)['mode'] === 'fallback';
+// Email OTP only when none of the user's 2FA methods is 'required'; Google Authenticator when assigned too
+$canUseEmail = false;
+$canUseGoogle = false;
+if ($iqama !== '') {
+    $acc = mysqli_prepare($conDB, "SELECT `id_iqama`, `email`, `user_type`, `status` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1");
+    mysqli_stmt_bind_param($acc, "s", $iqama);
+    mysqli_stmt_execute($acc);
+    $accRow = mysqli_fetch_assoc(mysqli_stmt_get_result($acc));
+    if ($accRow && (int) $accRow['status'] === 1 && $accRow['user_type'] !== 'employee') {
+        $twoFactor = login_second_factors($conDB, $accRow);
+        $canUseEmail = $twoFactor['email_fallback'];
+        $canUseGoogle = in_array('google', $twoFactor['methods'], true);
+    }
+}
 $csrfToken = login_sec_csrf_token();
 ?>
 <!DOCTYPE html>
@@ -138,6 +151,15 @@ $csrfToken = login_sec_csrf_token();
     <div class="w-full max-w-md bg-[#0b0b0f] border border-white/10 rounded-2xl p-8 shadow-2xl">
         <h1 class="text-2xl font-bold text-white mb-4">Microsoft Sign-in</h1>
         <div class="mb-6 p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400"><?= htmlspecialchars($errorMessage, ENT_QUOTES) ?></div>
+        <?php if ($canUseGoogle): ?>
+            <form method="post" action="./login.php" class="mb-3">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
+                <input type="hidden" name="id_iqama" value="<?= htmlspecialchars($iqama, ENT_QUOTES) ?>">
+                <input type="hidden" name="second_factor" value="google">
+                <?php if (!empty($pending['remember_me'])): ?><input type="hidden" name="remember_me" value="1"><?php endif; ?>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition">Use Google Authenticator instead</button>
+            </form>
+        <?php endif; ?>
         <?php if ($canUseEmail): ?>
             <form method="post" action="./login.php" class="mb-3">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">

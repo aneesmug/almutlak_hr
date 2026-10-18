@@ -4,6 +4,7 @@
 require_once __DIR__ . '/session_bootstrap.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/login_security.php';
+require_once __DIR__ . '/two_factor.php';
 
 if (session_status() == PHP_SESSION_NONE) { session_start(); }
 $csrf_ok = login_sec_csrf_valid();
@@ -35,7 +36,7 @@ try {
     }
 
     // --- Step 1: Check if user already exists in admin_login ---
-    $login_query = "SELECT `user_type` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1";
+    $login_query = "SELECT `id_iqama`, `user_type`, `email`, `status` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1";
     $stmt = mysqli_prepare($conDB, $login_query);
     mysqli_stmt_bind_param($stmt, "s", $id_iqama);
     mysqli_stmt_execute($stmt);
@@ -45,6 +46,13 @@ try {
         // --- User is already a registered login user ---
         $response['status'] = 'success';
         $response['user_type'] = $user['user_type'];
+        // Staff with both Microsoft Sign-in and Google Authenticator get a choice popup on the login page
+        if ($user['user_type'] !== 'employee' && (int) $user['status'] === 1) {
+            $twoFactor = login_second_factors($conDB, $user);
+            $response['second_factors'] = $twoFactor['methods'];
+            // Email code offered in the choice popup too (no phone at hand), unless a method is 'required'
+            $response['email_fallback'] = $twoFactor['email_fallback'] && !empty($user['email']);
+        }
     } else {
         // --- Step 2: User not in admin_login, check the employees table ---
         $employee_query = "SELECT `iqama` FROM `employees` WHERE `iqama` = ? LIMIT 1";
