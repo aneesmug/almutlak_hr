@@ -1105,6 +1105,13 @@
             .pr-report-note { margin: 10px 0 0 !important; }
             .pr-report-toolbar { margin-top: 12px; padding: 0 0 12px; border-bottom: 1px solid var(--sr-border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
             .pr-report-toolbar .sr-btn { height: 36px; }
+            .pr-report-filters { display: flex; flex: 1 1 360px; align-items: center; gap: 8px; min-width: 0; }
+            .pr-report-filters .sr-search { flex: 1 1 200px; }
+            .pr-company-filter { position: relative; flex: 0 1 220px; min-width: 150px; }
+            .pr-company-filter i { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); pointer-events: none; }
+            .pr-company-filter select { width: 100%; height: 38px; padding-inline: 32px 10px; border-radius: 10px; border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text); font-size: 13px; font-weight: 600; cursor: pointer; }
+            .pr-company-filter select:focus { outline: 0; background: var(--sr-surface); border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+            .pr-company-filter.is-active select { border-color: var(--sr-accent); background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
             .pr-report-toolbar .sr-btn:disabled { opacity: .55; cursor: not-allowed; }
             .pr-report-toolbar .pr-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, .25); font-size: 11px; font-weight: 700; }
             .pr-report-toolbar .pr-ico-red { color: #dc2626; }
@@ -7654,6 +7661,10 @@ function openPayslipsFile(base, data) {
                 const pendingCount = reportData.length - paidCount;
                 const allAlreadyPaid = pendingCount === 0;
                 const initials = (name) => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+                const unassignedLabel = __('unassigned_company', 'Unassigned');
+                const companyOf = (row) => row.comp_name || unassignedLabel;
+                const reportCompanies = [...new Set(reportData.map(companyOf))].sort((a, b) => a.localeCompare(b));
+                const showCompanyFilter = reportCompanies.length > 1;
                 const reportHtml = `
                     <div id="payrollReportModal" class="sr-form pr-report">
                         <!-- Compact header: title + chips left, inline stat strip right (keeps the popup short) -->
@@ -7671,10 +7682,10 @@ function openPayslipsFile(base, data) {
                                 </div>
                             </div>
                             <div class="pr-kpis">
-                                <div class="pr-kpi"><span><i class="mdi mdi-account-multiple"></i> ${__('employees', 'Employees')}</span><b>${reportData.length}</b></div>
-                                <div class="pr-kpi is-green"><span><i class="mdi mdi-check-circle"></i> ${__('paid_badge')}</span><b>${paidCount}</b></div>
-                                <div class="pr-kpi is-amber"><span><i class="mdi mdi-alert-outline"></i> ${__('pending', 'Pending')}</span><b>${pendingCount}</b></div>
-                                <div class="pr-kpi is-total"><span><i class="mdi mdi-cash-multiple"></i> ${__('grand_total_label')}</span><b><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</b></div>
+                                <div class="pr-kpi"><span><i class="mdi mdi-account-multiple"></i> ${__('employees', 'Employees')}</span><b id="prKpiEmployees">${reportData.length}</b></div>
+                                <div class="pr-kpi is-green"><span><i class="mdi mdi-check-circle"></i> ${__('paid_badge')}</span><b id="prKpiPaid">${paidCount}</b></div>
+                                <div class="pr-kpi is-amber"><span><i class="mdi mdi-alert-outline"></i> ${__('pending', 'Pending')}</span><b id="prKpiPending">${pendingCount}</b></div>
+                                <div class="pr-kpi is-total"><span><i class="mdi mdi-cash-multiple"></i> ${__('grand_total_label')}</span><b><i class="icon-saudi_riyal"></i> <span id="prKpiTotal">${fmtMoney(grandTotalNet)}</span></b></div>
                             </div>
                         </div>
 
@@ -7684,9 +7695,19 @@ function openPayslipsFile(base, data) {
                         </div>
 
                         <div class="sr-toolbar pr-report-toolbar">
-                            <div class="sr-search">
-                                <i class="mdi mdi-magnify"></i>
-                                <input type="text" id="payrollReportSearch" placeholder="${__('search')}..." autocomplete="off">
+                            <div class="pr-report-filters">
+                                <div class="sr-search">
+                                    <i class="mdi mdi-magnify"></i>
+                                    <input type="text" id="payrollReportSearch" placeholder="${__('search')}..." autocomplete="off">
+                                </div>
+                                ${showCompanyFilter ? `
+                                <div class="pr-company-filter" title="${__('company', 'Company')}">
+                                    <i class="mdi mdi-domain"></i>
+                                    <select id="payrollReportCompany">
+                                        <option value="">${__('all_companies_option') || 'All Companies'} (${reportCompanies.length})</option>
+                                        ${reportCompanies.map(c => `<option value="${escHtml(c)}">${escHtml(c)} (${reportData.filter(r => companyOf(r) === c).length})</option>`).join('')}
+                                    </select>
+                                </div>` : ''}
                             </div>
                             <div class="sr-toolbar-right">
                                 <button type="button" id="markAsPaidBtn" class="sr-btn sr-btn-success" style="display:${allAlreadyPaid ? 'none' : 'inline-flex'};" disabled>
@@ -7705,6 +7726,7 @@ function openPayslipsFile(base, data) {
                                     <tr>
                                         <th class="pr-col-check">${allAlreadyPaid ? '' : `<label class="sr-check" title="${__('select_all', 'Select all')}"><input type="checkbox" id="reportSelectAll"></label>`}</th>
                                         <th>${__('employee', 'Employee')}</th>
+                                        <th>${__('company', 'Company')}</th>
                                         <th>${__('status', 'Status')}</th>
                                         <th class="text-right">${__('net_salary_label') || 'Net Payable Salary'}</th>
                                     </tr>
@@ -7712,8 +7734,8 @@ function openPayslipsFile(base, data) {
                                 <tbody></tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="3" class="text-right">${__('grand_total_label')}</th>
-                                        <th class="text-right pr-total"><i class="icon-saudi_riyal"></i> ${fmtMoney(grandTotalNet)}</th>
+                                        <th colspan="4" class="text-right">${__('grand_total_label')}</th>
+                                        <th class="text-right pr-total"><i class="icon-saudi_riyal"></i> <span id="prFootTotal">${fmtMoney(grandTotalNet)}</span></th>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -7755,9 +7777,18 @@ function openPayslipsFile(base, data) {
                                                 <span class="sr-avatar">${escHtml(initials(d))}</span>
                                                 <div>
                                                     <span class="sr-person-name">${escHtml(d)}</span>
-                                                    <span class="sr-cell-sub"><span class="sr-mono">#${escHtml(row.emp_id)}</span>${row.comp_name ? ` · ${escHtml(row.comp_name)}` : ''}</span>
+                                                    <span class="sr-cell-sub"><span class="sr-mono">#${escHtml(row.emp_id)}</span></span>
                                                 </div>
                                             </div>`;
+                                    }
+                                },
+                                {
+                                    data: 'comp_name',
+                                    render: (d, type, row) => {
+                                        const name = companyOf(row);
+                                        return type === 'display'
+                                            ? `<span class="sr-chip"><i class="mdi mdi-domain"></i> ${escHtml(name)}</span>`
+                                            : name;
                                     }
                                 },
                                 {
@@ -7801,15 +7832,7 @@ function openPayslipsFile(base, data) {
                                 },
                                 emptyTable: `<div class="sr-empty">${__('no_data_available_in_table')}</div>`,
                                 zeroRecords: `<div class="sr-empty">${__('no_matching_records_found')}</div>`
-                            },
-                            buttons: [
-                                {
-                                    extend: 'print',
-                                    title: `${__('payroll_report_for_month_title')} ${reportMonthLabel}`,
-                                    exportOptions: { columns: [1, 2, 3], orthogonal: 'print' },
-                                    footer: true
-                                }
-                            ]
+                            }
                         });
 
                         // Own search box drives the table (dom 'rtip' hides the default one)
@@ -7817,15 +7840,40 @@ function openPayslipsFile(base, data) {
                             table.search(this.value).draw();
                         });
 
+                        // KPIs + footer total follow the current search / company filter
+                        const refreshTotals = () => {
+                            const rows = table.rows({ search: 'applied' }).data().toArray();
+                            const paidNow = rows.filter(r => r.status === 'paid').length;
+                            $('#prKpiEmployees').text(rows.length);
+                            $('#prKpiPaid').text(paidNow);
+                            $('#prKpiPending').text(rows.length - paidNow);
+                            const sum = fmtMoney(rows.reduce((s, r) => s + (parseFloat(r.net_salary) || 0), 0));
+                            $('#prKpiTotal, #prFootTotal').text(sum);
+                        };
+                        table.on('draw', () => { refreshTotals(); refreshSelection(); });
+
+                        // Company filter (exact match on the Company column); clears selection so
+                        // hidden rows from another company are never marked as paid by mistake
+                        $('#payrollReportCompany').on('change', function() {
+                            const val = this.value;
+                            $(this).closest('.pr-company-filter').toggleClass('is-active', !!val);
+                            $allBoxes().prop('checked', false);
+                            table.column(2).search(val ? '^' + $.fn.dataTable.util.escapeRegex(val) + '$' : '', true, false).draw();
+                            refreshSelection();
+                        });
+
                         const $allBoxes = () => table.rows().nodes().to$().find('.report-checkbox');
+                        const $visibleBoxes = () => table.rows({ search: 'applied' }).nodes().to$().find('.report-checkbox');
                         const refreshSelection = () => {
                             const $boxes = $allBoxes();
                             const checked = $boxes.filter(':checked').length;
                             $('#markAsPaidCount').text(checked);
                             $('#markAsPaidBtn').prop('disabled', checked === 0);
+                            const $visible = $visibleBoxes();
+                            const visibleChecked = $visible.filter(':checked').length;
                             $('#reportSelectAll')
-                                .prop('checked', checked > 0 && checked === $boxes.length)
-                                .prop('indeterminate', checked > 0 && checked < $boxes.length);
+                                .prop('checked', visibleChecked > 0 && visibleChecked === $visible.length)
+                                .prop('indeterminate', visibleChecked > 0 && visibleChecked < $visible.length);
                             table.rows().nodes().to$().each(function() {
                                 $(this).toggleClass('is-selected', $(this).find('.report-checkbox').is(':checked'));
                             });
@@ -7854,18 +7902,21 @@ function openPayslipsFile(base, data) {
                             await updatePayrollStatus(selectedPayrollIds, 'paid', () => {
                                 Swal.close();
                                 fetchEmployees();
-                            }, { monthLabel: reportMonthLabel, company: selectedCompany, total: selectedTotal });
+                            }, { monthLabel: reportMonthLabel, company: $('#payrollReportCompany').val() || selectedCompany, total: selectedTotal });
                         });
 
                         $('#reportSelectAll').on('change', function() {
-                            $allBoxes().prop('checked', $(this).prop('checked'));
+                            $visibleBoxes().prop('checked', $(this).prop('checked'));
                             refreshSelection();
                         });
 
                         $('#exportPdfBtn').on('click', () => exportPdfReport(reportData, selectedMonth));
                         $('#exportExcelBtn').on('click', () => exportExcelReport(reportData, selectedMonth));
                         $('#exportDetailedExcelBtn').on('click', () => exportDetailedExcelReport(reportData, selectedMonth, vacationEmployeesData));
-                        $('#printReportBtn').on('click', () => table.button(0).trigger());
+                        // Prints the rows matching the current search, grouped by company
+                        $('#printReportBtn').on('click', () => printPayrollReport(
+                            table.rows({ search: 'applied' }).data().toArray(), reportMonthLabel, $('#payrollReportCompany').val() || selectedCompany
+                        ));
                     }
                 });
             } else {
@@ -8100,6 +8151,158 @@ function openPayslipsFile(base, data) {
                 console.error('Error generating payroll summary report:', error);
                 Swal.close();
                 showError('Network Error', `Error connecting to the server or parsing data: ${error.message}.`);
+            }
+        }
+
+        // --- Print Report: styled A4 sheet grouped by company with subtotals ---
+        function printPayrollReport(rows, monthLabel, companyFilter) {
+            const esc = (s) => $('<div>').text(s == null ? '' : String(s)).html();
+            const money = (v) => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const unassigned = __('unassigned_company', 'Unassigned');
+            const logoSrc = $('.logo img').first().attr('src');
+            const logoUrl = logoSrc ? new URL(logoSrc, window.location.href).href : '';
+
+            // Group by company, sorted by company then employee id
+            const groups = new Map();
+            rows.slice()
+                .sort((a, b) => String(a.comp_name || '').localeCompare(String(b.comp_name || ''))
+                    || (parseInt(a.emp_id, 10) || 0) - (parseInt(b.emp_id, 10) || 0))
+                .forEach(r => {
+                    const key = r.comp_name || unassigned;
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key).push(r);
+                });
+
+            const total = rows.reduce((s, r) => s + (parseFloat(r.net_salary) || 0), 0);
+            const paid = rows.filter(r => r.status === 'paid').length;
+            const pending = rows.length - paid;
+            const statusPill = (st) => st === 'paid'
+                ? `<span class="pill paid">${esc(__('paid_badge'))}</span>`
+                : `<span class="pill pending">${esc(__('pending', 'Pending'))}</span>`;
+
+            let serial = 0;
+            const sections = [...groups.entries()].map(([company, list]) => {
+                const sub = list.reduce((s, r) => s + (parseFloat(r.net_salary) || 0), 0);
+                const body = list.map(r => `
+                    <tr>
+                        <td class="c-num">${++serial}</td>
+                        <td class="c-id">${esc(r.emp_id)}</td>
+                        <td>${esc(r.employee_name)}</td>
+                        <td class="c-st">${statusPill(r.status)}</td>
+                        <td class="c-amt">${money(r.net_salary)}</td>
+                    </tr>`).join('');
+                return `
+                    <section class="grp">
+                        <div class="grp-head">
+                            <span class="grp-name">${esc(company)}</span>
+                            <span class="grp-meta">${list.length} ${esc(__('employees', 'Employees'))} &middot; SAR ${money(sub)}</span>
+                        </div>
+                        <table>
+                            <thead><tr>
+                                <th class="c-num">#</th>
+                                <th class="c-id">${esc(__('emp_id', 'Emp ID'))}</th>
+                                <th>${esc(__('employee', 'Employee'))}</th>
+                                <th class="c-st">${esc(__('status', 'Status'))}</th>
+                                <th class="c-amt">${esc(__('net_salary_label') || 'Net Salary')} (SAR)</th>
+                            </tr></thead>
+                            <tbody>${body}</tbody>
+                            <tfoot><tr>
+                                <td colspan="4">${esc(__('subtotal', 'Subtotal'))} &mdash; ${esc(company)}</td>
+                                <td class="c-amt">${money(sub)}</td>
+                            </tr></tfoot>
+                        </table>
+                    </section>`;
+            }).join('');
+
+            const title = `${__('payroll_report_for_month_title')} ${monthLabel}`;
+            const printedAt = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>
+    @page { size: A4 portrait; margin: 12mm 10mm 14mm;
+        @bottom-left { content: "${esc(title).replace(/"/g, '')}"; font: 8pt Arial, sans-serif; color: #94a3b8; }
+        @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, sans-serif; color: #94a3b8; } }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 0; font: 9pt/1.35 "Segoe UI", Arial, sans-serif; color: #0f172a; background: #fff; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 3px solid #4f46e5; }
+    .head img { max-height: 46px; max-width: 180px; }
+    .head-title { text-align: right; }
+    .head-title h1 { margin: 0; font-size: 16pt; color: #1e1b4b; }
+    .head-title p { margin: 2px 0 0; color: #64748b; font-size: 8.5pt; }
+    .kpis { display: grid; grid-template-columns: repeat(5, 1fr); margin: 12px 0 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .kpi { padding: 7px 10px; border-right: 1px solid #e2e8f0; }
+    .kpi:last-child { border-right: 0; background: #eef2ff; }
+    .kpi span { display: block; font-size: 7pt; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+    .kpi b { font-size: 11pt; }
+    .kpi.green b { color: #15803d; } .kpi.amber b { color: #b45309; } .kpi:last-child b { color: #4338ca; }
+    .grp { margin-bottom: 12px; }
+    .grp-head { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 10px; background: #1e1b4b; color: #fff; border-radius: 6px 6px 0 0; break-after: avoid; }
+    .grp-name { font-weight: 700; font-size: 10pt; letter-spacing: .02em; }
+    .grp-meta { font-size: 8pt; opacity: .85; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { display: table-header-group; }
+    th { background: #f1f5f9; color: #475569; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .03em; text-align: left; padding: 5px 8px; border-bottom: 1px solid #cbd5e1; }
+    td { padding: 4px 8px; border-bottom: 1px solid #eef2f7; }
+    tbody tr:nth-child(even) td { background: #f8fafc; }
+    tr { break-inside: avoid; }
+    tfoot td { font-weight: 700; background: #eef2ff; border-top: 1.5px solid #c7d2fe; border-bottom: 0; }
+    .c-num { width: 34px; color: #94a3b8; text-align: center; }
+    .c-id { width: 62px; font-family: Consolas, monospace; color: #475569; }
+    .c-st { width: 70px; }
+    .c-amt { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+    .pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 7pt; font-weight: 600; }
+    .pill.paid { background: #dcfce7; color: #15803d; }
+    .pill.pending { background: #fef3c7; color: #b45309; }
+    .grand { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 9px 12px; background: #4f46e5; color: #fff; border-radius: 6px; font-size: 11pt; font-weight: 700; break-inside: avoid; }
+    .signs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 46px; break-inside: avoid; }
+    .signs div { border-top: 1px solid #94a3b8; padding-top: 5px; text-align: center; font-size: 8pt; color: #475569; }
+</style></head><body>
+    <div class="head">
+        <div>${logoUrl ? `<img src="${esc(logoUrl)}" alt="">` : ''}</div>
+        <div class="head-title">
+            <h1>${esc(title)}</h1>
+            <p>${esc(__('company', 'Company'))}: <b>${esc(companyFilter || __('all_companies_option') || 'All Companies')}</b> &middot; ${esc(__('printed_on', 'Printed on'))} ${esc(printedAt)}</p>
+        </div>
+    </div>
+    <div class="kpis">
+        <div class="kpi"><span>${esc(__('companies', 'Companies'))}</span><b>${groups.size}</b></div>
+        <div class="kpi"><span>${esc(__('employees', 'Employees'))}</span><b>${rows.length}</b></div>
+        <div class="kpi green"><span>${esc(__('paid_badge'))}</span><b>${paid}</b></div>
+        <div class="kpi amber"><span>${esc(__('pending', 'Pending'))}</span><b>${pending}</b></div>
+        <div class="kpi"><span>${esc(__('grand_total_label'))}</span><b>SAR ${money(total)}</b></div>
+    </div>
+    ${sections}
+    <div class="grand"><span>${esc(__('grand_total_label'))} (${rows.length} ${esc(__('employees', 'Employees'))})</span><span>SAR ${money(total)}</span></div>
+    <div class="signs">
+        <div>${esc(__('prepared_by', 'Prepared By'))}</div>
+        <div>${esc(__('checked_by', 'Checked By'))}</div>
+        <div>${esc(__('approved_by', 'Approved By'))}</div>
+    </div>
+</body></html>`;
+
+            // Print from a hidden iframe so no extra tab stays open after the print dialog closes
+            $('#payrollPrintFrame').remove();
+            const frame = $('<iframe id="payrollPrintFrame" aria-hidden="true"></iframe>')
+                .css({ position: 'fixed', right: 0, bottom: 0, width: 0, height: 0, border: 0, visibility: 'hidden' })
+                .appendTo('body')[0];
+            const win = frame.contentWindow;
+            win.document.open();
+            win.document.write(html);
+            win.document.close();
+
+            const cleanup = () => setTimeout(() => $(frame).remove(), 500);
+            win.addEventListener('afterprint', cleanup);
+            // Wait for the logo so it is on the printed page
+            const doPrint = () => {
+                win.focus();
+                win.print();
+                // Fallback for browsers that don't fire afterprint (print() blocks until the dialog closes)
+                setTimeout(() => { if (document.body.contains(frame)) cleanup(); }, 60000);
+            };
+            const img = win.document.querySelector('img');
+            if (img && !img.complete) {
+                img.onload = img.onerror = doPrint;
+            } else {
+                setTimeout(doPrint, 150);
             }
         }
 
