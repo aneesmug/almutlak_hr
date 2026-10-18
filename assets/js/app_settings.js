@@ -4339,7 +4339,7 @@ function __(key, def) {
             const msLogo = `<span class="as-ms-logo" aria-hidden="true"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span>`;
             const integrations = [
                 {
-                    setting: 'd365_enabled', on: D365_ON, icon: msLogo,
+                    tab: 'addons', setting: 'd365_enabled', on: D365_ON, icon: msLogo,
                     name: 'Microsoft Dynamics 365',
                     label: __('d365_enable_label', 'Enable Microsoft Dynamics 365'),
                     onHint: __('d365_enabled_hint', 'On - D365 tabs, status, sync buttons, reports and pages are shown to the people allowed to see them.'),
@@ -4348,7 +4348,7 @@ function __(key, def) {
                     confirmOff: __('d365_disable_confirm_text', 'All D365 tabs, status, sync buttons, reports, menu links and pages are hidden for everyone and nothing is sent to D365. Settings and permissions are kept.'),
                 },
                 {
-                    setting: 'attendance_enabled', on: ATTENDANCE_ON,
+                    tab: 'addons', setting: 'attendance_enabled', on: ATTENDANCE_ON,
                     icon: '<span class="ac-ico as-int-ico"><i class="mdi mdi-fingerprint"></i></span>',
                     name: __('attendance', 'Attendance'),
                     label: __('attendance_enable_label', 'Enable Attendance'),
@@ -4358,7 +4358,7 @@ function __(key, def) {
                     confirmOff: __('attendance_disable_confirm_text', 'Attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden for everyone. Devices stop being accepted (they keep their punches), and payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
                 },
                 {
-                    setting: 'msauth_enabled', on: MSAUTH_ON, icon: msLogo,
+                    tab: '2fa', setting: 'msauth_enabled', on: MSAUTH_ON, icon: msLogo,
                     name: __('msauth_name', 'Microsoft Sign-in (2FA)'),
                     label: __('msauth_enable_label', 'Enable Microsoft Sign-in'),
                     onHint: __('msauth_enabled_hint', 'On - staff who normally get an email OTP sign in with their Microsoft account (password + MFA) once the Microsoft Sign In tab is configured. Normal employees keep ID + password.'),
@@ -4367,7 +4367,7 @@ function __(key, def) {
                     confirmOff: __('msauth_disable_confirm_text', 'Staff go back to receiving the email OTP and the Microsoft Sign In tab is hidden. Settings are kept.'),
                 },
                 {
-                    setting: 'gauth_enabled', on: GAUTH_ON,
+                    tab: '2fa', setting: 'gauth_enabled', on: GAUTH_ON,
                     icon: '<span class="as-ga-logo" aria-hidden="true"><svg viewBox="0 0 48 48" width="22" height="22"><circle cx="24" cy="24" r="20" fill="none" stroke="#1a73e8" stroke-width="5"/><path d="M24 4a20 20 0 0 1 17.3 10" fill="none" stroke="#ea4335" stroke-width="5"/><path d="M41.3 34A20 20 0 0 1 24 44" fill="none" stroke="#34a853" stroke-width="5"/><path d="M24 14v10l7 5" fill="none" stroke="#5f6368" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
                     name: __('gauth_name', 'Google Authenticator (2FA)'),
                     label: __('gauth_enable_label', 'Enable Google Authenticator'),
@@ -4377,7 +4377,7 @@ function __(key, def) {
                     confirmOff: __('gauth_disable_confirm_text', 'Staff go back to the email OTP (or Microsoft sign-in) and the Google Authenticator tab is hidden. Settings and linked phones are kept.'),
                 },
                 {
-                    setting: 'email_otp_fallback', on: EMAIL_OTP_FALLBACK_ON,
+                    tab: '2fa', setting: 'email_otp_fallback', on: EMAIL_OTP_FALLBACK_ON,
                     icon: '<span class="ac-ico as-int-ico"><i class="mdi mdi-email-outline"></i></span>',
                     name: __('email_otp_fallback_name', 'Email OTP (backup for 2FA)'),
                     label: __('email_otp_fallback_label', 'Allow email code instead of 2FA'),
@@ -4388,11 +4388,14 @@ function __(key, def) {
                 },
             ];
             const meta = groupMeta('integrations');
-            settingsContainer.innerHTML = `
-                <div class="tab-pane active" id="group-integrations" role="tabpanel">
-                    ${srTabHead(meta.icon, __('integrations', 'Integrations'), __('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.'))}
-                    <div class="as-int-grid">
-                    ${integrations.map(it => `
+            // Sub-tabs: Add-ons (modules / external systems) and 2FA (staff sign-in methods)
+            const intTabs = [
+                { key: 'addons', icon: 'mdi-puzzle', label: __('integrations_addons', 'Add-ons') },
+                { key: '2fa', icon: 'mdi-security', label: __('integrations_2fa', '2FA') },
+            ];
+            let intTab = 'addons';
+            try { intTab = localStorage.getItem('integrations_sub_tab') === '2fa' ? '2fa' : 'addons'; } catch (e) {}
+            const intCard = it => `
                         <div class="sr-card as-int-card${it.on ? ' is-on' : ''}">
                             <div class="as-int-top">
                                 ${it.icon}
@@ -4408,10 +4411,24 @@ function __(key, def) {
                                     <label class="custom-control-label" for="integration-${it.setting}">${escapeHtml(it.label)}</label>
                                 </div>
                             </div>
-                        </div>`).join('')}
-                    </div>
+                        </div>`;
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-integrations" role="tabpanel">
+                    ${srTabHead(meta.icon, __('integrations', 'Integrations'), __('integrations_hint', 'Turn modules and connections to external systems on or off for the whole app.'))}
+                    ${srSubNav('integrations-sub-nav', intTabs, intTab)}
+                    ${intTabs.map(t => `
+                    <div class="as-int-grid" data-int-pane="${t.key}"${t.key === intTab ? '' : ' style="display:none"'}>
+                        ${integrations.filter(it => it.tab === t.key).map(intCard).join('')}
+                    </div>`).join('')}
                 </div>
             `;
+            settingsContainer.querySelectorAll('#integrations-sub-nav a').forEach(a => a.addEventListener('click', function (e) {
+                e.preventDefault();
+                const key = this.dataset.subTab;
+                settingsContainer.querySelectorAll('#integrations-sub-nav a').forEach(x => x.classList.toggle('active', x === this));
+                settingsContainer.querySelectorAll('[data-int-pane]').forEach(p => { p.style.display = p.dataset.intPane === key ? '' : 'none'; });
+                try { localStorage.setItem('integrations_sub_tab', key); } catch (err) {} // kept across the reload after a switch
+            }));
             settingsContainer.querySelectorAll('.integration-toggle').forEach(toggle => toggle.addEventListener('change', async function () {
                 const it = integrations.find(x => x.setting === toggle.dataset.setting);
                 const on = toggle.checked;
