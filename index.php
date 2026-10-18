@@ -582,11 +582,15 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
             window.addEventListener('pageshow', function (e) {
                 if (e.persisted) {
                     restoreSubmitButton();
-                    if (secondFactors.length > 1) { secondFactorInput.val(''); useEmailOtpInput.val(''); }
+                    if (verificationChoices().length > 1) { secondFactorInput.val(''); useEmailOtpInput.val(''); }
                 }
             });
 
             // --- Two-factor method (Microsoft Sign-in / Google Authenticator) ---
+            // Everything the user may pick: assigned 2FA methods, plus the email code when allowed
+            function verificationChoices() {
+                return secondFactors.concat(secondFactors.length && emailFallback ? ['email'] : []);
+            }
             const SECOND_FACTOR_LABELS = { microsoft: 'Microsoft', google: 'Google Authenticator', email: 'Email code' };
             function showSecondFactor(method) {
                 // 'email' = skip Microsoft / Google this time and send the email OTP (login.php checks it is allowed)
@@ -594,7 +598,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                 useEmailOtpInput.val(method === 'email' ? '1' : '');
                 const label = $('<b class="text-gray-200"></b>').text(SECOND_FACTOR_LABELS[method] || method);
                 secondFactorInfo.empty().append('Verification: ', label);
-                if (secondFactors.length > 1) {
+                if (verificationChoices().length > 1) {
                     secondFactorInfo.append(' &middot; ', $('<a href="#" class="tf-change">Change</a>').on('click', function (e) {
                         e.preventDefault();
                         chooseSecondFactor();
@@ -613,7 +617,7 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                     google: { logo: gaLogo, title: 'Google Authenticator', hint: 'Enter the 6-digit code from the app on your phone.' },
                     email: { logo: emailLogo, title: 'Email code', hint: "No phone with you? We'll email a 6-digit code to your registered address." }
                 };
-                const choices = secondFactors.concat(emailFallback ? ['email'] : []);
+                const choices = verificationChoices();
                 let chosen = null;
                 Swal.fire({
                     title: '<span class="srs-head"><span class="srs-icon tone-indigo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z"/><path d="M8.8 12.2l2.2 2.2 4.4-4.6"/></svg></span>'
@@ -694,10 +698,10 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                                     // Came back from a failed attempt: show why first, ask again on Log In
                                     feedbackContainer.addClass('bg-red-500/10 border border-red-500/30 text-red-400').text(window.loginErrorMessage).slideDown();
                                     window.loginErrorMessage = null;
-                                    if (secondFactors.length === 1) showSecondFactor(secondFactors[0]);
-                                } else if (secondFactors.length === 1) {
+                                    if (verificationChoices().length === 1) showSecondFactor(secondFactors[0]);
+                                } else if (verificationChoices().length === 1) {
                                     showSecondFactor(secondFactors[0]);
-                                } else if (secondFactors.length > 1) {
+                                } else if (verificationChoices().length > 1) {
                                     chooseSecondFactor();
                                 }
                             }
@@ -767,8 +771,8 @@ if (isset($_SESSION['auth_user']) && is_array($_SESSION['auth_user'])) {
                         return;
                     }
                 }
-                // Both 2FA methods and none picked yet: ask first
-                if (secondFactors.length > 1 && !secondFactorInput.val() && !useEmailOtpInput.val()) {
+                // More than one way to verify (2FA methods / email code) and none picked yet: ask first
+                if (verificationChoices().length > 1 && !secondFactorInput.val() && !useEmailOtpInput.val()) {
                     e.preventDefault();
                     chooseSecondFactor();
                     return;
