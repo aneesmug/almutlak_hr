@@ -562,8 +562,8 @@ if ($can_see_all_depts) {
         <script src="assets/js/jquery.core.js"></script>
         <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
         <?= sr_list_js() ?>
-        <script src="assets/js/resignationApprovalWizard.js"></script>
-        <script src="assets/js/resignationApproval.js"></script>
+        <script src="assets/js/resignationApprovalWizard.js?v=<?= @filemtime(__DIR__ . '/assets/js/resignationApprovalWizard.js') ?>"></script>
+        <script src="assets/js/resignationApproval.js?v=<?= @filemtime(__DIR__ . '/assets/js/resignationApproval.js') ?>"></script>
         <script>
             function applyFilters() {
                 const status = document.getElementById('statusFilter').value;

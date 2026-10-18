@@ -129,7 +129,17 @@
                 border-radius: 18px !important;
                 padding: 0 !important;
                 overflow: hidden;
+                position: relative;
             }
+            /* Previous / Next: data is swapped in place; this overlay covers the popup while it loads */
+            .pd-dloader { position: absolute; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+                background: rgba(255, 255, 255, .6); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+            .pd-dloader.show { display: flex; }
+            .pd-dloader-box { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 600;
+                color: var(--pd-text); background: var(--pd-card); border: 1px solid var(--pd-border); box-shadow: 0 10px 30px rgba(15, 23, 42, .12); }
+            .pd-spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--pd-accent-soft); border-top-color: var(--pd-accent); animation: pdSpin .7s linear infinite; }
+            @keyframes pdSpin { to { transform: rotate(360deg); } }
+            html.app-dark .pd-dloader { background: rgba(15, 23, 42, .55); }
             html.app-dark .pd-popup {
                 --pd-bg: #171b22; --pd-card: #212733; --pd-border: #313949; --pd-text: #e5e7eb; --pd-muted: #98a2b3;
                 --pd-accent: #8b93f8; --pd-accent-soft: rgba(139, 147, 248, .14);
@@ -2202,8 +2212,29 @@ async function navigatePayrollEmployee(targetEmployee, currentEmployee, month, i
         }
     }
 
-    Swal.close();
-    showPayrollDetails(targetEmployee.emp_id, targetEmployee.name, month);
+    // Keep the popup open: loader over it, then only the content is swapped (no close/reopen)
+    showPayrollDetails(targetEmployee.emp_id, targetEmployee.name, month, { inline: true });
+}
+
+// --- Employee payroll popup: in-place Previous / Next ---
+let payrollDetailLoadToken = 0;
+
+function isPayrollDetailOpen() {
+    const popup = Swal.isVisible() ? Swal.getPopup() : null;
+    return !!(popup && popup.classList.contains('pd-popup'));
+}
+
+function setPayrollDetailLoading(isLoading) {
+    const popup = Swal.getPopup();
+    if (!popup) return;
+    let overlay = popup.querySelector('.pd-dloader');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'pd-dloader';
+        overlay.innerHTML = `<div class="pd-dloader-box"><span class="pd-spinner"></span><span>${__('loading', 'Loading')}...</span></div>`;
+        popup.appendChild(overlay);
+    }
+    overlay.classList.toggle('show', isLoading);
 }
 
 // This function is correct as is, but ensure you are using the latest version from previous replies.
@@ -6348,16 +6379,32 @@ function escapeHtmlText(value) {
 
 // --- (UPDATED) showPayrollDetails Function ---
 
-async function showPayrollDetails(empId, empName, month) {
+async function showPayrollDetails(empId, empName, month, opts = {}) {
     // Clean up previous listeners before opening new modal
     currentEventListeners.forEach(cleanup => cleanup());
     currentEventListeners = [];
 
-    showPayrollProgress(__('loading_payroll_title', 'Loading Payroll'), empId, empName, month, [], 0);
+    // Previous / Next while the popup is open: keep it on screen with a loader and
+    // swap only its data (same idea as payroll_checklist_report.php), keeping the open tab.
+    const inline = !!opts.inline && isPayrollDetailOpen();
+    const keepSection = inline ? (document.querySelector('.pd-popup .pd-tab.active')?.dataset.section || null) : null;
+    const loadToken = ++payrollDetailLoadToken;
+
+    if (inline) {
+        setPayrollDetailLoading(true);
+    } else {
+        showPayrollProgress(__('loading_payroll_title', 'Loading Payroll'), empId, empName, month, [], 0);
+    }
 
     try {
         const response = await fetch(`./includes/api/get_payroll_details.php?emp_id=${empId}&month=${month}&_=${Date.now()}`);
         const data = await response.json();
+        if (loadToken !== payrollDetailLoadToken) {
+            return; // superseded by a newer Previous / Next click
+        }
+        if (inline && !isPayrollDetailOpen()) {
+            return; // popup was closed while loading
+        }
 
         if (data.status === 'success') {
             payroll = data.payroll; // Set global payroll object
@@ -6696,9 +6743,12 @@ async function showPayrollDetails(empId, empName, month) {
                 html: modalHtml,
                 footer: modalFooterHtml,
                 width: '960px',
+                // Previous / Next: no open animation, so the popup looks like it only changed its data
+                // (backdrop keeps its default show class so the dark background stays)
+                ...(inline ? { showClass: { popup: '', backdrop: 'swal2-backdrop-show', icon: 'swal2-icon-show' } } : {}),
                 showCancelButton: true,
                 showConfirmButton: !isReadOnly,
-                // Already generated + toolbar "Save & Generate" switch ON -> "Save & Generate":
+                // Already generated + "Save & Generate" setting ON (App Settings) -> "Save & Generate":
                 // save edits, regenerate this employee only, reopen. Otherwise plain "Save".
                 confirmButtonText: saveAndGenerate
                     ? `<i class="fas fa-sync-alt"></i> ${__('save_and_generate_button', 'Save & Generate')}`
@@ -6715,6 +6765,14 @@ async function showPayrollDetails(empId, empName, month) {
                     footer: 'pd-footer'
                 },
                 didOpen: () => {
+                    // Previous / Next: reopen on the same tab (Salary / Benefits / Deductions).
+                    // Deferred so the tab click handlers below are already bound.
+                    if (keepSection && keepSection !== 'salary') {
+                        setTimeout(() => {
+                            const tabBtn = document.querySelector(`.pd-popup .pd-tab[data-section="${keepSection}"]`);
+                            if (tabBtn) tabBtn.click();
+                        }, 0);
+                    }
                     if (isReadOnly) {
                         const popupEl = Swal.getPopup();
                         // Lock every field so a paid month's payroll can't be edited from here.
