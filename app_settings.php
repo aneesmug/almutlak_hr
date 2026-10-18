@@ -2,6 +2,7 @@
     require_once __DIR__ . '/includes/session_check.php';
     require_once __DIR__ . '/includes/special_access_helper.php';
     require_once __DIR__ . '/includes/screen_settings_helper.php';
+    require_once __DIR__ . '/includes/microsoft_auth.php';
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLocationsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_location_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -782,6 +783,8 @@
             'd365Enabled' => d365_enabled($conDB),
             // Attendance master switch (Integrations tab) - off hides Attendance Config and attendance permissions
             'attendanceEnabled' => attendance_enabled($conDB),
+            // Microsoft Sign-in switch (Integrations tab) - off hides the Microsoft Sign In config tab
+            'msauthEnabled' => msauth_switch_on($conDB),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

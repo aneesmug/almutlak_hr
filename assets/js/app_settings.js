@@ -67,6 +67,8 @@ function __(key, def) {
         const isD365Key = key => /(^|_)d365(_|$)/.test(String(key || ''));
         // Attendance master switch (Integrations tab): same idea for the attendance permissions / report
         const ATTENDANCE_ON = (window.APP_SETTINGS_PERMISSIONS || {}).attendanceEnabled !== false;
+        // Microsoft Sign-in switch (Integrations tab): off hides the Microsoft Sign In config tab (settings kept)
+        const MSAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).msauthEnabled === true;
         const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
         // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
         const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
@@ -136,6 +138,7 @@ function __(key, def) {
             email: { icon: 'mdi-email-outline', sub: __('settings_email_sub', 'SMTP server used for system emails and announcements.') },
             announcement_config: { icon: 'mdi-send', sub: __('settings_announcement_config_sub', 'Separate SMTP account used only to send announcements.') },
             D365_Config: { icon: 'mdi-cloud', sub: __('settings_d365_sub', 'Microsoft Dynamics 365 connection, templates and dimension mapping.') },
+            Microsoft_Sign_In: { icon: 'mdi-microsoft', sub: __('settings_msauth_sub', 'Microsoft Entra ID sign-in (password + MFA) for staff who use email OTP.') },
             approval: { icon: 'mdi-sitemap' },
             asset_clearance: { icon: 'mdi-package-variant-closed' },
             attendance_config: { icon: 'mdi-fingerprint', sub: __('settings_attendance_sub', 'Timetables and biometric device monitoring.') },
@@ -796,6 +799,185 @@ function __(key, def) {
                 let firstKey = 'connection';
                 try { firstKey = localStorage.getItem('d365_config_sub_tab') || 'connection'; } catch (e) {}
                 renderD365SubTab(tabs.some(t => t.key === firstKey) ? firstKey : 'connection');
+                return;
+            }
+
+            // Microsoft Sign In: the plain app_settings fields (outer Save button) plus a card with the
+            // Redirect URI to register in Entra and a Test button. Re-enters with its own host for the fields.
+            if (normalizedGroupName === 'Microsoft_Sign_In' && hostEl === settingsContainer) {
+                const redirectUri = window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'microsoft_callback.php';
+                settingsContainer.innerHTML = `
+                    <div class="tab-pane active" id="group-Microsoft_Sign_In" role="tabpanel">
+                        ${srTabHead(groupMeta('Microsoft_Sign_In').icon, __('Microsoft_Sign_In', 'Microsoft Sign In'), groupMeta('Microsoft_Sign_In').sub || '')}
+                        <div class="sr-card as-section">
+                            <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-lan-connect"></i> ${__('msauth_azure_setup', 'Microsoft Entra app registration')}</div></div>
+                            <ol class="as-int-hint" style="padding-inline-start:18px;margin-bottom:10px;">
+                                <li>${__('msauth_step_redirect', 'Azure > App registrations > HR System Sign-in > Authentication: add this Redirect URI (platform: Web).')}</li>
+                                <li>${__('msauth_step_client_id', 'Overview page: copy "Application (client) ID" into Client ID below.')}</li>
+                                <li>${__('msauth_step_secret', 'Certificates & secrets > Client secrets: copy the "Value" column (not "Secret ID") into Client Secret below.')}</li>
+                                <li>${__('msauth_step_save_test', 'Press Save Changes, then Test.')}</li>
+                            </ol>
+                            <div class="input-group">
+                                <input type="text" class="form-control sr-mono" id="msauth-redirect-uri" readonly value="${escapeHtml(redirectUri)}">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary" id="msauth-copy-uri" title="${__('copy', 'Copy')}"><i class="mdi mdi-content-copy"></i></button>
+                                    <button type="button" class="btn btn-primary" id="msauth-test"><i class="mdi mdi-login-variant"></i> ${__('test_connection', 'Test')}</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="msauth-fields"></div>
+                        <div class="sr-card as-section">
+                            <div class="sr-card-head">
+                                <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('msauth_users_title', 'Who signs in with Microsoft (2FA)')}</div>
+                            </div>
+                            <div class="custom-control custom-radio mb-1">
+                                <input type="radio" class="custom-control-input" name="msauth-scope" id="msauth-scope-selected" value="selected">
+                                <label class="custom-control-label" for="msauth-scope-selected"><b>${__('msauth_scope_selected', 'Selected users only')}</b> - ${__('msauth_scope_selected_hint', 'only the users you add below use Microsoft; everyone else keeps email OTP')}</label>
+                            </div>
+                            <div class="custom-control custom-radio mb-3">
+                                <input type="radio" class="custom-control-input" name="msauth-scope" id="msauth-scope-all" value="all">
+                                <label class="custom-control-label" for="msauth-scope-all"><b>${__('msauth_scope_all', 'Force all OTP users')}</b> - ${__('msauth_scope_all_hint', 'every staff user who would get an email OTP must sign in with Microsoft')}</label>
+                            </div>
+                            <div id="msauth-selected-box">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="as-int-hint mb-0" id="msauth-selected-count"></span>
+                                    <button type="button" class="btn btn-sm btn-primary" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0">
+                                        <thead><tr><th>${__('name', 'Name')}</th><th>${__('id_iqama', 'ID / Iqama')}</th><th>${__('email', 'Email')}</th><th></th></tr></thead>
+                                        <tbody id="msauth-users-body"><tr><td colspan="4" class="text-center text-muted">${__('loading', 'Loading')}...</td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <p class="as-int-hint mb-0" id="msauth-all-note" style="display:none">${__('msauth_all_note', 'All active OTP users sign in with Microsoft. Normal employees still use ID + password.')}</p>
+                        </div>
+                    </div>
+                `;
+                renderSettingsGroup('Microsoft_Sign_In', document.getElementById('msauth-fields'));
+                const msUsersBody = document.getElementById('msauth-users-body');
+                let msUsers = [];
+                let msScope = 'selected';
+                const postMs = (params) => fetch('./includes/settings_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams(params)
+                }).then(r => r.json());
+                const msToast = () => Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: __('saved', 'Saved'), showConfirmButton: false, timer: 1500 });
+                // Only the users already added are listed; the rest are picked through "Add user"
+                const renderMsUsers = () => {
+                    document.getElementById('msauth-scope-' + msScope).checked = true;
+                    document.getElementById('msauth-selected-box').style.display = msScope === 'selected' ? '' : 'none';
+                    document.getElementById('msauth-all-note').style.display = msScope === 'all' ? '' : 'none';
+                    const rows = msUsers.filter(u => u.method === 'microsoft');
+                    document.getElementById('msauth-selected-count').textContent = rows.length + ' ' + __('msauth_users_added', 'user(s) added');
+                    msUsersBody.innerHTML = rows.length ? rows.map(u => `
+                        <tr>
+                            <td>${escapeHtml(u.name)}<div class="text-muted small">${escapeHtml(u.user_type)}${u.linked ? ' · <span class="text-success">' + __('msauth_linked', 'Microsoft account linked') + '</span>' : ''}</div></td>
+                            <td class="sr-mono">${escapeHtml(u.id_iqama)}</td>
+                            <td>${escapeHtml(u.email || '-')}</td>
+                            <td class="text-right"><button type="button" class="btn btn-sm btn-outline-danger msauth-remove" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('remove', 'Remove')}"><i class="mdi mdi-close"></i></button></td>
+                        </tr>`).join('') : `<tr><td colspan="4" class="text-center text-muted">${__('msauth_no_users', 'No users added yet - everyone uses email OTP.')}</td></tr>`;
+                };
+                const setUserMethod = async (iqama, method) => {
+                    const data = await postMs({ action: 'set_msauth_user_method', id_iqama: iqama, method: method });
+                    if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                    const user = msUsers.find(u => u.id_iqama === iqama);
+                    if (user) user.method = method;
+                    renderMsUsers();
+                    msToast();
+                };
+                postMs({ action: 'get_msauth_users' }).then(data => {
+                    msUsers = data.success ? data.users : [];
+                    msScope = data.scope === 'all' ? 'all' : 'selected';
+                    renderMsUsers();
+                }).catch(() => { msUsersBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${__('error', 'Error')}</td></tr>`; });
+                document.querySelectorAll('input[name="msauth-scope"]').forEach(radio => radio.addEventListener('change', async function () {
+                    const scope = this.value;
+                    if (scope === 'all') {
+                        const answer = await Swal.fire({
+                            icon: 'warning',
+                            title: __('msauth_force_all_q', 'Force Microsoft sign-in for all OTP users?'),
+                            text: __('msauth_force_all_text', 'Every staff user who now gets an email OTP will have to sign in with their Microsoft account (password + MFA). Test with a few selected users first.'),
+                            showCancelButton: true,
+                            confirmButtonColor: '#dc2626',
+                            confirmButtonText: __('msauth_force_all_btn', 'Force for all'),
+                            cancelButtonText: __('cancel', 'Cancel')
+                        });
+                        if (!answer.isConfirmed) { renderMsUsers(); return; }
+                    }
+                    try {
+                        const data = await postMs({ action: 'set_msauth_scope', scope: scope });
+                        if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                        msScope = scope;
+                        renderMsUsers();
+                        msToast();
+                    } catch (err) {
+                        renderMsUsers();
+                        Swal.fire(__('error', 'Error'), err.message, 'error');
+                    }
+                }));
+                document.getElementById('msauth-add-user').addEventListener('click', async function () {
+                    const candidates = msUsers.filter(u => u.method !== 'microsoft');
+                    if (!candidates.length) {
+                        Swal.fire(__('msauth_add_user', 'Add user'), __('msauth_all_added', 'All OTP users are already added.'), 'info');
+                        return;
+                    }
+                    const result = await Swal.fire({
+                        title: __('msauth_add_user', 'Add user'),
+                        html: `<input type="search" id="msauth-pick-search" class="swal2-input" placeholder="${__('search', 'Search')}...">
+                               <select id="msauth-pick" class="swal2-select" size="8" style="width:100%;max-width:100%">
+                                   ${candidates.map(u => `<option value="${escapeHtml(u.id_iqama)}">${escapeHtml(u.name)} - ${escapeHtml(u.id_iqama)}${u.email ? ' - ' + escapeHtml(u.email) : ''}</option>`).join('')}
+                               </select>`,
+                        showCancelButton: true,
+                        confirmButtonText: __('add', 'Add'),
+                        cancelButtonText: __('cancel', 'Cancel'),
+                        didOpen: () => {
+                            const search = document.getElementById('msauth-pick-search');
+                            const pick = document.getElementById('msauth-pick');
+                            search.focus();
+                            search.addEventListener('input', () => {
+                                const q = search.value.toLowerCase();
+                                Array.from(pick.options).forEach(o => { o.hidden = !!q && !o.text.toLowerCase().includes(q); });
+                            });
+                        },
+                        preConfirm: () => {
+                            const value = document.getElementById('msauth-pick').value;
+                            if (!value) { Swal.showValidationMessage(__('msauth_pick_user', 'Select a user')); return false; }
+                            return value;
+                        }
+                    });
+                    if (!result.isConfirmed) return;
+                    try { await setUserMethod(result.value, 'microsoft'); } catch (err) { Swal.fire(__('error', 'Error'), err.message, 'error'); }
+                });
+                msUsersBody.addEventListener('click', async function (e) {
+                    const btn = e.target.closest('.msauth-remove');
+                    if (!btn) return;
+                    btn.disabled = true;
+                    try { await setUserMethod(btn.dataset.iqama, 'email_otp'); } catch (err) { btn.disabled = false; Swal.fire(__('error', 'Error'), err.message, 'error'); }
+                });
+                document.getElementById('msauth-copy-uri').addEventListener('click', function () {
+                    const input = document.getElementById('msauth-redirect-uri');
+                    input.select();
+                    if (navigator.clipboard) { navigator.clipboard.writeText(input.value).catch(() => {}); } else { document.execCommand('copy'); }
+                });
+                document.getElementById('msauth-test').addEventListener('click', async function () {
+                    const btn = this;
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch('./includes/settings_handler.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: new URLSearchParams({ action: 'test_msauth' })
+                        });
+                        const data = await res.json();
+                        Swal.fire(data.success ? __('success', 'Success') : __('error', 'Error'), data.message || '', data.success ? 'success' : 'error');
+                    } catch (e) {
+                        Swal.fire(__('error', 'Error'), e.message, 'error');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                });
                 return;
             }
 
@@ -3763,6 +3945,15 @@ function __(key, def) {
                     confirmOn: __('attendance_enable_confirm_text', 'Attendance pages, devices, the Attendance tab and the report come back. Devices then send the punches they kept while it was off.'),
                     confirmOff: __('attendance_disable_confirm_text', 'Attendance pages, menu links, the employee Attendance tab, the attendance report and Attendance Config are hidden for everyone. Devices stop being accepted (they keep their punches), and payroll skips automatic attendance deductions / overtime. Settings and permissions are kept.'),
                 },
+                {
+                    setting: 'msauth_enabled', on: MSAUTH_ON, icon: msLogo,
+                    name: __('msauth_name', 'Microsoft Sign-in (2FA)'),
+                    label: __('msauth_enable_label', 'Enable Microsoft Sign-in'),
+                    onHint: __('msauth_enabled_hint', 'On - staff who normally get an email OTP sign in with their Microsoft account (password + MFA) once the Microsoft Sign In tab is configured. Normal employees keep ID + password.'),
+                    offHint: __('msauth_disabled_hint', 'Off - staff receive the email OTP as before and the Microsoft Sign In tab is hidden. Settings are kept.'),
+                    confirmOn: __('msauth_enable_confirm_text', 'The Microsoft Sign In tab appears. Sign-in switches to Microsoft as soon as Tenant ID, Client ID and Client Secret are saved there.'),
+                    confirmOff: __('msauth_disable_confirm_text', 'Staff go back to receiving the email OTP and the Microsoft Sign In tab is hidden. Settings are kept.'),
+                },
             ];
             const meta = groupMeta('integrations');
             settingsContainer.innerHTML = `
@@ -6450,7 +6641,7 @@ function __(key, def) {
                 // outer nav so they don't also show up as their own top-level tabs.
                 const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
                 // D365 Config is hidden while Microsoft Dynamics 365 is switched off (Integrations tab)
-                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config')).sort(); // Sort groups alphabetically
+                const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config') && (MSAUTH_ON || g !== 'Microsoft_Sign_In')).sort(); // Sort groups alphabetically
 
                 let navHtml = '';
                 groups.forEach((group) => {

@@ -31,6 +31,7 @@ require_once __DIR__ . '/includes/session_bootstrap.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/translation_functions.php'; // Added for email translation
 require_once __DIR__ . '/includes/login_security.php';
+require_once __DIR__ . '/includes/microsoft_auth.php';
 require_once __DIR__ . '/includes/vendor/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -144,6 +145,26 @@ try {
             load_language($user_lang);
             $_SESSION['lang'] = $user_lang;
             // ---> END: LANGUAGE LOADING <---
+
+            // Microsoft Sign-in (App Settings > Integrations): only users assigned 'Microsoft' in
+            // App Settings > Microsoft Sign In > Users sign in with Microsoft (password + MFA);
+            // everyone else keeps receiving the email OTP.
+            if (msauth_enabled($conDB) && msauth_user_assigned($conDB, $user['id_iqama'])) {
+                $msSettings = msauth_settings($conDB);
+                $msEmailOk = msauth_email_allowed($user['email'] ?? '', $msSettings['domains']);
+                $wantsEmailOtp = !empty($_POST['use_email_otp']) && $msSettings['mode'] === 'fallback';
+
+                if (!$msEmailOk && $msSettings['mode'] === 'required') {
+                    throw new Exception('Your account email is not a company Microsoft account, so you cannot sign in. Please contact IT support.');
+                }
+                if ($msEmailOk && !$wantsEmailOtp) {
+                    $resp['status'] = 'success';
+                    $resp['redirect_url'] = msauth_begin($conDB, $user['id_iqama'], $user['email'], isset($_POST['remember_me']));
+                    session_write_close();
+                    header("Location: " . $resp['redirect_url']);
+                    exit();
+                }
+            }
 
             // Non-Employee OTP Login
             if (empty($user['email'])) {
