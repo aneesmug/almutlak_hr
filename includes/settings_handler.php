@@ -13,6 +13,7 @@ require_once(__DIR__ . "/screen_settings_helper.php");
 require_once(__DIR__ . "/zk_helpers.php");
 require_once(__DIR__ . "/MicrosoftAuth/microsoft_auth.php");
 require_once(__DIR__ . "/GoogleAuth/google_auth.php");
+require_once(__DIR__ . "/two_factor.php");
 require_once(__DIR__ . "/../vendor/autoload.php");
 
 if ($conDB->connect_error) {
@@ -187,6 +188,7 @@ function get_all_settings($conDB) {
     ensure_d365_settings($conDB);
     msauth_ensure_settings($conDB);
     gauth_ensure_settings($conDB);
+    email_otp_fallback_ensure_setting($conDB);
     global $is_system_admin;
 
     $settings = [];
@@ -200,7 +202,7 @@ function get_all_settings($conDB) {
     // memo_templates_version is an internal counter the memo page maintains itself
     // (see memo_helper.php) - showing it made a "Memo Internal" tab with a field
     // nobody should type into.
-    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope') ORDER BY setting_group, id";
+    $sql = "SELECT setting_name, setting_value, description, input_type, options, setting_group FROM app_settings WHERE setting_name NOT IN ('db_export_secret_key', 'memo_templates_version', 'd365_enabled', 'attendance_enabled', 'msauth_enabled', 'msauth_scope', 'gauth_enabled', 'gauth_scope', 'email_otp_fallback') ORDER BY setting_group, id";
     $result = $conDB->query($sql);
 
     if ($result) {
@@ -287,7 +289,7 @@ function update_all_settings($conDB) {
         $text_inputs = array_diff_key($_POST, ['action' => '']);
         global $is_system_admin;
         foreach ($text_inputs as $setting_name => $value) {
-            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled') && !($is_system_admin ?? false)) {
+            if ((strpos((string)$setting_name, 'd365_') === 0 || strpos((string)$setting_name, 'msauth_') === 0 || strpos((string)$setting_name, 'gauth_') === 0 || $setting_name === 'attendance_enabled' || $setting_name === 'email_otp_fallback') && !($is_system_admin ?? false)) {
                 continue; // D365 Config, Microsoft Sign In and the Integrations switches are system-admin only (see get_all_settings)
             }
             if ($setting_name === 'msauth_client_secret' && trim((string)$value) === '') {

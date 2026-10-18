@@ -4,6 +4,7 @@
     require_once __DIR__ . '/includes/screen_settings_helper.php';
     require_once __DIR__ . '/includes/MicrosoftAuth/microsoft_auth.php';
     require_once __DIR__ . '/includes/GoogleAuth/google_auth.php';
+    require_once __DIR__ . '/includes/two_factor.php';
     $canAccessDepartmentsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessJobTitlesTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessLocationsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_location_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
@@ -827,6 +828,8 @@
             'msauthEnabled' => msauth_switch_on($conDB),
             // Google Authenticator switch (Integrations tab) - off hides the Google Authenticator tab
             'gauthEnabled' => gauth_enabled($conDB),
+            // Email OTP as a backup for Microsoft / Google 2FA users (Integrations tab)
+            'emailOtpFallback' => email_otp_fallback_enabled($conDB),
             'canAccessDepartmentsTab' => (bool) $canAccessDepartmentsTab,
             'canAccessJobTitlesTab' => (bool) $canAccessJobTitlesTab,
             'canAccessLocationsTab' => (bool) $canAccessLocationsTab,

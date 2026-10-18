@@ -72,6 +72,8 @@ function __(key, def) {
         const MSAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).msauthEnabled === true;
         // Google Authenticator switch (Integrations tab): off hides the Google Authenticator tab (settings kept)
         const GAUTH_ON = (window.APP_SETTINGS_PERMISSIONS || {}).gauthEnabled === true;
+        // Email OTP backup for 2FA users (Integrations tab) - on unless switched off
+        const EMAIL_OTP_FALLBACK_ON = (window.APP_SETTINGS_PERMISSIONS || {}).emailOtpFallback !== false;
         const ATTENDANCE_KEYS = ['manage_device_monitor', 'manage_attendance', 'add_manual_attendance', 'manage_attendance_config', 'view_employee_attendance_tab', 'attendance'];
         // Keys / report types of a switched-off integration: hidden in the UI, kept when saving
         const isHiddenFeatureKey = key => (!D365_ON && isD365Key(key)) || (!ATTENDANCE_ON && ATTENDANCE_KEYS.includes(String(key || '')));
@@ -4373,6 +4375,16 @@ function __(key, def) {
                     offHint: __('gauth_disabled_hint', 'Off - staff receive the email OTP (or Microsoft sign-in) as before and the Google Authenticator tab is hidden. Settings and linked phones are kept.'),
                     confirmOn: __('gauth_enable_confirm_text', 'The Google Authenticator tab appears. Users you add there scan a QR code at their next sign-in (after confirming the email code), then use the app codes.'),
                     confirmOff: __('gauth_disable_confirm_text', 'Staff go back to the email OTP (or Microsoft sign-in) and the Google Authenticator tab is hidden. Settings and linked phones are kept.'),
+                },
+                {
+                    setting: 'email_otp_fallback', on: EMAIL_OTP_FALLBACK_ON,
+                    icon: '<span class="ac-ico as-int-ico"><i class="mdi mdi-email-outline"></i></span>',
+                    name: __('email_otp_fallback_name', 'Email OTP (backup for 2FA)'),
+                    label: __('email_otp_fallback_label', 'Allow email code instead of 2FA'),
+                    onHint: __('email_otp_fallback_on_hint', 'On - users with Microsoft / Google 2FA can pick "Email code" on the login page (no phone at hand), unless their method is set to "required". Staff without 2FA always get the email OTP.'),
+                    offHint: __('email_otp_fallback_off_hint', 'Off - users with Microsoft / Google 2FA must use it; the "Email code" option is hidden on the login page. Staff without 2FA still get the email OTP.'),
+                    confirmOn: __('email_otp_fallback_confirm_on', 'Users with Microsoft / Google 2FA can choose an email code instead on the login page.'),
+                    confirmOff: __('email_otp_fallback_confirm_off', 'Users with Microsoft / Google 2FA must use it - the "Email code" option disappears from the login page. Make sure they all have their phone / Microsoft account ready.'),
                 },
             ];
             const meta = groupMeta('integrations');
