@@ -1373,12 +1373,6 @@
                                                             <i class="fa fa-solid fa-user-tie"></i> <?= __('assign_payroll_supervisor_button', 'Assign Direct Supervisor (Payroll)') ?>
                                                         </button>
                                                         <?php endif; ?>
-                                                        <button type="button" class="dropdown-item" id="actionImportPayrollExcelBtn" style="display:none;" data-mi-color="primary">
-                                                            <i class="fa fa-solid fa-file-arrow-up"></i> <?= __('upload_payroll_excel') ?: 'Upload Payroll Excel' ?>
-                                                        </button>
-                                                        <button type="button" class="dropdown-item" id="actionRegeneratePayrollBtn" style="display:none;" title="Re-generate payroll and skip hold employees" data-mi-color="teal">
-                                                            <i class="fa fa-solid fa-refresh"></i> <?= __('regenerate_payroll_button') ?? 'Re-generate Payroll' ?>
-                                                        </button>
                                                         <?php if ($canUngeneratePayroll): ?>
                                                         <button type="button" class="dropdown-item" id="actionUngeneratePayrollBtn" style="display:none;" title="Remove generated payroll for this month (not-yet-paid employees only)" data-mi-color="danger">
                                                             <i class="fa fa-solid fa-trash-can"></i> <?= __('ungenerate_payroll_button', 'Un-Generate Payroll') ?>
@@ -1616,6 +1610,14 @@ async function updateStartApprovalButtonVisibility(monthValue = null) {
     } else {
         btn.addClass('hidden').hide();
     }
+}
+
+// "Save & Generate" - global switch in App Settings > Payroll Settings > Payroll Generation
+// Settings (app_settings.payroll_save_and_generate, default ON).
+// ON: employee payroll modal saves + regenerates that employee. OFF: save only.
+const PAYROLL_SAVE_AND_GENERATE = <?= (get_setting($conDB, 'payroll_save_and_generate') ?? '1') !== '0' ? 'true' : 'false' ?>;
+function isSaveAndGenerateOn() {
+    return PAYROLL_SAVE_AND_GENERATE;
 }
 
 // Build the "More Actions" SweetAlert2 menu HTML from the current state of the real,
@@ -2903,15 +2905,7 @@ async function updateRegenerateButtonVisibility() {
         $('#actionImportPayrollExcelBtn').addClass('hidden').hide();
     }
 
-    // Re-generate Payroll: hidden until payroll actually exists for this month,
-    // and hidden again once the month is paid.
-    if (hasGeneratedPayroll && !monthPaid) {
-        $('#actionRegeneratePayrollBtn').removeClass('hidden').show().prop('disabled', false);
-    } else {
-        $('#actionRegeneratePayrollBtn').addClass('hidden').hide();
-    }
-
-    // Un-generate Payroll: same visibility rule as Re-generate.
+    // Un-generate Payroll: shown only once payroll exists for this month and it isn't paid yet.
     if (hasGeneratedPayroll && !monthPaid) {
         $('#actionUngeneratePayrollBtn').removeClass('hidden').show().prop('disabled', false);
     } else {
@@ -3073,9 +3067,6 @@ function addEventListeners() {
     $('#actionGenerateReportBtn').off('click', generatePayrollReport).on('click', generatePayrollReport);
     currentEventListeners.push(() => $('#actionGenerateReportBtn').off('click', generatePayrollReport));
 
-    // New: Re-generate Payroll button
-    $('#actionRegeneratePayrollBtn').off('click', regeneratePayroll).on('click', regeneratePayroll);
-    currentEventListeners.push(() => $('#actionRegeneratePayrollBtn').off('click', regeneratePayroll));
     $('#actionUngeneratePayrollBtn').off('click', ungeneratePayroll).on('click', ungeneratePayroll);
     currentEventListeners.push(() => $('#actionUngeneratePayrollBtn').off('click', ungeneratePayroll));
 
@@ -5848,109 +5839,6 @@ function paSummaryHtml(status, requestInvNo, summary, notificationSent = null) {
         </div>`;
 }
 
-async function regeneratePayroll() {
-    // Get ALL employees (no checkbox filtering) - will regenerate for all non-hold employees
-    const allEmployeeIds = Array.isArray(allEmployeesData)
-        ? allEmployeesData.filter(emp => {
-            const pt = parseInt(emp.payment_type || 1, 10);
-            return pt !== 3; // Skip hold employees (payment_type = 3)
-          })
-          .map(emp => emp.emp_id)
-        : [];
-
-    const payrollMonth = $('#payrollMonth').val();
-
-    // Validate that a payroll month is selected
-    if (!payrollMonth) {
-        showWarning(__('month_not_selected_warning_title'), __('please_select_payroll_month_warning'));
-        return;
-    }
-
-    if (allEmployeeIds.length === 0) {
-        showWarning(__('no_employees_available_warning_title') || 'No Employees', __('no_active_employees_available_for_regeneration') || 'No active (non-hold) employees available for regeneration.');
-        return;
-    }
-
-    // Fetch existing benefits and deductions for the month
-    let existingBenefitsDeductions = { has_benefits: false, has_deductions: false, count: 0 };
-    try {
-        const checkResponse = await fetch(`./includes/api/check_payroll_benefits_deductions.php?month=${payrollMonth}`);
-        if (checkResponse.ok) {
-            existingBenefitsDeductions = await checkResponse.json();
-        }
-    } catch (e) {
-        console.warn('Could not check existing benefits/deductions:', e);
-    }
-
-    // Build info message if benefits/deductions exist -- regenerate preserves manually added
-    // benefits/deductions and only refreshes base salary components + recalculated totals.
-    let warningHtml = `<div style="text-align:left;">${__('regenerate_payroll_confirmation_message') || 'This will refresh payroll for all non-hold employees using the latest salary master data, and skip those on hold. Continue?'}</div>`;
-    if (existingBenefitsDeductions.has_benefits || existingBenefitsDeductions.has_deductions) {
-        const items = [];
-        if (existingBenefitsDeductions.has_benefits) {
-            items.push(`<i class="fas fa-gift text-info"></i> ${__('benefits_section')}`);
-        }
-        if (existingBenefitsDeductions.has_deductions) {
-            items.push(`<i class="fas fa-minus-circle text-danger"></i> ${__('deductions_section')}`);
-        }
-        warningHtml += `<div style="margin-top:15px; padding:10px; background-color:#e7f5ea; border-left:4px solid #28a745; border-radius:4px;">
-            <strong style="color:#1e7e34;"><i class="fas fa-check-circle"></i> ${__('existing_benefits_deductions_preserved_title') || 'Existing Benefits/Deductions Will Be Kept'}</strong>
-            <div style="margin-top:8px; color:#1e7e34;">
-                ${items.join('<br>')}
-            </div>
-            <small style="display:block; margin-top:8px; color:#1e7e34;">${__('regenerate_preserves_manual_items_note') || 'These manually added items stay as-is. Only base salary components and totals are recalculated from the latest employee master data.'}</small>
-        </div>`;
-    }
-
-    // Show confirmation dialog with warning
-    const confirmation = await Swal.fire({
-        title: __('regenerate_payroll_confirmation_title') || 'Regenerate Payroll?',
-        html: warningHtml,
-        icon: existingBenefitsDeductions.has_benefits || existingBenefitsDeductions.has_deductions ? 'warning' : 'info',
-        showCancelButton: true,
-        confirmButtonColor: '#ff9800',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: __('yes_regenerate_button') || 'Yes, Regenerate',
-        cancelButtonText: __('cancel'),
-        allowOutsideClick: false
-    });
-
-    if (!confirmation.isConfirmed) return;
-
-    // Show a loading indicator while processing
-    showPayrollRunLoading(__('regenerating_payroll_title') || 'Regenerating Payroll', payrollMonth, allEmployeeIds.length);
-
-    try {
-        // Send the request to the server to regenerate payroll
-        const response = await fetch('./includes/api/process_payroll.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                employee_ids: allEmployeeIds,
-                month: payrollMonth,
-                is_regenerate: true
-            }),
-        });
-        const result = await response.json();
-
-        // 'success' or 'warning' (some employees skipped) - one result popup for both
-        if (result.status === 'warning' || result.status === 'success') {
-            showPayrollRunResult(__('payroll_regenerated_success_title') || 'Payroll Regenerated Successfully', result, payrollMonth, allEmployeeIds.length);
-            await fetchEmployees(); // Refresh employee list to update status and action visibility
-        } else {
-            // If the server responds with an error, throw an error
-            throw new Error(result.message || 'An unexpected error occurred.');
-        }
-    } catch (error) {
-        // Catch any errors from the fetch or from the server's response and display them
-        console.error('Error:', error);
-        // The error message from the PHP script will be displayed here
-        showError(__('error_regenerating_payroll_title') || 'Error Regenerating Payroll', error.message);
-    }
-}
-
 async function ungeneratePayroll() {
     const payrollMonth = $('#payrollMonth').val();
 
@@ -6782,13 +6670,11 @@ async function showPayrollDetails(empId, empName, month) {
                     </div>
                     ${joiningDeductionInfoHtml}
                     ${gosiHandledInVacationInfoHtml}
-                    ${isPayrollGenerated && !isReadOnly ? `
-                    <label class="pd-check pd-save-only">
-                        <input type="checkbox" id="pdSaveOnlyCheckbox">
-                        <span>${__('save_only_checkbox_label', 'Save only (do not regenerate payroll)')}</span>
-                    </label>` : ''}
                 </div>
             `;
+
+            // Toolbar "Save & Generate" switch decides the save button for already-generated payroll
+            const saveAndGenerate = isPayrollGenerated && !isReadOnly && isSaveAndGenerateOn();
 
             const modalFooterHtml = `
                 <div class="payroll-nav-footer text-center">
@@ -6812,9 +6698,9 @@ async function showPayrollDetails(empId, empName, month) {
                 width: '960px',
                 showCancelButton: true,
                 showConfirmButton: !isReadOnly,
-                // Already generated -> one "Save & Generate" button: save this modal's edits,
-                // regenerate payroll for this employee only, reopen with the new figures.
-                confirmButtonText: isPayrollGenerated
+                // Already generated + toolbar "Save & Generate" switch ON -> "Save & Generate":
+                // save edits, regenerate this employee only, reopen. Otherwise plain "Save".
+                confirmButtonText: saveAndGenerate
                     ? `<i class="fas fa-sync-alt"></i> ${__('save_and_generate_button', 'Save & Generate')}`
                     : `<i class="fas fa-save"></i> ${__('save_changes_button')}`,
                 cancelButtonText: __('close'),
@@ -6824,7 +6710,7 @@ async function showPayrollDetails(empId, empName, month) {
                 customClass: {
                     popup: 'pd-popup' + (isReadOnly ? ' payroll-view-only-popup' : ''),
                     actions: 'pd-actions',
-                    confirmButton: 'pd-btn ' + (isPayrollGenerated ? 'pd-btn-generate' : 'pd-btn-primary'),
+                    confirmButton: 'pd-btn ' + (saveAndGenerate ? 'pd-btn-generate' : 'pd-btn-primary'),
                     cancelButton: 'pd-btn',
                     footer: 'pd-footer'
                 },
@@ -6842,19 +6728,6 @@ async function showPayrollDetails(empId, empName, month) {
                         });
                         popupEl.querySelectorAll('#addBenefitBtn, #addDeductionBtn, .delete-benefit-btn, .delete-deduction-btn, .mark-feedback-resolved-btn').forEach(el => {
                             el.style.display = 'none';
-                        });
-                    }
-                    // "Save only" ticked -> button turns back into a plain "Save Changes".
-                    const saveOnlyBox = document.getElementById('pdSaveOnlyCheckbox');
-                    if (saveOnlyBox) {
-                        saveOnlyBox.addEventListener('change', () => {
-                            const btn = Swal.getConfirmButton();
-                            if (!btn) return;
-                            btn.innerHTML = saveOnlyBox.checked
-                                ? `<i class="fas fa-save"></i> ${__('save_changes_button')}`
-                                : `<i class="fas fa-sync-alt"></i> ${__('save_and_generate_button', 'Save & Generate')}`;
-                            btn.classList.toggle('pd-btn-generate', !saveOnlyBox.checked);
-                            btn.classList.toggle('pd-btn-primary', saveOnlyBox.checked);
                         });
                     }
 
@@ -7467,8 +7340,7 @@ async function showPayrollDetails(empId, empName, month) {
                         Swal.showValidationMessage(loanError);
                         return false;
                     }
-                    const saveOnlyBox = document.getElementById('pdSaveOnlyCheckbox');
-                    return { ...collectPayrollModalData(employee), saveOnly: !!(saveOnlyBox && saveOnlyBox.checked) };
+                    return { ...collectPayrollModalData(employee), saveOnly: !saveAndGenerate };
                 }
             }).then(async (result) => {
                 addEventListeners();

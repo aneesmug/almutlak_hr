@@ -16,6 +16,7 @@
     $canAccessDeductionSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_deduction_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessSalaryIncrementSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_salary_increment_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessResignationSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_resignation_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+    $canAccessPayrollGenerationSettingsTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_payroll_generation_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     $canAccessAttendanceConfigTab = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'manage_attendance_config', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
     // Screen Settings tab: system admins get the full per-user table; a plain user
     // granted 'manage_own_screen_settings' only ever sees/edits their own single row
@@ -838,6 +839,7 @@
             'canAccessDeductionSettingsTab' => (bool) $canAccessDeductionSettingsTab,
             'canAccessSalaryIncrementSettingsTab' => (bool) $canAccessSalaryIncrementSettingsTab,
             'canAccessResignationSettingsTab' => (bool) $canAccessResignationSettingsTab,
+            'canAccessPayrollGenerationSettingsTab' => (bool) $canAccessPayrollGenerationSettingsTab,
             'canAccessAttendanceConfigTab' => (bool) $canAccessAttendanceConfigTab,
             'canAccessScreenSettingsTab' => (bool) $canAccessScreenSettingsTab,
             'canAccessTempRoleTransferTab' => (bool) $canAccessTempRoleTransferTab,

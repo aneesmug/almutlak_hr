@@ -23,6 +23,7 @@ const PAYROLL_SETTINGS_GROUP_KEYS = [
     'deduction_settings' => 'manage_deduction_settings',
     'salary_increment_settings' => 'manage_salary_increment_settings',
     'resignation_settings' => 'manage_resignation_settings',
+    'payroll_generation' => 'manage_payroll_generation_settings',
 ];
 
 function payrollSettingsCanAccessGroup($conDB, $group) {
@@ -51,6 +52,7 @@ function ensurePayrollParamSettings($conDB) {
         ['deduction_auto_attendance_enabled', '0', 'deduction_settings', 'Automatically add Late / Early-Leave deductions to payroll from attendance, using the Overtime hourly-rate formula'],
         ['salary_increment_max_amount', '2000', 'salary_increment_settings', 'Maximum salary increment amount allowed per request'],
         ['resignation_backdate_days', '0', 'resignation_settings', 'Days back allowed for Last Working Day when applying resignation'],
+        ['payroll_save_and_generate', '1', 'payroll_generation', 'Save & Generate: when ON, saving an employee payroll on Generate Payroll also regenerates it for that employee; when OFF, it only saves'],
     ];
 
     foreach ($defaults as [$name, $value, $group, $description]) {
@@ -75,6 +77,10 @@ function ensurePayrollParamSettings($conDB) {
         $insertStmt->execute();
         $insertStmt->close();
     }
+
+    // payroll_save_and_generate may already exist from the old Generate Payroll toolbar
+    // switch (saved under group 'payroll') - move it into its settings tab group.
+    $conDB->query("UPDATE app_settings SET setting_group = 'payroll_generation' WHERE setting_name = 'payroll_save_and_generate' AND setting_group <> 'payroll_generation'");
 }
 
 function ensureDeductionTypesTable($conDB) {
