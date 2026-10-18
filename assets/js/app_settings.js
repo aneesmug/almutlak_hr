@@ -215,6 +215,32 @@ function __(key, def) {
             </ul>`;
         }
 
+        // Microsoft Sign In / Google Authenticator: "Configuration" + "Users" sub-tabs. Both panes are
+        // rendered once (their handlers stay bound); the tabs only show / hide them. The outer Save
+        // button belongs to the Configuration pane only - the Users pane saves each change itself.
+        function bindTwoFactorSubTabs(prefix) {
+            const storageKey = prefix + '_sub_tab';
+            const saveBtn = document.getElementById('saveBtnWrapper');
+            const show = (key) => {
+                document.querySelectorAll('#' + prefix + '-sub-nav a').forEach(a => a.classList.toggle('active', a.dataset.subTab === key));
+                document.getElementById(prefix + '-pane-config').style.display = key === 'config' ? '' : 'none';
+                document.getElementById(prefix + '-pane-users').style.display = key === 'users' ? '' : 'none';
+                if (saveBtn) saveBtn.style.display = key === 'config' ? '' : 'none';
+                try { localStorage.setItem(storageKey, key); } catch (e) {}
+            };
+            document.querySelectorAll('#' + prefix + '-sub-nav a').forEach(a => a.addEventListener('click', function (e) {
+                e.preventDefault();
+                show(this.dataset.subTab);
+            }));
+            let first = 'config';
+            try { first = localStorage.getItem(storageKey) === 'users' ? 'users' : 'config'; } catch (e) {}
+            show(first);
+        }
+        const TWO_FACTOR_SUB_TABS = () => [
+            { key: 'config', icon: 'mdi-settings', label: __('configuration', 'Configuration') },
+            { key: 'users', icon: 'mdi-account-multiple-outline', label: __('users', 'Users') },
+        ];
+
         function getReportTypeCatalog() {
             return [
                 { value: 'employee', label: '' + __('employee_report') + '' },
@@ -812,6 +838,8 @@ function __(key, def) {
                 settingsContainer.innerHTML = `
                     <div class="tab-pane active" id="group-Microsoft_Sign_In" role="tabpanel">
                         ${srTabHead(groupMeta('Microsoft_Sign_In').icon, __('Microsoft_Sign_In', 'Microsoft Sign In'), groupMeta('Microsoft_Sign_In').sub || '')}
+                        ${srSubNav('msauth-sub-nav', TWO_FACTOR_SUB_TABS(), 'config')}
+                        <div id="msauth-pane-config">
                         <div class="sr-card as-section">
                             <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-lan-connect"></i> ${__('msauth_azure_setup', 'Microsoft Entra app registration')}</div></div>
                             <ol class="as-int-hint" style="padding-inline-start:18px;margin-bottom:10px;">
@@ -829,6 +857,8 @@ function __(key, def) {
                             </div>
                         </div>
                         <div id="msauth-fields"></div>
+                        </div>
+                        <div id="msauth-pane-users" style="display:none">
                         <div class="sr-card as-section ms2fa">
                             <div class="sr-card-head">
                                 <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('msauth_users_title', 'Who signs in with Microsoft (2FA)')}</div>
@@ -868,9 +898,11 @@ function __(key, def) {
                             </div>
                             <div class="sr-pager ms2fa-pager" id="msauth-pager"></div>
                         </div>
+                        </div>
                     </div>
                 `;
                 renderSettingsGroup('Microsoft_Sign_In', document.getElementById('msauth-fields'));
+                bindTwoFactorSubTabs('msauth');
                 const msUsersBody = document.getElementById('msauth-users-body');
                 let msUsers = [];
                 let msScope = 'selected';
@@ -1101,6 +1133,8 @@ function __(key, def) {
                 settingsContainer.innerHTML = `
                     <div class="tab-pane active" id="group-Google_Authenticator" role="tabpanel">
                         ${srTabHead(gaMeta.icon, __('Google_Authenticator', 'Google Authenticator'), gaMeta.sub || '')}
+                        ${srSubNav('gauth-sub-nav', TWO_FACTOR_SUB_TABS(), 'config')}
+                        <div id="gauth-pane-config">
                         <div class="sr-card as-section">
                             <div class="sr-card-head"><div class="sr-card-title"><i class="mdi mdi-qrcode"></i> ${__('gauth_how_title', 'How it works')}</div></div>
                             <ol class="as-int-hint" style="padding-inline-start:18px;margin-bottom:0;">
@@ -1111,6 +1145,8 @@ function __(key, def) {
                             </ol>
                         </div>
                         <div id="gauth-fields"></div>
+                        </div>
+                        <div id="gauth-pane-users" style="display:none">
                         <div class="sr-card as-section ms2fa">
                             <div class="sr-card-head">
                                 <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('gauth_users_title', 'Who uses Google Authenticator (2FA)')}</div>
@@ -1150,9 +1186,11 @@ function __(key, def) {
                             </div>
                             <div class="sr-pager ms2fa-pager" id="gauth-pager"></div>
                         </div>
+                        </div>
                     </div>
                 `;
                 renderSettingsGroup('Google_Authenticator', document.getElementById('gauth-fields'));
+                bindTwoFactorSubTabs('gauth');
                 const gaBody = document.getElementById('gauth-users-body');
                 const GA_PAGE_SIZE = 10;
                 let gaUsers = [];
