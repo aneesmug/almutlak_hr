@@ -43,13 +43,10 @@ function openResignationApprovalWizard(resignationId, empId, empName, iqama, des
                 return false;
             }
             
-            // Validate date is in future
-            const selectedDate = new Date(hrLastWorkingDay);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            if (selectedDate <= today) {
-                Swal.showValidationMessage('Last working day must be in the future');
+            // HR may move the date at most 7 days before/after the employee's last working day
+            const hrRange = getHrLastDayRange(lastWorkingDay);
+            if (hrRange && (hrLastWorkingDay < hrRange.min || hrLastWorkingDay > hrRange.max)) {
+                Swal.showValidationMessage(`Last working day must be between ${hrRange.min} and ${hrRange.max}`);
                 return false;
             }
             
@@ -66,7 +63,8 @@ function openResignationApprovalWizard(resignationId, empId, empName, iqama, des
     
     // Initialize date picker
     setTimeout(() => {
-        AppDate.single('#hr_last_working_day', { minDate: 'today' }); // past days blocked
+        const hrRange = getHrLastDayRange(lastWorkingDay); // ±7 days of the employee date
+        AppDate.single('#hr_last_working_day', hrRange ? { minDate: hrRange.min, maxDate: hrRange.max } : {});
     }, 300);
 }
 

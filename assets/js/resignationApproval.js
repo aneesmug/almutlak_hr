@@ -337,7 +337,20 @@ function submitEOSApproval(resignationId, empId, finalLastWorkingDate) {
 /**
  * HR Operations Step 1: Display Employee and Resignation Information
  */
+/**
+ * Allowed window for "Last Workday by HR": employee's last working day ±7 days (Y-m-d strings).
+ * Returns null when the employee date is missing/invalid. Server enforces the same rule.
+ */
+function getHrLastDayRange(lastDay, days = 7) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lastDay || ''));
+    if (!m) return null;
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const shift = (n) => new Date(+m[1], +m[2] - 1, +m[3] + n);
+    return { base: ymd(shift(0)), min: ymd(shift(-days)), max: ymd(shift(days)) };
+}
+
 function showHRStep1EmployeeInfo(data) {
+    const hrRange = getHrLastDayRange(data.lastDay);
     Swal.fire({
         title: __('resignation_review') || 'Resignation Review',
         html: `
@@ -379,6 +392,7 @@ function showHRStep1EmployeeInfo(data) {
                             <td class="label">${__('last_working_day_hr') || 'Last Workday by HR'} <span class="text-danger">*</span>:</td>
                             <td class="value">
                                 <input type="text" id="hr_last_working_day" class="form-control datepicker" placeholder="YYYY-MM-DD" style="max-width: 200px;" required autocomplete="off">
+                                ${hrRange ? `<small class="text-muted d-block mt-1">${__('hr_last_day_range_hint') || 'Allowed: 7 days before or after the employee date'} (${formatDate(hrRange.min)} - ${formatDate(hrRange.max)})</small>` : ''}
                             </td>
                         </tr>
                     </table>
@@ -398,13 +412,22 @@ function showHRStep1EmployeeInfo(data) {
             cancelButton: 'btn-lg'
         },
         didOpen: () => {
-            // Past days are blocked
-            AppDate.single('#hr_last_working_day', { minDate: 'today' });
+            // HR may pick up to 7 days before/after the employee's last working day
+            if (hrRange) {
+                $('#hr_last_working_day').val(hrRange.base);
+                AppDate.single('#hr_last_working_day', { minDate: hrRange.min, maxDate: hrRange.max, defaultDate: hrRange.base });
+            } else {
+                AppDate.single('#hr_last_working_day');
+            }
         },
         preConfirm: () => {
             const hrLastWorkingDay = $('#hr_last_working_day').val().trim();
             if (!hrLastWorkingDay) {
                 Swal.showValidationMessage(__('last_working_day_hr_required') || 'Last Workday by HR is required');
+                return false;
+            }
+            if (hrRange && (hrLastWorkingDay < hrRange.min || hrLastWorkingDay > hrRange.max)) {
+                Swal.showValidationMessage(`${__('hr_last_day_out_of_range') || 'Last Workday by HR must be within 7 days of the employee date'} (${formatDate(hrRange.min)} - ${formatDate(hrRange.max)})`);
                 return false;
             }
             return true;

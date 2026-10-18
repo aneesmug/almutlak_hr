@@ -939,6 +939,46 @@ if ($ajaxType == 'apply_resignation') {
         }
         */
         
+        // HR Operations (level 2) only: may move the last working day at most 7 days
+        // before/after the employee's requested date. Checked before processApproval so a
+        // bad date never records the approval. Other levels never save this field.
+        $pendingLevelQuery = "SELECT `approval_level` FROM `request_approvers`
+                              WHERE `request_inv_no` = '" . mysqli_real_escape_string($conDB, $requestInvNo) . "'
+                              AND " . approverInSql('`approver_id`') . "
+                              AND `status` IN ('pending','awaiting')
+                              LIMIT 1";
+        $pendingLevelResult = mysqli_query($conDB, $pendingLevelQuery);
+        $pendingLevelRow = $pendingLevelResult ? mysqli_fetch_assoc($pendingLevelResult) : null;
+        if ($pendingLevelResult) mysqli_free_result($pendingLevelResult);
+        $isHrOperationsLevel = $pendingLevelRow && (int)$pendingLevelRow['approval_level'] === 2;
+
+        $postedHrLastDay = trim((string)($_POST['hr_last_working_day'] ?? ''));
+        if ($isHrOperationsLevel && $postedHrLastDay !== '') {
+            $hrDate = DateTime::createFromFormat('!Y-m-d', $postedHrLastDay);
+            $empDate = !empty($resignation['last_working_day']) ? DateTime::createFromFormat('!Y-m-d', substr($resignation['last_working_day'], 0, 10)) : false;
+            if (!$hrDate || $hrDate->format('Y-m-d') !== $postedHrLastDay) {
+                echo json_encode([
+                    'type' => 'error',
+                    'title' => 'Invalid Date',
+                    'message' => 'Last Workday by HR is not a valid date.'
+                ]);
+                exit;
+            }
+            if ($empDate) {
+                $minDate = (clone $empDate)->modify('-7 days');
+                $maxDate = (clone $empDate)->modify('+7 days');
+                if ($hrDate < $minDate || $hrDate > $maxDate) {
+                    echo json_encode([
+                        'type' => 'error',
+                        'title' => 'Invalid Date',
+                        'message' => 'Last Workday by HR must be within 7 days of the employee\'s last working day ('
+                            . $minDate->format('d M Y') . ' - ' . $maxDate->format('d M Y') . ').'
+                    ]);
+                    exit;
+                }
+            }
+        }
+
         // Get approver details
         $approverQuery = "SELECT `fullname`, `email` FROM `admin_login` WHERE `emp_id` = '$approverId'";
         $approverResult = mysqli_query($conDB, $approverQuery);
