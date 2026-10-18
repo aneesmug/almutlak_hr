@@ -9,6 +9,9 @@ ALTER TABLE `admin_login` ADD COLUMN `ms_oid` VARCHAR(64) NULL DEFAULT NULL;
 --     'email_otp' (default) or 'microsoft'
 ALTER TABLE `admin_login` ADD COLUMN `login_method` VARCHAR(20) NOT NULL DEFAULT 'email_otp';
 
+-- 1c. Set by "Revoke session"; the next Microsoft sign-in must re-enter credentials (skip if the column exists)
+ALTER TABLE `admin_login` ADD COLUMN `ms_reauth` TINYINT(1) NOT NULL DEFAULT 0;
+
 -- 2. Settings rows (switch starts OFF)
 INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options)
 SELECT * FROM (

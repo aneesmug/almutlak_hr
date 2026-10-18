@@ -769,6 +769,39 @@
         .aca-handler .select2-container--default .select2-selection--multiple .select2-selection__choice {
             border: 1px solid var(--tone-indigo-bd); background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); border-radius: 7px; font-size: 12px; font-weight: 600;
         }
+
+        /* Microsoft Sign In > Who signs in with Microsoft (2FA) */
+        .ms2fa-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px 16px 4px; }
+        @media (max-width: 720px) { .ms2fa-scope { grid-template-columns: 1fr; } }
+        .ms2fa-opt { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 12px 14px; border: 1.5px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
+        .ms2fa-opt:hover { border-color: var(--sr-border-strong, #cbd5e1); }
+        .ms2fa-opt.is-active { border-color: var(--sr-accent); background: var(--sr-accent-soft); box-shadow: 0 0 0 3px rgba(99, 102, 241, .12); }
+        .ms2fa-opt input { margin-top: 4px; accent-color: var(--sr-accent); flex: 0 0 auto; }
+        .ms2fa-opt-ico { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); }
+        .ms2fa-opt-ico.tone-red { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+        .ms2fa-opt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .ms2fa-opt-text b { font-size: 13.5px; color: var(--sr-text); }
+        .ms2fa-opt-text small { font-size: 12px; color: var(--sr-muted); font-weight: 500; line-height: 1.4; }
+        .ms2fa-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px 8px; }
+        .ms2fa-count { font-size: 12.5px; color: var(--sr-muted); }
+        .ms2fa-count b { color: var(--sr-text); font-size: 14px; }
+        .ms2fa-note { margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px; background: var(--tone-sky-bg); color: var(--tone-sky-fg); font-size: 12.5px; }
+        .ms2fa-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+        .ms2fa-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); }
+        .ms2fa-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, #6366f1, #0ea5e9); }
+        .ms2fa-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .ms2fa-who > b { font-size: 14px; color: var(--sr-text); overflow-wrap: anywhere; }
+        .ms2fa-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--sr-muted); }
+        .ms2fa-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
+        .ms2fa-last { font-size: 11.5px; color: var(--sr-muted); }
+        .ms2fa-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+        .ms2fa-actions .msauth-revoke { color: var(--tone-amber-fg); border-color: var(--tone-amber-bd); }
+        .ms2fa-actions .msauth-revoke:hover { background: var(--tone-amber-bg); }
+        .ms2fa-remove { color: var(--tone-red-fg); }
+        .ms2fa-remove:hover { background: var(--tone-red-bg); }
+        .ms2fa-empty { padding: 22px; text-align: center; color: var(--sr-muted); font-size: 13px; border: 1.5px dashed var(--sr-border); border-radius: 12px; }
+        .ms2fa-empty i { display: block; font-size: 26px; margin-bottom: 4px; opacity: .6; }
+        @media (max-width: 640px) { .ms2fa-row { flex-wrap: wrap; } .ms2fa-actions { width: 100%; justify-content: flex-end; } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />

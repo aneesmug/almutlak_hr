@@ -76,6 +76,7 @@ try {
     // --- Signed in (same session setup as the email OTP path in login_verification.php) ---
     if (!empty($user['employee_name'])) { $user['fullname'] = $user['employee_name']; }
     login_sec_record($conDB, $iqama, 'msauth', true);
+    msauth_clear_reauth($conDB, $iqama);
     session_regenerate_id(true);
     unset($_SESSION['otp_verification']);
     $_SESSION['auth_user'] = [

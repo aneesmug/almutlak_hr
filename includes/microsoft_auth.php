@@ -148,6 +148,13 @@ if (!function_exists('msauth_settings')) {
         $nonce = bin2hex(random_bytes(16));
         $verifier = msauth_b64url(random_bytes(32));
 
+        // After an admin "Revoke session", Microsoft must ask for the password (and MFA per policy) again
+        msauth_ensure_oid_column($conDB);
+        $reauthStmt = mysqli_prepare($conDB, "SELECT `ms_reauth` FROM `admin_login` WHERE `id_iqama` = ? LIMIT 1");
+        mysqli_stmt_bind_param($reauthStmt, "s", $idIqama);
+        mysqli_stmt_execute($reauthStmt);
+        $forceReauth = (int) (mysqli_fetch_assoc(mysqli_stmt_get_result($reauthStmt))['ms_reauth'] ?? 0) === 1;
+
         $_SESSION['msauth'] = [
             'id_iqama' => (string) $idIqama,
             'state' => $state,
@@ -157,7 +164,7 @@ if (!function_exists('msauth_settings')) {
             'expires' => time() + 600,
         ];
 
-        return 'https://login.microsoftonline.com/' . rawurlencode($s['tenant_id']) . '/oauth2/v2.0/authorize?' . http_build_query([
+        $params = [
             'client_id' => $s['client_id'],
             'response_type' => 'code',
             'redirect_uri' => msauth_redirect_uri(),
@@ -168,7 +175,12 @@ if (!function_exists('msauth_settings')) {
             'code_challenge' => msauth_b64url(hash('sha256', $verifier, true)),
             'code_challenge_method' => 'S256',
             'login_hint' => (string) $email,
-        ]);
+        ];
+        if ($forceReauth) {
+            $params['prompt'] = 'login';
+            $params['max_age'] = 0;
+        }
+        return 'https://login.microsoftonline.com/' . rawurlencode($s['tenant_id']) . '/oauth2/v2.0/authorize?' . http_build_query($params);
     }
 
     function msauth_http_post($url, array $fields)
@@ -257,6 +269,44 @@ if (!function_exists('msauth_settings')) {
         if ($res && mysqli_num_rows($res) === 0) {
             mysqli_query($conDB, "ALTER TABLE `admin_login` ADD COLUMN `login_method` VARCHAR(20) NOT NULL DEFAULT 'email_otp'");
         }
+        // Set by "Revoke session": the next Microsoft sign-in must re-enter credentials (prompt=login)
+        $res = mysqli_query($conDB, "SHOW COLUMNS FROM `admin_login` LIKE 'ms_reauth'");
+        if ($res && mysqli_num_rows($res) === 0) {
+            mysqli_query($conDB, "ALTER TABLE `admin_login` ADD COLUMN `ms_reauth` TINYINT(1) NOT NULL DEFAULT 0");
+        }
+    }
+
+    /**
+     * Revokes a user's Microsoft 2FA trust only: the next sign-in must go through Microsoft with
+     * password + MFA again (prompt=login), and "remember me" (which skips sign-in) is cleared.
+     * The user's current app session is NOT ended. Returns [ok, message].
+     */
+    function msauth_revoke_user($conDB, $idIqama)
+    {
+        msauth_ensure_oid_column($conDB);
+        $stmt = mysqli_prepare($conDB, "SELECT `id` FROM `admin_login` WHERE `id_iqama` = ? AND `user_type` <> 'employee' LIMIT 1");
+        mysqli_stmt_bind_param($stmt, "s", $idIqama);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        if (!$row) {
+            return [false, 'User not found.'];
+        }
+        $accountId = (int) $row['id'];
+
+        $upd = mysqli_prepare($conDB, "UPDATE `admin_login` SET `remember_token` = NULL, `remember_token_expiry` = NULL, `ms_reauth` = 1 WHERE `id` = ?");
+        mysqli_stmt_bind_param($upd, "i", $accountId);
+        mysqli_stmt_execute($upd);
+
+        return [true, 'Microsoft 2FA revoked. The user stays signed in now, but the next sign-in must go through Microsoft with password + MFA again.'];
+    }
+
+    /** Clears the forced re-authentication flag after a successful Microsoft sign-in. */
+    function msauth_clear_reauth($conDB, $idIqama)
+    {
+        msauth_ensure_oid_column($conDB);
+        $stmt = mysqli_prepare($conDB, "UPDATE `admin_login` SET `ms_reauth` = 0 WHERE `id_iqama` = ?");
+        mysqli_stmt_bind_param($stmt, "s", $idIqama);
+        mysqli_stmt_execute($stmt);
     }
 
     /** True when this OTP user must sign in with Microsoft (forced for all, or added to the selected list). */
@@ -278,19 +328,25 @@ if (!function_exists('msauth_settings')) {
     {
         msauth_ensure_oid_column($conDB);
         $users = [];
-        $res = mysqli_query($conDB, "SELECT a.`id_iqama`, COALESCE(NULLIF(e.`name`, ''), a.`fullname`) AS `name`, a.`email`, a.`user_type`, a.`login_method`,
-                (a.`ms_oid` IS NOT NULL AND a.`ms_oid` <> '') AS `linked`
+        $res = mysqli_query($conDB, "SELECT a.`id_iqama`, a.`emp_id`, COALESCE(NULLIF(e.`name`, ''), a.`fullname`) AS `name`, a.`email`, a.`user_type`, a.`login_method`,
+                (a.`ms_oid` IS NOT NULL AND a.`ms_oid` <> '') AS `linked`, a.`ms_reauth`,
+                (SELECT COUNT(*) FROM `user_activity_log` u WHERE u.`user_id` = a.`id` AND u.`status` = 'active') AS `active_sessions`,
+                (SELECT MAX(l.`created_at`) FROM `login_attempts` l WHERE l.`identifier` = a.`id_iqama` AND l.`kind` = 'msauth' AND l.`success` = 1) AS `last_ms_login`
             FROM `admin_login` a LEFT JOIN `employees` e ON e.`emp_id` = a.`emp_id`
             WHERE a.`user_type` <> 'employee' AND a.`status` = 1
             ORDER BY `name`");
         while ($res && ($r = mysqli_fetch_assoc($res))) {
             $users[] = [
                 'id_iqama' => (string) $r['id_iqama'],
+                'emp_id' => (string) $r['emp_id'],
                 'name' => (string) $r['name'],
                 'email' => (string) $r['email'],
                 'user_type' => (string) $r['user_type'],
                 'method' => $r['login_method'] === 'microsoft' ? 'microsoft' : 'email_otp',
                 'linked' => (bool) $r['linked'],
+                'reauth' => (int) $r['ms_reauth'] === 1,
+                'active_sessions' => (int) $r['active_sessions'],
+                'last_ms_login' => (string) ($r['last_ms_login'] ?? ''),
             ];
         }
         return $users;

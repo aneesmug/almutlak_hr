@@ -98,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'get_msauth_users':
         case 'set_msauth_user_method':
         case 'set_msauth_scope':
+        case 'revoke_msauth_user':
             // Assigning Microsoft sign-in per user: system admins only
             if (!($is_system_admin ?? false)) {
                 http_response_code(403);
@@ -106,6 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($action === 'get_msauth_users') {
                 echo json_encode(['success' => true, 'scope' => msauth_settings($conDB)['scope'], 'users' => msauth_list_users($conDB)]);
+            } elseif ($action === 'revoke_msauth_user') {
+                [$msOk, $msMessage] = msauth_revoke_user($conDB, (string)($_POST['id_iqama'] ?? ''));
+                echo json_encode(['success' => $msOk, 'message' => $msMessage]);
             } elseif ($action === 'set_msauth_scope') {
                 [$msOk, $msMessage] = msauth_set_scope($conDB, (string)($_POST['scope'] ?? ''));
                 echo json_encode(['success' => $msOk, 'message' => $msMessage]);

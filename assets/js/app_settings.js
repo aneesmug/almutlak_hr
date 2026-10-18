@@ -826,31 +826,28 @@ function __(key, def) {
                             </div>
                         </div>
                         <div id="msauth-fields"></div>
-                        <div class="sr-card as-section">
+                        <div class="sr-card as-section ms2fa">
                             <div class="sr-card-head">
                                 <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('msauth_users_title', 'Who signs in with Microsoft (2FA)')}</div>
                             </div>
-                            <div class="custom-control custom-radio mb-1">
-                                <input type="radio" class="custom-control-input" name="msauth-scope" id="msauth-scope-selected" value="selected">
-                                <label class="custom-control-label" for="msauth-scope-selected"><b>${__('msauth_scope_selected', 'Selected users only')}</b> - ${__('msauth_scope_selected_hint', 'only the users you add below use Microsoft; everyone else keeps email OTP')}</label>
+                            <div class="ms2fa-scope" role="radiogroup">
+                                <label class="ms2fa-opt">
+                                    <input type="radio" name="msauth-scope" id="msauth-scope-selected" value="selected">
+                                    <span class="ms2fa-opt-ico"><i class="mdi mdi-account-check"></i></span>
+                                    <span class="ms2fa-opt-text"><b>${__('msauth_scope_selected', 'Selected users only')}</b><small>${__('msauth_scope_selected_hint', 'Only the users you add below use Microsoft. Everyone else keeps email OTP.')}</small></span>
+                                </label>
+                                <label class="ms2fa-opt">
+                                    <input type="radio" name="msauth-scope" id="msauth-scope-all" value="all">
+                                    <span class="ms2fa-opt-ico tone-red"><i class="mdi mdi-security"></i></span>
+                                    <span class="ms2fa-opt-text"><b>${__('msauth_scope_all', 'Force all OTP users')}</b><small>${__('msauth_scope_all_hint', 'Every staff user who would get an email OTP must sign in with Microsoft.')}</small></span>
+                                </label>
                             </div>
-                            <div class="custom-control custom-radio mb-3">
-                                <input type="radio" class="custom-control-input" name="msauth-scope" id="msauth-scope-all" value="all">
-                                <label class="custom-control-label" for="msauth-scope-all"><b>${__('msauth_scope_all', 'Force all OTP users')}</b> - ${__('msauth_scope_all_hint', 'every staff user who would get an email OTP must sign in with Microsoft')}</label>
+                            <div class="ms2fa-bar">
+                                <span class="ms2fa-count" id="msauth-selected-count"></span>
+                                <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
                             </div>
-                            <div id="msauth-selected-box">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="as-int-hint mb-0" id="msauth-selected-count"></span>
-                                    <button type="button" class="btn btn-sm btn-primary" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table table-sm mb-0">
-                                        <thead><tr><th>${__('name', 'Name')}</th><th>${__('id_iqama', 'ID / Iqama')}</th><th>${__('email', 'Email')}</th><th></th></tr></thead>
-                                        <tbody id="msauth-users-body"><tr><td colspan="4" class="text-center text-muted">${__('loading', 'Loading')}...</td></tr></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <p class="as-int-hint mb-0" id="msauth-all-note" style="display:none">${__('msauth_all_note', 'All active OTP users sign in with Microsoft. Normal employees still use ID + password.')}</p>
+                            <p class="ms2fa-note" id="msauth-all-note" style="display:none"><i class="mdi mdi-information-outline"></i> ${__('msauth_all_note', 'All active OTP users sign in with Microsoft. Users who already signed in with Microsoft are listed below so you can revoke their 2FA. Normal employees still use ID + password.')}</p>
+                            <div class="ms2fa-list" id="msauth-users-body"><div class="ms2fa-empty">${__('loading', 'Loading')}...</div></div>
                         </div>
                     </div>
                 `;
@@ -865,19 +862,45 @@ function __(key, def) {
                 }).then(r => r.json());
                 const msToast = () => Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: __('saved', 'Saved'), showConfirmButton: false, timer: 1500 });
                 // Only the users already added are listed; the rest are picked through "Add user"
+                const msInitials = name => String(name || '').trim().split(/\s+/).filter(Boolean)
+                    .filter((w, i, all) => i === 0 || i === all.length - 1).map(w => w.charAt(0)).join('').toUpperCase() || '?';
                 const renderMsUsers = () => {
+                    const isAll = msScope === 'all';
                     document.getElementById('msauth-scope-' + msScope).checked = true;
-                    document.getElementById('msauth-selected-box').style.display = msScope === 'selected' ? '' : 'none';
-                    document.getElementById('msauth-all-note').style.display = msScope === 'all' ? '' : 'none';
-                    const rows = msUsers.filter(u => u.method === 'microsoft');
-                    document.getElementById('msauth-selected-count').textContent = rows.length + ' ' + __('msauth_users_added', 'user(s) added');
+                    document.querySelectorAll('.ms2fa-opt').forEach(l => l.classList.toggle('is-active', l.querySelector('input').checked));
+                    document.getElementById('msauth-add-user').style.display = isAll ? 'none' : '';
+                    document.getElementById('msauth-all-note').style.display = isAll ? '' : 'none';
+                    // Selected: the users added. Forced for all: everyone who has already linked a Microsoft account.
+                    const rows = msUsers.filter(u => isAll ? u.linked : u.method === 'microsoft');
+                    document.getElementById('msauth-selected-count').innerHTML = `<b>${rows.length}</b> ${isAll ? __('msauth_users_linked', 'user(s) signed in with Microsoft') : __('msauth_users_added', 'user(s) added')}`;
                     msUsersBody.innerHTML = rows.length ? rows.map(u => `
-                        <tr>
-                            <td>${escapeHtml(u.name)}<div class="text-muted small">${escapeHtml(u.user_type)}${u.linked ? ' · <span class="text-success">' + __('msauth_linked', 'Microsoft account linked') + '</span>' : ''}</div></td>
-                            <td class="sr-mono">${escapeHtml(u.id_iqama)}</td>
-                            <td>${escapeHtml(u.email || '-')}</td>
-                            <td class="text-right"><button type="button" class="btn btn-sm btn-outline-danger msauth-remove" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('remove', 'Remove')}"><i class="mdi mdi-close"></i></button></td>
-                        </tr>`).join('') : `<tr><td colspan="4" class="text-center text-muted">${__('msauth_no_users', 'No users added yet - everyone uses email OTP.')}</td></tr>`;
+                        <div class="ms2fa-row">
+                            <span class="ms2fa-avatar">${escapeHtml(msInitials(u.name))}</span>
+                            <div class="ms2fa-who">
+                                <b>${escapeHtml(u.name)}</b>
+                                <span class="ms2fa-meta">
+                                    <span class="sr-mono">${escapeHtml(u.id_iqama)}</span>
+                                    ${u.email ? `<span>${escapeHtml(u.email)}</span>` : ''}
+                                    <span>${escapeHtml(u.user_type)}</span>
+                                </span>
+                                <span class="ms2fa-tags">
+                                    ${u.linked
+                                        ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('msauth_linked', 'Microsoft linked')}</span>`
+                                        : `<span class="sr-pill tone-slate"><span class="sr-dot"></span>${__('msauth_not_linked', 'Not signed in yet')}</span>`}
+                                    ${u.active_sessions > 0
+                                        ? `<span class="sr-pill tone-sky"><span class="sr-dot"></span>${u.active_sessions} ${__('msauth_active_sessions', 'active session(s)')}</span>`
+                                        : ''}
+                                    ${u.reauth ? `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('msauth_reauth_pending', '2FA revoked - MFA at next sign-in')}</span>` : ''}
+                                    ${u.last_ms_login ? `<span class="ms2fa-last">${__('msauth_last_login', 'Last Microsoft sign-in')}: <span class="sr-mono">${escapeHtml(u.last_ms_login)}</span></span>` : ''}
+                                </span>
+                            </div>
+                            <div class="ms2fa-actions">
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm msauth-revoke" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('msauth_revoke_hint', 'Require Microsoft password + MFA again at the next sign-in (does not sign the user out)')}"><i class="mdi mdi-account-key"></i> ${__('msauth_revoke', 'Revoke 2FA')}</button>
+                                ${isAll ? '' : `<button type="button" class="sr-btn sr-btn-icon sr-btn-sm ms2fa-remove msauth-remove" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('msauth_remove_hint', 'Remove - back to email OTP')}"><i class="mdi mdi-close"></i></button>`}
+                            </div>
+                        </div>`).join('') : `<div class="ms2fa-empty"><i class="mdi mdi-account-multiple-outline"></i>${isAll
+                            ? __('msauth_no_linked', 'Nobody has signed in with Microsoft yet.')
+                            : __('msauth_no_users', 'No users added yet - everyone uses email OTP.')}</div>`;
                 };
                 const setUserMethod = async (iqama, method) => {
                     const data = await postMs({ action: 'set_msauth_user_method', id_iqama: iqama, method: method });
@@ -887,11 +910,38 @@ function __(key, def) {
                     renderMsUsers();
                     msToast();
                 };
-                postMs({ action: 'get_msauth_users' }).then(data => {
+                const loadMsUsers = () => postMs({ action: 'get_msauth_users' }).then(data => {
                     msUsers = data.success ? data.users : [];
                     msScope = data.scope === 'all' ? 'all' : 'selected';
                     renderMsUsers();
-                }).catch(() => { msUsersBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${__('error', 'Error')}</td></tr>`; });
+                }).catch(() => { msUsersBody.innerHTML = `<div class="ms2fa-empty text-danger">${__('error', 'Error')}</div>`; });
+                loadMsUsers();
+                // Revoke 2FA: next sign-in needs Microsoft password + MFA again (current session is kept)
+                msUsersBody.addEventListener('click', async function (e) {
+                    const btn = e.target.closest('.msauth-revoke');
+                    if (!btn) return;
+                    const user = msUsers.find(u => u.id_iqama === btn.dataset.iqama);
+                    const answer = await Swal.fire({
+                        icon: 'warning',
+                        title: __('msauth_revoke_q', 'Revoke Microsoft 2FA?'),
+                        html: `<b>${escapeHtml(user ? user.name : btn.dataset.iqama)}</b><br>${__('msauth_revoke_text', 'The user stays signed in now. At the next sign-in Microsoft will ask for the password and MFA again, and "remember me" will no longer skip it.')}`,
+                        showCancelButton: true,
+                        confirmButtonColor: '#dc2626',
+                        confirmButtonText: __('msauth_revoke', 'Revoke 2FA'),
+                        cancelButtonText: __('cancel', 'Cancel')
+                    });
+                    if (!answer.isConfirmed) return;
+                    btn.disabled = true;
+                    try {
+                        const data = await postMs({ action: 'revoke_msauth_user', id_iqama: btn.dataset.iqama });
+                        if (!data.success) throw new Error(data.message || __('error', 'Error'));
+                        await loadMsUsers();
+                        Swal.fire(__('msauth_revoked', '2FA revoked'), data.message || '', 'success');
+                    } catch (err) {
+                        btn.disabled = false;
+                        Swal.fire(__('error', 'Error'), err.message, 'error');
+                    }
+                });
                 document.querySelectorAll('input[name="msauth-scope"]').forEach(radio => radio.addEventListener('change', async function () {
                     const scope = this.value;
                     if (scope === 'all') {
@@ -925,22 +975,30 @@ function __(key, def) {
                     }
                     const result = await Swal.fire({
                         title: __('msauth_add_user', 'Add user'),
-                        html: `<input type="search" id="msauth-pick-search" class="swal2-input" placeholder="${__('search', 'Search')}...">
-                               <select id="msauth-pick" class="swal2-select" size="8" style="width:100%;max-width:100%">
-                                   ${candidates.map(u => `<option value="${escapeHtml(u.id_iqama)}">${escapeHtml(u.name)} - ${escapeHtml(u.id_iqama)}${u.email ? ' - ' + escapeHtml(u.email) : ''}</option>`).join('')}
-                               </select>`,
+                        html: `<div style="text-align:start"><select id="msauth-pick" style="width:100%"></select></div>`,
                         showCancelButton: true,
                         confirmButtonText: __('add', 'Add'),
                         cancelButtonText: __('cancel', 'Cancel'),
                         didOpen: () => {
-                            const search = document.getElementById('msauth-pick-search');
-                            const pick = document.getElementById('msauth-pick');
-                            search.focus();
-                            search.addEventListener('input', () => {
-                                const q = search.value.toLowerCase();
-                                Array.from(pick.options).forEach(o => { o.hidden = !!q && !o.text.toLowerCase().includes(q); });
-                            });
+                            // Nothing is listed until something is typed: matches emp ID, ID/Iqama, name or email
+                            $('#msauth-pick').select2({
+                                dropdownParent: $(Swal.getPopup()),
+                                width: '100%',
+                                placeholder: __('msauth_search_user', 'Type emp ID, ID/Iqama or name...'),
+                                minimumInputLength: 1,
+                                data: candidates.map(u => ({
+                                    id: u.id_iqama,
+                                    text: `${u.emp_id ? u.emp_id + ' - ' : ''}${u.name} (${u.id_iqama})${u.email ? ' - ' + u.email : ''}`
+                                })),
+                                matcher: (params, item) => {
+                                    const q = String(params.term || '').trim().toLowerCase();
+                                    if (!q) return null;
+                                    return item.text && item.text.toLowerCase().includes(q) ? item : null;
+                                }
+                            }).val(null).trigger('change');
+                            setTimeout(() => $('#msauth-pick').select2('open'), 50);
                         },
+                        willClose: () => { try { $('#msauth-pick').select2('destroy'); } catch (e) {} },
                         preConfirm: () => {
                             const value = document.getElementById('msauth-pick').value;
                             if (!value) { Swal.showValidationMessage(__('msauth_pick_user', 'Select a user')); return false; }
