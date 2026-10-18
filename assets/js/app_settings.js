@@ -844,10 +844,26 @@ function __(key, def) {
                             </div>
                             <div class="ms2fa-bar">
                                 <span class="ms2fa-count" id="msauth-selected-count"></span>
-                                <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
+                                <div class="ms2fa-tools">
+                                    <input type="search" class="form-control form-control-sm ms2fa-search" id="msauth-list-search" placeholder="${__('msauth_search_list', 'Search name, ID, email...')}">
+                                    <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
+                                </div>
                             </div>
                             <p class="ms2fa-note" id="msauth-all-note" style="display:none"><i class="mdi mdi-information-outline"></i> ${__('msauth_all_note', 'All active OTP users sign in with Microsoft. Users who already signed in with Microsoft are listed below so you can revoke their 2FA. Normal employees still use ID + password.')}</p>
-                            <div class="ms2fa-list" id="msauth-users-body"><div class="ms2fa-empty">${__('loading', 'Loading')}...</div></div>
+                            <div class="sr-table-wrap ms2fa-table">
+                                <table class="sr-table table mb-0">
+                                    <thead><tr>
+                                        <th>${__('user', 'User')}</th>
+                                        <th>${__('id_iqama', 'ID / Iqama')}</th>
+                                        <th>${__('email', 'Email')}</th>
+                                        <th>${__('status', 'Status')}</th>
+                                        <th>${__('msauth_last_login', 'Last Microsoft sign-in')}</th>
+                                        <th class="text-right">${__('actions', 'Actions')}</th>
+                                    </tr></thead>
+                                    <tbody id="msauth-users-body"><tr><td colspan="6" class="ms2fa-empty-cell">${__('loading', 'Loading')}...</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="sr-pager ms2fa-pager" id="msauth-pager"></div>
                         </div>
                     </div>
                 `;
@@ -871,37 +887,73 @@ function __(key, def) {
                     document.getElementById('msauth-add-user').style.display = isAll ? 'none' : '';
                     document.getElementById('msauth-all-note').style.display = isAll ? '' : 'none';
                     // Selected: the users added. Forced for all: everyone who has already linked a Microsoft account.
-                    const rows = msUsers.filter(u => isAll ? u.linked : u.method === 'microsoft');
-                    document.getElementById('msauth-selected-count').innerHTML = `<b>${rows.length}</b> ${isAll ? __('msauth_users_linked', 'user(s) signed in with Microsoft') : __('msauth_users_added', 'user(s) added')}`;
-                    msUsersBody.innerHTML = rows.length ? rows.map(u => `
-                        <div class="ms2fa-row">
-                            <span class="ms2fa-avatar">${escapeHtml(msInitials(u.name))}</span>
-                            <div class="ms2fa-who">
-                                <b>${escapeHtml(u.name)}</b>
-                                <span class="ms2fa-meta">
-                                    <span class="sr-mono">${escapeHtml(u.id_iqama)}</span>
-                                    ${u.email ? `<span>${escapeHtml(u.email)}</span>` : ''}
-                                    <span>${escapeHtml(u.user_type)}</span>
-                                </span>
-                                <span class="ms2fa-tags">
+                    const allRows = msUsers.filter(u => isAll ? u.linked : u.method === 'microsoft');
+                    const q = (document.getElementById('msauth-list-search').value || '').trim().toLowerCase();
+                    const rows = q ? allRows.filter(u => [u.name, u.id_iqama, u.emp_id, u.email, u.user_type].join(' ').toLowerCase().includes(q)) : allRows;
+                    document.getElementById('msauth-selected-count').innerHTML = `<b>${allRows.length}</b> ${isAll ? __('msauth_users_linked', 'user(s) signed in with Microsoft') : __('msauth_users_added', 'user(s) added')}`;
+
+                    const pages = Math.max(1, Math.ceil(rows.length / MS_PAGE_SIZE));
+                    msPage = Math.min(Math.max(1, msPage), pages);
+                    const pageRows = rows.slice((msPage - 1) * MS_PAGE_SIZE, msPage * MS_PAGE_SIZE);
+                    const emptyText = q ? __('no_records_found', 'No records found')
+                        : (isAll ? __('msauth_no_linked', 'Nobody has signed in with Microsoft yet.') : __('msauth_no_users', 'No users added yet - everyone uses email OTP.'));
+
+                    msUsersBody.innerHTML = pageRows.length ? pageRows.map(u => `
+                        <tr>
+                            <td>
+                                <div class="ms2fa-user">
+                                    <span class="ms2fa-avatar">${escapeHtml(msInitials(u.name))}</span>
+                                    <span class="ms2fa-who"><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.emp_id ? u.emp_id + ' · ' : '')}${escapeHtml(u.user_type)}</small></span>
+                                </div>
+                            </td>
+                            <td class="sr-mono">${escapeHtml(u.id_iqama)}</td>
+                            <td>${escapeHtml(u.email || '-')}</td>
+                            <td>
+                                <div class="ms2fa-tags">
                                     ${u.linked
                                         ? `<span class="sr-pill tone-green"><span class="sr-dot"></span>${__('msauth_linked', 'Microsoft linked')}</span>`
                                         : `<span class="sr-pill tone-slate"><span class="sr-dot"></span>${__('msauth_not_linked', 'Not signed in yet')}</span>`}
-                                    ${u.active_sessions > 0
-                                        ? `<span class="sr-pill tone-sky"><span class="sr-dot"></span>${u.active_sessions} ${__('msauth_active_sessions', 'active session(s)')}</span>`
-                                        : ''}
-                                    ${u.reauth ? `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('msauth_reauth_pending', '2FA revoked - MFA at next sign-in')}</span>` : ''}
-                                    ${u.last_ms_login ? `<span class="ms2fa-last">${__('msauth_last_login', 'Last Microsoft sign-in')}: <span class="sr-mono">${escapeHtml(u.last_ms_login)}</span></span>` : ''}
-                                </span>
-                            </div>
-                            <div class="ms2fa-actions">
+                                    ${u.active_sessions > 0 ? `<span class="sr-pill tone-sky"><span class="sr-dot"></span>${u.active_sessions} ${__('msauth_active_sessions', 'active session(s)')}</span>` : ''}
+                                    ${u.reauth ? `<span class="sr-pill tone-amber"><span class="sr-dot"></span>${__('msauth_reauth_pending', '2FA revoked')}</span>` : ''}
+                                </div>
+                            </td>
+                            <td class="sr-mono ms2fa-nowrap">${u.last_ms_login ? escapeHtml(u.last_ms_login) : '<span class="text-muted">-</span>'}</td>
+                            <td class="text-right ms2fa-nowrap">
                                 <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm msauth-revoke" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('msauth_revoke_hint', 'Require Microsoft password + MFA again at the next sign-in (does not sign the user out)')}"><i class="mdi mdi-account-key"></i> ${__('msauth_revoke', 'Revoke 2FA')}</button>
                                 ${isAll ? '' : `<button type="button" class="sr-btn sr-btn-icon sr-btn-sm ms2fa-remove msauth-remove" data-iqama="${escapeHtml(u.id_iqama)}" title="${__('msauth_remove_hint', 'Remove - back to email OTP')}"><i class="mdi mdi-close"></i></button>`}
-                            </div>
-                        </div>`).join('') : `<div class="ms2fa-empty"><i class="mdi mdi-account-multiple-outline"></i>${isAll
-                            ? __('msauth_no_linked', 'Nobody has signed in with Microsoft yet.')
-                            : __('msauth_no_users', 'No users added yet - everyone uses email OTP.')}</div>`;
+                            </td>
+                        </tr>`).join('') : `<tr><td colspan="6" class="ms2fa-empty-cell"><i class="mdi mdi-account-multiple-outline"></i>${emptyText}</td></tr>`;
+
+                    // Pager: "Showing x-y of n" + page buttons (same look as the other sr-* lists)
+                    const pager = document.getElementById('msauth-pager');
+                    if (rows.length <= MS_PAGE_SIZE) { pager.innerHTML = ''; return; }
+                    const from = (msPage - 1) * MS_PAGE_SIZE + 1, to = Math.min(msPage * MS_PAGE_SIZE, rows.length);
+                    let nums = [];
+                    for (let p = 1; p <= pages; p++) {
+                        if (p === 1 || p === pages || Math.abs(p - msPage) <= 1) nums.push(p);
+                        else if (nums[nums.length - 1] !== '…') nums.push('…');
+                    }
+                    const li = (label, page, disabled, active) => `<li class="page-item${disabled ? ' disabled' : ''}${active ? ' active' : ''}"><a class="page-link" href="#" data-page="${page}">${label}</a></li>`;
+                    pager.innerHTML = `
+                        <div class="ms2fa-pager-row">
+                            <span>${__('showing', 'Showing')} ${from}-${to} ${__('of', 'of')} ${rows.length}</span>
+                            <ul class="pagination pagination-sm mb-0">
+                                ${li('&lsaquo;', msPage - 1, msPage === 1, false)}
+                                ${nums.map(n => n === '…' ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : li(n, n, false, n === msPage)).join('')}
+                                ${li('&rsaquo;', msPage + 1, msPage === pages, false)}
+                            </ul>
+                        </div>`;
                 };
+                const MS_PAGE_SIZE = 10;
+                let msPage = 1;
+                document.getElementById('msauth-list-search').addEventListener('input', () => { msPage = 1; renderMsUsers(); });
+                document.getElementById('msauth-pager').addEventListener('click', function (e) {
+                    const link = e.target.closest('a.page-link');
+                    if (!link || link.closest('.disabled')) { e.preventDefault(); return; }
+                    e.preventDefault();
+                    msPage = parseInt(link.dataset.page, 10) || 1;
+                    renderMsUsers();
+                });
                 const setUserMethod = async (iqama, method) => {
                     const data = await postMs({ action: 'set_msauth_user_method', id_iqama: iqama, method: method });
                     if (!data.success) throw new Error(data.message || __('error', 'Error'));

@@ -786,22 +786,26 @@
         .ms2fa-count { font-size: 12.5px; color: var(--sr-muted); }
         .ms2fa-count b { color: var(--sr-text); font-size: 14px; }
         .ms2fa-note { margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px; background: var(--tone-sky-bg); color: var(--tone-sky-fg); font-size: 12.5px; }
-        .ms2fa-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
-        .ms2fa-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface-2); }
-        .ms2fa-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, #6366f1, #0ea5e9); }
-        .ms2fa-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-        .ms2fa-who > b { font-size: 14px; color: var(--sr-text); overflow-wrap: anywhere; }
-        .ms2fa-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--sr-muted); }
-        .ms2fa-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
-        .ms2fa-last { font-size: 11.5px; color: var(--sr-muted); }
-        .ms2fa-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-        .ms2fa-actions .msauth-revoke { color: var(--tone-amber-fg); border-color: var(--tone-amber-bd); }
-        .ms2fa-actions .msauth-revoke:hover { background: var(--tone-amber-bg); }
-        .ms2fa-remove { color: var(--tone-red-fg); }
+        .ms2fa-tools { display: flex; align-items: center; gap: 8px; }
+        .ms2fa-search { width: 240px; max-width: 100%; border-radius: 9px; }
+        .ms2fa-table { padding: 0 16px; }
+        .ms2fa-table table.sr-table td { vertical-align: middle; }
+        .ms2fa-user { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+        .ms2fa-avatar { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, #6366f1, #0ea5e9); }
+        .ms2fa-who { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+        .ms2fa-who b { font-size: 13px; color: var(--sr-text); }
+        .ms2fa-who small { font-size: 11.5px; color: var(--sr-muted); }
+        .ms2fa-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+        .ms2fa-nowrap { white-space: nowrap; }
+        .ms2fa-table .msauth-revoke { color: var(--tone-amber-fg); border-color: var(--tone-amber-bd); }
+        .ms2fa-table .msauth-revoke:hover { background: var(--tone-amber-bg); }
+        .ms2fa-remove { color: var(--tone-red-fg); margin-inline-start: 4px; }
         .ms2fa-remove:hover { background: var(--tone-red-bg); }
-        .ms2fa-empty { padding: 22px; text-align: center; color: var(--sr-muted); font-size: 13px; border: 1.5px dashed var(--sr-border); border-radius: 12px; }
-        .ms2fa-empty i { display: block; font-size: 26px; margin-bottom: 4px; opacity: .6; }
-        @media (max-width: 640px) { .ms2fa-row { flex-wrap: wrap; } .ms2fa-actions { width: 100%; justify-content: flex-end; } }
+        .ms2fa-empty-cell { padding: 22px !important; text-align: center; color: var(--sr-muted); font-size: 13px; }
+        .ms2fa-empty-cell i { display: block; font-size: 26px; margin-bottom: 4px; opacity: .6; }
+        .ms2fa-pager { padding: 10px 16px 16px; }
+        .ms2fa-pager-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--sr-muted); }
+        @media (max-width: 640px) { .ms2fa-bar { flex-wrap: wrap; } .ms2fa-tools { width: 100%; } .ms2fa-search { flex: 1; width: auto; } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
