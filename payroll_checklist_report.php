@@ -1055,6 +1055,7 @@ foreach ($employees as $employee) {
         .pc-formula .ok { color: var(--tone-green-fg); } .pc-formula .bad { color: var(--tone-red-fg); }
         .pc-dgrid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
         .pc-dgrid.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pc-dgrid.single { grid-template-columns: 1fr; }
         .pc-panel { border: 1px solid var(--sr-border); border-radius: 12px; background: var(--sr-surface); min-width: 0; overflow: hidden; }
         .pc-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--sr-border); font-size: 13.5px; font-weight: 700; color: var(--sr-text); }
         .pc-panel-head i { margin-inline-end: 6px; color: var(--sr-accent); }
@@ -2815,6 +2816,9 @@ foreach ($employees as $employee) {
             const ini = String(emp.employee_name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
             const money = v => `<i class="icon-saudi_riyal"></i> ${fmt(v)}`;
             const sumOf = list => (Array.isArray(list) ? list : []).reduce((t, i) => t + Number(i.note || 0), 0);
+            // Benefits / Deductions panels only render when the employee has records for them.
+            const hasBenefitItems = Array.isArray(emp.benefits_list) && emp.benefits_list.length > 0;
+            const hasDeductionItems = Array.isArray(emp.deductions_list) && emp.deductions_list.length > 0;
 
             // Header: who + where + status
             const headerHtml = `
@@ -2882,18 +2886,21 @@ foreach ($employees as $employee) {
                         </ul>
                     </div>
                 </div>
-                <div class="pc-dgrid even">
+                ${(hasBenefitItems || hasDeductionItems) ? `
+                <div class="pc-dgrid ${hasBenefitItems && hasDeductionItems ? 'even' : 'single'}">
+                    ${hasBenefitItems ? `
                     <div class="pc-panel p-green">
                         <div class="pc-panel-head"><span><i class="fas fa-plus-circle"></i><?= addslashes(__('benefits_section', 'Benefits')) ?></span>
                             <span class="pc-panel-total">${money(sumOf(emp.benefits_list))}</span></div>
                         ${buildItemsList(emp.benefits_list, 'benefit', '<?= addslashes(__('no_benefits_added', 'No benefits added')) ?>')}
-                    </div>
+                    </div>` : ''}
+                    ${hasDeductionItems ? `
                     <div class="pc-panel p-red">
                         <div class="pc-panel-head"><span><i class="fas fa-minus-circle"></i><?= addslashes(__('deductions_section', 'Deductions')) ?></span>
                             <span class="pc-panel-total">${money(sumOf(emp.deductions_list))}</span></div>
                         ${buildItemsList(emp.deductions_list, 'deduction', '<?= addslashes(__('no_deductions_added', 'No deductions added')) ?>')}
-                    </div>
-                </div>
+                    </div>` : ''}
+                </div>` : ''}
             `;
 
             const modalFooterHtml = `

@@ -1683,7 +1683,7 @@ function getDirectSupervisorOptionsForPayroll(PDO $pdo, string $currentUserId): 
             throw new Exception('Payroll request not found.');
         }
 
-        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        $monthValue = resolvePayrollSupervisorReportMonth($pdo, (string)($requestRow['payroll_month'] ?? ''));
         if ($monthValue === '') {
             throw new Exception('No generated payroll found.');
         }
@@ -1784,7 +1784,7 @@ function getSupervisorEmployeesPreviewForPayroll(PDO $pdo, string $currentUserId
             throw new Exception('Payroll request not found.');
         }
 
-        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        $monthValue = resolvePayrollSupervisorReportMonth($pdo, (string)($requestRow['payroll_month'] ?? ''));
         if ($monthValue === '') {
             throw new Exception('No generated payroll found.');
         }
@@ -3323,7 +3323,7 @@ function sendSupervisorPayrollReport(PDO $pdo, $conDB, string $currentUserId): v
             throw new Exception('Supervisor reports can be sent only when payroll is pending with HR Payroll.');
         }
 
-        $monthValue = getLatestGeneratedPayrollMonth($pdo);
+        $monthValue = resolvePayrollSupervisorReportMonth($pdo, (string)($requestRow['payroll_month'] ?? ''));
         if ($monthValue === '') {
             throw new Exception('No generated payroll found.');
         }

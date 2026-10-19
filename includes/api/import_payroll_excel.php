@@ -362,11 +362,14 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
             return true;
         }
     } else {
-        $lookup = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction = :deduction LIMIT 1");
+        // Match on calculation type too: one reason can now have both a day line and a
+        // time line (e.g. "Absent And Latein"), and they must not overwrite each other.
+        $lookup = $pdo->prepare("SELECT id FROM payroll_deductions WHERE emp_id = :emp_id AND month = :month_year AND deduction = :deduction AND COALESCE(calculation_type, 'fixed') = :calculation_type LIMIT 1");
         $lookup->execute([
             ':emp_id' => $empId,
             ':month_year' => $monthYear,
             ':deduction' => $deductionName,
+            ':calculation_type' => $calculationType,
         ]);
         $existingId = $lookup->fetchColumn();
 
@@ -708,17 +711,6 @@ try {
         }
 
         if ($hasDeductionEntry) {
-            // Duration in hours is only used for the money calculation below - minutes are
-            // never folded into the stored hours value, they get their own column.
-            $deductionDurationForCalc = $deductionDurationHours;
-            $rawDeductionHours = $deductionHours;
-            $rawDeductionMinutes = $deductionMinutes;
-
-            if ($deductionValue <= 0) {
-                $calculatedDeduction = calculateImportedDeductionAmount($payrollRecord, $deductionDurationForCalc);
-                $deductionValue = $calculatedDeduction['amount'];
-            }
-
             $deductionName = normalizeDeductionName($deductionReason !== '' ? $deductionReason : 'Imported Deduction');
 
             if (isGosiDeductionName($deductionName)) {
@@ -733,26 +725,54 @@ try {
                 $seenGosiDeductions[$gosiKey] = true;
             }
 
-            $deductionKey = $empId . '|' . $monthYear . '|' . strtolower(trim($deductionName));
-            if (isset($pendingDeductions[$deductionKey])) {
-                $pendingDeductions[$deductionKey]['amount'] += $deductionValue;
-                $pendingDeductions[$deductionKey]['hours'] += (int)round($rawDeductionHours);
-                $pendingDeductions[$deductionKey]['minutes'] += (int)round($rawDeductionMinutes);
-                $pendingDeductions[$deductionKey]['days'] += $deductionDays;
-                $pendingDeductions[$deductionKey]['status'] = $deductionStatus ?? 1;
-                $pendingDeductions[$deductionKey]['type'] = $deductionType;
+            // Keep each excel column as its own deduction: deduction_days becomes a
+            // "Deduction by Day" line and deduction_hours/minutes a "Deduction by Time"
+            // line. Previously a row with both (e.g. 1 day + 11 hours) was folded into a
+            // single hourly line of 19 hours, hiding the day absence.
+            $deductionPortions = [];
+            if ($deductionType === 'fixed') {
+                $deductionPortions[] = ['type' => 'fixed', 'days' => 0.0, 'hours' => 0.0, 'minutes' => 0.0, 'duration' => 0.0];
             } else {
-                $pendingDeductions[$deductionKey] = [
-                    'emp_id' => $empId,
-                    'month' => $monthYear,
-                    'name' => $deductionName,
-                    'amount' => $deductionValue,
-                    'status' => $deductionStatus ?? 1,
-                    'type' => $deductionType,
-                    'hours' => (int)round($rawDeductionHours),
-                    'minutes' => (int)round($rawDeductionMinutes),
-                    'days' => $deductionDays,
-                ];
+                if ($deductionDays > 0) {
+                    $deductionPortions[] = ['type' => 'daily_deduction', 'days' => $deductionDays, 'hours' => 0.0, 'minutes' => 0.0, 'duration' => $deductionDays * 8];
+                }
+                if ($deductionHours > 0 || $deductionMinutes > 0) {
+                    $deductionPortions[] = ['type' => 'hourly_deduction', 'days' => 0.0, 'hours' => $deductionHours, 'minutes' => $deductionMinutes, 'duration' => $deductionHours + ($deductionMinutes / 60)];
+                }
+            }
+
+            foreach ($deductionPortions as $portion) {
+                // Duration in hours is only used for the money calculation - minutes are
+                // never folded into the stored hours value, they get their own column.
+                if ($portion['type'] === 'fixed') {
+                    $portionAmount = $deductionValue;
+                } elseif ($deductionValue > 0 && $deductionDurationHours > 0) {
+                    // Reviewed value covers the whole row - split it by each portion's share.
+                    $portionAmount = $deductionValue * ($portion['duration'] / $deductionDurationHours);
+                } else {
+                    $portionAmount = calculateImportedDeductionAmount($payrollRecord, $portion['duration'])['amount'];
+                }
+
+                $deductionKey = $empId . '|' . $monthYear . '|' . strtolower(trim($deductionName)) . '|' . $portion['type'];
+                if (isset($pendingDeductions[$deductionKey])) {
+                    $pendingDeductions[$deductionKey]['amount'] += $portionAmount;
+                    $pendingDeductions[$deductionKey]['hours'] += (int)round($portion['hours']);
+                    $pendingDeductions[$deductionKey]['minutes'] += (int)round($portion['minutes']);
+                    $pendingDeductions[$deductionKey]['days'] += $portion['days'];
+                    $pendingDeductions[$deductionKey]['status'] = $deductionStatus ?? 1;
+                } else {
+                    $pendingDeductions[$deductionKey] = [
+                        'emp_id' => $empId,
+                        'month' => $monthYear,
+                        'name' => $deductionName,
+                        'amount' => $portionAmount,
+                        'status' => $deductionStatus ?? 1,
+                        'type' => $portion['type'],
+                        'hours' => (int)round($portion['hours']),
+                        'minutes' => (int)round($portion['minutes']),
+                        'days' => $portion['days'],
+                    ];
+                }
             }
             $summary['imported_deductions']++;
             $rowImported = true;
@@ -785,32 +805,12 @@ try {
 
     $totalDeductionsAmount = 0.0;
     foreach ($pendingDeductions as $pendingDeduction) {
+        // Pending entries are keyed by calculation type, so day and hour portions never
+        // share an entry (payroll_deductions stores hours/minutes OR days, never both).
         $mergedType = $pendingDeduction['type'];
         $mergedHours = (int)$pendingDeduction['hours'];
         $mergedMinutes = (int)$pendingDeduction['minutes'];
-        $mergedDays = (int)$pendingDeduction['days'];
-
-        // Two excel rows for the same employee can share one reason text (e.g. a
-        // days-based row and an hours-based row both named "Late Arrival Deduction"),
-        // and get accumulated into a single pending entry above. 'type' there just took
-        // whichever row was processed last - if that happened to be hourly, the days
-        // portion was silently dropped because payroll_deductions stores hours/minutes
-        // OR days, never both. Recompute the type from what actually accumulated so a
-        // day contribution is never lost: fold it into hour-equivalent (days * 8) when
-        // an hour/minute contribution also exists, otherwise keep it as daily_deduction.
-        if ($mergedType !== 'fixed') {
-            $hasHourPortion = ($mergedHours > 0 || $mergedMinutes > 0);
-            $hasDayPortion = ($mergedDays > 0);
-            if ($hasDayPortion && $hasHourPortion) {
-                $mergedHours += $mergedDays * 8;
-                $mergedDays = 0;
-                $mergedType = 'hourly_deduction';
-            } elseif ($hasDayPortion) {
-                $mergedType = 'daily_deduction';
-            } else {
-                $mergedType = 'hourly_deduction';
-            }
-        }
+        $mergedDays = (int)round((float)$pendingDeduction['days']);
 
         upsertPayrollDeduction(
             $pdo,

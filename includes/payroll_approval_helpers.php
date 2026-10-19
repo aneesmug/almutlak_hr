@@ -200,6 +200,26 @@ if (!function_exists('getLatestGeneratedPayrollMonth')) {
     }
 }
 
+if (!function_exists('resolvePayrollSupervisorReportMonth')) {
+    // Month the supervisor report should use for a given approval request: the
+    // request's own payroll_month when payroll exists for it. Falling back to the
+    // global latest month only when it doesn't - otherwise generating even a couple
+    // of next-month payroll rows (e.g. 2026-11) made the 2026-10 request's
+    // "Send Payroll Report by Direct Supervisor" list only those few employees.
+    function resolvePayrollSupervisorReportMonth(PDO $pdo, string $requestPayrollMonth): string
+    {
+        $requestPayrollMonth = trim($requestPayrollMonth);
+        if (preg_match('/^\d{4}-\d{2}$/', $requestPayrollMonth)) {
+            $stmt = $pdo->prepare("SELECT 1 FROM payrolls WHERE month_year = :month_year LIMIT 1");
+            $stmt->execute([':month_year' => $requestPayrollMonth]);
+            if ($stmt->fetchColumn()) {
+                return $requestPayrollMonth;
+            }
+        }
+        return getLatestGeneratedPayrollMonth($pdo);
+    }
+}
+
 if (!function_exists('ensurePayrollSupervisorAssignmentsTable')) {
     // Payroll-specific "who reports this employee's payroll to whom" mapping - kept
     // separate from employees.supervisor_id (which drives vacation-approval routing in
