@@ -203,12 +203,13 @@ if ($totalItems > 0) {
     // totals, not any vacation. Inlined as a plain int (server-controlled setting, not
     // user input) since this query already builds LAST_DAY/CONCAT unparameterized.
     $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    $settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
     // When the setting is disabled (0), this condition must make the NOT EXISTS check
     // below always pass (no one excluded via it) - "1=0" inside the EXISTS subquery's
     // WHERE does exactly that, mirroring payroll_checklist_report.php skipping the
     // whole dropoutFilter in that case.
     $vacdaysGuardSql = $vacationDropoutDays > 0
-        ? "AND COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays}"
+        ? "AND (COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays} OR {$settlementVacSql})"
         : "AND 1=0";
     $mainSql = "SELECT
             p_months.month_year AS payroll_month,
@@ -792,6 +793,7 @@ function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
     // (payment_type = 3) and employees dropped via a long vacation or already
     // settled - otherwise this breakdown table disagrees with the real report.
     $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    $settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
     $params = [
         ':month_year' => $monthValue,
     ];
@@ -805,7 +807,7 @@ function getPayrollBankWiseCompanySummary(PDO $pdo, string $monthValue): array
                     AND vd.current_status IN ('approved', 'completed')
                     AND vd.start_date <= :dropout_month_end
                     AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
-                    AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                    AND (COALESCE(vd.vacdays, 0) >= :dropout_days_param OR {$settlementVacSql})
                     AND vd.request_inv_no LIKE 'VAC-%'
             )";
         $params[':dropout_month_end'] = $monthEnd;

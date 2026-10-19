@@ -425,6 +425,7 @@ function getPayrollVacationExclusionSql(string $monthValue): array
     }
 
     $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    $settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
     if ($vacationDropoutDays > 0) {
         $sql .= " AND NOT EXISTS (
                 SELECT 1 FROM emp_vacation vd
@@ -433,7 +434,7 @@ function getPayrollVacationExclusionSql(string $monthValue): array
                     AND vd.current_status IN ('approved', 'completed')
                     AND vd.start_date <= :dropout_month_end
                     AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
-                    AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                    AND (COALESCE(vd.vacdays, 0) >= :dropout_days_param OR {$settlementVacSql})
                     AND vd.request_inv_no LIKE 'VAC-%'
             )";
         $params[':dropout_month_end'] = $monthEnd;
@@ -2441,6 +2442,15 @@ function findManagerPayrollUploadByFileId(array $meta, string $fileId): array
     return ['index' => -1, 'upload' => []];
 }
 
+// Managers edit the template headers ("Emp ID", "Benefit Hours", "emp-id "), which made
+// every row of that sheet silently skipped. Compare headers as lowercase snake_case.
+function normalizeManagerPayrollSheetHeader($headerValue): string
+{
+    $value = strtolower(trim((string)$headerValue));
+    $value = preg_replace('/[^a-z0-9]+/', '_', $value);
+    return trim((string)$value, '_');
+}
+
 function findManagerPayrollCheckpointFromVisibleColumn($sheet): string
 {
     if (!$sheet) {
@@ -2455,7 +2465,7 @@ function findManagerPayrollCheckpointFromVisibleColumn($sheet): string
     $headerRow = array_shift($rows);
     $checkpointColumn = null;
     foreach ($headerRow as $column => $headerValue) {
-        if (strtolower(trim((string)$headerValue)) === 'checkpoint_code') {
+        if (normalizeManagerPayrollSheetHeader($headerValue) === 'checkpoint_code') {
             $checkpointColumn = $column;
             break;
         }
@@ -2488,7 +2498,7 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
     $headerRow = array_shift($rows);
     $headerMap = [];
     foreach ($headerRow as $column => $headerValue) {
-        $normalized = strtolower(trim((string)$headerValue));
+        $normalized = normalizeManagerPayrollSheetHeader($headerValue);
         if ($normalized !== '') {
             $headerMap[$normalized] = $column;
         }
@@ -2506,7 +2516,7 @@ function parseManagerPayrollSheetRows($sheet, string $monthYear, string $checkpo
 
     $normalizedRows = [];
     foreach ($rows as $row) {
-        $empId = $getCell($row, $headerMap, ['emp_id', 'employee_id']);
+        $empId = $getCell($row, $headerMap, ['emp_id', 'employee_id', 'empid', 'emp_no', 'employee_no']);
         if ($empId === '') {
             continue;
         }
@@ -3101,7 +3111,8 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
         echo json_encode([
             'status' => 'success',
             'files' => $files,
-            'can_download' => !empty($GLOBALS['is_system_admin'])
+            // Everyone allowed to open this list (HR Payroll / HR Senior BP / admin) may download.
+            'can_download' => true
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -3278,7 +3289,7 @@ function rollbackManagerPayrollImport(PDO $pdo, string $currentUserId): void
     }
 }
 
-// System admin only: stream the original manager-uploaded Excel so it can be
+// HR Payroll / HR Senior BP / admin: stream the original manager-uploaded Excel so it can be
 // checked against what the review modal parsed out of it.
 function downloadManagerUploadedPayrollExcelFile(): void
 {
@@ -3292,8 +3303,10 @@ function downloadManagerUploadedPayrollExcelFile(): void
         echo $message;
     };
 
-    if (empty($GLOBALS['is_system_admin'])) {
-        $fail(403, 'Only system administrators can download manager uploaded files.');
+    // Same audience as the "Select Manager Uploaded File" list itself.
+    $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+    if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp', 'administrator'], true) && empty($GLOBALS['is_system_admin'])) {
+        $fail(403, 'Only HR Payroll and HR Senior BP can download manager uploaded files.');
         return;
     }
 

@@ -2033,6 +2033,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
     // payroll month, same rule process_payroll.php/get_payroll_report.php use to skip
     // payroll generation for that month.
     $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+    $settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
     if ($vacationDropoutDays > 0) {
         $where[] = "NOT EXISTS (
                 SELECT 1 FROM emp_vacation vd
@@ -2041,7 +2042,7 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
                     AND vd.current_status IN ('approved', 'completed')
                     AND vd.start_date <= LAST_DAY(CONCAT(p.month_year, '-01'))
                     AND COALESCE(vd.return_date, vd.start_date) >= CONCAT(p.month_year, '-01')
-                    AND COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays}
+                    AND (COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays} OR {$settlementVacSql})
                     AND vd.request_inv_no LIKE 'VAC-%'
             )";
     }

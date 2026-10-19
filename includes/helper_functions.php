@@ -279,6 +279,46 @@ if (!function_exists('isLocalAnnualRemovedFromPayroll')) {
     }
 }
 
+if (!function_exists('payrollSettlementVacationSql')) {
+    /**
+     * SQL twin of isSettlementPayableVacation() (+ resolveVacationSalaryType()) for an
+     * emp_vacation alias: TRUE when the vacation's salary is paid by the vacation
+     * settlement (Fly annual, or Local annual removed from payroll - Saudi, >= minimum
+     * days, vacation salary 'payroll'), so the employee must not also be in payroll for
+     * the months that vacation touches. Used next to the vacation_payroll_dropout_days
+     * check in every payroll dropout query.
+     */
+    function payrollSettlementVacationSql(string $v = 'vd'): string
+    {
+        $rule = getLocalAnnualPayrollRemovalRuleConfig();
+        $localType = addslashes((string)$rule['vac_type']);
+        $localFly = addslashes((string)$rule['fly_type']);
+        $country = (int)$rule['country_id'];
+        $minDays = (float)$rule['minimum_days_exclusive'];
+
+        $days = "COALESCE({$v}.vacdays, 0)";
+        $salaryType = "TRIM(COALESCE({$v}.vacation_salary_type, ''))";
+        // employees.allow_vacation_salary_below_min_days waives country + minimum days.
+        $allowBelow = "COALESCE((SELECT ex.allow_vacation_salary_below_min_days FROM employees ex WHERE ex.emp_id = {$v}.emp_id LIMIT 1), 0) = 1";
+        $countryOk = "COALESCE((SELECT ex.country FROM employees ex WHERE ex.emp_id = {$v}.emp_id LIMIT 1), 0) = {$country}";
+
+        return "(
+            (LOWER(TRIM(COALESCE({$v}.vac_type, ''))) = 'fly' AND LOWER(TRIM(COALESCE({$v}.fly_type, ''))) = 'annual')
+            OR (
+                TRIM(COALESCE({$v}.vac_type, '')) = '{$localType}'
+                AND TRIM(COALESCE({$v}.fly_type, '')) = '{$localFly}'
+                AND ({$countryOk} OR {$allowBelow})
+                AND ({$days} >= {$minDays} OR {$allowBelow})
+                AND (
+                    ({$allowBelow} AND {$days} < {$minDays})
+                    OR {$salaryType} = 'payroll'
+                    OR ({$salaryType} NOT IN ('payroll', 'end_of_service') AND COALESCE({$v}.is_deductible, 0) = 1)
+                )
+            )
+        )";
+    }
+}
+
 if (!function_exists('isSettlementPayableVacation')) {
     function isSettlementPayableVacation($vacType, $flyType, $countryId, $vacDays, $isDeductible, $vacationSalaryType = null, $allowBelowMinDays = false)
     {

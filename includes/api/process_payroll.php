@@ -445,6 +445,7 @@ try {
         // not just "active on day 1" - a qualifying vacation starting mid-month must still
         // drop the employee from that month's payroll.
         $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+        $settlementVacSqlV = payrollSettlementVacationSql('v'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
         if ($vacationDropoutDays > 0) {
             $stmtVacationDropout = $pdo->prepare(
                 "SELECT v.id
@@ -454,7 +455,7 @@ try {
                      AND v.current_status IN ('approved', 'completed')
                      AND v.start_date <= :month_end
                      AND COALESCE(v.return_date, v.start_date) >= :month_start
-                     AND COALESCE(v.vacdays, 0) >= :dropout_days
+                     AND (COALESCE(v.vacdays, 0) >= :dropout_days OR {$settlementVacSqlV})
                      AND v.request_inv_no LIKE 'VAC-%'
                  LIMIT 1"
             );
@@ -469,7 +470,7 @@ try {
             if ($vacationDropout) {
                 $skippedEmployees[] = [
                     'emp_id' => $empId,
-                    'reason' => "Employee's vacation is {$vacationDropoutDays}+ days at the start of this payroll month"
+                    'reason' => "Employee is on a vacation of {$vacationDropoutDays}+ days, or one paid through the vacation settlement, in this payroll month"
                 ];
                 continue;
             }
@@ -594,6 +595,9 @@ try {
                                     AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
                                     AND (
                                         COALESCE(v.vacdays, 0) >= :dropout_days_threshold
+                                        -- Vacation salary paid by the settlement (Fly annual /
+                                        -- Local annual removed from payroll): deduct the days too.
+                                        OR {$settlementVacSqlV}
                                         -- Emergency Fly vacation: abroad and unpaid (no vacation
                                         -- salary in payroll or settlement), so the days before the
                                         -- return are deducted whatever its length.

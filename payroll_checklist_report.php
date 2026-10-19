@@ -595,6 +595,7 @@ $monthStart = $monthYear !== '' ? $monthYear . '-01' : null;
 $monthEnd = $monthStart ? date('Y-m-t', strtotime($monthStart)) : null;
 
 $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+$settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
 $dropoutFilter = '';
 if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
     $dropoutFilter = " AND NOT EXISTS (
@@ -604,7 +605,7 @@ if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
                 AND vd.current_status IN ('approved', 'completed')
                 AND vd.start_date <= :dropout_month_end
                 AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
-                AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                AND (COALESCE(vd.vacdays, 0) >= :dropout_days_param OR {$settlementVacSql})
                 AND vd.request_inv_no LIKE 'VAC-%'
         )";
     $params[':dropout_month_end'] = $monthEnd;
@@ -4340,7 +4341,7 @@ foreach ($employees as $employee) {
             const availableFiles = filesResponse.files.filter((file) => !!file);
             const mfpIsMissing = (file) => file.is_available === false;
 
-            // Download of the original file is system-admin only (enforced server side too).
+            // Download of the original file: everyone who can open this picker (checked server side too).
             const canDownloadFiles = filesResponse.can_download === true;
             const buildManagerFileDownloadUrl = (fileId) => './includes/ajaxFile/payroll_approval_handler.php?' + new URLSearchParams({
                 action: 'download_manager_uploaded_payroll_excel_file',

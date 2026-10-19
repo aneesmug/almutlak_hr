@@ -81,6 +81,7 @@ if ($companyFilter === '__none__') {
 // so employees skipped from payroll generation because of a long vacation don't still
 // show up on this report.
 $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
+$settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
 $dropout_filter = "";
 if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
     $dropout_filter = " AND NOT EXISTS (
@@ -90,7 +91,7 @@ if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
                 AND vd.current_status IN ('approved', 'completed')
                 AND vd.start_date <= :dropout_month_end
                 AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
-                AND COALESCE(vd.vacdays, 0) >= :dropout_days_param
+                AND (COALESCE(vd.vacdays, 0) >= :dropout_days_param OR {$settlementVacSql})
                 AND vd.request_inv_no LIKE 'VAC-%'
         )";
     $params[':dropout_month_end'] = $monthEnd;
