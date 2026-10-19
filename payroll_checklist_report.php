@@ -4010,7 +4010,7 @@ foreach ($employees as $employee) {
 
                         const emptyState = (icon, text) => `<div class="pir-empty"><i class="${icon}"></i><span>${text}</span></div>`;
                         const baseDataTableOptions = {
-                            pageLength: 10,
+                            pageLength: 7,
                             lengthMenu: [[-1, 5, 7, 10, 15, 20], ['All', 5, 7, 10, 15, 20]],
                             order: [[1, 'asc']],
                             columnDefs: [{ targets: [0], orderable: false }],
