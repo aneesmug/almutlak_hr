@@ -825,6 +825,18 @@ if (mysqli_num_rows($query) == 1) {
 			.profile-section .psh-empty i { margin-inline-end: 6px; color: var(--ps); }
 			.profile-section .sr-table-wrap { border-radius: 12px; overflow: auto; border: 1px solid #eef1f5; }
 			#additionalinfo1 .profile-section { margin-bottom: 18px; }
+			/* More Info tab: Additional Information on the left; Medical Insurance with Other Income
+			   right under it on the right (grid, so the order never depends on column balancing) */
+			#additionalinfo1 .profile-content-wrapper:has(.ps-additional) {
+				column-count: initial; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+				grid-template-rows: auto 1fr; column-gap: 18px; align-items: start;
+			}
+			#additionalinfo1 .profile-content-wrapper:has(.ps-additional) .ps-additional { grid-column: 1; grid-row: 1 / span 2; }
+			#additionalinfo1 .profile-content-wrapper:has(.ps-additional) .ps-medical { grid-column: 2; grid-row: 1; }
+			#additionalinfo1 .profile-content-wrapper:has(.ps-additional) .ps-income { grid-column: 2; grid-row: 2; }
+			@media (max-width: 1199px) {
+				#additionalinfo1 .profile-content-wrapper:has(.ps-additional) { display: block; }
+			}
 
 			/* Vacation balance summary (Vacations tab) */
 			.vac-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
@@ -2611,6 +2623,8 @@ if (mysqli_num_rows($query) == 1) {
 										<?php if ($canViewAdditionalInfo || $canViewOtherIncome): ?>
 
 										<div class="tab-pane" id="additionalinfo1">
+											<!-- Same two-column card layout as the Profile tab -->
+											<div class="profile-content-wrapper">
 											<?php if ($canViewAdditionalInfo): ?>
 											<div class="profile-section ps-additional">
 												<div class="profile-section-header">
@@ -2694,6 +2708,7 @@ if (mysqli_num_rows($query) == 1) {
 														<div class="profile-field-label"><i class="fa fa-star"></i><?= __('medical_class', 'Medical Class') ?></div>
 														<div class="profile-field-value"><?= display_or_na($current_medical_insurance['medical_class'] ?? null) ?></div>
 													</div>
+												</div>
 												<?php if (count($medical_insurance_records) > 1): ?>
 										<h6 class="psh-subtitle"><i class="fa fa-clock-rotate-left"></i> <?= __('insurance_history', 'Insurance History') ?></h6>
 										<div class="sr-table-wrap"><table class="table sr-table" style="width: 100%;">
@@ -2727,7 +2742,6 @@ if (mysqli_num_rows($query) == 1) {
 											</tbody>
 										</table></div>
 										<?php endif; ?>
-												</div>
 											</div>
 										</div>
 
@@ -2797,6 +2811,7 @@ if (mysqli_num_rows($query) == 1) {
 											</div>
 										</div>
 										<?php endif; // $canViewOtherIncome ?>
+											</div><!-- /.profile-content-wrapper -->
 										</div>
 										<?php endif; // $canViewAdditionalInfo || $canViewOtherIncome ?>
 										<div class="tab-pane" id="assets">
