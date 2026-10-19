@@ -61,26 +61,17 @@ $params = [
 // listing page doesn't show employees that generation will skip anyway.
 // Each skip rule is kept as a bare EXISTS condition + its own params so the same rule can be
 // negated for the normal list and matched for the "On Vacation (skipped)" list below.
-$vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
-$settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
+// Vacation dropout rule lives in includes/payroll_vacation_rules.php.
+$vacationDropoutDays = getPayrollVacationDropoutDays($conDB);
 $dropoutFilter = "";
-$dropoutCond = "";
 $dropoutParams = [];
-if ($vacationDropoutDays > 0 && !empty($monthStart) && !empty($monthEnd)) {
-    $dropoutCond = "EXISTS (
-            SELECT 1 FROM emp_vacation vd
-            WHERE vd.emp_id = e.emp_id
-                AND vd.review = 'A'
-                AND vd.current_status IN ('approved', 'completed')
-                AND vd.start_date <= :dropout_month_end
-                AND COALESCE(vd.return_date, vd.start_date) >= :dropout_month_start
-                AND (COALESCE(vd.vacdays, 0) >= :dropout_days_param OR {$settlementVacSql})
-                AND vd.request_inv_no LIKE 'VAC-%'
-        )";
+$dropoutCond = (!empty($monthStart) && !empty($monthEnd))
+    ? payrollVacationDropoutCondition($conDB, 'e.emp_id', ':dropout_month_start', ':dropout_month_end')
+    : '';
+if ($dropoutCond !== '') {
     $dropoutParams = [
         ':dropout_month_end' => $monthEnd,
         ':dropout_month_start' => $monthStart,
-        ':dropout_days_param' => $vacationDropoutDays,
     ];
     $dropoutFilter = " AND NOT " . $dropoutCond;
     $params += $dropoutParams;
@@ -95,39 +86,8 @@ $settlementFilter = "";
 $settlementCond = "";
 $settlementParams = [];
 if (!empty($monthStart) && !empty($monthEnd)) {
-    $settlementCond = "EXISTS (
-            SELECT 1 FROM settlement_records sr
-            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
-            WHERE sr.emp_id = e.emp_id
-                AND sr.request_type = 'annual_vacation'
-                AND sr.settlement_status IN ('completed', 'processed')
-                AND sr.payment_date IS NOT NULL
-                AND (
-                        (
-                            sv.id IS NOT NULL
-                            AND sv.current_status IN ('approved', 'completed')
-                            AND sv.start_date <= :settlement_month_end
-                            AND COALESCE(sv.return_date, sv.start_date) >= :settlement_month_start
-                            AND (
-                                sv.return_date IS NULL
-                                -- return_date is the last vacation day: ending on month end counts
-                                OR DATE_ADD(sv.return_date, INTERVAL 1 DAY) > :settlement_month_end3
-                            )
-                        )
-                        OR
-                        (
-                            sv.id IS NULL
-                            AND sr.payment_date BETWEEN :settlement_month_start2 AND :settlement_month_end2
-                        )
-                )
-        )";
-    $settlementParams = [
-        ':settlement_month_end' => $monthEnd,
-        ':settlement_month_start' => $monthStart,
-        ':settlement_month_end2' => $monthEnd,
-        ':settlement_month_start2' => $monthStart,
-        ':settlement_month_end3' => $monthEnd,
-    ];
+    // Paid vacation settlement rule lives in includes/payroll_vacation_rules.php.
+    [$settlementCond, $settlementParams] = payrollPaidSettlementCondition('e.emp_id', $monthStart, $monthEnd);
     $settlementFilter = " AND NOT " . $settlementCond;
     $params += $settlementParams;
 }

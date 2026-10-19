@@ -135,62 +135,13 @@ function hasPaidVacationSettlementForMonth(PDO $pdo, $empId, $monthYear) {
     $monthStart = $monthYear . '-01';
     $monthEnd = date('Y-m-t', strtotime($monthStart));
 
-    // Uses the employee's ACTUAL return date (an approved rejoin request's
-    // final_approved_date, when one exists - same COALESCE precedence as the
-    // vacation-return proration query below) rather than the vacation's originally
-    // requested return_date. Otherwise an employee who returned early from a
-    // settled vacation (rejoin recorded, but emp_vacation.return_date left as the
-    // original longer request) gets dropped from payroll for the whole month even
-    // though they actually worked the days after their real return.
-    $stmt = $pdo->prepare("SELECT sr.id
-        FROM settlement_records sr
-        LEFT JOIN emp_vacation v ON v.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
-        LEFT JOIN (
-                SELECT rr1.vacation_id, rr1.final_approved_date
-                FROM rejoin_requests rr1
-                INNER JOIN (
-                        SELECT vacation_id, MAX(id) AS latest_id
-                        FROM rejoin_requests
-                        WHERE status = 'approved'
-                            AND final_approved_date IS NOT NULL
-                        GROUP BY vacation_id
-                ) rr_latest ON rr_latest.latest_id = rr1.id
-        ) rr ON rr.vacation_id = v.id
-        WHERE sr.emp_id = :emp_id
-          AND sr.request_type = 'annual_vacation'
-          AND sr.settlement_status IN ('completed', 'processed')
-          AND sr.payment_date IS NOT NULL
-          AND (
-                (
-                    v.id IS NOT NULL
-                    AND v.current_status IN ('approved', 'completed')
-                    AND v.start_date <= :month_end
-                    AND COALESCE(rr.final_approved_date, v.return_date, v.start_date) >= :month_start
-                    -- return_date is the LAST vacation day, rejoin final_approved_date is the
-                    -- first day back. A vacation ending exactly on month end still covers the
-                    -- whole remainder of the month, so compare the day after return_date.
-                    AND (
-                        COALESCE(rr.final_approved_date, v.return_date) IS NULL
-                        OR COALESCE(rr.final_approved_date, DATE_ADD(v.return_date, INTERVAL 1 DAY)) > :month_end3
-                    )
-                )
-                OR
-                (
-                    v.id IS NULL
-                    AND sr.payment_date BETWEEN :month_start2 AND :month_end2
-                )
-          )
-        LIMIT 1");
-    $stmt->execute([
-        ':emp_id' => $empId,
-        ':month_start' => $monthStart,
-        ':month_end' => $monthEnd,
-        ':month_start2' => $monthStart,
-        ':month_end2' => $monthEnd,
-        ':month_end3' => $monthEnd
-    ]);
+    // Rule lives in includes/payroll_vacation_rules.php (actual return = approved rejoin
+    // date, a vacation ending on month end still covers the month).
+    [$cond, $params] = payrollPaidSettlementCondition(':emp_id', $monthStart, $monthEnd);
+    $stmt = $pdo->prepare("SELECT {$cond} AS paid");
+    $stmt->execute([':emp_id' => $empId] + $params);
 
-    return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    return (int)$stmt->fetchColumn() === 1;
 }
 
 // Decode the incoming JSON payload from the request body
@@ -444,33 +395,21 @@ try {
         // Uses full-month overlap (start_date <= month_end AND return_date >= month_start),
         // not just "active on day 1" - a qualifying vacation starting mid-month must still
         // drop the employee from that month's payroll.
-        $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
-        $settlementVacSqlV = payrollSettlementVacationSql('v'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
-        if ($vacationDropoutDays > 0) {
-            $stmtVacationDropout = $pdo->prepare(
-                "SELECT v.id
-                 FROM emp_vacation v
-                 WHERE v.emp_id = :emp_id
-                     AND v.review = 'A'
-                     AND v.current_status IN ('approved', 'completed')
-                     AND v.start_date <= :month_end
-                     AND COALESCE(v.return_date, v.start_date) >= :month_start
-                     AND (COALESCE(v.vacdays, 0) >= :dropout_days OR {$settlementVacSqlV})
-                     AND v.request_inv_no LIKE 'VAC-%'
-                 LIMIT 1"
-            );
+        // Rule lives in includes/payroll_vacation_rules.php.
+        $vacationDropoutDays = getPayrollVacationDropoutDays($conDB);
+        $dropoutCond = payrollVacationDropoutCondition($conDB, ':emp_id', ':month_start', ':month_end', 'v');
+        if ($dropoutCond !== '') {
+            $stmtVacationDropout = $pdo->prepare("SELECT {$dropoutCond} AS dropped");
             $stmtVacationDropout->execute([
                 ':emp_id' => $empId,
                 ':month_end' => $payrollMonthEnd,
                 ':month_start' => $payrollMonthStart,
-                ':dropout_days' => $vacationDropoutDays
             ]);
-            $vacationDropout = $stmtVacationDropout->fetch(PDO::FETCH_ASSOC);
 
-            if ($vacationDropout) {
+            if ((int)$stmtVacationDropout->fetchColumn() === 1) {
                 $skippedEmployees[] = [
                     'emp_id' => $empId,
-                    'reason' => "Employee is on a vacation of {$vacationDropoutDays}+ days, or one paid through the vacation settlement, in this payroll month"
+                    'reason' => 'Employee is ' . lcfirst(payrollVacationDropoutReason($conDB)),
                 ];
                 continue;
             }
@@ -571,6 +510,7 @@ try {
                         // a paid settlement (already compensated for those days, so must still be
                         // deducted regardless of length). A short vacation under the threshold
                         // with no settlement must not touch payroll at all: full month's pay.
+                        $vacationReturnQualifierSql = payrollVacationDropoutQualifierSql($conDB, 'v');
                         $stmtVacationReturn = $pdo->prepare("SELECT COALESCE(rr.final_approved_date, v.return_date) AS effective_return_date,
                                     v.id, v.request_inv_no, v.vac_type, v.fly_type, v.vacation_salary_type, v.vacdays, v.is_deductible,
                                     v.start_date, v.return_date, v.overtime_amount, v.other_earnings, v.deduction_amount, v.auto_gosi_deduction,
@@ -594,10 +534,9 @@ try {
                                     AND COALESCE(rr.final_approved_date, v.return_date) >= :month_start_lower
                                     AND COALESCE(rr.final_approved_date, v.return_date) <= :month_end
                                     AND (
-                                        COALESCE(v.vacdays, 0) >= :dropout_days_threshold
-                                        -- Vacation salary paid by the settlement (Fly annual /
-                                        -- Local annual removed from payroll): deduct the days too.
-                                        OR {$settlementVacSqlV}
+                                        -- Same vacations that drop an employee from payroll
+                                        -- (includes/payroll_vacation_rules.php).
+                                        {$vacationReturnQualifierSql}
                                         -- Emergency Fly vacation: abroad and unpaid (no vacation
                                         -- salary in payroll or settlement), so the days before the
                                         -- return are deducted whatever its length.
@@ -617,7 +556,6 @@ try {
                                 ':month_start_upper' => $monthYear . '-01',
                                 ':month_start_lower' => $monthYear . '-01',
                 ':month_end' => $monthEndDate->format('Y-m-d'),
-                ':dropout_days_threshold' => $vacationDropoutDays
             ]);
             $vacationReturn = $stmtVacationReturn->fetch(PDO::FETCH_ASSOC);
 

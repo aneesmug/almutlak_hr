@@ -1656,7 +1656,6 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
 
     $sql = "SELECT
             e.emp_id, e.iqama, e.name, e.sex, e.joining_date, e.dob, e.mobile, e.status, e.country, e.gosi, e.supervisor_id,
-            sec.section_name AS position_name,
             aj.job AS actual_job_name, aj.job_ar AS actual_job_name_ar,
             d.id AS dept_code, d.dep_nme, d.dep_nme_ar,
             sd.name_en AS subdept_name_en, sd.name_ar AS subdept_name_ar,
@@ -1671,7 +1670,6 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
             (COALESCE(es.basic,0)+COALESCE(es.housing,0)+COALESCE(es.transport,0)+COALESCE(es.food,0)+COALESCE(es.misc,0)+COALESCE(es.cashier,0)+COALESCE(es.fuel,0)+COALESCE(es.tel,0)+COALESCE(es.other,0)+COALESCE(es.guard,0)) AS total_salary,
             sup.name AS supervisor_name
         FROM employees AS e
-        LEFT JOIN section AS sec ON e.sectin_nme = sec.id
         LEFT JOIN ac_jobs AS aj ON e.actual_job = aj.id
         LEFT JOIN department AS d ON e.dept = d.id
         LEFT JOIN sub_departments AS sd ON e.sub_dept_id = sd.id
@@ -1766,7 +1764,9 @@ function ctc_report_build_rows($conDB, $whereClause, $needsEos, $needsBalance) {
             'name' => $srcRow['name'] ?? '',
             'gender' => ((int)($srcRow['sex'] ?? 0) === 1) ? __('male') : __('female'),
             'join_date' => format_safe_date($srcRow['joining_date'] ?? null),
-            'position' => $srcRow['position_name'] ?? '',
+            // Position = job title (ac_jobs). employees.sectin_nme is a legacy field pointing
+            // at the `section` buildings table and is empty/stale for most employees.
+            'position' => $useAr ? ($srcRow['actual_job_name_ar'] ?: ($srcRow['actual_job_name'] ?? '')) : ($srcRow['actual_job_name'] ?? ''),
             'actual_job' => $useAr ? ($srcRow['actual_job_name_ar'] ?? $srcRow['actual_job_name'] ?? '') : ($srcRow['actual_job_name'] ?? ''),
             'department' => $useAr ? ($srcRow['dep_nme_ar'] ?? $srcRow['dep_nme'] ?? '') : ($srcRow['dep_nme'] ?? ''),
             'birth_date' => format_safe_date($srcRow['dob'] ?? null),
@@ -2032,48 +2032,16 @@ function generatePayrollReport($conDB, $columns, $departments, $dateFrom, $dateT
     // Vacation dropout filter - exclude employees on a long vacation covering the
     // payroll month, same rule process_payroll.php/get_payroll_report.php use to skip
     // payroll generation for that month.
-    $vacationDropoutDays = (int) get_setting_num($conDB, 'vacation_payroll_dropout_days', 30);
-    $settlementVacSql = payrollSettlementVacationSql('vd'); // + vacations paid by settlement (Fly annual / Local annual removed from payroll)
-    if ($vacationDropoutDays > 0) {
-        $where[] = "NOT EXISTS (
-                SELECT 1 FROM emp_vacation vd
-                WHERE vd.emp_id = e.emp_id
-                    AND vd.review = 'A'
-                    AND vd.current_status IN ('approved', 'completed')
-                    AND vd.start_date <= LAST_DAY(CONCAT(p.month_year, '-01'))
-                    AND COALESCE(vd.return_date, vd.start_date) >= CONCAT(p.month_year, '-01')
-                    AND (COALESCE(vd.vacdays, 0) >= {$vacationDropoutDays} OR {$settlementVacSql})
-                    AND vd.request_inv_no LIKE 'VAC-%'
-            )";
+    // Rule lives in includes/payroll_vacation_rules.php.
+    $dropoutCond = payrollVacationDropoutCondition($conDB, 'e.emp_id', "CONCAT(p.month_year, '-01')", "LAST_DAY(CONCAT(p.month_year, '-01'))");
+    if ($dropoutCond !== '') {
+        $where[] = "NOT {$dropoutCond}";
     }
 
     // Paid vacation settlement filter - exclude employees already settled for the
     // period covering this payroll month, mirroring get_payroll_report.php.
-    $where[] = "NOT EXISTS (
-            SELECT 1 FROM settlement_records sr
-            LEFT JOIN emp_vacation sv ON sv.request_inv_no = SUBSTRING(sr.request_inv_no, 6)
-            WHERE sr.emp_id = e.emp_id
-                AND sr.request_type = 'annual_vacation'
-                AND sr.settlement_status IN ('completed', 'processed')
-                AND sr.payment_date IS NOT NULL
-                AND (
-                        (
-                            sv.id IS NOT NULL
-                            AND sv.current_status IN ('approved', 'completed')
-                            AND sv.start_date <= LAST_DAY(CONCAT(p.month_year, '-01'))
-                            AND COALESCE(sv.return_date, sv.start_date) >= CONCAT(p.month_year, '-01')
-                            AND (
-                                sv.return_date IS NULL
-                                OR sv.return_date > LAST_DAY(CONCAT(p.month_year, '-01'))
-                            )
-                        )
-                        OR
-                        (
-                            sv.id IS NULL
-                            AND sr.payment_date BETWEEN CONCAT(p.month_year, '-01') AND LAST_DAY(CONCAT(p.month_year, '-01'))
-                        )
-                )
-        )";
+    [$settlementCond] = payrollPaidSettlementCondition('e.emp_id', "CONCAT(p.month_year, '-01')", "LAST_DAY(CONCAT(p.month_year, '-01'))");
+    $where[] = "NOT {$settlementCond}";
 
     // Department fallback filter (only when no explicit scope restrictions are configured)
     $hasSpecialRestrictions = !empty($_SESSION['allowed_employees_array']) ||
