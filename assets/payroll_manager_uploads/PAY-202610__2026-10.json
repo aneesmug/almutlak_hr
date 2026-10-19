@@ -13,7 +13,10 @@
             "reviewed_by": "",
             "reviewed_by_name": "",
             "reviewed_at": "",
-            "review_note": ""
+            "review_note": "",
+            "rolled_back_at": "",
+            "rolled_back_by": "",
+            "rolled_back_by_name": ""
         },
         {
             "file_id": "d40ca7c3c2ef54e55aa7",
@@ -23,10 +26,13 @@
             "uploaded_by": "3431",
             "uploaded_by_name": "LEANDRO SANTIAGO",
             "uploaded_at": "2026-10-19 13:54:26",
-            "reviewed_by": "",
-            "reviewed_by_name": "",
-            "reviewed_at": "",
-            "review_note": ""
+            "reviewed_by": "3431",
+            "reviewed_by_name": "LEANDRO BUNAG SANTIAGO",
+            "reviewed_at": "2026-10-19 14:57:19",
+            "review_note": "Reviewed by HR Payroll and imported to payroll.",
+            "rolled_back_at": "",
+            "rolled_back_by": "",
+            "rolled_back_by_name": ""
         }
     ]
 }

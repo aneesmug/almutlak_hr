@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 
 require_once("./../../includes/db.php");
 require_once("./../../includes/session_check.php");
+require_once("./../../includes/payroll_approval_helpers.php");
 
 function parseImportAmount($value): float
 {
@@ -232,9 +233,11 @@ function extractImportCheckpointCode(array $rows): string
     return (string)array_key_first($checkpointCodes);
 }
 
-function reservePayrollImportCheckpoint(PDO $pdo, string $checkpointCode, ?string $defaultMonth, string $createdBy): void
+// $allowReplace: manager-file review flow may import an already-used checkpoint again
+// (corrected re-upload) - the caller then removes the previous import's lines first.
+function reservePayrollImportCheckpoint(PDO $pdo, string $checkpointCode, ?string $defaultMonth, string $createdBy, bool $allowReplace = false): void
 {
-    $lookupStmt = $pdo->prepare("SELECT id, used_at FROM payroll_import_checkpoint_registry WHERE checkpoint_code = :checkpoint_code LIMIT 1");
+    $lookupStmt = $pdo->prepare("SELECT id, used_at FROM payroll_import_checkpoint_registry WHERE checkpoint_code = :checkpoint_code LIMIT 1 FOR UPDATE");
     $lookupStmt->execute([':checkpoint_code' => $checkpointCode]);
     $record = $lookupStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
@@ -242,11 +245,11 @@ function reservePayrollImportCheckpoint(PDO $pdo, string $checkpointCode, ?strin
         throw new RuntimeException('The selected file is not valid. Please upload a valid payroll import file.');
     }
 
-    if (!empty($record['used_at'])) {
+    if (!empty($record['used_at']) && !$allowReplace) {
         throw new RuntimeException('This file was already used. Please upload a different file.');
     }
 
-    $updateStmt = $pdo->prepare("UPDATE payroll_import_checkpoint_registry SET used_at = CURRENT_TIMESTAMP, default_month = COALESCE(:default_month, default_month), created_by = CASE WHEN created_by IS NULL OR created_by = '' THEN :created_by ELSE created_by END WHERE checkpoint_code = :checkpoint_code AND used_at IS NULL");
+    $updateStmt = $pdo->prepare("UPDATE payroll_import_checkpoint_registry SET used_at = CURRENT_TIMESTAMP, default_month = COALESCE(:default_month, default_month), created_by = CASE WHEN created_by IS NULL OR created_by = '' THEN :created_by ELSE created_by END WHERE checkpoint_code = :checkpoint_code" . ($allowReplace ? '' : ' AND used_at IS NULL'));
     $updateStmt->execute([
         ':checkpoint_code' => $checkpointCode,
         ':default_month' => $defaultMonth,
@@ -258,7 +261,17 @@ function reservePayrollImportCheckpoint(PDO $pdo, string $checkpointCode, ?strin
     }
 }
 
-function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string $benefitName, float $benefitAmount, int $status, string $benefitType = 'fixed', int $benefitHours = 0, int $benefitMinutes = 0): bool
+function fetchImportRecordSnapshot(PDO $pdo, string $table, int $id): ?array
+{
+    $stmt = $pdo->prepare("SELECT * FROM {$table} WHERE id = :id LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+// Returns ['id' => record id, 'action' => 'insert'|'update', 'previous' => row before update|null]
+// so the import can log it in payroll_import_transactions for rollback.
+function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string $benefitName, float $benefitAmount, int $status, string $benefitType = 'fixed', int $benefitHours = 0, int $benefitMinutes = 0): array
 {
     // hours and minutes are stored as separate whole-number columns so a value like
     // "1h 43m" is kept exact, instead of folding minutes into a fractional hours value
@@ -281,6 +294,7 @@ function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string
     $existingId = $lookup->fetchColumn();
 
     if ($existingId) {
+        $previous = fetchImportRecordSnapshot($pdo, 'payroll_benefits', (int)$existingId);
         $update = $pdo->prepare("UPDATE payroll_benefits SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, minutes = :minutes, days = NULL, type_id = NULL WHERE id = :id");
         $update->execute([
             ':amount' => number_format($benefitAmount, 2, '.', ''),
@@ -290,7 +304,7 @@ function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string
             ':minutes' => $normalizedMinutes,
             ':id' => $existingId,
         ]);
-        return true;
+        return ['id' => (int)$existingId, 'action' => 'update', 'previous' => $previous];
     }
 
     $insert = $pdo->prepare("INSERT INTO payroll_benefits (emp_id, benefit, note, hours, minutes, days, calculation_type, month, status, type_id) VALUES (:emp_id, :benefit, :amount, :hours, :minutes, NULL, :calculation_type, :month_year, :status, NULL)");
@@ -305,10 +319,10 @@ function upsertPayrollBenefit(PDO $pdo, string $empId, string $monthYear, string
         ':status' => $status,
     ]);
 
-    return true;
+    return ['id' => (int)$pdo->lastInsertId(), 'action' => 'insert', 'previous' => null];
 }
 
-function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, string $deductionName, float $deductionAmount, int $status, string $deductionType = 'fixed', int $deductionHours = 0, int $deductionMinutes = 0, int $deductionDays = 0): bool
+function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, string $deductionName, float $deductionAmount, int $status, string $deductionType = 'fixed', int $deductionHours = 0, int $deductionMinutes = 0, int $deductionDays = 0): array
 {
     $deductionName = normalizeDeductionName($deductionName);
     // hours and minutes are stored as separate whole-number columns so a value like
@@ -345,6 +359,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         $existingId = !empty($existingIds) ? (int)$existingIds[0] : 0;
 
         if ($existingId > 0) {
+            $previous = fetchImportRecordSnapshot($pdo, 'payroll_deductions', $existingId);
             $update = $pdo->prepare("UPDATE payroll_deductions SET deduction = 'GOSI', note = :amount, status = :status, calculation_type = 'fixed', hours = NULL, minutes = NULL, days = NULL WHERE id = :id");
             $update->execute([
                 ':amount' => number_format($deductionAmount, 2, '.', ''),
@@ -359,7 +374,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
                 $delete->execute($duplicateIds);
             }
 
-            return true;
+            return ['id' => $existingId, 'action' => 'update', 'previous' => $previous];
         }
     } else {
         // Match on calculation type too: one reason can now have both a day line and a
@@ -374,6 +389,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         $existingId = $lookup->fetchColumn();
 
         if ($existingId) {
+            $previous = fetchImportRecordSnapshot($pdo, 'payroll_deductions', (int)$existingId);
             $update = $pdo->prepare("UPDATE payroll_deductions SET note = :amount, status = :status, calculation_type = :calculation_type, hours = :hours, minutes = :minutes, days = :days WHERE id = :id");
             $update->execute([
                 ':amount' => number_format($deductionAmount, 2, '.', ''),
@@ -384,7 +400,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
                 ':days' => $normalizedDays,
                 ':id' => $existingId,
             ]);
-            return true;
+            return ['id' => (int)$existingId, 'action' => 'update', 'previous' => $previous];
         }
     }
 
@@ -401,7 +417,7 @@ function upsertPayrollDeduction(PDO $pdo, string $empId, string $monthYear, stri
         ':status' => $status,
     ]);
 
-    return true;
+    return ['id' => (int)$pdo->lastInsertId(), 'action' => 'insert', 'previous' => null];
 }
 
 function recalculateImportedPayroll(PDO $pdo, string $empId, string $monthYear): void
@@ -445,6 +461,10 @@ function recalculateImportedPayroll(PDO $pdo, string $empId, string $monthYear):
 $input = json_decode(file_get_contents('php://input'), true);
 $rows = isset($input['rows']) && is_array($input['rows']) ? $input['rows'] : [];
 $defaultMonth = normalizeImportMonth($input['default_month'] ?? null);
+// Optional: which manager-uploaded file / request this import came from (review flow),
+// stored with each transaction so the file can be rolled back later.
+$sourceFileId = substr(trim((string)($input['source_file_id'] ?? '')), 0, 100);
+$sourceRequestInvNo = substr(trim((string)($input['request_inv_no'] ?? '')), 0, 255);
 
 if (empty($rows)) {
     echo json_encode(['status' => 'error', 'message' => 'No import rows received.']);
@@ -468,9 +488,56 @@ try {
     ensurePayrollImportCheckpointTable($pdo);
     $checkpointCode = extractImportCheckpointCode($rows);
 
+    ensurePayrollImportTransactionsTable($pdo);
+    $importedBy = (string)($_SESSION['empid'] ?? $empid ?? '');
+    $logTransactionStmt = $pdo->prepare("INSERT INTO payroll_import_transactions
+        (checkpoint_code, source_file_id, request_inv_no, emp_id, month_year, record_type, record_id, record_name, calculation_type, hours, minutes, days, amount, action, previous_data, imported_by)
+        VALUES (:checkpoint_code, :source_file_id, :request_inv_no, :emp_id, :month_year, :record_type, :record_id, :record_name, :calculation_type, :hours, :minutes, :days, :amount, :action, :previous_data, :imported_by)");
+    $logImportTransaction = static function (string $recordType, array $result, array $pending, string $calcType, int $hours, int $minutes, float $days)
+        use ($logTransactionStmt, &$checkpointCode, $sourceFileId, $sourceRequestInvNo, $importedBy): void {
+        if (empty($result['id'])) {
+            return;
+        }
+        $logTransactionStmt->execute([
+            ':checkpoint_code' => $checkpointCode,
+            ':source_file_id' => $sourceFileId !== '' ? $sourceFileId : null,
+            ':request_inv_no' => $sourceRequestInvNo !== '' ? $sourceRequestInvNo : null,
+            ':emp_id' => $pending['emp_id'],
+            ':month_year' => $pending['month'],
+            ':record_type' => $recordType,
+            ':record_id' => (int)$result['id'],
+            ':record_name' => $pending['name'],
+            ':calculation_type' => $calcType,
+            ':hours' => $hours > 0 ? $hours : null,
+            ':minutes' => $minutes > 0 ? $minutes : null,
+            ':days' => $days > 0 ? $days : null,
+            ':amount' => number_format((float)$pending['amount'], 2, '.', ''),
+            ':action' => $result['action'],
+            ':previous_data' => $result['previous'] !== null ? json_encode($result['previous'], JSON_UNESCAPED_UNICODE) : null,
+            ':imported_by' => $importedBy,
+        ]);
+    };
+
     $pdo->beginTransaction();
-    reservePayrollImportCheckpoint($pdo, $checkpointCode, $defaultMonth, (string)($_SESSION['empid'] ?? $empid ?? '')); 
+    $isManagerFileImport = $sourceFileId !== '';
+    reservePayrollImportCheckpoint($pdo, $checkpointCode, $defaultMonth, (string)($_SESSION['empid'] ?? $empid ?? ''), $isManagerFileImport);
     $touchedPayrolls = [];
+
+    // Re-upload of an already imported file: remove the old lines (delete what that
+    // import added, restore what it overwrote) before importing the new values, so a
+    // changed reason / day-vs-hour split never leaves the previous figures behind.
+    $replacedTransactionsCount = 0;
+    if ($isManagerFileImport) {
+        $previousTxStmt = $pdo->prepare("SELECT * FROM payroll_import_transactions WHERE checkpoint_code = :checkpoint_code AND rolled_back_at IS NULL ORDER BY id DESC");
+        $previousTxStmt->execute([':checkpoint_code' => $checkpointCode]);
+        $previousTransactions = $previousTxStmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($previousTransactions)) {
+            foreach (undoPayrollImportTransactions($pdo, $previousTransactions, $importedBy) as $payrollKey => $parts) {
+                $touchedPayrolls[$payrollKey] = $parts;
+            }
+            $replacedTransactionsCount = count($previousTransactions);
+        }
+    }
     $seenGosiDeductions = [];
     // Multiple Excel rows for the same employee often share one generic deduction/benefit
     // reason (e.g. several "Hourly deduction" lines with different days/hours/minutes).
@@ -789,7 +856,7 @@ try {
 
     $totalBenefitsAmount = 0.0;
     foreach ($pendingBenefits as $pendingBenefit) {
-        upsertPayrollBenefit(
+        $benefitResult = upsertPayrollBenefit(
             $pdo,
             $pendingBenefit['emp_id'],
             $pendingBenefit['month'],
@@ -800,6 +867,7 @@ try {
             (int)$pendingBenefit['hours'],
             (int)$pendingBenefit['minutes']
         );
+        $logImportTransaction('benefit', $benefitResult, $pendingBenefit, normalizeBenefitImportType($pendingBenefit['type']), (int)$pendingBenefit['hours'], (int)$pendingBenefit['minutes'], 0.0);
         $totalBenefitsAmount += (float)$pendingBenefit['amount'];
     }
 
@@ -812,7 +880,7 @@ try {
         $mergedMinutes = (int)$pendingDeduction['minutes'];
         $mergedDays = (int)round((float)$pendingDeduction['days']);
 
-        upsertPayrollDeduction(
+        $deductionResult = upsertPayrollDeduction(
             $pdo,
             $pendingDeduction['emp_id'],
             $pendingDeduction['month'],
@@ -824,6 +892,7 @@ try {
             $mergedMinutes,
             $mergedDays
         );
+        $logImportTransaction('deduction', $deductionResult, $pendingDeduction, normalizeDeductionImportType($mergedType), $mergedHours, $mergedMinutes, (float)$mergedDays);
         $totalDeductionsAmount += (float)$pendingDeduction['amount'];
     }
 
@@ -872,6 +941,7 @@ try {
         'deductions_records_count' => count($pendingDeductions),
         'total_benefits_amount' => number_format($totalBenefitsAmount, 2, '.', ''),
         'total_deductions_amount' => number_format($totalDeductionsAmount, 2, '.', ''),
+        'replaced_previous_lines' => $replacedTransactionsCount,
         'updated_payrolls' => $summary['updated_payrolls'],
         'skipped_rows' => $summary['skipped_rows'],
         'skipped_details' => $summary['skipped_details'],

@@ -114,6 +114,14 @@ switch ($action) {
         downloadManagerUploadedPayrollExcelFile();
         break;
 
+    case 'list_manager_payroll_import_transactions':
+        listManagerPayrollImportTransactions($pdo);
+        break;
+
+    case 'rollback_manager_payroll_import':
+        rollbackManagerPayrollImport($pdo, $currentUserId);
+        break;
+
     case 'get_finance_verification_setup':
         getFinanceVerificationSetup($pdo, $currentUserId, $requestTypeId);
         break;
@@ -2403,7 +2411,10 @@ function normalizeManagerPayrollUploadMeta(array $meta, string $requestInvNo, st
             'reviewed_by' => trim((string)($upload['reviewed_by'] ?? '')),
             'reviewed_by_name' => trim((string)($upload['reviewed_by_name'] ?? '')),
             'reviewed_at' => trim((string)($upload['reviewed_at'] ?? '')),
-            'review_note' => trim((string)($upload['review_note'] ?? ''))
+            'review_note' => trim((string)($upload['review_note'] ?? '')),
+            'rolled_back_at' => trim((string)($upload['rolled_back_at'] ?? '')),
+            'rolled_back_by' => trim((string)($upload['rolled_back_by'] ?? '')),
+            'rolled_back_by_name' => trim((string)($upload['rolled_back_by_name'] ?? ''))
         ];
     }
 
@@ -2687,9 +2698,9 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
         if (!$checkpointRecord) {
             throw new Exception('The uploaded file is not valid.');
         }
-        if (!empty($checkpointRecord['used_at'])) {
-            throw new Exception("This file is already uploaded, so you can't upload it again.");
-        }
+        // An already-imported checkpoint is allowed again: importing the new file first
+        // removes the lines the previous import of this checkpoint added, then imports
+        // the new values (see includes/api/import_payroll_excel.php).
 
         $storageDir = getManagerPayrollUploadStorageDir();
         if (!is_dir($storageDir) && !@mkdir($storageDir, 0775, true) && !is_dir($storageDir)) {
@@ -2707,9 +2718,15 @@ function uploadManagerPayrollExcel(PDO $pdo, $conDB, string $currentUserId): voi
                     continue;
                 }
 
+                // Re-uploading a reviewed (or rolled-back) checkpoint is allowed - its import
+                // replaces the old lines. Only block a second copy still waiting for review.
+                if (trim((string)($existingUpload['rolled_back_at'] ?? '')) !== ''
+                    || trim((string)($existingUpload['reviewed_at'] ?? '')) !== '') {
+                    continue;
+                }
                 $existingCheckpoint = strtoupper(trim((string)($existingUpload['checkpoint_code'] ?? '')));
                 if ($existingCheckpoint !== '' && $existingCheckpoint === $checkpointCode) {
-                    throw new Exception("This file is already uploaded, so you can't upload it again.");
+                    throw new Exception("This file is already uploaded and still waiting for review. Delete the pending copy first, then upload the corrected file.");
                 }
             }
 
@@ -2948,9 +2965,9 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
         if (!$checkpointRecord) {
             throw new Exception('The uploaded file is not valid.');
         }
-        if (!empty($checkpointRecord['used_at'])) {
-            throw new Exception("This file is already uploaded, so you can't upload it again.");
-        }
+        // An already-imported checkpoint is allowed again: importing the new file first
+        // removes the lines the previous import of this checkpoint added, then imports
+        // the new values (see includes/api/import_payroll_excel.php).
 
         echo json_encode([
             'status' => 'success',
@@ -3075,6 +3092,8 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
                 'reviewed_by_name' => trim((string)($upload['reviewed_by_name'] ?? '')),
                 'reviewed_at' => trim((string)($upload['reviewed_at'] ?? '')),
                 'review_note' => trim((string)($upload['review_note'] ?? '')),
+                'rolled_back_at' => trim((string)($upload['rolled_back_at'] ?? '')),
+                'rolled_back_by_name' => trim((string)($upload['rolled_back_by_name'] ?? '')),
                 'is_available' => is_file($storageDir . DIRECTORY_SEPARATOR . basename($storedName))
             ];
         }
@@ -3085,6 +3104,176 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
             'can_download' => !empty($GLOBALS['is_system_admin'])
         ]);
     } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+function assertPayrollImportReviewerRole(string $message): void
+{
+    $currentUserType = strtolower(trim((string)($GLOBALS['user_type'] ?? '')));
+    if (!in_array($currentUserType, ['hr_payroll', 'hr_senior_bp', 'administrator'], true)) {
+        throw new Exception($message);
+    }
+}
+
+// Transactions an import wrote for one uploaded file. Imports done before
+// payroll_import_transactions existed carry no source_file_id - match those on the
+// file's checkpoint code instead.
+function fetchManagerPayrollImportTransactions(PDO $pdo, array $upload, bool $activeOnly): array
+{
+    $fileId = trim((string)($upload['file_id'] ?? ''));
+    $checkpointCode = strtoupper(trim((string)($upload['checkpoint_code'] ?? '')));
+    $stmt = $pdo->prepare("SELECT t.*, e.name AS emp_name
+        FROM payroll_import_transactions t
+        LEFT JOIN employees e ON e.emp_id = t.emp_id
+        WHERE (t.source_file_id = :file_id OR (t.source_file_id IS NULL AND :checkpoint_code <> '' AND t.checkpoint_code = :checkpoint_code2))
+        " . ($activeOnly ? 'AND t.rolled_back_at IS NULL' : '') . "
+        ORDER BY t.id DESC");
+    $stmt->execute([':file_id' => $fileId, ':checkpoint_code' => $checkpointCode, ':checkpoint_code2' => $checkpointCode]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function listManagerPayrollImportTransactions(PDO $pdo): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+
+    try {
+        assertPayrollImportReviewerRole('Only HR Payroll and HR Senior BP can view imported transactions.');
+        if ($requestInvNo === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing request number or valid month.');
+        }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
+        ensurePayrollImportTransactionsTable($pdo);
+
+        $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+        $files = [];
+        foreach (($meta['uploads'] ?? []) as $upload) {
+            $transactions = fetchManagerPayrollImportTransactions($pdo, $upload, false);
+            if (empty($transactions) && trim((string)($upload['reviewed_at'] ?? '')) === '') {
+                continue; // never imported - nothing to show here
+            }
+
+            $files[] = [
+                'file_id' => (string)$upload['file_id'],
+                'original_name' => (string)$upload['original_name'],
+                'company_name' => extractManagerPayrollCompanyNameFromFileName((string)$upload['original_name']),
+                'uploaded_by_name' => (string)$upload['uploaded_by_name'],
+                'reviewed_at' => (string)$upload['reviewed_at'],
+                'reviewed_by_name' => (string)$upload['reviewed_by_name'],
+                'rolled_back_at' => (string)$upload['rolled_back_at'],
+                'rolled_back_by_name' => (string)$upload['rolled_back_by_name'],
+                'transactions' => array_map(static function (array $t): array {
+                    return [
+                        'id' => (int)$t['id'],
+                        'emp_id' => (string)$t['emp_id'],
+                        'emp_name' => (string)($t['emp_name'] ?? ''),
+                        'record_type' => (string)$t['record_type'],
+                        'record_name' => (string)$t['record_name'],
+                        'calculation_type' => (string)($t['calculation_type'] ?? ''),
+                        'hours' => $t['hours'] !== null ? (int)$t['hours'] : null,
+                        'minutes' => $t['minutes'] !== null ? (int)$t['minutes'] : null,
+                        'days' => $t['days'] !== null ? (float)$t['days'] : null,
+                        'amount' => (float)$t['amount'],
+                        'action' => (string)$t['action'],
+                        'imported_at' => (string)$t['imported_at'],
+                        'rolled_back_at' => (string)($t['rolled_back_at'] ?? ''),
+                    ];
+                }, $transactions),
+            ];
+        }
+
+        echo json_encode(['status' => 'success', 'month' => $monthYear, 'files' => $files]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+}
+
+// Undo imported transactions: rows the import inserted are deleted, rows it overwrote
+// get their previous values back, payroll totals are recalculated. With transaction_id
+// only that one line is undone; otherwise every active line of the file. Once a file has
+// no active lines left its checkpoint is freed so the corrected Excel can be uploaded again.
+function rollbackManagerPayrollImport(PDO $pdo, string $currentUserId): void
+{
+    $requestInvNo = trim((string)($_POST['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_POST['month'] ?? ''));
+    $fileId = trim((string)($_POST['file_id'] ?? ''));
+    $transactionId = (int)($_POST['transaction_id'] ?? 0);
+
+    try {
+        assertPayrollImportReviewerRole('Only HR Payroll and HR Senior BP can delete imported transactions.');
+        if ($requestInvNo === '' || $fileId === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+            throw new Exception('Missing file selection, request number, or valid month.');
+        }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
+        ensurePayrollImportTransactionsTable($pdo);
+
+        $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
+        try {
+            $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+            $found = findManagerPayrollUploadByFileId($meta, $fileId);
+            if ($found['index'] < 0) {
+                throw new Exception('Selected manager uploaded file was not found.');
+            }
+            $upload = $found['upload'];
+
+            $active = fetchManagerPayrollImportTransactions($pdo, $upload, true);
+            $toUndo = $transactionId > 0
+                ? array_values(array_filter($active, static fn(array $t) => (int)$t['id'] === $transactionId))
+                : $active;
+            if ($transactionId > 0 && empty($toUndo)) {
+                throw new Exception('Transaction not found or already deleted.');
+            }
+            if (empty($toUndo)) {
+                throw new Exception('No tracked transactions to delete for this file. Files imported before transaction tracking was added must be corrected manually in Generate Payroll.');
+            }
+
+            $pdo->beginTransaction();
+            try {
+                $touched = undoPayrollImportTransactions($pdo, $toUndo, $currentUserId);
+
+                foreach ($touched as [$empId, $txMonth]) {
+                    recalculatePayrollTotalsAfterImportChange($pdo, $empId, $txMonth);
+                }
+
+                $remaining = count($active) - count($toUndo);
+                $fileRolledBack = $remaining <= 0;
+                $checkpointCode = strtoupper(trim((string)($upload['checkpoint_code'] ?? '')));
+                if ($fileRolledBack && $checkpointCode !== '') {
+                    ensureManagerPayrollImportCheckpointRegistryTable($pdo);
+                    $pdo->prepare("UPDATE payroll_import_checkpoint_registry SET used_at = NULL WHERE checkpoint_code = :code")
+                        ->execute([':code' => $checkpointCode]);
+                }
+
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $e;
+            }
+
+            if ($fileRolledBack) {
+                $nameStmt = $pdo->prepare('SELECT name FROM employees WHERE emp_id = :emp_id LIMIT 1');
+                $nameStmt->execute([':emp_id' => $currentUserId]);
+                $meta['uploads'][$found['index']]['rolled_back_at'] = date('Y-m-d H:i:s');
+                $meta['uploads'][$found['index']]['rolled_back_by'] = $currentUserId;
+                $meta['uploads'][$found['index']]['rolled_back_by_name'] = (string)($nameStmt->fetchColumn() ?: $currentUserId);
+                saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
+            }
+        } finally {
+            releaseManagerPayrollUploadLock($lockHandle);
+        }
+
+        echo json_encode([
+            'status' => 'success',
+            'message' => $fileRolledBack
+                ? 'Imported transactions deleted. The corrected Excel file can now be uploaded again.'
+                : 'Transaction deleted and payroll recalculated.',
+            'undone_count' => count($toUndo),
+            'file_rolled_back' => $fileRolledBack,
+        ]);
+    } catch (Throwable $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
 }
@@ -3181,6 +3370,23 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
             $meta['uploads'][$found['index']]['reviewed_at'] = date('Y-m-d H:i:s');
             $meta['uploads'][$found['index']]['review_note'] = $reviewNote !== '' ? $reviewNote : 'Reviewed by HR Payroll and imported into payroll.';
 
+            // The import of this file already replaced the lines of earlier imports with
+            // the same checkpoint - flag those older files so they aren't mistaken as live.
+            $reviewedCheckpoint = strtoupper(trim((string)($found['upload']['checkpoint_code'] ?? '')));
+            if ($reviewedCheckpoint !== '') {
+                foreach ($meta['uploads'] as $i => $other) {
+                    if ($i === $found['index']
+                        || strtoupper(trim((string)($other['checkpoint_code'] ?? ''))) !== $reviewedCheckpoint
+                        || trim((string)($other['reviewed_at'] ?? '')) === ''
+                        || trim((string)($other['rolled_back_at'] ?? '')) !== '') {
+                        continue;
+                    }
+                    $meta['uploads'][$i]['rolled_back_at'] = date('Y-m-d H:i:s');
+                    $meta['uploads'][$i]['rolled_back_by'] = $currentUserId;
+                    $meta['uploads'][$i]['rolled_back_by_name'] = 'Replaced by newer upload';
+                }
+            }
+
             saveManagerPayrollUploadMeta($requestInvNo, $monthYear, normalizeManagerPayrollUploadMeta($meta, $requestInvNo, $monthYear));
         } finally {
             releaseManagerPayrollUploadLock($lockHandle);
@@ -3221,8 +3427,8 @@ function deleteManagerUploadedPayrollExcelFile(PDO $pdo, string $currentUserId):
                 throw new Exception('Selected manager uploaded file was not found.');
             }
 
-            if (!empty($found['upload']['reviewed_at'])) {
-                throw new Exception('A reviewed file cannot be deleted.');
+            if (!empty($found['upload']['reviewed_at']) && empty($found['upload']['rolled_back_at'])) {
+                throw new Exception('A reviewed file cannot be deleted. Roll back its imported transactions first.');
             }
 
             $storedName = trim((string)($found['upload']['stored_name'] ?? ''));

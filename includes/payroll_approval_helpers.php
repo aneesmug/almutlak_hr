@@ -200,6 +200,122 @@ if (!function_exists('getLatestGeneratedPayrollMonth')) {
     }
 }
 
+if (!function_exists('ensurePayrollImportTransactionsTable')) {
+    // One row per payroll_benefits / payroll_deductions record an Excel import inserted
+    // or overwrote, so a reviewed manager file can be rolled back (deleted / restored),
+    // corrected, and uploaded again.
+    function ensurePayrollImportTransactionsTable(PDO $pdo): void
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS payroll_import_transactions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            checkpoint_code VARCHAR(255) NOT NULL,
+            source_file_id VARCHAR(100) DEFAULT NULL,
+            request_inv_no VARCHAR(255) DEFAULT NULL,
+            emp_id VARCHAR(50) NOT NULL,
+            month_year VARCHAR(7) NOT NULL,
+            record_type ENUM('benefit','deduction') NOT NULL,
+            record_id INT NOT NULL,
+            record_name VARCHAR(255) NOT NULL,
+            calculation_type VARCHAR(50) DEFAULT NULL,
+            hours INT DEFAULT NULL,
+            minutes INT DEFAULT NULL,
+            days DECIMAL(10,2) DEFAULT NULL,
+            amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+            action ENUM('insert','update') NOT NULL,
+            previous_data LONGTEXT DEFAULT NULL,
+            imported_by VARCHAR(50) DEFAULT NULL,
+            imported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            rolled_back_at DATETIME DEFAULT NULL,
+            rolled_back_by VARCHAR(50) DEFAULT NULL,
+            INDEX idx_checkpoint (checkpoint_code),
+            INDEX idx_source_file (source_file_id),
+            INDEX idx_request_month (request_inv_no, month_year),
+            INDEX idx_record (record_type, record_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+    }
+}
+
+if (!function_exists('undoPayrollImportTransactions')) {
+    // Reverses logged import lines: rows the import inserted are deleted, rows it
+    // overwrote get their previous values back, and each line is marked rolled back.
+    // Caller owns the DB transaction and must recalc the returned [emp_id, month] pairs.
+    function undoPayrollImportTransactions(PDO $pdo, array $transactions, string $userId): array
+    {
+        $touched = [];
+        $paidStmt = $pdo->prepare("SELECT status FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year LIMIT 1");
+        $markStmt = $pdo->prepare("UPDATE payroll_import_transactions SET rolled_back_at = NOW(), rolled_back_by = :by WHERE id = :id");
+
+        foreach ($transactions as $t) {
+            $empId = (string)$t['emp_id'];
+            $txMonth = (string)$t['month_year'];
+
+            $paidStmt->execute([':emp_id' => $empId, ':month_year' => $txMonth]);
+            if (strtolower((string)$paidStmt->fetchColumn()) === 'paid') {
+                throw new RuntimeException('Employee ' . $empId . ' payroll for ' . $txMonth . ' is already paid and cannot be changed.');
+            }
+
+            $table = $t['record_type'] === 'benefit' ? 'payroll_benefits' : 'payroll_deductions';
+            $recordId = (int)$t['record_id'];
+
+            if ($t['action'] === 'insert') {
+                $pdo->prepare("DELETE FROM {$table} WHERE id = :id AND emp_id = :emp_id AND month = :month_year")
+                    ->execute([':id' => $recordId, ':emp_id' => $empId, ':month_year' => $txMonth]);
+            } else {
+                $previous = json_decode((string)($t['previous_data'] ?? ''), true);
+                if (is_array($previous) && !empty($previous)) {
+                    $sets = [];
+                    $params = [':id' => $recordId];
+                    foreach ($previous as $column => $value) {
+                        if ($column === 'id' || !preg_match('/^[A-Za-z0-9_]+$/', (string)$column)) {
+                            continue;
+                        }
+                        $sets[] = "`{$column}` = :c_{$column}";
+                        $params[":c_{$column}"] = $value;
+                    }
+                    if (!empty($sets)) {
+                        $pdo->prepare("UPDATE {$table} SET " . implode(', ', $sets) . " WHERE id = :id")->execute($params);
+                    }
+                }
+            }
+
+            $markStmt->execute([':by' => $userId, ':id' => (int)$t['id']]);
+            $touched[$empId . '|' . $txMonth] = [$empId, $txMonth];
+        }
+
+        return $touched;
+    }
+}
+
+if (!function_exists('recalculatePayrollTotalsAfterImportChange')) {
+    // Same totals logic as recalculateImportedPayroll() in includes/api/import_payroll_excel.php.
+    function recalculatePayrollTotalsAfterImportChange(PDO $pdo, string $empId, string $monthYear): void
+    {
+        $payrollStmt = $pdo->prepare("SELECT id, total_gross_salary FROM payrolls WHERE emp_id = :emp_id AND month_year = :month_year LIMIT 1 FOR UPDATE");
+        $payrollStmt->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+        $payroll = $payrollStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$payroll) {
+            return;
+        }
+
+        $sum = static function (string $table) use ($pdo, $empId, $monthYear): float {
+            $stmt = $pdo->prepare("SELECT COALESCE(SUM(CAST(note AS DECIMAL(10,2))), 0) FROM {$table} WHERE emp_id = :emp_id AND month = :month_year AND status = 1");
+            $stmt->execute([':emp_id' => $empId, ':month_year' => $monthYear]);
+            return (float)$stmt->fetchColumn();
+        };
+        $totalBenefits = $sum('payroll_benefits');
+        $totalDeductions = $sum('payroll_deductions');
+        $netSalary = (float)$payroll['total_gross_salary'] + $totalBenefits - $totalDeductions;
+
+        $pdo->prepare("UPDATE payrolls SET total_benefits = :tb, total_deductions = :td, net_salary = :net, status = CASE WHEN status = 'paid' THEN 'paid' ELSE 'updated' END WHERE id = :id")
+            ->execute([
+                ':tb' => number_format($totalBenefits, 2, '.', ''),
+                ':td' => number_format($totalDeductions, 2, '.', ''),
+                ':net' => number_format($netSalary, 2, '.', ''),
+                ':id' => $payroll['id'],
+            ]);
+    }
+}
+
 if (!function_exists('resolvePayrollSupervisorReportMonth')) {
     // Month the supervisor report should use for a given approval request: the
     // request's own payroll_month when payroll exists for it. Falling back to the

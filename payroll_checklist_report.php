@@ -1521,6 +1521,54 @@ foreach ($employees as $employee) {
         .mfp-note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #ecfdf5; color: #047857; font-weight: 600; }
         .mfp-note i { margin-right: 6px; }
         .mfp-popup .swal2-confirm:disabled { opacity: .45; cursor: not-allowed; }
+        .mfp-tabs { display: inline-flex; gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 12px; margin-bottom: 14px; }
+        .mfp-tab { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border: 0; border-radius: 9px; background: transparent; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
+        .mfp-tab:hover { color: #0f172a; }
+        .mfp-tab.active { background: #fff; color: #4f46e5; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+        .mfp-tab-count { min-width: 20px; padding: 1px 7px; border-radius: 999px; background: #e2e8f0; font-size: 11px; }
+        .mfp-tab.active .mfp-tab-count { background: #eef2ff; color: #4f46e5; }
+        .mfp-pane { display: none; } .mfp-pane.active { display: block; }
+        .mfp-pill.tone-slate { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+        .mfp-pill.tone-red { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+        .mfp-stat.tone-red { background: #fef2f2; color: #b91c1c; }
+        .mfp-loading, .mfp-empty { padding: 30px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #94a3b8; }
+        .mfp-empty i { font-size: 26px; } .mfp-empty.is-error { color: #b91c1c; }
+        #mfpTransactionsBody { display: flex; flex-direction: column; gap: 12px; max-height: 56vh; overflow: auto; padding: 2px; }
+        /* Cards/items must keep their height inside the scrolling flex column - with the
+           default flex-shrink they were squeezed to the box height and clipped, so the
+           list never scrolled. */
+        .mfp-tx-card, .mfp-item { flex-shrink: 0; }
+        #mfpTransactionsBody, .mfp-list { overscroll-behavior: contain; }
+        .mfp-tx-card { border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; overflow: hidden; }
+        .mfp-tx-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .mfp-search { position: relative; flex: 0 1 300px; }
+        .mfp-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; pointer-events: none; }
+        .mfp-search input { width: 100%; height: 38px; padding: 0 12px 0 34px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 13px; color: #0f172a; transition: border-color .15s, box-shadow .15s; }
+        .mfp-search input:focus { outline: none; border-color: #818cf8; background: #fff; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+        html.app-dark .mfp-search input { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+        .mfp-tx-card.is-rolled-back { background: #fafbfc; }
+        .mfp-tx-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; flex-wrap: wrap; border-bottom: 1px solid #f1f5f9; }
+        .mfp-tx-head .mfp-main { flex: 1 1 220px; }
+        .mfp-tx-sums { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+        .mfp-tx-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+        .mfp-danger-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s; }
+        .mfp-danger-btn:hover { background: #fee2e2; } .mfp-danger-btn:disabled { opacity: .5; cursor: wait; }
+        .mfp-tx-table-wrap { overflow-x: auto; }
+        .mfp-tx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .mfp-tx-table th { padding: 8px 12px; background: #f8fafc; color: #64748b; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: left; white-space: nowrap; }
+        .mfp-tx-table td { padding: 8px 12px; border-top: 1px solid #f1f5f9; vertical-align: middle; }
+        .mfp-tx-table tr.is-gone td { opacity: .5; } .mfp-tx-table tr.is-gone td:last-child { opacity: 1; }
+        .mfp-tx-table tr.is-gone .mfp-tx-num { text-decoration: line-through; }
+        .mfp-tx-emp { display: flex; flex-direction: column; } .mfp-tx-emp b { color: #0f172a; font-weight: 600; } .mfp-tx-emp span { color: #94a3b8; font-size: 11px; }
+        .mfp-tx-sub { color: #94a3b8; font-size: 11px; }
+        .mfp-tx-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .mfp-tx-num.is-plus { color: #047857; font-weight: 700; } .mfp-tx-num.is-minus { color: #b91c1c; font-weight: 700; }
+        .mfp-tx-table .mfp-icon-btn { width: 30px; height: 30px; font-size: 13px; }
+        .mfp-tx-legacy { padding: 12px 14px; color: #64748b; font-size: 12.5px; } .mfp-tx-legacy i { margin-right: 6px; }
+        html.app-dark .mfp-tabs { background: #1e293b; } html.app-dark .mfp-tab.active { background: #0f172a; color: #a5b4fc; }
+        html.app-dark .mfp-tx-card { background: #0f172a; border-color: #334155; }
+        html.app-dark .mfp-tx-table th { background: #1e293b; } html.app-dark .mfp-tx-table td, html.app-dark .mfp-tx-head { border-color: #1e293b; }
+        html.app-dark .mfp-tx-emp b { color: #f1f5f9; }
         @media (max-width: 900px) {
             .mfp-item { grid-template-columns: 24px 40px minmax(0, 1fr) auto; row-gap: 8px; }
             .mfp-meta, .mfp-status { grid-column: 3 / 4; }
@@ -4180,7 +4228,70 @@ foreach ($employees as $employee) {
             return reviewResult.value;
         }
 
-        async function reviewManagerUploadedPayrollExcel() {
+        // Sends one action to payroll_approval_handler.php for the current request/month.
+        async function postManagerPayrollAction(fields) {
+            const body = new URLSearchParams(Object.assign({
+                request_inv_no: managerPayrollExcelState.requestInvNo,
+                month: managerPayrollExcelState.month
+            }, fields));
+            const response = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data || data.status !== 'success') {
+                throw new Error((data && data.message) || 'Request failed.');
+            }
+            return data;
+        }
+
+        // SweetAlert2 shows one popup at a time, so a delete inside the file picker closes
+        // the picker, asks for confirmation in its own Swal, runs the action, then reopens
+        // the picker on the same tab / search (reopen state carries dataChanged forward).
+        async function runManagerPickerAction(action, reopenState) {
+            const isFileDelete = action.type === 'delete_file';
+            const isLine = action.type === 'rollback_line';
+            const confirm = await Swal.fire({
+                icon: 'warning',
+                title: isFileDelete ? 'Delete uploaded file?' : (isLine ? 'Delete this imported line?' : 'Delete all imported lines?'),
+                html: isFileDelete
+                    ? 'The uploaded Excel file will be removed. This cannot be undone.'
+                    : (isLine
+                        ? `<b>${escapePayrollImportHtml(action.label || '')}</b><br>The line is removed and payroll is recalculated.`
+                        : `All imported lines of <b>${escapePayrollImportHtml(action.label || 'this file')}</b> are removed and payroll is recalculated. The corrected Excel can then be uploaded again.`),
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-trash-alt"></i> Yes, delete',
+                cancelButtonText: '<?= addslashes(__('cancel', 'Cancel')) ?>',
+                confirmButtonColor: '#dc2626',
+                reverseButtons: true,
+                focusCancel: true,
+                allowOutsideClick: false
+            });
+
+            if (confirm.isConfirmed) {
+                Swal.fire({ title: 'Deleting…', didOpen: () => Swal.showLoading(), allowOutsideClick: false, allowEscapeKey: false });
+                try {
+                    const fields = isFileDelete
+                        ? { action: 'delete_manager_uploaded_payroll_excel_file', file_id: action.fileId }
+                        : Object.assign({ action: 'rollback_manager_payroll_import', file_id: action.fileId }, isLine ? { transaction_id: action.txId } : {});
+                    const result = await postManagerPayrollAction(fields);
+                    reopenState.dataChanged = reopenState.dataChanged || !isFileDelete;
+                    if (isFileDelete) refreshManagerReviewButtonCount();
+                    await Swal.fire({ icon: 'success', title: 'Deleted', text: result.message || 'Deleted successfully.', timer: 1800, showConfirmButton: false });
+                } catch (error) {
+                    await Swal.fire({ icon: 'error', title: '<?= addslashes(__('error', 'Error')) ?>', text: error.message || 'Delete failed.' });
+                }
+            }
+
+            return reviewManagerUploadedPayrollExcel(reopenState);
+        }
+
+        async function reviewManagerUploadedPayrollExcel(reopenOptions) {
+            // Called from the menu with no/other args; only our own reopen passes { reopen: true }.
+            const reopenState = (reopenOptions && reopenOptions.reopen)
+                ? reopenOptions
+                : { reopen: true, tab: 'files', search: '', dataChanged: false };
             if (!managerPayrollExcelState.canReview) {
                 Swal.fire('<?= addslashes(__('error', 'Error')) ?>', 'Only HR Payroll and HR Senior BP can review and import manager files.', 'error');
                 return;
@@ -4216,7 +4327,8 @@ foreach ($employees as $employee) {
                 }
             } catch (error) {
                 Swal.close();
-                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', error.message || 'Failed to load manager uploaded files.', 'error');
+                await Swal.fire('<?= addslashes(__('error', 'Error')) ?>', error.message || 'Failed to load manager uploaded files.', 'error');
+                if (reopenState.dataChanged) window.location.reload();
                 return;
             }
 
@@ -4237,11 +4349,14 @@ foreach ($employees as $employee) {
 
             const mfpEsc = escapePayrollImportHtml;
             const mfpIsReviewed = (file) => String(file.reviewed_at || '').trim() !== '';
+            const mfpIsRolledBack = (file) => String(file.rolled_back_at || '').trim() !== '';
             // Pending files first (newest upload on top), reviewed files after.
             const sortedFiles = availableFiles.slice().sort((a, b) =>
                 (mfpIsReviewed(a) - mfpIsReviewed(b)) || String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
             const pendingCount = sortedFiles.filter((file) => !mfpIsReviewed(file)).length;
             const reviewedCount = sortedFiles.length - pendingCount;
+            const rolledBackPill = '<span class="mfp-pill tone-slate"><i class="fas fa-undo"></i>Rolled back</span>';
+            const deleteFileBtn = (fileId) => `<button type="button" class="mfp-icon-btn tone-red payroll-delete-uploaded-file-btn" data-file-id="${fileId}" title="Delete uploaded file"><i class="fas fa-trash-alt"></i></button>`;
             const mfpInitials = (name) => String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p.charAt(0)).join('').toUpperCase() || '?';
             const mfpWhen = (value) => {
                 const raw = String(value || '').trim();
@@ -4252,6 +4367,7 @@ foreach ($employees as $employee) {
             let firstSelectableMarked = false;
             const fileTableRows = sortedFiles.map((file) => {
                 const isReviewed = mfpIsReviewed(file);
+                const isRolledBack = mfpIsRolledBack(file);
                 const canSelect = !isReviewed;
                 const shouldCheck = canSelect && !firstSelectableMarked;
                 if (shouldCheck) {
@@ -4284,31 +4400,51 @@ foreach ($employees as $employee) {
                                 : '<span class="mfp-pill tone-amber"><span class="mfp-dot"></span>Pending review</span>'}
                         </span>
                         <span class="mfp-status">
-                            ${isReviewed ? '<span class="mfp-pill tone-green"><i class="fas fa-check-circle"></i>Reviewed</span>' : ''}
+                            ${isRolledBack ? rolledBackPill : (isReviewed ? '<span class="mfp-pill tone-green"><i class="fas fa-check-circle"></i>Reviewed</span>' : '')}
                         </span>
                         <span class="mfp-actions">
                             ${canDownloadFiles ? `<a class="mfp-icon-btn tone-green" href="${mfpEsc(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}
-                            ${canSelect ? `<button type="button" class="mfp-icon-btn tone-red payroll-delete-uploaded-file-btn" data-file-id="${fileId}" title="Delete uploaded file"><i class="fas fa-trash-alt"></i></button>` : ''}
+                            ${(canSelect || isRolledBack) ? deleteFileBtn(fileId) : ''}
                         </span>
                     </label>
                 `;
             }).join('');
 
+            // A delete clicked inside the picker is parked here; the picker closes and
+            // runManagerPickerAction() confirms it in its own SweetAlert2 popup.
+            let mfpPendingAction = null;
+            const startTab = reopenState.tab === 'transactions' ? 'transactions' : 'files';
             const pickResult = await Swal.fire({
                 title: 'Select Manager Uploaded File',
                 width: 1100,
                 html: `
                     <div class="mfp-wrap">
-                        <div class="mfp-top">
-                            <p class="mfp-lead"><i class="far fa-calendar"></i> Files uploaded for <strong>${mfpEsc(String(managerPayrollExcelState.month || ''))}</strong>. Pick a pending file to review and import.</p>
-                            <div class="mfp-stats">
-                                <span class="mfp-stat"><b>${sortedFiles.length}</b> Total</span>
-                                <span class="mfp-stat tone-amber"><b>${pendingCount}</b> Pending</span>
-                                <span class="mfp-stat tone-green"><b>${reviewedCount}</b> Reviewed</span>
-                            </div>
+                        <div class="mfp-tabs" role="tablist">
+                            <button type="button" class="mfp-tab${startTab === 'files' ? ' active' : ''}" data-mfp-tab="files"><i class="fa-solid fa-file-excel"></i> Uploaded Files <span class="mfp-tab-count">${sortedFiles.length}</span></button>
+                            <button type="button" class="mfp-tab${startTab === 'transactions' ? ' active' : ''}" data-mfp-tab="transactions"><i class="fas fa-exchange-alt"></i> Imported Transactions</button>
                         </div>
-                        <div class="mfp-list" id="managerPayrollFilePickerTable">${fileTableRows}</div>
-                        ${pendingCount === 0 ? '<div class="mfp-note"><i class="fas fa-check-double"></i> All uploaded files for this month have already been reviewed and imported.</div>' : ''}
+                        <div class="mfp-pane${startTab === 'files' ? ' active' : ''}" data-mfp-pane="files">
+                            <div class="mfp-top">
+                                <p class="mfp-lead"><i class="far fa-calendar"></i> Files uploaded for <strong>${mfpEsc(String(managerPayrollExcelState.month || ''))}</strong>. Pick a pending file to review and import.</p>
+                                <div class="mfp-stats">
+                                    <span class="mfp-stat"><b>${sortedFiles.length}</b> Total</span>
+                                    <span class="mfp-stat tone-amber"><b>${pendingCount}</b> Pending</span>
+                                    <span class="mfp-stat tone-green"><b>${reviewedCount}</b> Reviewed</span>
+                                </div>
+                            </div>
+                            <div class="mfp-list" id="managerPayrollFilePickerTable">${fileTableRows}</div>
+                            ${pendingCount === 0 ? '<div class="mfp-note"><i class="fas fa-check-double"></i> All uploaded files for this month have already been reviewed and imported. To correct a file, upload the corrected Excel again - its import replaces the old lines.</div>' : ''}
+                        </div>
+                        <div class="mfp-pane${startTab === 'transactions' ? ' active' : ''}" data-mfp-pane="transactions">
+                            <div class="mfp-tx-toolbar">
+                                <p class="mfp-lead"><i class="fas fa-info-circle"></i> Lines imported from each reviewed file. Delete a wrong line or all lines of a file.</p>
+                                <div class="mfp-search">
+                                    <i class="fas fa-search"></i>
+                                    <input type="search" id="mfpTxSearch" placeholder="Search employee ID or name…" autocomplete="off" value="${mfpEsc(reopenState.search || '')}">
+                                </div>
+                            </div>
+                            <div id="mfpTransactionsBody"><div class="mfp-loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></div>
+                        </div>
                     </div>
                 `,
                 showCancelButton: true,
@@ -4333,43 +4469,153 @@ foreach ($employees as $employee) {
                     document.querySelectorAll('#managerPayrollFilePickerTable .mfp-actions').forEach((el) => el.addEventListener('click', (event) => event.stopPropagation()));
                     syncSelection();
 
-                    document.querySelectorAll('#managerPayrollFilePickerTable .payroll-delete-uploaded-file-btn').forEach((btn) => {
-                        btn.addEventListener('click', async function() {
-                            const fileId = String(this.dataset.fileId || '').trim();
-                            if (!fileId || !window.confirm('Delete this uploaded file? This cannot be undone.')) {
-                                return;
-                            }
+                    // Park the action and close the picker; it is confirmed in its own Swal.
+                    const queueAction = (action) => {
+                        const searchInput = document.getElementById('mfpTxSearch');
+                        reopenState.search = searchInput ? searchInput.value : reopenState.search;
+                        reopenState.tab = action.type === 'delete_file' ? 'files' : 'transactions';
+                        mfpPendingAction = action;
+                        Swal.close();
+                    };
 
-                            this.disabled = true;
-                            try {
-                                const deletePayload = new URLSearchParams();
-                                deletePayload.append('action', 'delete_manager_uploaded_payroll_excel_file');
-                                deletePayload.append('request_inv_no', managerPayrollExcelState.requestInvNo);
-                                deletePayload.append('month', managerPayrollExcelState.month);
-                                deletePayload.append('file_id', fileId);
+                    // ---- Tabs: the Review button only belongs to the Uploaded Files tab ----
+                    let transactionsLoaded = false;
+                    const activateTab = (target) => {
+                        document.querySelectorAll('.mfp-tab').forEach((t) => t.classList.toggle('active', t.dataset.mfpTab === target));
+                        document.querySelectorAll('.mfp-pane').forEach((p) => p.classList.toggle('active', p.dataset.mfpPane === target));
+                        if (confirmBtn) confirmBtn.style.display = target === 'files' ? '' : 'none';
+                        Swal.resetValidationMessage();
+                        if (target === 'transactions' && !transactionsLoaded) {
+                            transactionsLoaded = true;
+                            loadMfpTransactions();
+                        }
+                    };
+                    document.querySelectorAll('.mfp-tab').forEach((tab) => tab.addEventListener('click', () => activateTab(tab.dataset.mfpTab)));
 
-                                const deleteResponse = await fetch('./includes/ajaxFile/payroll_approval_handler.php', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                                    body: deletePayload.toString()
-                                });
-                                const deleteData = await deleteResponse.json().catch(() => null);
-                                if (!deleteResponse.ok || !deleteData || deleteData.status !== 'success') {
-                                    throw new Error((deleteData && deleteData.message) || 'Failed to delete uploaded file.');
-                                }
+                    const fmtMoney = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    const qtyLabel = (t) => {
+                        const parts = [];
+                        if (t.days) parts.push(`${Number(t.days)}d`);
+                        if (t.hours) parts.push(`${t.hours}h`);
+                        if (t.minutes) parts.push(`${t.minutes}m`);
+                        return parts.length ? parts.join(' ') : '—';
+                    };
+                    const typeLabel = (t) => {
+                        const c = String(t.calculation_type || '');
+                        if (c === 'daily_deduction') return 'By Day';
+                        if (c === 'fixed') return 'Fixed';
+                        return 'By Time';
+                    };
 
-                                const row = this.closest('.mfp-item');
-                                if (row) {
-                                    row.remove();
-                                }
-                                syncSelection();
-                                refreshManagerReviewButtonCount();
-                            } catch (error) {
-                                this.disabled = false;
-                                window.alert(error.message || 'Failed to delete uploaded file.');
-                            }
+                    // Filter rows by employee ID / name; hide file cards with no match.
+                    const applyTxSearch = () => {
+                        const input = document.getElementById('mfpTxSearch');
+                        const term = String(input ? input.value : '').trim().toLowerCase();
+                        let visibleTotal = 0;
+                        document.querySelectorAll('#mfpTransactionsBody .mfp-tx-card').forEach((card) => {
+                            let visible = 0;
+                            card.querySelectorAll('tbody tr').forEach((tr) => {
+                                const match = term === '' || String(tr.dataset.search || '').includes(term);
+                                tr.style.display = match ? '' : 'none';
+                                if (match) visible++;
+                            });
+                            card.style.display = (term === '' || visible > 0) ? '' : 'none';
+                            visibleTotal += visible;
                         });
+                        const noMatch = document.getElementById('mfpTxNoMatch');
+                        if (noMatch) noMatch.style.display = (term !== '' && visibleTotal === 0) ? '' : 'none';
+                    };
+                    const txSearchInput = document.getElementById('mfpTxSearch');
+                    if (txSearchInput) txSearchInput.addEventListener('input', applyTxSearch);
+
+                    const renderTransactions = (files) => {
+                        const host = document.getElementById('mfpTransactionsBody');
+                        if (!host) return;
+                        if (!files.length) {
+                            host.innerHTML = '<div class="mfp-empty"><i class="fas fa-inbox"></i><span>No imported transactions for this month yet.</span></div>';
+                            return;
+                        }
+                        host.innerHTML = files.map((f) => {
+                            const tx = Array.isArray(f.transactions) ? f.transactions : [];
+                            const active = tx.filter((t) => !t.rolled_back_at);
+                            const benefitTotal = active.filter((t) => t.record_type === 'benefit').reduce((s, t) => s + Number(t.amount || 0), 0);
+                            const deductionTotal = active.filter((t) => t.record_type === 'deduction').reduce((s, t) => s + Number(t.amount || 0), 0);
+                            const isRolledBack = !!f.rolled_back_at;
+                            const fid = mfpEsc(f.file_id);
+                            const rows = tx.map((t) => {
+                                const gone = !!t.rolled_back_at;
+                                const isBenefit = t.record_type === 'benefit';
+                                const label = `${t.emp_name || 'Employee'} #${t.emp_id} · ${t.record_name} ${qtyLabel(t)}`;
+                                return `
+                                    <tr class="${gone ? 'is-gone' : ''}" data-search="${mfpEsc((String(t.emp_id) + ' ' + String(t.emp_name || '')).toLowerCase())}">
+                                        <td><div class="mfp-tx-emp"><b>${mfpEsc(t.emp_name || 'Employee')}</b><span>#${mfpEsc(t.emp_id)}</span></div></td>
+                                        <td><span class="mfp-pill ${isBenefit ? 'tone-green' : 'tone-red'}"><i class="fas ${isBenefit ? 'fa-plus' : 'fa-minus'}"></i>${isBenefit ? 'Benefit' : 'Deduction'}</span></td>
+                                        <td>${mfpEsc(t.record_name)}<div class="mfp-tx-sub">${typeLabel(t)}${t.action === 'update' ? ' · updated existing line' : ''}</div></td>
+                                        <td class="mfp-tx-num">${mfpEsc(qtyLabel(t))}</td>
+                                        <td class="mfp-tx-num ${isBenefit ? 'is-plus' : 'is-minus'}"><i class="icon-saudi_riyal"></i> ${fmtMoney(t.amount)}</td>
+                                        <td class="text-center">${gone
+                                            ? '<span class="mfp-pill tone-slate">Deleted</span>'
+                                            : `<button type="button" class="mfp-icon-btn tone-red mfp-tx-delete" data-file-id="${fid}" data-tx-id="${Number(t.id)}" data-label="${mfpEsc(label)}" title="Delete this line"><i class="fas fa-trash-alt"></i></button>`}</td>
+                                    </tr>`;
+                            }).join('');
+                            return `
+                                <div class="mfp-tx-card${isRolledBack ? ' is-rolled-back' : ''}">
+                                    <div class="mfp-tx-head">
+                                        <span class="mfp-file-icon"><i class="fa-solid fa-file-excel"></i></span>
+                                        <div class="mfp-main">
+                                            <span class="mfp-company">${mfpEsc(f.company_name || '-')}</span>
+                                            <span class="mfp-filename">${mfpEsc(f.original_name || '')}</span>
+                                        </div>
+                                        <div class="mfp-tx-sums">
+                                            <span class="mfp-stat tone-green">+ ${fmtMoney(benefitTotal)}</span>
+                                            <span class="mfp-stat tone-red">− ${fmtMoney(deductionTotal)}</span>
+                                            <span class="mfp-stat"><b>${active.length}</b>/${tx.length} lines</span>
+                                        </div>
+                                        <div class="mfp-tx-head-actions">
+                                            ${isRolledBack
+                                                ? `${rolledBackPill}<span class="mfp-tx-sub">${mfpEsc(f.rolled_back_at)}${f.rolled_back_by_name ? ' · ' + mfpEsc(f.rolled_back_by_name) : ''}</span>`
+                                                : (active.length
+                                                    ? `<button type="button" class="mfp-danger-btn mfp-tx-rollback" data-file-id="${fid}" data-label="${mfpEsc(f.company_name || f.original_name || '')}"><i class="fas fa-undo"></i> Delete all &amp; allow re-upload</button>`
+                                                    : '')}
+                                        </div>
+                                    </div>
+                                    ${tx.length
+                                        ? `<div class="mfp-tx-table-wrap"><table class="mfp-tx-table">
+                                            <thead><tr><th>Employee</th><th>Type</th><th>Reason</th><th>Qty</th><th>Amount</th><th></th></tr></thead>
+                                            <tbody>${rows}</tbody></table></div>`
+                                        : '<div class="mfp-tx-legacy"><i class="fas fa-history"></i> Imported before transaction tracking was added - lines cannot be listed or rolled back here. Correct them in Generate Payroll.</div>'}
+                                </div>`;
+                        }).join('') + '<div class="mfp-empty" id="mfpTxNoMatch" style="display:none;"><i class="fas fa-search"></i><span>No employee matches your search.</span></div>';
+                        applyTxSearch();
+                    };
+
+                    const loadMfpTransactions = async () => {
+                        const host = document.getElementById('mfpTransactionsBody');
+                        if (host) host.innerHTML = '<div class="mfp-loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+                        try {
+                            const data = await postManagerPayrollAction({ action: 'list_manager_payroll_import_transactions' });
+                            renderTransactions(Array.isArray(data.files) ? data.files : []);
+                        } catch (error) {
+                            if (host) host.innerHTML = `<div class="mfp-empty is-error"><i class="fas fa-exclamation-triangle"></i><span>${mfpEsc(error.message)}</span></div>`;
+                        }
+                    };
+
+                    const txBody = document.getElementById('mfpTransactionsBody');
+                    if (txBody) txBody.addEventListener('click', (event) => {
+                        const lineBtn = event.target.closest('.mfp-tx-delete');
+                        const fileBtn = event.target.closest('.mfp-tx-rollback');
+                        if (lineBtn) {
+                            queueAction({ type: 'rollback_line', fileId: lineBtn.dataset.fileId, txId: lineBtn.dataset.txId, label: lineBtn.dataset.label });
+                        } else if (fileBtn) {
+                            queueAction({ type: 'rollback_file', fileId: fileBtn.dataset.fileId, label: fileBtn.dataset.label });
+                        }
                     });
+
+                    document.querySelectorAll('#managerPayrollFilePickerTable .payroll-delete-uploaded-file-btn').forEach((btn) => {
+                        btn.addEventListener('click', () => queueAction({ type: 'delete_file', fileId: String(btn.dataset.fileId || '').trim() }));
+                    });
+
+                    activateTab(startTab);
                 },
                 preConfirm: () => {
                     const selectedRadio = document.querySelector('input[name="managerPayrollReviewFileRow"]:checked');
@@ -4382,7 +4628,15 @@ foreach ($employees as $employee) {
                 }
             });
 
+            if (mfpPendingAction) {
+                return runManagerPickerAction(mfpPendingAction, reopenState);
+            }
+
             if (!pickResult.isConfirmed || !pickResult.value) {
+                // Lines were deleted while the picker was open - reload for fresh totals.
+                if (reopenState.dataChanged) {
+                    window.location.reload();
+                }
                 return;
             }
 
@@ -4503,7 +4757,10 @@ foreach ($employees as $employee) {
                     },
                     body: JSON.stringify({
                         rows: rowsWithOriginalCheckpoint,
-                        default_month: managerPayrollExcelState.month
+                        default_month: managerPayrollExcelState.month,
+                        // Links every imported line to this file so it can be rolled back later.
+                        source_file_id: selectedFileId,
+                        request_inv_no: managerPayrollExcelState.requestInvNo
                     })
                 });
                 const result = await response.json().catch(() => null);
@@ -4561,6 +4818,7 @@ foreach ($employees as $employee) {
                 const successHtml = `
                     <div style="text-align:left;">
                         <p style="color:#5d7286; margin-bottom:16px;">${escapePayrollImportHtml(result.message || 'Payroll imported successfully from manager upload.')}</p>
+                        ${Number(result.replaced_previous_lines || 0) > 0 ? `<div class="mfp-note" style="margin:0 0 14px; background:#eef2ff; color:#4338ca;"><i class="fas fa-sync-alt"></i> This file was imported before - ${Number(result.replaced_previous_lines)} old line(s) were removed and replaced with the new values.</div>` : ''}
                         <div class="calc-grid" style="margin-bottom:0;">
                             <div class="calc-box"><div class="calc-title"><i class="fas fa-list-check"></i> Records Imported</div><div class="calc-value">${Number(result.processed_rows || 0)}</div></div>
                             <div class="calc-box"><div class="calc-title"><i class="fas fa-users"></i> Employees Updated</div><div class="calc-value">${Number(result.updated_payrolls || 0)}</div></div>
