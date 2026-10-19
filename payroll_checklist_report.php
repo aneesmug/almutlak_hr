@@ -1538,6 +1538,9 @@ foreach ($employees as $employee) {
            default flex-shrink they were squeezed to the box height and clipped, so the
            list never scrolled. */
         .mfp-tx-card, .mfp-item { flex-shrink: 0; }
+        .mfp-item.is-missing { cursor: default; background: #fffafa; border-style: dashed; border-color: #fecaca; }
+        .mfp-item.is-missing .mfp-file-icon { background: #fef2f2; color: #dc2626; }
+        .mfp-note.is-warn { margin: 0 0 12px; background: #fef2f2; color: #b91c1c; }
         #mfpTransactionsBody, .mfp-list { overscroll-behavior: contain; }
         .mfp-tx-card { border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; overflow: hidden; }
         .mfp-tx-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -4332,11 +4335,10 @@ foreach ($employees as $employee) {
                 return;
             }
 
-            const availableFiles = filesResponse.files.filter((file) => !!file && file.is_available !== false);
-            if (availableFiles.length === 0) {
-                Swal.fire('<?= addslashes(__('error', 'Error')) ?>', 'All uploaded files are unavailable on server. Please ask manager to upload again.', 'error');
-                return;
-            }
+            // Files whose .xlsx is missing on disk stay listed (greyed, not selectable, deletable)
+            // instead of blocking the whole picker - Imported Transactions must stay reachable.
+            const availableFiles = filesResponse.files.filter((file) => !!file);
+            const mfpIsMissing = (file) => file.is_available === false;
 
             // Download of the original file is system-admin only (enforced server side too).
             const canDownloadFiles = filesResponse.can_download === true;
@@ -4353,7 +4355,8 @@ foreach ($employees as $employee) {
             // Pending files first (newest upload on top), reviewed files after.
             const sortedFiles = availableFiles.slice().sort((a, b) =>
                 (mfpIsReviewed(a) - mfpIsReviewed(b)) || String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
-            const pendingCount = sortedFiles.filter((file) => !mfpIsReviewed(file)).length;
+            const pendingCount = sortedFiles.filter((file) => !mfpIsReviewed(file) && !mfpIsMissing(file)).length;
+            const missingCount = sortedFiles.filter(mfpIsMissing).length;
             const reviewedCount = sortedFiles.length - pendingCount;
             const rolledBackPill = '<span class="mfp-pill tone-slate"><i class="fas fa-undo"></i>Rolled back</span>';
             const deleteFileBtn = (fileId) => `<button type="button" class="mfp-icon-btn tone-red payroll-delete-uploaded-file-btn" data-file-id="${fileId}" title="Delete uploaded file"><i class="fas fa-trash-alt"></i></button>`;
@@ -4368,7 +4371,8 @@ foreach ($employees as $employee) {
             const fileTableRows = sortedFiles.map((file) => {
                 const isReviewed = mfpIsReviewed(file);
                 const isRolledBack = mfpIsRolledBack(file);
-                const canSelect = !isReviewed;
+                const isMissing = mfpIsMissing(file);
+                const canSelect = !isReviewed && !isMissing;
                 const shouldCheck = canSelect && !firstSelectableMarked;
                 if (shouldCheck) {
                     firstSelectableMarked = true;
@@ -4377,7 +4381,7 @@ foreach ($employees as $employee) {
                 const uploader = String(file.uploaded_by_name || file.uploaded_by || 'N/A');
 
                 return `
-                    <label class="mfp-item${isReviewed ? ' is-reviewed' : ''}${shouldCheck ? ' is-selected' : ''}" data-file-id="${fileId}">
+                    <label class="mfp-item${isReviewed ? ' is-reviewed' : ''}${isMissing ? ' is-missing' : ''}${shouldCheck ? ' is-selected' : ''}" data-file-id="${fileId}">
                         <input type="radio" class="mfp-radio" name="managerPayrollReviewFileRow" value="${fileId}" ${shouldCheck ? 'checked' : ''} ${canSelect ? '' : 'disabled'}>
                         <span class="mfp-check"><i class="fas ${isReviewed ? 'fa-lock' : 'fa-check'}"></i></span>
                         <span class="mfp-file-icon"><i class="fa-solid fa-file-excel"></i></span>
@@ -4400,11 +4404,13 @@ foreach ($employees as $employee) {
                                 : '<span class="mfp-pill tone-amber"><span class="mfp-dot"></span>Pending review</span>'}
                         </span>
                         <span class="mfp-status">
-                            ${isRolledBack ? rolledBackPill : (isReviewed ? '<span class="mfp-pill tone-green"><i class="fas fa-check-circle"></i>Reviewed</span>' : '')}
+                            ${isMissing
+                                ? '<span class="mfp-pill tone-red" title="The Excel file is not in assets/payroll_manager_uploads on this server. Delete this entry and ask the manager to upload again."><i class="fas fa-exclamation-triangle"></i>File missing on server</span>'
+                                : (isRolledBack ? rolledBackPill : (isReviewed ? '<span class="mfp-pill tone-green"><i class="fas fa-check-circle"></i>Reviewed</span>' : ''))}
                         </span>
                         <span class="mfp-actions">
-                            ${canDownloadFiles ? `<a class="mfp-icon-btn tone-green" href="${mfpEsc(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}
-                            ${(canSelect || isRolledBack) ? deleteFileBtn(fileId) : ''}
+                            ${(canDownloadFiles && !isMissing) ? `<a class="mfp-icon-btn tone-green" href="${mfpEsc(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}
+                            ${(canSelect || isRolledBack || (isMissing && !isReviewed)) ? deleteFileBtn(fileId) : ''}
                         </span>
                     </label>
                 `;
@@ -4432,6 +4438,7 @@ foreach ($employees as $employee) {
                                     <span class="mfp-stat tone-green"><b>${reviewedCount}</b> Reviewed</span>
                                 </div>
                             </div>
+                            ${missingCount > 0 ? `<div class="mfp-note is-warn"><i class="fas fa-exclamation-triangle"></i> ${missingCount} uploaded file(s) are listed but the Excel file is missing on this server (assets/payroll_manager_uploads). Delete the pending entry and ask the manager to upload again.</div>` : ''}
                             <div class="mfp-list" id="managerPayrollFilePickerTable">${fileTableRows}</div>
                             ${pendingCount === 0 ? '<div class="mfp-note"><i class="fas fa-check-double"></i> All uploaded files for this month have already been reviewed and imported. To correct a file, upload the corrected Excel again - its import replaces the old lines.</div>' : ''}
                         </div>
