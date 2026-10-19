@@ -1135,14 +1135,48 @@ foreach ($employees as $employee) {
         .more-actions-modal .swal2-close:hover { color: #f46a6a; }
         /* Filters */
         .pc-filters .sr-card-head h3 i, .pc-list .sr-card-head h3 i { color: var(--sr-accent); margin-inline-end: 6px; }
-        .pc-filters .sr-filter-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-        .pc-filters .select2-container { width: 100% !important; }
-        .pc-filters .select2-container--default .select2-selection--multiple {
-            min-height: 38px; border: 1px solid var(--sr-border-strong); border-radius: 9px; padding: 2px 6px; background: var(--sr-surface-2);
-        }
-        .pc-filters .select2-container--default.select2-container--focus .select2-selection--multiple { border-color: var(--sr-accent); }
-        .pc-filters .select2-container--default .select2-selection--multiple .select2-selection__choice { margin-top: 4px; }
-        .pc-filters .pc-reset { width: 100%; justify-content: center; height: 38px; }
+        .pc-filters { padding: 0 !important; overflow: hidden; }
+        .pcf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--sr-border); }
+        .pcf-title { display: flex; align-items: center; gap: 12px; }
+        .pcf-title h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--sr-text); line-height: 1.2; }
+        .pcf-title-icon { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft, #eef2ff); color: var(--sr-accent); font-size: 15px; }
+        .pcf-sub { font-size: 12px; color: var(--sr-muted); }
+        .pcf-sub b { color: var(--sr-accent); }
+        .pcf-reset { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 9px; font-size: 13px; font-weight: 600; color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; text-decoration: none !important; transition: background .15s; }
+        .pcf-reset:hover { background: #fee2e2; color: #b91c1c; }
+        .pcf-reset.is-idle { color: var(--sr-muted); background: transparent; border-color: var(--sr-border); }
+        .pcf-reset.is-idle:hover { color: var(--sr-text); background: var(--sr-surface-2); }
+        .pcf-body { padding: 16px 20px 18px; }
+        .pcf-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(260px, 1.25fr); gap: 14px; align-items: end; }
+        .pcf-field label { display: block; margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--sr-muted); }
+        .pcf-control { position: relative; }
+        .pcf-control > i { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); font-size: 13px; pointer-events: none; transition: color .15s; }
+        .pcf-select { width: 100%; height: 40px; padding-inline: 36px 32px; border: 1px solid var(--sr-border-strong); border-radius: 10px; background-color: var(--sr-surface-2); color: var(--sr-text); font-size: 13px; cursor: pointer; appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 12px center; transition: border-color .15s, box-shadow .15s; }
+        [dir="rtl"] .pcf-select { background-position: left 12px center; }
+        .pcf-select:hover { border-color: var(--sr-accent); }
+        .pcf-select:focus { outline: none; border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+        .pcf-field.is-set .pcf-select { border-color: var(--sr-accent); background-color: var(--sr-accent-soft, #eef2ff); font-weight: 600; }
+        .pcf-field.is-set .pcf-control > i { color: var(--sr-accent); }
+        .pcf-chips { display: flex; gap: 6px; }
+        .pcf-chip { flex: 1; margin: 0 !important; cursor: pointer; }
+        .pcf-chip input { position: absolute; opacity: 0; pointer-events: none; }
+        .pcf-chip span { height: 40px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 1px solid var(--sr-border-strong); border-radius: 10px; background: var(--sr-surface-2); color: var(--sr-muted); font-size: 13px; font-weight: 600; white-space: nowrap; transition: all .15s; user-select: none; }
+        .pcf-chip:hover span { border-color: var(--sr-accent); color: var(--sr-text); }
+        .pcf-chip-tick { display: none; font-size: 10px; }
+        .pcf-chip input:checked + span .pcf-chip-tick { display: inline; }
+        .pcf-chip input:focus-visible + span { box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
+        .pcf-chip.tone-indigo input:checked + span { background: #eef2ff; border-color: #a5b4fc; color: #4338ca; }
+        .pcf-chip.tone-green input:checked + span { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+        .pcf-chip.tone-amber input:checked + span { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+        html.app-dark .pcf-chip.tone-indigo input:checked + span { background: rgba(99,102,241,.18); color: #a5b4fc; }
+        html.app-dark .pcf-chip.tone-green input:checked + span { background: rgba(16,185,129,.16); color: #6ee7b7; }
+        html.app-dark .pcf-chip.tone-amber input:checked + span { background: rgba(245,158,11,.16); color: #fcd34d; }
+        html.app-dark .pcf-reset:not(.is-idle) { background: rgba(220,38,38,.14); border-color: rgba(220,38,38,.35); color: #fca5a5; }
+        html.app-dark .pcf-field.is-set .pcf-select { background-color: rgba(99,102,241,.14); }
+        @media (max-width: 1199px) { .pcf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pcf-field-chips { grid-column: 1 / -1; } }
+        @media (max-width: 575px) { .pcf-grid { grid-template-columns: 1fr; } .pcf-head { flex-wrap: wrap; } }
         /* KPI cards (static sr-scard) */
         .pc-kpis .sr-scard { cursor: default; }
         .pc-kpis .sr-scard:hover { transform: none; }
@@ -1362,22 +1396,74 @@ foreach ($employees as $employee) {
             .pc-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
             .print-hide-status { display: none !important; }
         }
-        #payrollImportReviewTabs .nav-link#payrollImportBenefitsTab {
-            color: #28a745;
-        }
-        #payrollImportReviewTabs .nav-link#payrollImportBenefitsTab.active {
-            color: #fff;
-            background-color: #28a745;
-            border-color: #28a745 #28a745 #28a745;
-        }
-        #payrollImportReviewTabs .nav-link#payrollImportDeductionsTab {
-            color: #dc3545;
-        }
-        #payrollImportReviewTabs .nav-link#payrollImportDeductionsTab.active {
-            color: #fff;
-            background-color: #dc3545;
-            border-color: #dc3545 #dc3545 #dc3545;
-        }
+        /* ---- Review Imported Rows popup (pir-*) ---- */
+        .pir-popup { max-width: 1400px !important; }
+        .pir-wrap { text-align: left; color: #1e293b; font-size: 13px; }
+        .pir-lead { margin: 0 0 14px; color: #64748b; font-size: 13px; }
+        .pir-lead i { color: #6366f1; margin-right: 4px; }
+        .pir-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .pir-kpi { border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; background: #f8fafc; display: flex; flex-direction: column; gap: 2px; }
+        .pir-kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+        .pir-kpi-value { font-size: 18px; font-weight: 700; color: #0f172a; }
+        .pir-kpi.tone-indigo { background: #eef2ff; border-color: #c7d2fe; } .pir-kpi.tone-indigo .pir-kpi-label { color: #4f46e5; }
+        .pir-kpi.tone-green { background: #ecfdf5; border-color: #a7f3d0; } .pir-kpi.tone-green .pir-kpi-label, .pir-kpi.tone-green .pir-kpi-value { color: #047857; }
+        .pir-kpi.tone-red { background: #fef2f2; border-color: #fecaca; } .pir-kpi.tone-red .pir-kpi-label, .pir-kpi.tone-red .pir-kpi-value { color: #b91c1c; }
+        .pir-tabs { display: inline-flex; gap: 4px; padding: 4px; background: #f1f5f9; border-radius: 12px; margin-bottom: 12px; }
+        .pir-tab { display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 9px; font-weight: 600; font-size: 13px; color: #475569; text-decoration: none !important; transition: background .15s, color .15s; }
+        .pir-tab:hover { color: #0f172a; background: rgba(255,255,255,.6); }
+        .pir-tab-count { min-width: 22px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: #e2e8f0; color: #475569; text-align: center; }
+        .pir-tab.active { background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+        .pir-tab.tone-green.active { color: #047857; } .pir-tab.tone-green.active .pir-tab-count { background: #d1fae5; color: #047857; }
+        .pir-tab.tone-red.active { color: #b91c1c; } .pir-tab.tone-red.active .pir-tab-count { background: #fee2e2; color: #b91c1c; }
+        .pir-pane { display: none; } .pir-pane.active { display: block; }
+        .pir-wrap .payroll-import-review-table-wrap { border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px 6px; overflow-x: auto; }
+        .pir-dt-top, .pir-dt-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .pir-dt-top { margin-bottom: 8px; } .pir-dt-bottom { margin-top: 8px; }
+        .pir-wrap .dataTables_length label, .pir-wrap .dataTables_filter label { margin: 0; font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 6px; }
+        .pir-wrap .dataTables_length select, .pir-wrap .dataTables_filter input { height: 32px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 10px; font-size: 13px; background: #fff; margin: 0 !important; }
+        .pir-wrap .dataTables_filter input { width: 220px; }
+        .pir-wrap .dataTables_info { padding: 0 !important; font-size: 12px; color: #64748b; }
+        .pir-wrap .dataTables_paginate .pagination { margin: 0; gap: 3px; }
+        .pir-wrap .dataTables_paginate .page-link { border: 1px solid #e2e8f0; border-radius: 8px !important; min-width: 32px; height: 32px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: #475569; }
+        .pir-wrap .dataTables_paginate .page-item.active .page-link { background: #6366f1; border-color: #6366f1; color: #fff; }
+        .pir-wrap .dataTables_paginate .page-item.disabled .page-link { opacity: .45; }
+        .pir-table { width: 100% !important; border-collapse: separate !important; border-spacing: 0; margin: 0 !important; }
+        .pir-table thead th { background: #f8fafc; color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 9px 10px !important; border: 0 !important; border-bottom: 1px solid #e2e8f0 !important; white-space: nowrap; }
+        .pir-table tbody td { padding: 8px 10px !important; border: 0 !important; border-bottom: 1px solid #f1f5f9 !important; vertical-align: middle; }
+        .pir-table tbody tr:hover td { background: #fafbff; }
+        .pir-col-idx { width: 44px; } .pir-col-emp { min-width: 230px; } .pir-col-num { width: 92px; } .pir-col-amt { width: 150px; } .pir-col-reason { min-width: 260px; }
+        .pir-idx { color: #94a3b8; font-size: 12px; text-align: center; }
+        .pir-person { display: flex; align-items: center; gap: 10px; }
+        .pir-avatar { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+        .pir-person-name { font-weight: 600; color: #0f172a; line-height: 1.2; }
+        .pir-person-sub { font-size: 11.5px; color: #64748b; }
+        .pir-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+        .pir-input { width: 100%; height: 34px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 10px; font-size: 13px; background: #fff; color: #0f172a; transition: border-color .15s, box-shadow .15s; }
+        .pir-input:focus { outline: none; border-color: #818cf8; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+        .pir-input-num { text-align: center; font-variant-numeric: tabular-nums; }
+        .pir-amount { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px; font-weight: 700; }
+        .pir-amount input { border: 0; background: transparent; width: 100%; font-weight: 700; color: inherit; font-variant-numeric: tabular-nums; padding: 0; outline: none; }
+        .pir-amount.tone-green { background: #ecfdf5; color: #047857; }
+        .pir-amount.tone-red { background: #fef2f2; color: #b91c1c; }
+        .pir-reason { display: flex; gap: 6px; }
+        .pir-clear-btn { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 8px; border: 1px solid #fecaca; background: #fff; color: #dc2626; display: inline-flex; align-items: center; justify-content: center; transition: background .15s; }
+        .pir-clear-btn:hover { background: #fef2f2; }
+        .pir-empty { padding: 28px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #94a3b8; }
+        .pir-empty i { font-size: 26px; }
+        @media (max-width: 767px) { .pir-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pir-wrap .dataTables_filter input { width: 150px; } }
+        html.app-dark .pir-wrap { color: #e2e8f0; }
+        html.app-dark .pir-kpi, html.app-dark .pir-table thead th { background: #1e293b; border-color: #334155; }
+        html.app-dark .pir-kpi-value, html.app-dark .pir-person-name { color: #f1f5f9; }
+        html.app-dark .pir-tabs { background: #1e293b; } html.app-dark .pir-tab.active { background: #0f172a; }
+        html.app-dark .pir-input, html.app-dark .pir-clear-btn, html.app-dark .pir-wrap .dataTables_length select, html.app-dark .pir-wrap .dataTables_filter input { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+        html.app-dark .pir-wrap .payroll-import-review-table-wrap { border-color: #334155; }
+        html.app-dark .pir-table tbody td { border-bottom-color: #1e293b !important; }
+        html.app-dark .pir-table tbody tr:hover td { background: #172033; }
+        /* Manager file picker: Excel download icon (system admin only) */
+        .pir-file-actions { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+        .pir-file-actions .payroll-delete-uploaded-file-btn { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+        .pir-xls-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857 !important; font-size: 17px; transition: background .15s, transform .15s; }
+        .pir-xls-btn:hover { background: #d1fae5; transform: translateY(-1px); }
     </style>
 </head>
 <body class="enlarged" data-keep-enlarged="true">
@@ -1475,10 +1561,41 @@ foreach ($employees as $employee) {
             <template id="pcMoreActionsTpl"><?= $pcMoreActionsHtml ?></template>
         </div>
 
+<?php
+        $pcfResetUrl = 'payroll_checklist_report.php?month=' . urlencode($monthYear)
+            . ($requestInvNo !== '' ? '&request_inv_no=' . urlencode($requestInvNo) : '')
+            . ($assignedScopeOnly ? '&assigned_scope=1' : '');
+        $pcfDefaultPayment = [1, 2];
+        $pcfSelectedPayment = array_values($selectedPaymentTypes);
+        sort($pcfSelectedPayment);
+        $pcfActiveCount = count(array_filter([$selectedCompany, $selectedDepartment, $selectedSponsor, $selectedFeedbackStatus], static fn($v) => $v !== ''))
+            + ($pcfSelectedPayment !== $pcfDefaultPayment ? 1 : 0);
+        $selectedPaymentTypeMap = array_flip($selectedPaymentTypes);
+        $pcfPaymentOptions = [
+            1 => ['label' => __('bank_option', 'Bank'), 'icon' => 'fas fa-university', 'tone' => 'indigo'],
+            2 => ['label' => __('cash_option', 'Cash'), 'icon' => 'fas fa-money-bill-wave', 'tone' => 'green'],
+            3 => ['label' => __('hold_option', 'Hold'), 'icon' => 'fas fa-pause-circle', 'tone' => 'amber'],
+        ];
+?>
         <div class="sr-card pc-filters mb-3">
-            <div class="sr-card-head"><h3 class="sr-card-title"><i class="fas fa-filter"></i><?= __('filters', 'Filters') ?></h3></div>
-            <div>
-                <form method="GET" class="sr-filter-grid" id="checklistFilterForm">
+            <div class="pcf-head">
+                <div class="pcf-title">
+                    <span class="pcf-title-icon"><i class="fas fa-sliders-h"></i></span>
+                    <div>
+                        <h3><?= __('filters', 'Filters') ?></h3>
+                        <span class="pcf-sub">
+                            <?php if ($pcfActiveCount > 0): ?>
+                                <b><?= (int)$pcfActiveCount ?></b> <?= __('active_filters', 'active filter(s)') ?>
+                            <?php else: ?>
+                                <?= __('showing_all_records', 'Showing all records') ?>
+                            <?php endif; ?>
+                        </span>
+                    </div>
+                </div>
+                <a href="<?= htmlspecialchars($pcfResetUrl) ?>" class="pcf-reset<?= $pcfActiveCount === 0 ? ' is-idle' : '' ?>"><i class="fas fa-undo"></i> <?= __('reset_filters', 'Reset Filters') ?></a>
+            </div>
+            <div class="pcf-body">
+                <form method="GET" class="pcf-grid" id="checklistFilterForm">
                     <input type="hidden" name="month" value="<?= htmlspecialchars($monthYear) ?>">
                     <?php if ($requestInvNo !== ''): ?>
                         <input type="hidden" name="request_inv_no" value="<?= htmlspecialchars($requestInvNo) ?>">
@@ -1487,24 +1604,23 @@ foreach ($employees as $employee) {
                         <input type="hidden" name="assigned_scope" value="1">
                     <?php endif; ?>
 
-                    <div>
-                        <div class="form-group mb-0">
+                    <div class="pcf-field<?= $selectedCompany !== '' ? ' is-set' : '' ?>">
                             <label for="filterCompany"><?= __('company', 'Company') ?></label>
-                            <select class="form-control" id="filterCompany" name="company">
+                            <div class="pcf-control"><i class="fas fa-building"></i>
+                            <select class="pcf-select" id="filterCompany" name="company">
                                 <option value=""><?= __('all', 'All') ?> <?= __('company', 'Company') ?></option>
                                 <?php foreach ($companies as $company): ?>
                                     <option value="<?= htmlspecialchars((string)($company['comp_id'] ?? '')) ?>" <?= ((string)($company['comp_id'] ?? '') === $selectedCompany) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars(getDisplayName((string)($company['comp_name'] ?? ''))) ?>
                                     </option>
                                 <?php endforeach; ?>
-                            </select>
-                        </div>
+                            </select></div>
                     </div>
 
-                    <div>
-                        <div class="form-group mb-0">
+                    <div class="pcf-field<?= $selectedDepartment !== '' ? ' is-set' : '' ?>">
                             <label for="filterDepartment"><?= __('department', 'Department') ?></label>
-                            <select class="form-control" id="filterDepartment" name="department">
+                            <div class="pcf-control"><i class="fas fa-sitemap"></i>
+                            <select class="pcf-select" id="filterDepartment" name="department">
                                 <option value=""><?= __('all', 'All') ?> <?= __('department', 'Department') ?></option>
                                 <?php foreach ($departments as $department): ?>
                                     <?php $departmentLabel = ($is_rtl ?? false) ? ($department['dep_nme_ar'] ?? $department['dep_nme'] ?? '') : ($department['dep_nme'] ?? $department['dep_nme_ar'] ?? ''); ?>
@@ -1512,52 +1628,44 @@ foreach ($employees as $employee) {
                                         <?= htmlspecialchars(getDisplayName((string)$departmentLabel)) ?>
                                     </option>
                                 <?php endforeach; ?>
-                            </select>
-                        </div>
+                            </select></div>
                     </div>
 
-                    <div>
-                        <div class="form-group mb-0">
+                    <div class="pcf-field<?= $selectedSponsor !== '' ? ' is-set' : '' ?>">
                             <label for="filterSponsor"><?= __('sponsor', 'Sponsor') ?></label>
-                            <select class="form-control" id="filterSponsor" name="sponsor">
+                            <div class="pcf-control"><i class="fas fa-id-badge"></i>
+                            <select class="pcf-select" id="filterSponsor" name="sponsor">
                                 <option value=""><?= __('all', 'All') ?> <?= __('sponsor', 'Sponsor') ?></option>
                                 <?php foreach ($sponsors as $sponsor): ?>
                                     <option value="<?= htmlspecialchars((string)($sponsor['id'] ?? '')) ?>" <?= ((string)($sponsor['id'] ?? '') === $selectedSponsor) ? 'selected' : '' ?>>
                                         <?= htmlspecialchars(getDisplayName((string)($sponsor['sponsor'] ?? ''))) ?>
                                     </option>
                                 <?php endforeach; ?>
-                            </select>
-                        </div>
+                            </select></div>
                     </div>
 
-                    <div>
-                        <div class="form-group mb-0">
+                    <div class="pcf-field<?= $selectedFeedbackStatus !== '' ? ' is-set' : '' ?>">
                             <label for="filterFeedbackStatus"><?= __('feedback_status', 'Feedback Status') ?></label>
-                            <select class="form-control" id="filterFeedbackStatus" name="feedback_status">
+                            <div class="pcf-control"><i class="fas fa-comment-dots"></i>
+                            <select class="pcf-select" id="filterFeedbackStatus" name="feedback_status">
                                 <option value=""><?= __('all', 'All') ?> <?= __('feedback', 'Feedback') ?></option>
                                 <option value="submitted" <?= $selectedFeedbackStatus === 'submitted' ? 'selected' : '' ?>><?= __('feedback_submitted', 'Feedback Submitted') ?></option>
                                 <option value="resolved" <?= $selectedFeedbackStatus === 'resolved' ? 'selected' : '' ?>><?= __('feedback_resolved', 'Feedback Resolved') ?></option>
                                 <option value="needs_mark_checked" <?= $selectedFeedbackStatus === 'needs_mark_checked' ? 'selected' : '' ?>><?= __('needs_mark_checked', 'Need Mark Checked') ?></option>
-                            </select>
-                        </div>
+                            </select></div>
                     </div>
 
-                    <div>
-                        <div class="form-group mb-0">
-                            <label for="filterPaymentType"><?= __('salary_payment_type_label', 'Payment Type') ?></label>
-                            <?php $selectedPaymentTypeMap = array_flip($selectedPaymentTypes); ?>
-                            <select class="form-control" id="filterPaymentType" name="payment_type[]" multiple size="3">
-                                <option value="1" <?= isset($selectedPaymentTypeMap[1]) ? 'selected' : '' ?>><?= __('bank_option', 'Bank') ?></option>
-                                <option value="2" <?= isset($selectedPaymentTypeMap[2]) ? 'selected' : '' ?>><?= __('cash_option', 'Cash') ?></option>
-                                <option value="3" <?= isset($selectedPaymentTypeMap[3]) ? 'selected' : '' ?>><?= __('hold_option', 'Hold') ?></option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="form-group mb-0">
-                            <label>&nbsp;</label>
-                            <a href="payroll_checklist_report.php?month=<?= urlencode($monthYear) ?><?= $requestInvNo !== '' ? '&request_inv_no=' . urlencode($requestInvNo) : '' ?><?= $assignedScopeOnly ? '&assigned_scope=1' : '' ?>" class="sr-btn pc-reset"><i class="fas fa-undo"></i> <?= __('reset_filters', 'Reset Filters') ?></a>
+                    <div class="pcf-field pcf-field-chips">
+                        <label><?= __('salary_payment_type_label', 'Payment Type') ?></label>
+                        <?php /* Empty marker keeps "payment_type" in the URL when every chip is off, so the server shows all types instead of falling back to Bank + Cash. */ ?>
+                        <input type="hidden" name="payment_type[]" value="">
+                        <div class="pcf-chips" role="group">
+                            <?php foreach ($pcfPaymentOptions as $ptValue => $pt): ?>
+                                <label class="pcf-chip tone-<?= $pt['tone'] ?>">
+                                    <input type="checkbox" class="pcf-payment-chip" name="payment_type[]" value="<?= (int)$ptValue ?>" <?= isset($selectedPaymentTypeMap[$ptValue]) ? 'checked' : '' ?>>
+                                    <span><i class="<?= $pt['icon'] ?>"></i> <?= htmlspecialchars($pt['label']) ?><i class="fas fa-check pcf-chip-tick"></i></span>
+                                </label>
+                            <?php endforeach; ?>
                         </div>
                     </div>
                 </form>
@@ -1820,28 +1928,9 @@ foreach ($employees as $employee) {
                 });
             });
 
-            const paymentTypeField = document.getElementById('filterPaymentType');
-            if (paymentTypeField) {
-                paymentTypeField.addEventListener('change', function() {
-                    // For native multiple select fallback, submit immediately.
-                    if (!(window.jQuery && typeof jQuery.fn.select2 === 'function')) {
-                        submitFilterForm();
-                    }
-                });
-
-                if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
-                    let hasSelectionChange = false;
-                    $('#filterPaymentType').on('select2:select select2:unselect', function() {
-                        hasSelectionChange = true;
-                    });
-                    $('#filterPaymentType').on('select2:close', function() {
-                        if (hasSelectionChange) {
-                            hasSelectionChange = false;
-                            submitFilterForm();
-                        }
-                    });
-                }
-            }
+            document.querySelectorAll('.pcf-payment-chip').forEach((chip) => {
+                chip.addEventListener('change', submitFilterForm);
+            });
         }
 
         function initPaymentTypeSelect2() {
@@ -3542,38 +3631,63 @@ foreach ($employees as $employee) {
         function buildPayrollImportReviewTable(rows) {
             const monthValue = rows.length > 0 ? String(rows[0].month || '').trim() : '';
 
-            const employeeCell = (row) => `
-                <td>
-                    <input type="hidden" class="payroll-import-review-input" data-field="checkpoint_code" value="${escapePayrollImportHtml(row.checkpoint_code || '')}">
-                    <div class="payroll-import-review-employee-cell">
-                        <span class="payroll-import-review-employee-id">${escapePayrollImportHtml(row.emp_id || '')}</span>
+            const esc = escapePayrollImportHtml;
+            const employeeLookup = new Map((Array.isArray(employeesData) ? employeesData : [])
+                .map((emp) => [String((emp && emp.emp_id) || '').trim(), emp]));
+
+            const employeeCell = (row) => {
+                const empId = String(row.emp_id || '').trim();
+                const emp = employeeLookup.get(empId) || {};
+                const name = String(emp.employee_name || '').trim();
+                const initials = (name || empId).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase() || '#';
+                return `
+                <td data-order="${esc(empId)}" data-search="${esc(empId + ' ' + name)}">
+                    <input type="hidden" class="payroll-import-review-input" data-field="checkpoint_code" value="${esc(row.checkpoint_code || '')}">
+                    <input type="hidden" class="payroll-import-review-input" data-field="emp_id" value="${esc(empId)}">
+                    <input type="hidden" class="payroll-import-review-input" data-field="month" value="${esc(row.month || '')}">
+                    <div class="pir-person">
+                        <span class="pir-avatar">${esc(initials)}</span>
+                        <div class="pir-person-text">
+                            <div class="pir-person-name">${esc(name || 'Employee')}</div>
+                            <div class="pir-person-sub"><span class="pir-mono">#${esc(empId)}</span>${emp.department_name ? ' · ' + esc(emp.department_name) : ''}</div>
+                        </div>
                     </div>
-                    <input type="hidden" class="payroll-import-review-input" data-field="emp_id" value="${escapePayrollImportHtml(row.emp_id || '')}">
-                    <input type="hidden" class="payroll-import-review-input" data-field="month" value="${escapePayrollImportHtml(row.month || '')}">
-                </td>
-            `;
+                </td>`;
+            };
+
+            const numInput = (field, value, placeholder) =>
+                `<input type="text" inputmode="decimal" autocomplete="off" class="pir-input pir-input-num payroll-import-review-input" data-field="${field}" value="${esc(value || '')}" placeholder="${placeholder}">`;
+            const amountCell = (field, value, tone) => `
+                <td>
+                    <div class="pir-amount tone-${tone}">
+                        <i class="icon-saudi_riyal"></i>
+                        <input type="text" class="payroll-import-review-input" data-field="${field}" value="${esc(value || '')}" readonly tabindex="-1">
+                    </div>
+                </td>`;
+            const reasonCell = (field, value, entryType) => `
+                <td>
+                    <div class="pir-reason">
+                        <input type="text" class="pir-input payroll-import-review-input" data-field="${field}" value="${esc(value || '')}" placeholder="Reason">
+                        <button type="button" class="pir-clear-btn payroll-import-clear-entry-btn" data-entry-type="${entryType}" title="Clear this entry"><i class="fa fa-times"></i></button>
+                    </div>
+                </td>`;
 
             const rowHasBenefitEntry = (row) => normalizePayrollImportDurationHours(row.overtime_hours, row.overtime_minutes) > 0 || Number(row.overtime_value || 0) > 0;
             const rowHasDeductionEntry = (row) => normalizePayrollImportDeductionDurationHours(row.deduction_hours, row.deduction_minutes, row.deduction_days) > 0 || Number(row.deduction_value || 0) > 0;
+            const benefitCount = rows.filter(rowHasBenefitEntry).length;
+            const deductionCount = rows.filter(rowHasDeductionEntry).length;
 
             const benefitRows = rows
                 .map((row, index) => ({ row, index }))
                 .filter(({ row }) => rowHasBenefitEntry(row))
                 .map(({ row, index }) => `
                 <tr data-row-index="${index}">
-                    <td class="text-center">${index + 1}</td>
+                    <td class="pir-idx">${index + 1}</td>
                     ${employeeCell(row)}
-                    <td><input type="hidden" class="payroll-import-review-input" data-field="benefit_type" value="${escapePayrollImportHtml(normalizePayrollImportBenefitType(row.benefit_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_hours" value="${escapePayrollImportHtml(row.overtime_hours || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_minutes" value="${escapePayrollImportHtml(row.overtime_minutes || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_value" value="${escapePayrollImportHtml(row.overtime_value || '')}" readonly></td>
-                    <td>
-                        <div class="input-group input-group-sm">
-                            <input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="overtime_reason" value="${escapePayrollImportHtml(row.overtime_reason || '')}">
-                            <div class="input-group-append">
-                                <button type="button" class="btn btn-outline-danger payroll-import-clear-entry-btn" data-entry-type="overtime"><i class="fa fa-times"></i></button>
-                            </div>
-                        </div>
-                    </td>
+                    <td><input type="hidden" class="payroll-import-review-input" data-field="benefit_type" value="${esc(normalizePayrollImportBenefitType(row.benefit_type || ''))}">${numInput('overtime_hours', row.overtime_hours, 'h')}</td>
+                    <td>${numInput('overtime_minutes', row.overtime_minutes, 'm')}</td>
+                    ${amountCell('overtime_value', row.overtime_value, 'green')}
+                    ${reasonCell('overtime_reason', row.overtime_reason, 'overtime')}
                 </tr>
             `).join('');
 
@@ -3582,79 +3696,73 @@ foreach ($employees as $employee) {
                 .filter(({ row }) => rowHasDeductionEntry(row))
                 .map(({ row, index }) => `
                 <tr data-row-index="${index}">
-                    <td class="text-center">${index + 1}</td>
+                    <td class="pir-idx">${index + 1}</td>
                     ${employeeCell(row)}
-                    <td><input type="hidden" class="payroll-import-review-input" data-field="deduction_type" value="${escapePayrollImportHtml(normalizePayrollImportDeductionType(row.deduction_type || ''))}"><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_days" value="${escapePayrollImportHtml(row.deduction_days || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_hours" value="${escapePayrollImportHtml(row.deduction_hours || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_minutes" value="${escapePayrollImportHtml(row.deduction_minutes || '')}"></td>
-                    <td><input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_value" value="${escapePayrollImportHtml(row.deduction_value || '')}" readonly></td>
-                    <td>
-                        <div class="input-group input-group-sm">
-                            <input type="text" class="form-control form-control-sm payroll-import-review-input" data-field="deduction_reason" value="${escapePayrollImportHtml(row.deduction_reason || '')}">
-                            <div class="input-group-append">
-                                <button type="button" class="btn btn-outline-danger payroll-import-clear-entry-btn" data-entry-type="deduction"><i class="fa fa-times"></i></button>
-                            </div>
-                        </div>
-                    </td>
+                    <td><input type="hidden" class="payroll-import-review-input" data-field="deduction_type" value="${esc(normalizePayrollImportDeductionType(row.deduction_type || ''))}">${numInput('deduction_days', row.deduction_days, 'd')}</td>
+                    <td>${numInput('deduction_hours', row.deduction_hours, 'h')}</td>
+                    <td>${numInput('deduction_minutes', row.deduction_minutes, 'm')}</td>
+                    ${amountCell('deduction_value', row.deduction_value, 'red')}
+                    ${reasonCell('deduction_reason', row.deduction_reason, 'deduction')}
                 </tr>
             `).join('');
 
+            const tableHead = (cols) => `<thead><tr>${cols.map(([label, cls]) => `<th class="${cls || ''}">${label}</th>`).join('')}</tr></thead>`;
+
             return `
-                <div style="text-align:left;">
-                    <div class="payroll-import-review-summary">
-                        <div><strong>Review Imported Rows</strong></div>
-                        <div>Processed Rows: <strong>${rows.length}</strong></div>
-                        <div>Month: <strong>${escapePayrollImportHtml(monthValue || '--')}</strong></div>
-                        <div>Review and adjust benefit and deduction values before the final save.</div>
+                <div class="pir-wrap">
+                    <p class="pir-lead"><i class="fas fa-info-circle"></i> Check hours and reasons per employee. Amounts recalculate automatically before the final save.</p>
+
+                    <div class="pir-kpis">
+                        <div class="pir-kpi tone-slate"><span class="pir-kpi-label"><i class="far fa-calendar"></i> Month</span><span class="pir-kpi-value">${esc(monthValue || '--')}</span></div>
+                        <div class="pir-kpi tone-indigo"><span class="pir-kpi-label"><i class="fas fa-list-ol"></i> Processed Rows</span><span class="pir-kpi-value">${rows.length}</span></div>
+                        <div class="pir-kpi tone-green"><span class="pir-kpi-label"><i class="fas fa-plus-circle"></i> Benefits</span><span class="pir-kpi-value"><i class="icon-saudi_riyal"></i> <span id="pirBenefitsTotal">0.00</span></span></div>
+                        <div class="pir-kpi tone-red"><span class="pir-kpi-label"><i class="fas fa-minus-circle"></i> Deductions</span><span class="pir-kpi-value"><i class="icon-saudi_riyal"></i> <span id="pirDeductionsTotal">0.00</span></span></div>
                     </div>
-                    <br />
-                    <ul class="nav nav-tabs" id="payrollImportReviewTabs" role="tablist">
-                        <li class="nav-item">
-                            <a class="nav-link active" id="payrollImportBenefitsTab" data-toggle="tab" href="#payrollImportBenefitsPane" role="tab">Benefits</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" id="payrollImportDeductionsTab" data-toggle="tab" href="#payrollImportDeductionsPane" role="tab">Deductions</a>
-                        </li>
-                    </ul>
-                    <div class="tab-content" style="margin-top:12px;">
-                        <div class="tab-pane fade show active" id="payrollImportBenefitsPane" role="tabpanel">
-                            <div class="payroll-import-review-table-wrap">
-                                <table id="payrollImportBenefitsTable" class="table table-bordered table-sm payroll-import-review-table">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:60px;">#</th>
-                                            <th style="width:190px;">Employee</th>
-                                            <th style="width:95px;">Hours</th>
-                                            <th style="width:95px;">Minutes</th>
-                                            <th style="width:150px;">Benefits</th>
-                                            <th style="width:320px;">Overtime Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>${benefitRows}</tbody>
-                                </table>
-                            </div>
+
+                    <div class="pir-tabs" id="payrollImportReviewTabs" role="tablist">
+                        <a class="pir-tab tone-green active" id="payrollImportBenefitsTab" data-review-pane="#payrollImportBenefitsPane" href="#payrollImportBenefitsPane" role="tab">
+                            <i class="fas fa-plus-circle"></i> Benefits <span class="pir-tab-count">${benefitCount}</span>
+                        </a>
+                        <a class="pir-tab tone-red" id="payrollImportDeductionsTab" data-review-pane="#payrollImportDeductionsPane" href="#payrollImportDeductionsPane" role="tab">
+                            <i class="fas fa-minus-circle"></i> Deductions <span class="pir-tab-count">${deductionCount}</span>
+                        </a>
+                    </div>
+
+                    <div class="pir-pane active" id="payrollImportBenefitsPane" role="tabpanel">
+                        <div class="payroll-import-review-table-wrap">
+                            <table id="payrollImportBenefitsTable" class="pir-table payroll-import-review-table">
+                                ${tableHead([['#', 'pir-col-idx'], ['Employee', 'pir-col-emp'], ['Hours', 'pir-col-num'], ['Minutes', 'pir-col-num'], ['Amount', 'pir-col-amt'], ['Overtime Reason', 'pir-col-reason']])}
+                                <tbody>${benefitRows}</tbody>
+                            </table>
                         </div>
-                        <div class="tab-pane fade" id="payrollImportDeductionsPane" role="tabpanel">
-                            <div class="payroll-import-review-table-wrap">
-                                <table id="payrollImportDeductionsTable" class="table table-bordered table-sm payroll-import-review-table">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:60px;">#</th>
-                                            <th style="width:190px;">Employee</th>
-                                            <th style="width:80px;">Days</th>
-                                            <th style="width:95px;">Hours</th>
-                                            <th style="width:95px;">Minutes</th>
-                                            <th style="width:150px;">Deduction</th>
-                                            <th style="width:320px;">Deduction Reason</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>${deductionRows}</tbody>
-                                </table>
-                            </div>
+                    </div>
+                    <div class="pir-pane" id="payrollImportDeductionsPane" role="tabpanel">
+                        <div class="payroll-import-review-table-wrap">
+                            <table id="payrollImportDeductionsTable" class="pir-table payroll-import-review-table">
+                                ${tableHead([['#', 'pir-col-idx'], ['Employee', 'pir-col-emp'], ['Days', 'pir-col-num'], ['Hours', 'pir-col-num'], ['Minutes', 'pir-col-num'], ['Amount', 'pir-col-amt'], ['Deduction Reason', 'pir-col-reason']])}
+                                <tbody>${deductionRows}</tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             `;
+        }
+
+        // Live sums for the KPI strip; reads every DataTable row (not just the visible page).
+        function updatePayrollImportReviewTotals() {
+            const sumField = (dataTable, selector, field) => {
+                const nodes = dataTable ? dataTable.rows().nodes().toArray() : Array.from(document.querySelectorAll(selector));
+                return nodes.reduce((total, tr) => {
+                    const input = tr.querySelector(`.payroll-import-review-input[data-field="${field}"]`);
+                    const value = parseFloat(input ? input.value : '');
+                    return total + (Number.isFinite(value) ? value : 0);
+                }, 0);
+            };
+            const fmt = (value) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const benefitsEl = document.getElementById('pirBenefitsTotal');
+            const deductionsEl = document.getElementById('pirDeductionsTotal');
+            if (benefitsEl) benefitsEl.textContent = fmt(sumField(payrollImportBenefitsDataTable, '#payrollImportBenefitsTable tbody tr', 'overtime_value'));
+            if (deductionsEl) deductionsEl.textContent = fmt(sumField(payrollImportDeductionsDataTable, '#payrollImportDeductionsTable tbody tr', 'deduction_value'));
         }
 
         function collectReviewedPayrollImportRows() {
@@ -3833,6 +3941,7 @@ foreach ($employees as $employee) {
                 confirmButtonText: 'Save After Review',
                 cancelButtonText: '<?= addslashes(__('cancel', 'Cancel')) ?>',
                 confirmButtonColor: '#2563eb',
+                customClass: { popup: 'pir-popup' },
                 allowOutsideClick: false,
                 focusConfirm: false,
                 didOpen: () => {
@@ -3860,6 +3969,7 @@ foreach ($employees as $employee) {
                             if (reasonInput) reasonInput.value = '';
 
                             applyRules(row);
+                            updatePayrollImportReviewTotals();
                         });
                     };
 
@@ -3868,6 +3978,7 @@ foreach ($employees as $employee) {
                             .off('input change', '.payroll-import-review-input')
                             .on('input change', '.payroll-import-review-input', function() {
                                 applyRules(this.closest('tr'));
+                                updatePayrollImportReviewTotals();
                             });
                     };
 
@@ -3890,28 +4001,54 @@ foreach ($employees as $employee) {
                             }
                         });
 
+                        const emptyState = (icon, text) => `<div class="pir-empty"><i class="${icon}"></i><span>${text}</span></div>`;
                         const baseDataTableOptions = {
                             pageLength: 10,
-                            lengthMenu: [[-1, 10, 25, 50, 100], ['All', 10, 25, 50, 100]],
+                            lengthMenu: [[-1, 5, 7, 10, 15, 20], ['All', 5, 7, 10, 15, 20]],
                             order: [[1, 'asc']],
+                            columnDefs: [{ targets: [0], orderable: false }],
                             autoWidth: false,
                             responsive: false,
-                            scrollX: true,
+                            // No scrollX: it splits header/body into separate tables that
+                            // mis-align inside the animated Swal popup. The wrap div scrolls.
+                            dom: '<"pir-dt-top"lf>rt<"pir-dt-bottom"ip>',
+                            pagingType: 'simple_numbers',
                             destroy: true
                         };
+                        const language = (emptyHtml) => ({
+                            emptyTable: emptyHtml,
+                            zeroRecords: emptyState('fas fa-search', 'No matching employees'),
+                            search: '',
+                            searchPlaceholder: 'Search employee…',
+                            lengthMenu: 'Show _MENU_',
+                            info: '_START_–_END_ of _TOTAL_',
+                            infoEmpty: '0 records',
+                            infoFiltered: '(filtered from _MAX_)',
+                            paginate: { previous: '<i class="fas fa-chevron-left"></i>', next: '<i class="fas fa-chevron-right"></i>' }
+                        });
 
                         payrollImportBenefitsDataTable = benefitsTableElement.DataTable(Object.assign({}, baseDataTableOptions, {
-                            language: { emptyTable: 'No benefit records available' }
+                            language: language(emptyState('fas fa-plus-circle', 'No benefit records in this file'))
                         }));
                         payrollImportDeductionsDataTable = deductionsTableElement.DataTable(Object.assign({}, baseDataTableOptions, {
-                            language: { emptyTable: 'No deduction records available' }
+                            language: language(emptyState('fas fa-minus-circle', 'No deduction records in this file'))
                         }));
 
                         payrollImportBenefitsDataTable.columns.adjust().draw(false);
                     }
 
-                    $('#payrollImportReviewTabs a[data-toggle="tab"]').off('shown.bs.tab').on('shown.bs.tab', function(event) {
-                        const targetId = $(event.target).attr('href');
+                    updatePayrollImportReviewTotals();
+
+                    // Switch panes manually: Bootstrap's data-toggle="tab" only flipped the
+                    // nav link inside the Swal popup and left the Benefits pane showing.
+                    $('#payrollImportReviewTabs a[data-review-pane]').off('click.payrollReview').on('click.payrollReview', function(event) {
+                        event.preventDefault();
+                        const targetId = String(this.dataset.reviewPane || '');
+                        $('#payrollImportReviewTabs .pir-tab').removeClass('active');
+                        $(this).addClass('active');
+                        $('#payrollImportBenefitsPane, #payrollImportDeductionsPane').removeClass('active');
+                        $(targetId).addClass('active');
+
                         if (targetId === '#payrollImportDeductionsPane' && payrollImportDeductionsDataTable) {
                             payrollImportDeductionsDataTable.columns.adjust().draw(false);
                         } else if (targetId === '#payrollImportBenefitsPane' && payrollImportBenefitsDataTable) {
@@ -3922,7 +4059,7 @@ foreach ($employees as $employee) {
                 willClose: () => {
                     $('#payrollImportBenefitsTable').off('click', '.payroll-import-clear-entry-btn').off('input change', '.payroll-import-review-input');
                     $('#payrollImportDeductionsTable').off('click', '.payroll-import-clear-entry-btn').off('input change', '.payroll-import-review-input');
-                    $('#payrollImportReviewTabs a[data-toggle="tab"]').off('shown.bs.tab');
+                    $('#payrollImportReviewTabs a[data-review-pane]').off('click.payrollReview');
                     payrollImportBenefitsDataTable = null;
                     payrollImportDeductionsDataTable = null;
                 },
@@ -4010,6 +4147,15 @@ foreach ($employees as $employee) {
                 return;
             }
 
+            // Download of the original file is system-admin only (enforced server side too).
+            const canDownloadFiles = filesResponse.can_download === true;
+            const buildManagerFileDownloadUrl = (fileId) => './includes/ajaxFile/payroll_approval_handler.php?' + new URLSearchParams({
+                action: 'download_manager_uploaded_payroll_excel_file',
+                request_inv_no: managerPayrollExcelState.requestInvNo,
+                month: managerPayrollExcelState.month,
+                file_id: fileId
+            }).toString();
+
             let firstSelectableMarked = false;
             const fileTableRows = availableFiles.map((file) => {
                 const isReviewed = String(file.reviewed_at || '').trim() !== '';
@@ -4033,7 +4179,7 @@ foreach ($employees as $employee) {
                         <td>${escapePayrollImportHtml(String(file.uploaded_at || 'N/A'))}</td>
                         <td>${statusBadge}</td>
                         <td>${isReviewed ? escapePayrollImportHtml(String(file.reviewed_at || '')) : '-'}</td>
-                        <td class="text-center">${canSelect ? `<button type="button" class="btn btn-sm btn-outline-danger payroll-delete-uploaded-file-btn" data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}" title="Delete uploaded file"><i class="fa fa-trash"></i></button>` : ''}</td>
+                        <td class="text-center"><div class="pir-file-actions">${canDownloadFiles ? `<a class="pir-xls-btn" href="${escapePayrollImportHtml(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}${canSelect ? `<button type="button" class="btn btn-sm btn-outline-danger payroll-delete-uploaded-file-btn" data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}" title="Delete uploaded file"><i class="fa fa-trash"></i></button>` : ''}</div></td>
                     </tr>
                 `;
             }).join('');
@@ -4055,7 +4201,7 @@ foreach ($employees as $employee) {
                                         <th>Uploaded At</th>
                                         <th>Status</th>
                                         <th>Reviewed At</th>
-                                        <th style="width:70px;" class="text-center">Delete</th>
+                                        <th style="width:${canDownloadFiles ? 110 : 70}px;" class="text-center">${canDownloadFiles ? 'Actions' : 'Delete'}</th>
                                     </tr>
                                 </thead>
                                 <tbody>${fileTableRows}</tbody>

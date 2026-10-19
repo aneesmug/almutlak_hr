@@ -16,6 +16,10 @@ if (empty($_SESSION['empid'])) {
 }
 
 $action = $_POST['action'] ?? '';
+// File download is a plain GET link (opened in a new tab), not an AJAX POST.
+if ($action === '' && ($_GET['action'] ?? '') === 'download_manager_uploaded_payroll_excel_file') {
+    $action = 'download_manager_uploaded_payroll_excel_file';
+}
 $currentUserId = (string)$_SESSION['empid'];
 
 $pdo = getDbConnection();
@@ -104,6 +108,10 @@ switch ($action) {
 
     case 'delete_manager_uploaded_payroll_excel_file':
         deleteManagerUploadedPayrollExcelFile($pdo, $currentUserId);
+        break;
+
+    case 'download_manager_uploaded_payroll_excel_file':
+        downloadManagerUploadedPayrollExcelFile();
         break;
 
     case 'get_finance_verification_setup':
@@ -3060,11 +3068,68 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
 
         echo json_encode([
             'status' => 'success',
-            'files' => $files
+            'files' => $files,
+            'can_download' => !empty($GLOBALS['is_system_admin'])
         ]);
     } catch (Exception $e) {
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
+}
+
+// System admin only: stream the original manager-uploaded Excel so it can be
+// checked against what the review modal parsed out of it.
+function downloadManagerUploadedPayrollExcelFile(): void
+{
+    $requestInvNo = trim((string)($_GET['request_inv_no'] ?? ''));
+    $monthYear = trim((string)($_GET['month'] ?? ''));
+    $fileId = trim((string)($_GET['file_id'] ?? ''));
+
+    $fail = static function (int $code, string $message): void {
+        http_response_code($code);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo $message;
+    };
+
+    if (empty($GLOBALS['is_system_admin'])) {
+        $fail(403, 'Only system administrators can download manager uploaded files.');
+        return;
+    }
+
+    if ($requestInvNo === '' || $fileId === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
+        $fail(400, 'Missing file selection, request number, or valid month.');
+        return;
+    }
+
+    $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
+    $found = findManagerPayrollUploadByFileId($meta, $fileId);
+    $storedName = basename(trim((string)($found['upload']['stored_name'] ?? '')));
+    if ($found['index'] < 0 || $storedName === '') {
+        $fail(404, 'Selected manager uploaded file was not found.');
+        return;
+    }
+
+    $filePath = getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR . $storedName;
+    if (!is_file($filePath)) {
+        $fail(404, 'Uploaded file no longer exists on server.');
+        return;
+    }
+
+    $downloadName = trim((string)($found['upload']['original_name'] ?? '')) ?: $storedName;
+    $downloadName = str_replace(['"', "\r", "\n", '/', '\\'], '_', $downloadName);
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $downloadName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
+    header('Content-Length: ' . filesize($filePath));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    readfile($filePath);
 }
 
 function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId): void
