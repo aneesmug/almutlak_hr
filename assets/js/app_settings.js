@@ -209,6 +209,13 @@ function __(key, def) {
             pill.innerHTML = `<span class="sr-dot"></span>${n} ${__('assigned', 'assigned')}`;
         }
 
+        // Left-nav label of a settings group: translated, without a trailing "Settings" word
+        // (the whole page is App Settings), e.g. "Payroll & Compensation Settings" -> "Payroll & Compensation"
+        function navGroupLabel(group) {
+            const label = String(translateText(String(group).replace(/_/g, ' ')));
+            return label.replace(/\s*\bsettings\s*$/i, '').replace(/^\s*إعدادات\s+/, '').trim() || label;
+        }
+
         // Sub-tab pills used by every hub (tabs: [{key, label, icon}])
         function srSubNav(id, tabs, activeKey) {
             return `<ul class="nav nav-pills mb-3 as-subnav" id="${id}">
@@ -1600,7 +1607,10 @@ function __(key, def) {
         function renderPayrollSettingsHub() {
             const visibleTabs = PAYROLL_SETTINGS_SUB_TABS.filter(tab => tab.canAccess());
 
-            const navHtml = srSubNav('payroll-settings-sub-nav', visibleTabs);
+            // The hub is already "Payroll Settings" - drop the repeated "Settings" word from each
+            // sub-tab pill ("Loan Settings" -> "Loan"); the full label stays as the section title.
+            const shortLabel = label => String(label).replace(/\s*\bsettings\s*$/i, '').replace(/^\s*إعدادات\s+/, '').trim() || label;
+            const navHtml = srSubNav('payroll-settings-sub-nav', visibleTabs.map(tab => ({ ...tab, label: shortLabel(tab.label) })));
 
             settingsContainer.innerHTML = `
                 <div class="tab-pane active" id="group-payroll_settings" role="tabpanel">
@@ -7111,11 +7121,11 @@ function __(key, def) {
                     let restrictedNavHtml = '';
                     groups.forEach((group) => {
                         const isActive = (savedGroup === group);
-                        const translatedGroup = translateText(group.replace(/_/g, ' '));
+                        const translatedGroup = navGroupLabel(group);
                         restrictedNavHtml += `
                             <li class="nav-item">
                                 <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
-                                    <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize">${translatedGroup}</span>
+                                    <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize" title="${escapeHtml(translatedGroup)}">${translatedGroup}</span>
                                 </a>
                             </li>
                         `;
@@ -7255,11 +7265,11 @@ function __(key, def) {
                 groups.forEach((group) => {
                     const isActive = (savedGroup === group);
                     const displayGroup = group.replace(/_/g, ' '); // Display with spaces instead of underscores
-                    const translatedGroup = translateText(displayGroup); // Translate the group name
+                    const translatedGroup = navGroupLabel(group); // Translated, short (no trailing "Settings")
                     navHtml += `
                         <li class="nav-item">
                             <a class="nav-link ${isActive ? 'active' : ''}" data-toggle="pill" href="#group-${group}" role="tab" data-group="${group}">
-                                <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize">${translatedGroup}</span>
+                                <i class="mdi ${groupMeta(group).icon}"></i><span class="text-capitalize" title="${escapeHtml(translatedGroup)}">${translatedGroup}</span>
                             </a>
                         </li>
                     `;

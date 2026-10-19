@@ -827,6 +827,15 @@ $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 <script src="assets/js/app_dark.js?v=<?= @filemtime(__DIR__ . '/../assets/js/app_dark.js') ?>" defer></script>
 <?php } ?>
 <?php if (!$appDarkTheme && get_setting($conDB, 'sidebar_theme') !== 'dark') { ?><script>document.body.classList.add('sbv2-light');</script><?php } ?>
+<?php
+// Sidebar logo follows the menu theme (App Settings > Theme Config > Logo): dark menu -> text_logo
+// (white), light menu -> logo (dark). Every page prints the <img> itself just above this include,
+// so it is swapped here once instead of editing ~140 pages.
+$sbv2MenuDark = $appDarkTheme || get_setting($conDB, 'sidebar_theme') === 'dark';
+$sbv2Logo = trim((string) get_setting($conDB, $sbv2MenuDark ? 'text_logo' : 'logo'));
+if ($sbv2Logo === '') { $sbv2Logo = (string) get_setting($conDB, 'logo'); }
+?>
+<script>(function () { var img = document.querySelector('.left.side-menu .topbar-left .logo span img'); if (img) img.src = <?= json_encode($sbv2Logo) ?>; })();</script>
 <?php if (get_setting($conDB, 'sidebar_icon_style') === 'white') { ?><script>document.body.classList.add('sbv2-icons-white');</script><?php } ?>
 
 <div class="user-box">

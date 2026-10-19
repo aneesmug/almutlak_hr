@@ -539,6 +539,8 @@
         /* ---------- Shared settings building blocks (generic field renderer + custom tabs) ---------- */
         .as-subnav .nav-link i { margin-inline-end: 4px; font-size: 15px; }
         .sr-page #settings-nav .nav-link i { font-size: 17px; width: 20px; text-align: center; color: var(--sr-muted); flex: 0 0 auto; }
+        /* One line per tab name; anything too long ends in "..." (full name on hover) */
+        .sr-page #settings-nav .nav-link > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .sr-page #settings-nav .nav-link.active i, .sr-page #settings-nav .nav-link:hover i { color: var(--sr-accent); }
         .as-section { margin: 0 0 16px; overflow: hidden; }
         .as-section .sr-card-head { align-items: flex-start; }
