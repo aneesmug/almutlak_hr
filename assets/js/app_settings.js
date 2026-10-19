@@ -754,7 +754,7 @@ function __(key, def) {
 
             // Special handling for special access configuration
             if (normalizedGroupName === 'special_access') {
-                renderSpecialAccessSettings();
+                renderSpecialAccessHub();
                 return;
             }
 
@@ -1420,6 +1420,13 @@ function __(key, def) {
             // into this same function, which pass their own hostEl and must fall through).
             if (normalizedGroupName === 'email' && hostEl === settingsContainer) {
                 renderEmailSettingsHub();
+                return;
+            }
+
+            // General: split into sub-tabs (Application / Sessions / VAT / Travel contacts / Internal).
+            // Each sub-tab renders its rows through this same generic renderer with its own host.
+            if (normalizedGroupName === 'general' && hostEl === settingsContainer) {
+                renderGeneralSettingsHub();
                 return;
             }
 
@@ -3022,34 +3029,6 @@ function __(key, def) {
             setSpecialAccessPanelLoading(false);
         }
 
-        // Keeps each assigned-user block's category chips on ONE line: chips that wrap to a
-        // second row are hidden and replaced by a "+N" chip (full list is under Show details).
-        function fitSpecialAccessCategoryLines(container) {
-            container.querySelectorAll('.as-cat-line').forEach(line => {
-                line.querySelectorAll('.as-cat-more').forEach(el => el.remove());
-                const chips = Array.from(line.children);
-                chips.forEach(c => { c.style.display = ''; });
-                if (!line.offsetParent || chips.length < 2) return; // hidden tab / nothing to fold
-                const top = chips[0].offsetTop;
-                const wrapped = () => chips.filter(c => c.style.display !== 'none' && c.offsetTop > top);
-                let hidden = wrapped();
-                if (!hidden.length) return;
-                hidden.forEach(c => { c.style.display = 'none'; });
-                const more = document.createElement('span');
-                more.className = 'as-cat-chip as-cat-more';
-                line.appendChild(more);
-                const visible = chips.filter(c => c.style.display !== 'none');
-                let count = hidden.length;
-                more.textContent = '+' + count;
-                // The "+N" chip itself must fit - fold more chips until it does
-                while (more.offsetTop > top && visible.length > 1) {
-                    visible.pop().style.display = 'none';
-                    more.textContent = '+' + (++count);
-                }
-                more.title = chips.filter(c => c.style.display === 'none').map(c => c.textContent.trim()).join(', ');
-            });
-        }
-
         function renderAssignedSpecialAccessSummary(users) {
             const container = document.getElementById('special-access-assigned-users-list');
             if (!container) return;
@@ -3073,117 +3052,190 @@ function __(key, def) {
                 return;
             }
 
-            // Renders one user's granted keys as badges, grouped under a small uppercase
-            // category label (same categories as the edit grid) instead of one flat run -
-            // makes it scannable at a glance instead of a wall of identical blue badges.
-            function buildGroupedBadges(grantedKeys) {
-                grantedKeys = grantedKeys.filter(featureVisible);
-                const grantedSet = new Set(grantedKeys);
-                const placed = new Set();
-                let out = '';
-
-                categories.forEach(cat => {
-                    const keysHere = cat.keys.filter(k => grantedSet.has(k));
-                    if (!keysHere.length) return;
-                    keysHere.forEach(k => placed.add(k));
-                    out += `<div class="as-grant-group"><div class="special-access-group-label"><i class="fa ${cat.icon} mr-1"></i>${escapeHtml(cat.name)}</div>`;
-                    out += `<div class="as-chip-wrap">${keysHere.map(key => `<span class="as-grant-chip">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('')}</div></div>`;
-                });
-
-                const leftover = grantedKeys.filter(k => !placed.has(k));
-                if (leftover.length) {
-                    out += `<div class="as-grant-group"><div class="special-access-group-label">${__('other', 'Other')}</div>`;
-                    out += `<div class="as-chip-wrap">${leftover.map(key => `<span class="as-grant-chip">${escapeHtml(catalogMap.get(key) || key)}</span>`).join('')}</div></div>`;
-                }
-                return out;
-            }
-
-            // Report access only gets a line here when the user has an EXPLICIT entry - if
-            // they've never been touched they're on the "sees everything" default and there's
-            // nothing to call out.
-            function buildReportAccessBadges(empId) {
-                if (!Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) return '';
-                const grantedTypes = normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible);
-                let out = `<div class="as-grant-group"><div class="special-access-group-label"><i class="fa fa-chart-bar mr-1"></i>${__('report_access', 'Report Access')}</div><div class="as-chip-wrap">`;
-                if (!grantedTypes.length) {
-                    out += `<span class="as-grant-chip is-none">${__('no_reports', 'No reports')}</span>`;
-                } else {
-                    out += grantedTypes.map(type => `<span class="as-grant-chip is-report">${escapeHtml(reportCatalogMap.get(type) || type)}</span>`).join('');
-                }
-                return out + '</div></div>';
-            }
-
-            // Compact block summary: one chip per category (icon + name + count) instead of
-            // every permission label - the full grouped list lives in the expandable details.
-            function buildCategorySummary(empId, grantedKeys) {
-                const grantedSet = new Set(grantedKeys.filter(featureVisible));
-                const placed = new Set();
-                let out = '';
-                categories.forEach(cat => {
-                    const keysHere = cat.keys.filter(k => grantedSet.has(k) && !placed.has(k));
-                    keysHere.forEach(k => placed.add(k));
-                    const n = keysHere.length;
-                    if (n) out += `<span class="as-cat-chip"><i class="fa ${cat.icon}"></i>${escapeHtml(cat.name)}<b>${n}</b></span>`;
-                });
-                const leftover = [...grantedSet].filter(k => !placed.has(k)).length;
-                if (leftover) out += `<span class="as-cat-chip"><i class="mdi mdi-dots-horizontal"></i>${__('other', 'Other')}<b>${leftover}</b></span>`;
-                if (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId)) {
-                    const reports = normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible).length;
-                    out += reports
-                        ? `<span class="as-cat-chip is-report"><i class="fa fa-chart-bar"></i>${__('report_access', 'Report Access')}<b>${reports}</b></span>`
-                        : `<span class="as-cat-chip is-none"><i class="fa fa-chart-bar"></i>${__('no_reports', 'No reports')}</span>`;
-                }
-                return out;
-            }
-
-            let html = '';
-
-            assignedEmpIds.forEach(empId => {
+            // --- Table view: one row per user (summary chips) + expandable details row ---
+            const rows = assignedEmpIds.map(empId => {
                 const user = userMap.get(empId);
                 const name = user ? ((user.name || '').trim() || empId) : empId;
                 const role = user ? ((user.user_type || '').trim()) : '';
-                const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]);
-                const badgeCount = grantedKeys.length + (Object.prototype.hasOwnProperty.call(reportPermissionMap, empId) ? 1 : 0);
+                const grantedKeys = normalizeSpecialAccessList(specialAccessMap[empId]).filter(featureVisible);
+                const hasReport = Object.prototype.hasOwnProperty.call(reportPermissionMap, empId);
+                const reportCount = hasReport ? normalizeReportTypeList(reportPermissionMap[empId]).filter(featureVisible).length : 0;
+                const catNames = categories.filter(cat => cat.keys.some(k => grantedKeys.includes(k))).map(cat => cat.name);
+                return {
+                    empId, name, role, grantedKeys, hasReport, reportCount, catNames,
+                    search: [name, empId, formatRoleLabel(role), ...catNames, ...grantedKeys.map(k => catalogMap.get(k) || k)].join(' ').toLowerCase()
+                };
+            }).sort((a, b) => a.name.localeCompare(b.name));
 
-                html += '<div class="as-user-card as-user-block">';
-                html += srUserCardHead(name, empId, role, `<span class="sr-count">${badgeCount}</span>`, `
-                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon copy-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('copy_access_to_users', 'Copy access to other users')}"><i class="mdi mdi-content-copy"></i></button>
-                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-special-access-user" data-emp-id="${escapeHtml(empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>`);
-                html += `<div class="as-user-body">
-                            <div class="as-chip-wrap as-cat-line">${buildCategorySummary(empId, grantedKeys)}</div>
-                            <div class="as-user-details" hidden>${buildGroupedBadges(grantedKeys)}${buildReportAccessBadges(empId)}</div>
-                        </div>
-                        <button type="button" class="as-user-toggle" aria-expanded="false">
-                            <span>${__('show_details', 'Show details')}</span><i class="mdi mdi-chevron-down"></i>
-                        </button>`;
-                html += '</div>';
-            });
+            const state = window.__saListState || (window.__saListState = { q: '', cat: '', page: 1, open: {} });
+            const PAGE_SIZE = 12;
 
-            container.innerHTML = html;
-
-            fitSpecialAccessCategoryLines(container);
-            if (!window.__saCatLineResizeBound) {
-                window.__saCatLineResizeBound = true;
-                let t;
-                window.addEventListener('resize', () => {
-                    clearTimeout(t);
-                    t = setTimeout(() => {
-                        const c = document.getElementById('special-access-assigned-users-list');
-                        if (c) fitSpecialAccessCategoryLines(c);
-                    }, 150);
-                });
+            // Category filter options (only categories somebody actually has)
+            const catSelect = document.getElementById('special-access-cat-filter');
+            if (catSelect) {
+                const used = categories.filter(cat => rows.some(r => r.catNames.includes(cat.name)));
+                if (state.cat && state.cat !== '__report' && !used.some(c => c.name === state.cat)) state.cat = '';
+                catSelect.innerHTML = `<option value="">${__('all_categories', 'All categories')}</option>`
+                    + used.map(c => `<option value="${escapeHtml(c.name)}"${state.cat === c.name ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')
+                    + (rows.some(r => r.hasReport) ? `<option value="__report"${state.cat === '__report' ? ' selected' : ''}>${__('report_access', 'Report Access')}</option>` : '');
             }
 
-            container.querySelectorAll('.as-user-toggle').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const details = this.closest('.as-user-block').querySelector('.as-user-details');
-                    const open = details.hidden;
-                    details.hidden = !open;
-                    this.setAttribute('aria-expanded', String(open));
-                    this.querySelector('span').textContent = open ? __('hide_details', 'Hide details') : __('show_details', 'Show details');
+            const initials = n => String(n || '?').trim().split(/\s+/).filter(Boolean)
+                .filter((w, i, all) => i === 0 || i === all.length - 1).map(w => w.charAt(0)).join('').toUpperCase() || '?';
+
+            // Summary: up to 3 category chips, the rest as "+N" (hover shows them)
+            function summaryChips(r) {
+                const chips = [];
+                categories.forEach(cat => {
+                    const n = cat.keys.filter(k => r.grantedKeys.includes(k)).length;
+                    if (n) chips.push({ html: `<span class="as-cat-chip"><i class="fa ${cat.icon}"></i>${escapeHtml(cat.name)}<b>${n}</b></span>`, label: cat.name + ' (' + n + ')' });
                 });
-            });
+                const leftover = r.grantedKeys.filter(k => !categories.some(cat => cat.keys.includes(k))).length;
+                if (leftover) chips.push({ html: `<span class="as-cat-chip"><i class="mdi mdi-dots-horizontal"></i>${__('other', 'Other')}<b>${leftover}</b></span>`, label: __('other', 'Other') + ' (' + leftover + ')' });
+                if (r.hasReport) {
+                    chips.push(r.reportCount
+                        ? { html: `<span class="as-cat-chip is-report"><i class="fa fa-chart-bar"></i>${__('report_access', 'Report Access')}<b>${r.reportCount}</b></span>`, label: __('report_access', 'Report Access') + ' (' + r.reportCount + ')' }
+                        : { html: `<span class="as-cat-chip is-none"><i class="fa fa-chart-bar"></i>${__('no_reports', 'No reports')}</span>`, label: __('no_reports', 'No reports') });
+                }
+                const rest = chips.slice(3);
+                return chips.slice(0, 3).map(c => c.html).join('')
+                    + (rest.length ? `<span class="as-cat-chip as-cat-more" title="${escapeHtml(rest.map(c => c.label).join(', '))}">+${rest.length}</span>` : '');
+            }
+
+            // Details: one block per category with its permissions
+            function detailsHtml(r) {
+                const blocks = [];
+                const placed = new Set();
+                categories.forEach(cat => {
+                    const keys = cat.keys.filter(k => r.grantedKeys.includes(k));
+                    if (!keys.length) return;
+                    keys.forEach(k => placed.add(k));
+                    blocks.push({ icon: `fa ${cat.icon}`, name: cat.name, items: keys.map(k => catalogMap.get(k) || k) });
+                });
+                const leftover = r.grantedKeys.filter(k => !placed.has(k));
+                if (leftover.length) blocks.push({ icon: 'mdi mdi-dots-horizontal', name: __('other', 'Other'), items: leftover.map(k => catalogMap.get(k) || k) });
+                if (r.hasReport) {
+                    const types = normalizeReportTypeList(reportPermissionMap[r.empId]).filter(featureVisible);
+                    blocks.push({ icon: 'fa fa-chart-bar', name: __('report_access', 'Report Access'), report: true,
+                        items: types.length ? types.map(t => reportCatalogMap.get(t) || t) : null });
+                }
+                return `<div class="sa-detail-grid">${blocks.map(b => `
+                    <div class="sa-detail-block${b.report ? ' is-report' : ''}">
+                        <div class="sa-detail-head"><i class="${b.icon}"></i><span>${escapeHtml(b.name)}</span><b>${b.items ? b.items.length : 0}</b></div>
+                        <ul class="sa-detail-list">${b.items
+                            ? b.items.map(t => `<li>${escapeHtml(t)}</li>`).join('')
+                            : `<li class="is-none">${__('no_reports', 'No reports')}</li>`}</ul>
+                    </div>`).join('')}</div>`;
+            }
+
+            function draw() {
+                const q = state.q.trim().toLowerCase();
+                const filtered = rows.filter(r => (!q || r.search.includes(q))
+                    && (!state.cat || (state.cat === '__report' ? r.hasReport : r.catNames.includes(state.cat))));
+                const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+                state.page = Math.min(Math.max(1, state.page), pages);
+                const pageRows = filtered.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE);
+
+                let body = pageRows.map(r => {
+                    const isOpen = !!state.open[r.empId];
+                    const total = r.grantedKeys.length + r.reportCount;
+                    return `
+                    <tr class="sa-row${isOpen ? ' is-open' : ''}" data-emp-id="${escapeHtml(r.empId)}">
+                        <td class="sa-col-toggle"><button type="button" class="sa-expand" aria-expanded="${isOpen}" title="${__('show_details', 'Show details')}"><i class="mdi mdi-chevron-right"></i></button></td>
+                        <td>
+                            <div class="sr-person">
+                                <span class="sr-avatar">${escapeHtml(initials(r.name))}</span>
+                                <div class="sa-who">
+                                    <span class="sr-cell-title" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+                                    <span class="sr-cell-sub"><span class="sr-mono">#${escapeHtml(r.empId)}</span>${r.role ? ` · ${escapeHtml(formatRoleLabel(r.role))}` : ''}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td><div class="sa-chips">${summaryChips(r)}</div></td>
+                        <td class="text-center"><span class="sa-total" title="${__('permissions', 'Permissions')}">${total}</span></td>
+                        <td class="text-right">
+                            <div class="sa-actions">
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon copy-assigned-special-access-user" data-emp-id="${escapeHtml(r.empId)}" title="${__('copy_access_to_users', 'Copy access to other users')}"><i class="mdi mdi-content-copy"></i></button>
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon edit-assigned-special-access-user" data-emp-id="${escapeHtml(r.empId)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove remove-assigned-special-access-user" data-emp-id="${escapeHtml(r.empId)}" title="${__('remove')}"><i class="mdi mdi-delete"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="sa-detail-row"${isOpen ? '' : ' hidden'}><td colspan="5">${isOpen ? detailsHtml(r) : ''}</td></tr>`;
+                }).join('');
+                if (!pageRows.length) {
+                    body = `<tr><td colspan="5"><div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_records_found', 'No records found')}</div></td></tr>`;
+                }
+
+                let pager = '';
+                if (filtered.length > PAGE_SIZE) {
+                    const from = (state.page - 1) * PAGE_SIZE + 1, to = Math.min(state.page * PAGE_SIZE, filtered.length);
+                    const nums = [];
+                    for (let p = 1; p <= pages; p++) {
+                        if (p === 1 || p === pages || Math.abs(p - state.page) <= 1) nums.push(p);
+                        else if (nums[nums.length - 1] !== '…') nums.push('…');
+                    }
+                    const li = (label, page, disabled, active) => `<li class="page-item${disabled ? ' disabled' : ''}${active ? ' active' : ''}"><a class="page-link" href="#" data-page="${page}">${label}</a></li>`;
+                    pager = `<div class="sa-pager"><span>${__('showing', 'Showing')} ${from}-${to} ${__('of', 'of')} ${filtered.length}</span>
+                        <ul class="pagination pagination-sm mb-0">
+                            ${li('&lsaquo;', state.page - 1, state.page === 1, false)}
+                            ${nums.map(n => n === '…' ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : li(n, n, false, n === state.page)).join('')}
+                            ${li('&rsaquo;', state.page + 1, state.page === pages, false)}
+                        </ul></div>`;
+                }
+
+                container.innerHTML = `
+                    <div class="sr-table-wrap sa-table-wrap">
+                        <table class="sr-table table mb-0 sa-table">
+                            <thead><tr>
+                                <th class="sa-col-toggle"></th>
+                                <th>${__('user', 'User')}</th>
+                                <th>${__('access', 'Access')}</th>
+                                <th class="text-center">${__('total', 'Total')}</th>
+                                <th class="text-right">${__('actions', 'Actions')}</th>
+                            </tr></thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    </div>${pager}`;
+                bindRowButtons();
+            }
+
+            // Search / category filter: bound once per tab render (the inputs outlive each redraw)
+            window.__saDraw = draw; // always the latest data
+            const searchInput = document.getElementById('special-access-assigned-search');
+            if (searchInput && !searchInput.dataset.saBound) {
+                searchInput.dataset.saBound = '1';
+                searchInput.value = state.q;
+                searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+                searchInput.addEventListener('input', () => { state.q = searchInput.value; state.page = 1; window.__saDraw(); });
+            }
+            if (catSelect && !catSelect.dataset.saBound) {
+                catSelect.dataset.saBound = '1';
+                catSelect.addEventListener('change', () => { state.cat = catSelect.value; state.page = 1; window.__saDraw(); });
+            }
+            // Pager + row expand (click anywhere on the row except the action buttons)
+            container.onclick = function (e) {
+                const link = e.target.closest('a.page-link');
+                if (link) {
+                    e.preventDefault();
+                    if (!link.closest('.disabled')) { state.page = parseInt(link.dataset.page, 10) || 1; draw(); }
+                    return;
+                }
+                if (e.target.closest('.sa-actions')) return;
+                const row = e.target.closest('tr.sa-row');
+                if (!row) return;
+                const empId = row.dataset.empId;
+                const open = !state.open[empId];
+                state.open[empId] = open;
+                row.classList.toggle('is-open', open);
+                row.querySelector('.sa-expand').setAttribute('aria-expanded', String(open));
+                const detail = row.nextElementSibling;
+                const r = rows.find(x => x.empId === empId);
+                if (open && r) detail.firstElementChild.innerHTML = detailsHtml(r);
+                detail.hidden = !open;
+            };
+
+            function bindRowButtons() {
 
             container.querySelectorAll('.edit-assigned-special-access-user').forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -3243,6 +3295,9 @@ function __(key, def) {
                     });
                 });
             });
+            }
+
+            draw();
         }
 
         // Bulk "Copy access to..." from an assigned-user card: applies the source user's
@@ -3750,11 +3805,12 @@ function __(key, def) {
             });
         }
 
-        function renderRequestTypeBlocksSettings() {
+        function renderRequestTypeBlocksSettings(hostEl) {
             const meta = groupMeta('request_type_blocks');
-            settingsContainer.innerHTML = `
+            const embedded = !!hostEl && hostEl !== settingsContainer;
+            (hostEl || settingsContainer).innerHTML = `
                 <div class="tab-pane active" id="group-request_type_blocks" role="tabpanel">
-                    ${srTabHead(meta.icon, __('manage_request_type_blocks', 'Manage Request Type Blocks'), '')}
+                    ${embedded ? '' : srTabHead(meta.icon, __('manage_request_type_blocks', 'Manage Request Type Blocks'), '')}
                     <div class="sr-notice tone-sky as-notice-top"><i class="mdi mdi-information-outline"></i><div>
                         ${__('manage_request_type_blocks_hint', 'Blocking a request type here disables it for every employee at once. To exempt a specific employee from a global block (or to block just one employee for a type that isn\'t globally blocked), use the "Block Specific Request Types" section on that employee\'s Edit Employee page.')}
                     </div></div>
@@ -4330,6 +4386,60 @@ function __(key, def) {
 
             document.getElementById('trt-add-btn').addEventListener('click', openGrantModal);
             loadList();
+        }
+
+        // --- General tab: sub-tabs ---
+        // Rows are picked by setting_name; any general row not listed lands in "Application", and the
+        // former top-level "Internal" tab (group 'internal') is the last sub-tab. One sub-tab is in the
+        // page at a time (like D365 Config) - Save Changes saves the fields of the open sub-tab.
+        const GENERAL_SUB_TABS = [
+            { key: 'application', icon: 'mdi-application', label: () => __('general_application', 'Application'),
+              names: ['application_name', 'company_name', 'company_name_ar', 'default_language', 'timezone', 'maintenance_mode'] },
+            { key: 'sessions', icon: 'mdi-timer-sand', label: () => __('general_sessions', 'Sessions'),
+              names: ['session_timeout', 'auto_signout_hours', 'auto_signout_hours_employee'] },
+            { key: 'vat', icon: 'mdi-percent', label: () => __('general_vat', 'VAT'),
+              names: ['vat', 'vat_no'] },
+            { key: 'travel', icon: 'mdi-airplane', label: () => __('general_travel_contacts', 'Travel Contacts'),
+              names: ['traveling_company_email', 'gr_officer_email'] },
+            { key: 'internal', icon: 'mdi-key-variant', label: () => __('internal', 'Internal'),
+              names: ['db_backup_secret_key', 'db_export_secret_key'], group: 'internal' },
+        ];
+
+        function renderGeneralSettingsHub() {
+            const generalRows = groupedSettings['general'] || [];
+            const listed = new Set(GENERAL_SUB_TABS.flatMap(t => t.names));
+            const rowsFor = (tab) => {
+                let rows = generalRows.filter(r => tab.names.includes(r.setting_name));
+                if (tab.key === 'application') rows = rows.concat(generalRows.filter(r => !listed.has(r.setting_name)));
+                if (tab.group) rows = rows.concat(groupedSettings[tab.group] || []);
+                return rows;
+            };
+            const tabs = GENERAL_SUB_TABS.filter(t => rowsFor(t).length);
+            const meta = groupMeta('general');
+            settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-general" role="tabpanel">
+                    ${srTabHead(meta.icon, translateText('general'), meta.sub || '')}
+                    ${srSubNav('general-sub-nav', tabs.map(t => ({ key: t.key, icon: t.icon, label: t.label() })), 'none')}
+                    <div id="general-sub-content"></div>
+                </div>
+            `;
+            const subContent = document.getElementById('general-sub-content');
+            const show = (key) => {
+                const tab = tabs.find(t => t.key === key) || tabs[0];
+                if (!tab) return;
+                document.querySelectorAll('#general-sub-nav a').forEach(a => a.classList.toggle('active', a.dataset.subTab === tab.key));
+                try { localStorage.setItem('general_sub_tab', tab.key); } catch (e) {}
+                // Rendered through the generic field renderer under a private group name
+                groupedSettings['__general_' + tab.key] = rowsFor(tab);
+                renderSettingsGroup('__general_' + tab.key, subContent);
+            };
+            document.querySelectorAll('#general-sub-nav a').forEach(a => a.addEventListener('click', function (e) {
+                e.preventDefault();
+                show(this.dataset.subTab);
+            }));
+            let first = 'application';
+            try { first = localStorage.getItem('general_sub_tab') || 'application'; } catch (e) {}
+            show(first);
         }
 
         // --- Integrations tab (system admins) ---
@@ -5060,10 +5170,55 @@ function __(key, def) {
             }
         }
 
-        async function renderSpecialAccessSettings() {
+        // --- Special Access hub (full settings admins): "Special Access" (per-user abilities +
+        // report access) and "Request Type Blocks" (global blocks) as sub-tabs. Users who only
+        // hold manage_global_request_blocks still get Request Type Blocks as its own tab.
+        function renderSpecialAccessHub() {
+            const tabs = [
+                { key: 'special_access', icon: 'mdi-account-key', label: __('special_access', 'Special Access') },
+                { key: 'request_type_blocks', icon: 'mdi-block-helper', label: __('request_type_blocks', 'Request Type Blocks') },
+            ];
             settingsContainer.innerHTML = `
+                <div class="tab-pane active" id="group-special_access_hub" role="tabpanel">
+                    ${srTabHead(groupMeta('special_access').icon, __('special_access', 'Special Access'),
+                        __('select_a_user_and_grant_them_specific_admin_hr_abilities') + ' ' + __('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.'),
+                        '<span class="sr-pill tone-slate" id="special-access-total-users-badge"><span class="sr-dot"></span>-</span>')}
+                    ${srSubNav('special-access-sub-nav', tabs, 'none')}
+                    <div id="special-access-sub-content"></div>
+                </div>
+            `;
+            // Count pill straight from the saved maps (also right when the hub opens on Request Type Blocks)
+            const assigned = new Set([
+                ...Object.keys(specialAccessMap || {}).filter(id => (specialAccessMap[id] || []).length > 0),
+                ...Object.keys(reportPermissionMap || {}),
+            ]);
+            setAssignedCountPill('special-access-total-users-badge', assigned.size);
+
+            const subContent = document.getElementById('special-access-sub-content');
+            const show = (key) => {
+                key = tabs.some(t => t.key === key) ? key : 'special_access';
+                document.querySelectorAll('#special-access-sub-nav a').forEach(a => a.classList.toggle('active', a.dataset.subTab === key));
+                try { localStorage.setItem('special_access_sub_tab', key); } catch (e) {}
+                if (key === 'request_type_blocks') {
+                    renderRequestTypeBlocksSettings(subContent);
+                } else {
+                    renderSpecialAccessSettings(subContent);
+                }
+            };
+            document.querySelectorAll('#special-access-sub-nav a').forEach(a => a.addEventListener('click', function (e) {
+                e.preventDefault();
+                show(this.dataset.subTab);
+            }));
+            let first = 'special_access';
+            try { first = localStorage.getItem('special_access_sub_tab') || 'special_access'; } catch (e) {}
+            show(first);
+        }
+
+        async function renderSpecialAccessSettings(hostEl) {
+            const embedded = !!hostEl && hostEl !== settingsContainer;
+            (hostEl || settingsContainer).innerHTML = `
                 <div class="tab-pane active" id="group-special-access" role="tabpanel">
-                    ${srTabHead(groupMeta('special_access').icon, __('special_access_by_user'),
+                    ${embedded ? '' : srTabHead(groupMeta('special_access').icon, __('special_access_by_user'),
                         __('select_a_user_and_grant_them_specific_admin_hr_abilities') + ' ' + __('report_access_is_also_managed_here', 'Report access (which reports a user can view) is also managed here, per user.'),
                         '<span class="sr-pill tone-slate" id="special-access-total-users-badge"><span class="sr-dot"></span>-</span>')}
 
@@ -5080,12 +5235,15 @@ function __(key, def) {
                         <div class="sr-card as-section">
                             <div class="sr-toolbar">
                                 <div class="sr-card-title"><i class="mdi mdi-account-multiple-outline"></i> ${__('assigned_users')}</div>
-                                <div class="sr-search as-list-search">
-                                    <i class="mdi mdi-magnify"></i>
-                                    <input type="search" id="special-access-assigned-search" placeholder="${__('search')}..." autocomplete="off" aria-label="${__('search')}">
+                                <div class="sa-tools">
+                                    <select id="special-access-cat-filter" class="form-control form-control-sm sa-cat-filter" aria-label="${__('category', 'Category')}"></select>
+                                    <div class="sr-search as-list-search">
+                                        <i class="mdi mdi-magnify"></i>
+                                        <input type="search" id="special-access-assigned-search" placeholder="${__('search_name_id_permission', 'Search name, ID, permission...')}" autocomplete="off" aria-label="${__('search')}">
+                                    </div>
                                 </div>
                             </div>
-                            <div id="special-access-assigned-users-list" class="as-user-list as-user-grid">
+                            <div id="special-access-assigned-users-list" class="sa-list">
                                 <div class="ac-loading"><span class="spinner-border spinner-border-sm" role="status"></span> ${__('loading')}</div>
                             </div>
                         </div>
@@ -5114,7 +5272,7 @@ function __(key, def) {
             // Plain employees are included here on purpose - the "Access Page: ..." special
             // access keys exist specifically to grant a single employee access to a page that's
             // normally blocked for their role (see get_special_access_page_labels()).
-            bindUserCardSearch('special-access-assigned-search', 'special-access-assigned-users-list');
+            // Search / category filter are wired by renderAssignedSpecialAccessSummary (table view)
             const users = await fetchSpecialAccessUsers();
             specialAccessEligibleUsers = users;
             const select = document.getElementById('special-access-user-select');
@@ -7088,7 +7246,8 @@ function __(key, def) {
                 // 'device_monitor' only inside the Attendance Config hub (see
                 // renderEmailSettingsHub / renderAttendanceConfigHub) - keep both out of the
                 // outer nav so they don't also show up as their own top-level tabs.
-                const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo'];
+                // 'internal' = General > Internal; Request Type Blocks = Special Access > Request Type Blocks
+                const HUB_ONLY_GROUPS = ['announcement_config', 'announcement_recipients', 'device_monitor', 'attendance_retention', 'sync_settings', 'zk_sync_status', 'theme_config_logo', 'internal', 'request type blocks', 'request_type_blocks'];
                 // D365 Config is hidden while Microsoft Dynamics 365 is switched off (Integrations tab)
                 const groups = Object.keys(groupedSettings).filter(g => !HUB_ONLY_GROUPS.includes(g) && (D365_ON || g !== 'D365_Config') && (ATTENDANCE_ON || g !== 'attendance_config') && (MSAUTH_ON || g !== 'Microsoft_Sign_In') && (GAUTH_ON || g !== 'Google_Authenticator')).sort(); // Sort groups alphabetically
 
