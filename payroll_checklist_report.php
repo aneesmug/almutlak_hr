@@ -63,6 +63,21 @@ ensurePayrollApprovalTable($pdo);
 ensurePayrollChecklistSupportTables($pdo);
 $requestTypeId = ensurePayrollApprovalRequestType($pdo);
 
+// A request always belongs to one payroll month. Links built while a later month
+// already had payroll rows (e.g. PAY-202610 with month=2026-11) opened the checklist
+// on the wrong month, so manager uploads saved under the request month were "not found".
+if ($requestInvNo !== '') {
+    $requestMonthStmt = $pdo->prepare("SELECT payroll_month FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1");
+    $requestMonthStmt->execute([':inv_no' => $requestInvNo]);
+    $requestPayrollMonth = trim((string)($requestMonthStmt->fetchColumn() ?: ''));
+    if (preg_match('/^\d{4}-\d{2}$/', $requestPayrollMonth) && $requestPayrollMonth !== $monthYear) {
+        $redirectQuery = $_GET;
+        $redirectQuery['month'] = $requestPayrollMonth;
+        header('Location: payroll_checklist_report.php?' . http_build_query($redirectQuery));
+        exit();
+    }
+}
+
 function payrollTableHasColumn(PDO $pdo, string $tableName, string $columnName): bool
 {
     $stmt = $pdo->prepare("SELECT COUNT(*)
@@ -1461,6 +1476,63 @@ foreach ($employees as $employee) {
         html.app-dark .pir-table tbody td { border-bottom-color: #1e293b !important; }
         html.app-dark .pir-table tbody tr:hover td { background: #172033; }
         /* Manager file picker: Excel download icon (system admin only) */
+        /* ---- Select Manager Uploaded File popup (mfp-*) ---- */
+        .mfp-popup { max-width: 96vw; }
+        .mfp-wrap { text-align: left; color: #1e293b; font-size: 13px; }
+        .mfp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+        .mfp-lead { margin: 0; color: #64748b; }
+        .mfp-lead i { color: #6366f1; margin-right: 4px; }
+        .mfp-lead strong { color: #0f172a; }
+        .mfp-stats { display: inline-flex; gap: 6px; }
+        .mfp-stat { padding: 4px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 12px; font-weight: 600; }
+        .mfp-stat b { font-weight: 800; margin-right: 2px; }
+        .mfp-stat.tone-amber { background: #fffbeb; color: #b45309; }
+        .mfp-stat.tone-green { background: #ecfdf5; color: #047857; }
+        .mfp-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow: auto; padding: 2px; }
+        .mfp-item { display: grid; grid-template-columns: 24px 40px minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) auto auto; align-items: center; gap: 14px; margin: 0 !important; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; font-weight: 400; }
+        .mfp-item:hover { border-color: #a5b4fc; box-shadow: 0 2px 10px rgba(99,102,241,.08); }
+        .mfp-item.is-selected { border-color: #6366f1; background: #f5f7ff; box-shadow: 0 0 0 3px rgba(99,102,241,.14); }
+        .mfp-item.is-reviewed { cursor: default; background: #fafbfc; }
+        .mfp-item.is-reviewed:hover { border-color: #e2e8f0; box-shadow: none; }
+        .mfp-radio { position: absolute; opacity: 0; pointer-events: none; }
+        .mfp-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: transparent; transition: all .15s; }
+        .mfp-item.is-selected .mfp-check { background: #6366f1; border-color: #6366f1; color: #fff; }
+        .mfp-item.is-reviewed .mfp-check { border-color: #e2e8f0; background: #f1f5f9; color: #94a3b8; }
+        .mfp-file-icon { width: 40px; height: 40px; border-radius: 10px; background: #ecfdf5; color: #047857; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; }
+        .mfp-item.is-reviewed .mfp-file-icon { background: #f1f5f9; color: #64748b; }
+        .mfp-main, .mfp-meta { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+        .mfp-company { font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mfp-filename { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mfp-meta-label { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #94a3b8; }
+        .mfp-user { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mfp-avatar { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; background: #eef2ff; color: #4f46e5; font-size: 9.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+        .mfp-when { display: inline-flex; gap: 6px; color: #334155; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .mfp-time { color: #94a3b8; }
+        .mfp-pill { display: inline-flex; align-items: center; gap: 5px; width: max-content; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+        .mfp-pill.tone-amber { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+        .mfp-pill.tone-green { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+        .mfp-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .mfp-actions { display: inline-flex; gap: 6px; justify-content: flex-end; min-width: 34px; }
+        .mfp-icon-btn { width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; border: 1px solid; background: #fff; text-decoration: none !important; transition: background .15s, transform .15s; cursor: pointer; }
+        .mfp-icon-btn:hover { transform: translateY(-1px); }
+        .mfp-icon-btn.tone-green { color: #047857 !important; border-color: #a7f3d0; background: #ecfdf5; } .mfp-icon-btn.tone-green:hover { background: #d1fae5; }
+        .mfp-icon-btn.tone-red { color: #dc2626; border-color: #fecaca; } .mfp-icon-btn.tone-red:hover { background: #fef2f2; }
+        .mfp-icon-btn:disabled { opacity: .5; cursor: wait; }
+        .mfp-note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #ecfdf5; color: #047857; font-weight: 600; }
+        .mfp-note i { margin-right: 6px; }
+        .mfp-popup .swal2-confirm:disabled { opacity: .45; cursor: not-allowed; }
+        @media (max-width: 900px) {
+            .mfp-item { grid-template-columns: 24px 40px minmax(0, 1fr) auto; row-gap: 8px; }
+            .mfp-meta, .mfp-status { grid-column: 3 / 4; }
+            .mfp-actions { grid-column: 4; grid-row: 1; }
+        }
+        html.app-dark .mfp-wrap, html.app-dark .mfp-user, html.app-dark .mfp-when { color: #e2e8f0; }
+        html.app-dark .mfp-company, html.app-dark .mfp-lead strong { color: #f1f5f9; }
+        html.app-dark .mfp-item { background: #0f172a; border-color: #334155; }
+        html.app-dark .mfp-item.is-reviewed { background: #111827; }
+        html.app-dark .mfp-item.is-selected { background: rgba(99,102,241,.12); border-color: #818cf8; }
+        html.app-dark .mfp-stat { background: #1e293b; color: #cbd5e1; }
+        html.app-dark .mfp-icon-btn.tone-red { background: transparent; border-color: rgba(220,38,38,.4); color: #fca5a5; }
         .pir-file-actions { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
         .pir-file-actions .payroll-delete-uploaded-file-btn { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
         .pir-xls-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857 !important; font-size: 17px; transition: background .15s, transform .15s; }
@@ -4163,65 +4235,104 @@ foreach ($employees as $employee) {
                 file_id: fileId
             }).toString();
 
+            const mfpEsc = escapePayrollImportHtml;
+            const mfpIsReviewed = (file) => String(file.reviewed_at || '').trim() !== '';
+            // Pending files first (newest upload on top), reviewed files after.
+            const sortedFiles = availableFiles.slice().sort((a, b) =>
+                (mfpIsReviewed(a) - mfpIsReviewed(b)) || String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
+            const pendingCount = sortedFiles.filter((file) => !mfpIsReviewed(file)).length;
+            const reviewedCount = sortedFiles.length - pendingCount;
+            const mfpInitials = (name) => String(name || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p.charAt(0)).join('').toUpperCase() || '?';
+            const mfpWhen = (value) => {
+                const raw = String(value || '').trim();
+                const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+                return m ? `<span class="mfp-date">${mfpEsc(m[1])}</span><span class="mfp-time">${mfpEsc(m[2])}</span>` : mfpEsc(raw || '—');
+            };
+
             let firstSelectableMarked = false;
-            const fileTableRows = availableFiles.map((file) => {
-                const isReviewed = String(file.reviewed_at || '').trim() !== '';
-                const statusBadge = isReviewed
-                    ? '<span class="badge badge-success">Reviewed Completed</span>'
-                    : '<span class="badge badge-warning">Pending Review</span>';
+            const fileTableRows = sortedFiles.map((file) => {
+                const isReviewed = mfpIsReviewed(file);
                 const canSelect = !isReviewed;
                 const shouldCheck = canSelect && !firstSelectableMarked;
                 if (shouldCheck) {
                     firstSelectableMarked = true;
                 }
+                const fileId = mfpEsc(String(file.file_id || ''));
+                const uploader = String(file.uploaded_by_name || file.uploaded_by || 'N/A');
 
                 return `
-                    <tr ${isReviewed ? 'style="opacity:0.75;"' : ''} data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}">
-                        <td class="text-center">
-                            <input type="radio" name="managerPayrollReviewFileRow" value="${escapePayrollImportHtml(String(file.file_id || ''))}" ${shouldCheck ? 'checked' : ''} ${canSelect ? '' : 'disabled'}>
-                        </td>
-                        <td>${escapePayrollImportHtml(String(file.company_name || '-'))}</td>
-                        <td>${escapePayrollImportHtml(String(file.original_name || file.stored_name || 'Uploaded file'))}</td>
-                        <td>${escapePayrollImportHtml(String(file.uploaded_by_name || file.uploaded_by || 'N/A'))}</td>
-                        <td>${escapePayrollImportHtml(String(file.uploaded_at || 'N/A'))}</td>
-                        <td>${statusBadge}</td>
-                        <td>${isReviewed ? escapePayrollImportHtml(String(file.reviewed_at || '')) : '-'}</td>
-                        <td class="text-center"><div class="pir-file-actions">${canDownloadFiles ? `<a class="pir-xls-btn" href="${escapePayrollImportHtml(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}${canSelect ? `<button type="button" class="btn btn-sm btn-outline-danger payroll-delete-uploaded-file-btn" data-file-id="${escapePayrollImportHtml(String(file.file_id || ''))}" title="Delete uploaded file"><i class="fa fa-trash"></i></button>` : ''}</div></td>
-                    </tr>
+                    <label class="mfp-item${isReviewed ? ' is-reviewed' : ''}${shouldCheck ? ' is-selected' : ''}" data-file-id="${fileId}">
+                        <input type="radio" class="mfp-radio" name="managerPayrollReviewFileRow" value="${fileId}" ${shouldCheck ? 'checked' : ''} ${canSelect ? '' : 'disabled'}>
+                        <span class="mfp-check"><i class="fas ${isReviewed ? 'fa-lock' : 'fa-check'}"></i></span>
+                        <span class="mfp-file-icon"><i class="fa-solid fa-file-excel"></i></span>
+                        <span class="mfp-main">
+                            <span class="mfp-company">${mfpEsc(String(file.company_name || '-'))}</span>
+                            <span class="mfp-filename" title="${mfpEsc(String(file.original_name || file.stored_name || ''))}">${mfpEsc(String(file.original_name || file.stored_name || 'Uploaded file'))}</span>
+                        </span>
+                        <span class="mfp-meta">
+                            <span class="mfp-meta-label">Uploaded by</span>
+                            <span class="mfp-user"><span class="mfp-avatar">${mfpEsc(mfpInitials(uploader))}</span>${mfpEsc(uploader)}</span>
+                        </span>
+                        <span class="mfp-meta">
+                            <span class="mfp-meta-label">Uploaded</span>
+                            <span class="mfp-when">${mfpWhen(file.uploaded_at)}</span>
+                        </span>
+                        <span class="mfp-meta">
+                            <span class="mfp-meta-label">${isReviewed ? 'Reviewed' : 'Status'}</span>
+                            ${isReviewed
+                                ? `<span class="mfp-when">${mfpWhen(file.reviewed_at)}</span>`
+                                : '<span class="mfp-pill tone-amber"><span class="mfp-dot"></span>Pending review</span>'}
+                        </span>
+                        <span class="mfp-status">
+                            ${isReviewed ? '<span class="mfp-pill tone-green"><i class="fas fa-check-circle"></i>Reviewed</span>' : ''}
+                        </span>
+                        <span class="mfp-actions">
+                            ${canDownloadFiles ? `<a class="mfp-icon-btn tone-green" href="${mfpEsc(buildManagerFileDownloadUrl(String(file.file_id || '')))}" target="_blank" rel="noopener" title="Download Excel file"><i class="fa-solid fa-file-excel"></i></a>` : ''}
+                            ${canSelect ? `<button type="button" class="mfp-icon-btn tone-red payroll-delete-uploaded-file-btn" data-file-id="${fileId}" title="Delete uploaded file"><i class="fas fa-trash-alt"></i></button>` : ''}
+                        </span>
+                    </label>
                 `;
             }).join('');
 
             const pickResult = await Swal.fire({
                 title: 'Select Manager Uploaded File',
-                width: '85%',
+                width: 1100,
                 html: `
-                    <div style="text-align:left;">
-                        <p class="mb-2">Only files uploaded for <strong>${escapePayrollImportHtml(String(managerPayrollExcelState.month || ''))}</strong> are shown below.</p>
-                        <div style="max-height:340px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
-                            <table class="table table-sm table-bordered mb-0" id="managerPayrollFilePickerTable">
-                                <thead class="thead-light">
-                                    <tr>
-                                        <th style="width:90px;" class="text-center">Select</th>
-                                        <th>Company Name</th>
-                                        <th>File Name</th>
-                                        <th>Uploaded By</th>
-                                        <th>Uploaded At</th>
-                                        <th>Status</th>
-                                        <th>Reviewed At</th>
-                                        <th style="width:${canDownloadFiles ? 110 : 70}px;" class="text-center">${canDownloadFiles ? 'Actions' : 'Delete'}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>${fileTableRows}</tbody>
-                            </table>
+                    <div class="mfp-wrap">
+                        <div class="mfp-top">
+                            <p class="mfp-lead"><i class="far fa-calendar"></i> Files uploaded for <strong>${mfpEsc(String(managerPayrollExcelState.month || ''))}</strong>. Pick a pending file to review and import.</p>
+                            <div class="mfp-stats">
+                                <span class="mfp-stat"><b>${sortedFiles.length}</b> Total</span>
+                                <span class="mfp-stat tone-amber"><b>${pendingCount}</b> Pending</span>
+                                <span class="mfp-stat tone-green"><b>${reviewedCount}</b> Reviewed</span>
+                            </div>
                         </div>
+                        <div class="mfp-list" id="managerPayrollFilePickerTable">${fileTableRows}</div>
+                        ${pendingCount === 0 ? '<div class="mfp-note"><i class="fas fa-check-double"></i> All uploaded files for this month have already been reviewed and imported.</div>' : ''}
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: 'Review Selected File',
+                confirmButtonText: '<i class="fas fa-clipboard-check"></i> Review Selected File',
                 cancelButtonText: '<?= addslashes(__('cancel', 'Cancel')) ?>',
                 confirmButtonColor: '#2563eb',
+                customClass: { popup: 'mfp-popup' },
                 allowOutsideClick: false,
                 didOpen: () => {
+                    const confirmBtn = Swal.getConfirmButton();
+                    const syncSelection = () => {
+                        document.querySelectorAll('#managerPayrollFilePickerTable .mfp-item').forEach((item) => {
+                            const radio = item.querySelector('.mfp-radio');
+                            item.classList.toggle('is-selected', !!(radio && radio.checked));
+                        });
+                        if (confirmBtn) {
+                            confirmBtn.disabled = !document.querySelector('input[name="managerPayrollReviewFileRow"]:checked');
+                        }
+                    };
+                    document.querySelectorAll('#managerPayrollFilePickerTable .mfp-radio').forEach((radio) => radio.addEventListener('change', syncSelection));
+                    // Action buttons sit inside the <label>; keep their clicks from toggling the radio.
+                    document.querySelectorAll('#managerPayrollFilePickerTable .mfp-actions').forEach((el) => el.addEventListener('click', (event) => event.stopPropagation()));
+                    syncSelection();
+
                     document.querySelectorAll('#managerPayrollFilePickerTable .payroll-delete-uploaded-file-btn').forEach((btn) => {
                         btn.addEventListener('click', async function() {
                             const fileId = String(this.dataset.fileId || '').trim();
@@ -4247,10 +4358,11 @@ foreach ($employees as $employee) {
                                     throw new Error((deleteData && deleteData.message) || 'Failed to delete uploaded file.');
                                 }
 
-                                const row = this.closest('tr');
+                                const row = this.closest('.mfp-item');
                                 if (row) {
                                     row.remove();
                                 }
+                                syncSelection();
                                 refreshManagerReviewButtonCount();
                             } catch (error) {
                                 this.disabled = false;

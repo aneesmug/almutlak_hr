@@ -2239,6 +2239,17 @@ function normalizeManagerPayrollUploadKey(string $requestInvNo, string $monthYea
     return $requestPart . '__' . $monthPart;
 }
 
+// Manager uploads are always stored under the request's own payroll_month (upload
+// enforces it), so read/review/delete/download must use that month too, whatever
+// month the caller's page URL happened to carry.
+function resolveManagerPayrollUploadMonth(PDO $pdo, string $requestInvNo, string $monthYear): string
+{
+    $stmt = $pdo->prepare('SELECT payroll_month FROM payroll_approval_requests WHERE request_inv_no = :inv_no LIMIT 1');
+    $stmt->execute([':inv_no' => $requestInvNo]);
+    $requestMonth = trim((string)($stmt->fetchColumn() ?: ''));
+    return preg_match('/^\d{4}-\d{2}$/', $requestMonth) ? $requestMonth : $monthYear;
+}
+
 function getManagerPayrollUploadMetaPath(string $requestInvNo, string $monthYear): string
 {
     return getManagerPayrollUploadStorageDir() . DIRECTORY_SEPARATOR
@@ -2878,6 +2889,7 @@ function getManagerUploadedPayrollExcelRows(PDO $pdo, string $currentUserId): vo
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
             throw new Exception('Missing request number or valid month.');
         }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
 
         $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
         $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
@@ -3021,6 +3033,7 @@ function listManagerUploadedPayrollExcelFiles(PDO $pdo, string $currentUserId): 
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear)) {
             throw new Exception('Missing request number or valid month.');
         }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
 
         $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
         $uploads = isset($meta['uploads']) && is_array($meta['uploads']) ? $meta['uploads'] : [];
@@ -3099,6 +3112,7 @@ function downloadManagerUploadedPayrollExcelFile(): void
         $fail(400, 'Missing file selection, request number, or valid month.');
         return;
     }
+    $monthYear = resolveManagerPayrollUploadMonth($GLOBALS['pdo'], $requestInvNo, $monthYear);
 
     $meta = normalizeManagerPayrollUploadMeta(loadManagerPayrollUploadMeta($requestInvNo, $monthYear), $requestInvNo, $monthYear);
     $found = findManagerPayrollUploadByFileId($meta, $fileId);
@@ -3148,6 +3162,7 @@ function markManagerUploadedPayrollExcelReviewed(PDO $pdo, string $currentUserId
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear) || $fileId === '') {
             throw new Exception('Missing file selection, request number, or valid month.');
         }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
 
         $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
         try {
@@ -3196,6 +3211,7 @@ function deleteManagerUploadedPayrollExcelFile(PDO $pdo, string $currentUserId):
         if ($requestInvNo === '' || $monthYear === '' || !preg_match('/^\d{4}-\d{2}$/', $monthYear) || $fileId === '') {
             throw new Exception('Missing file selection, request number, or valid month.');
         }
+        $monthYear = resolveManagerPayrollUploadMonth($pdo, $requestInvNo, $monthYear);
 
         $lockHandle = acquireManagerPayrollUploadLock($requestInvNo, $monthYear);
         try {
