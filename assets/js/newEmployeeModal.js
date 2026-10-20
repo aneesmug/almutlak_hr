@@ -1114,6 +1114,7 @@ function openManPowerEmployeeModal(data, w) {
             formData.append('emp_id', $('#mpEmpId').val());
             formData.append('iqama', $('#mpIqama').val());
             formData.append('iqama_exp_g', $('#mpIqamaExpG').val());
+            formData.append('iqama_exp', $('#mpIqamaExpHijri').val());
             formData.append('mobile', $('#mpMobile').val());
             formData.append('salary', newEmpGetNumeric('mpSalary'));
             formData.append('joining_date', $('#mpJoiningDate').val());

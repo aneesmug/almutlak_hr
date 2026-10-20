@@ -95,6 +95,93 @@ function ecm_emp_id_reserved_by(PDO $pdo, string $empId, int $ownDraftId): ?stri
     return $holder === false ? null : (string)$holder;
 }
 
+// --- Store values exactly as entered ----------------------------------------------------
+// MySQL here runs without STRICT mode, so a value that doesn't fit its column is silently
+// changed instead of rejected (e.g. GOSI 7.25 into an INT column became 7, too-long text gets
+// cut, Arabic text in a latin1 column becomes "?"). Every value is checked against the real
+// column definition first and the registration is refused with a clear message instead.
+const ECM_FIELD_LABELS = [
+    'name' => ['employee_name', 'Employee Name'], 'emp_id' => ['employee_id', 'Employee ID'],
+    'iqama' => ['iqama_id', 'Iqama id'], 'iqama_exp' => ['iqama_id_expiry', 'Iqama / ID expiry'],
+    'iqama_exp_g' => ['iqama_id_expiry', 'Iqama / ID expiry'], 'passport_number' => ['passport_no', 'Passport no'],
+    'passport_exp' => ['passport_expiry', 'Passport expiry'], 'mobile' => ['mobile', 'Mobile'],
+    'emg_mobile' => ['emergency_mobile_no_label', 'Emergency Mobile No.'], 'emg_name' => ['emergency_contact_name_label', 'Emergency Contact Name'],
+    'country' => ['nationality', 'Nationality'], 'dept' => ['department', 'Department'], 'city_id' => ['city_label', 'City'],
+    'location_id' => ['location_label', 'Location'], 'sub_dept_id' => ['sub_department_label', 'Sub-Department'],
+    'emptype' => ['employee_type_label', 'Employee Type'], 'supervisor_id' => ['direct_supervisor', 'Direct Supervisor'],
+    'joining_date' => ['joining_date', 'Joining date'], 'dob' => ['date_of_birth', 'Date of birth'], 'dob_h' => ['date_of_birth', 'Date of birth'],
+    't_shirt_size' => ['t_shirt_size', 'T-Size'], 'sex' => ['gender', 'Gender'], 'mar_status' => ['marital_status', 'Marital status'],
+    'blood_type' => ['blood_group', 'Blood group'], 'emp_sup_type' => ['sponsorship', 'Sponsorship'], 'actual_Job' => ['actual_job', 'Position'],
+    'vac_period' => ['contract_period', 'Contract period'], 'vacation_days' => ['vacation_days', 'Vacation Days'], 'salary' => ['salary', 'Salary'],
+    'bank_name' => ['bank_name', 'Bank name'], 'iban' => ['iban', 'IBAN'], 'email' => ['email', 'Email'], 'address' => ['address', 'Address'],
+    'gosi' => ['gosi', 'GOSI'], 'probation' => ['probation_period_label', 'Probation Period'], 'payment_type' => ['salary_payment_type_label', 'Salary Payment type'],
+    'comp_no' => ['company_label', 'Company'],
+];
+
+function ecm_employee_columns(PDO $pdo): array
+{
+    static $cols = null;
+    if ($cols === null) {
+        $cols = [];
+        foreach ($pdo->query("SHOW FULL COLUMNS FROM `employees`") as $c) {
+            $cols[strtolower($c['Field'])] = $c;
+        }
+    }
+    return $cols;
+}
+
+// $row: column => value. Empty strings for nullable numeric/date columns become NULL (instead
+// of MySQL turning them into 0); returns the adjusted row or throws with a readable message.
+function ecm_check_values_fit(PDO $pdo, array $row): array
+{
+    $cols = ecm_employee_columns($pdo);
+    foreach ($row as $column => $value) {
+        $col = $cols[strtolower($column)] ?? null;
+        if ($col === null || $value === null) continue;
+        $label = isset(ECM_FIELD_LABELS[$column]) ? __(ECM_FIELD_LABELS[$column][0], ECM_FIELD_LABELS[$column][1]) : $column;
+        $type = strtolower($col['Type']);
+        $value = (string)$value;
+        $fail = fn(string $why) => throw new Exception("$label (\"$value\"): $why");
+
+        if (preg_match('/^(tinyint|smallint|mediumint|int|bigint|decimal|float|double|date|datetime|timestamp)/', $type) && $value === '') {
+            if ($col['Null'] === 'YES') {
+                $row[$column] = null;
+                continue;
+            }
+            $fail(__('is_required', 'is required'));
+        }
+        if (preg_match('/^(tinyint|smallint|mediumint|int|bigint)/', $type)) {
+            if (!preg_match('/^-?\d+$/', $value)) {
+                $fail($column === 'gosi'
+                    ? "the database column `gosi` is $type and can't store decimals - run db_updates/fix_employees_gosi_decimal.sql"
+                    : 'must be a whole number');
+            }
+        } elseif (preg_match('/^decimal\((\d+),(\d+)\)/', $type, $m)) {
+            if (!preg_match('/^-?(\d*)(?:\.(\d*))?$/', $value, $n) || ($n[1] === '' && ($n[2] ?? '') === '')) {
+                $fail('must be a number');
+            }
+            if (strlen($n[2] ?? '') > (int)$m[2]) $fail("max {$m[2]} decimal places");
+            if (strlen(ltrim($n[1], '0')) > (int)$m[1] - (int)$m[2]) $fail('number is too large');
+        } elseif (preg_match('/^enum\((.*)\)$/', $type, $m)) {
+            $allowed = array_map(fn($v) => stripslashes(trim($v, "'")), str_getcsv($m[1], ',', "'"));
+            if (!in_array($value, $allowed, true)) $fail('not a valid option');
+        } elseif ($type === 'date') {
+            $d = DateTime::createFromFormat('!Y-m-d', $value);
+            if (!$d || $d->format('Y-m-d') !== $value) $fail('must be a date (YYYY-MM-DD)');
+        } elseif (preg_match('/^(var)?char\((\d+)\)/', $type, $m)) {
+            if (mb_strlen($value) > (int)$m[2]) $fail("too long - max {$m[2]} characters");
+        } elseif (preg_match('/^(tiny|medium|long)?text/', $type, $m)) {
+            $max = ['tiny' => 255, '' => 65535, 'medium' => 16777215, 'long' => 4294967295][$m[1] ?? ''];
+            if (strlen($value) > $max) $fail('too long');
+        }
+        // latin1 columns can't hold Arabic (or other non-Western) letters - they'd turn into "?".
+        if (stripos((string)$col['Collation'], 'latin1') === 0 && preg_match('/[^\x{0000}-\x{00FF}]/u', $value)) {
+            $fail('this field accepts English letters only');
+        }
+    }
+    return $row;
+}
+
 function ecm_remove_draft(PDO $pdo, int $draftId): void
 {
     if ($draftId > 0) {
@@ -262,7 +349,7 @@ if ($action === 'create_company_employee') {
         'salary' => fn($v) => str_replace(',', '', $v),
         'iban' => fn($v) => str_replace(' ', '', $v),
         'mobile' => fn($v) => preg_replace('/[^0-9]/', '', explode(' ', $v)[0]),
-        'email' => fn($v) => filter_var(trim($v), FILTER_SANITIZE_EMAIL),
+        'email' => fn($v) => trim($v),
         // Stored as the number of months only ("3" / "6") - edit_employee.php's select and
         // view_employee.php's probation check both work on that. Also normalizes the old
         // "3 Months" value still held by drafts / cached copies of the modal script.
@@ -305,6 +392,13 @@ if ($action === 'create_company_employee') {
         }
         if (!is_numeric($values[':salary'])) {
             throw new Exception(__('salary_must_be_numeric'));
+        }
+        if (($values[':email'] ?? '') !== '' && !filter_var($values[':email'], FILTER_VALIDATE_EMAIL)) {
+            throw new Exception(__('email', 'Email') . ' (\"' . $values[':email'] . '\"): ' . __('invalid_email', 'is not a valid email address'));
+        }
+        $fitted = ecm_check_values_fit($pdo, array_combine(array_map(fn($k) => substr($k, 1), array_keys($values)), $values));
+        foreach ($fitted as $column => $fittedValue) {
+            $values[":$column"] = $fittedValue;
         }
         $dupStmt = $pdo->prepare("SELECT 1 FROM `employees` WHERE `emp_id` = ? LIMIT 1");
         $dupStmt->execute([$values[':emp_id']]);
@@ -447,7 +541,19 @@ if ($action === 'create_man_power_employee') {
     $dob = trim($_POST['dob'] ?? '');
     $sex = trim($_POST['sex'] ?? 'male');
     $iqama_exp_g = trim($_POST['iqama_exp_g'] ?? '');
+    $iqama_exp = trim($_POST['iqama_exp'] ?? ''); // Hijri expiry - was collected by the form but never saved
     $emp_sup_type = "man_power";
+
+    try {
+        $fitted = ecm_check_values_fit($pdo, [
+            'name' => $name_emp, 'emp_id' => $emp_id, 'iqama' => $iqama, 'mobile' => $mobile, 'salary' => $salary,
+            'joining_date' => $joining_date, 'dept' => $department, 'comp_no' => $comp_no, 'country' => $country,
+            'dob' => $dob, 'sex' => $sex, 'iqama_exp_g' => $iqama_exp_g, 'iqama_exp' => $iqama_exp,
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        exit;
+    }
     $created_at = date('Y-m-d H:i:s');
     $image_path = '';
 
@@ -502,12 +608,12 @@ if ($action === 'create_man_power_employee') {
     //  2. Inserts the string 'active' into `status`, an int column - MySQL coerces that to
     //     0 (inactive), so every man-power employee created via the original page ends up
     //     inactive. Inserts 1 here instead, matching what "active" is meant to mean.
-    $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `created_at`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`, `cost_center`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO `employees` (`name`, `emp_id`, `iqama`, `mobile`, `salary`, `joining_date`, `created_at`, `status`, `avatar`, `fly`, `dept`, `comp_no`, `city_id`, `location_id`, `sub_dept_id`, `country`, `dob`, `sex`, `emp_sup_type`, `iqama_exp_g`, `cost_center`, `iqama_exp`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'no', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     $stmt_insert = $conDB->prepare($sql);
     $stmt_insert->bind_param(
-        "ssssdsssssiiissssss",
+        "ssssssssssiiisssssss", // salary as text: binding as double turned "4200.50" into "4200.5"
         $name_emp,
         $emp_id,
         $iqama,
@@ -526,7 +632,8 @@ if ($action === 'create_man_power_employee') {
         $sex,
         $emp_sup_type,
         $iqama_exp_g,
-        $cost_center
+        $cost_center,
+        $iqama_exp
     );
 
     if ($stmt_insert->execute()) {

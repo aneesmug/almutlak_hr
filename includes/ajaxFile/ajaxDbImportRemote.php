@@ -9,6 +9,61 @@ if (!($is_system_admin ?? false)) {
     exit;
 }
 
+// Nothing below writes to the session. Release the session file lock right away -
+// PHP file sessions are locked for the whole request, and a run_import page can take
+// minutes, which otherwise freezes every other page of the app in this browser.
+session_write_close();
+
+// Import checkpoint (app_settings 'db_import_remote_checkpoint'): the batch, the table
+// and page cursor reached, and the latest rotated live export key. Saved after every
+// page so a crash / closed tab / server restart can resume instead of starting over
+// (and without losing the single-use key the live server already rotated).
+function dbir_checkpoint_get(mysqli $db): ?array
+{
+    $res = mysqli_query($db, "SELECT setting_value FROM app_settings WHERE setting_name = 'db_import_remote_checkpoint'");
+    $row = $res ? mysqli_fetch_row($res) : null;
+    $data = $row ? json_decode((string) $row[0], true) : null;
+    return is_array($data) && !empty($data['table']) ? $data : null;
+}
+
+function dbir_checkpoint_save(mysqli $db, array $data): void
+{
+    $data['updated_at'] = date('Y-m-d H:i:s');
+    $json = json_encode($data);
+    $stmt = mysqli_prepare($db, "INSERT INTO app_settings (setting_name, setting_value) VALUES ('db_import_remote_checkpoint', ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+    mysqli_stmt_bind_param($stmt, 's', $json);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+}
+
+// Live progress of the page currently being imported (download bytes, rows applied),
+// written to a small temp file while run_import works and polled by the browser every
+// second - so a 20,000-row page visibly moves instead of jumping at the end, and a stall
+// shows up as "no activity for Xs". Throttled to at most ~3 writes per second.
+function dbir_progress_file(): string
+{
+    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'dbir_progress_' . md5(DB_NAME) . '.json';
+}
+
+function dbir_progress(array $data, bool $force = false): void
+{
+    static $last = 0.0, $state = [];
+    $state = array_merge($state, $data);
+    $now = microtime(true);
+    if (!$force && $now - $last < 0.3) {
+        return;
+    }
+    $last = $now;
+    $state['ts'] = time();
+    @file_put_contents(dbir_progress_file(), json_encode($state), LOCK_EX);
+}
+
+function dbir_checkpoint_clear(mysqli $db): void
+{
+    mysqli_query($db, "UPDATE app_settings SET setting_value = '' WHERE setting_name = 'db_import_remote_checkpoint'");
+}
+
 // Returns the column name immediately before $target in $orderedNames (ordinal order),
 // or null if $target is the first column - used to emit AFTER `col` / FIRST in generated ALTERs.
 function db_import_remote_predecessor(array $orderedNames, string $target) {
@@ -22,8 +77,15 @@ function db_import_remote_predecessor(array $orderedNames, string $target) {
     return null;
 }
 
-function db_import_remote_curl(string $url, array $postFields, int $timeoutSeconds) {
+function db_import_remote_curl(string $url, array $postFields, int $timeoutSeconds, ?callable $onProgress = null) {
     $ch = curl_init($url);
+    if ($onProgress) {
+        curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+        curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($ch, $dlTotal, $dlNow) use ($onProgress) {
+            $onProgress((int) $dlNow);
+            return 0;
+        });
+    }
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => http_build_query($postFields),
@@ -55,6 +117,25 @@ function db_import_remote_normalize_base_url(string $raw): ?string {
 }
 
 $action = $_POST['action'] ?? '';
+
+if ($action === 'get_checkpoint') {
+    echo json_encode(['status' => 'success', 'checkpoint' => dbir_checkpoint_get($conDB)]);
+    exit;
+}
+if ($action === 'get_progress') {
+    $raw = @file_get_contents(dbir_progress_file());
+    $data = $raw ? json_decode($raw, true) : null;
+    if (is_array($data)) {
+        $data['age'] = max(0, time() - (int) ($data['ts'] ?? 0));
+    }
+    echo json_encode(['status' => 'success', 'progress' => is_array($data) ? $data : null]);
+    exit;
+}
+if ($action === 'clear_checkpoint') {
+    dbir_checkpoint_clear($conDB);
+    echo json_encode(['status' => 'success']);
+    exit;
+}
 $baseUrl = db_import_remote_normalize_base_url((string) ($_POST['base_url'] ?? ''));
 $exportKey = trim((string) ($_POST['export_key'] ?? ''));
 
@@ -207,6 +288,26 @@ if ($action === 'run_import') {
     }
 
     set_time_limit(0);
+    // Finish the page (and save the checkpoint) even if the browser goes away mid-request
+    ignore_user_abort(true);
+
+    // Batch info for the checkpoint - the client sends the whole queue with every page
+    $queueRaw = json_decode((string) ($_POST['queue'] ?? ''), true);
+    $queue = is_array($queueRaw) ? array_values(array_filter(array_map('strval', $queueRaw))) : $tables;
+    $importedBefore = max(0, (int) ($_POST['imported'] ?? 0));
+    $checkpoint = [
+        'base_url' => $baseUrl,
+        'queue' => $queue,
+        'table' => $tables[0],
+        'cursor' => trim((string) ($_POST['cursor'] ?? '')),
+        'table_total' => isset($_POST['table_total']) ? (int) $_POST['table_total'] : null,
+        'imported' => $importedBefore,
+        'table_done' => false,
+        'truncate' => $truncateFirst,
+        'since' => $sinceRaw,
+        'export_key' => $exportKey,
+    ];
+
     $postFields = ['export_key' => $exportKey, 'tables' => implode(',', $tables)];
     if ($sinceRaw !== '') {
         $postFields['since'] = $sinceRaw;
@@ -226,7 +327,13 @@ if ($action === 'run_import') {
         $pageSize = 0;
     }
 
-    $result = db_import_remote_curl($baseUrl . '/download_db_export.php', $postFields, 0);
+    // 15 min cap so a hung live request can't block this worker forever
+    $pageToken = (string) ($_POST['page_token'] ?? '');
+    dbir_progress(['token' => $pageToken, 'table' => $tables[0], 'phase' => 'download', 'bytes' => 0, 'applied' => 0], true);
+    $result = db_import_remote_curl($baseUrl . '/download_db_export.php', $postFields, 900, function (int $bytes) {
+        dbir_progress(['bytes' => $bytes]);
+    });
+    dbir_progress(['phase' => 'received', 'bytes' => strlen((string) $result['body'])], true);
 
     if ($result['error']) {
         echo json_encode(['status' => 'error', 'message' => 'Fetch failed: ' . $result['error']]);
@@ -262,6 +369,10 @@ if ($action === 'run_import') {
     // server-side on every successful export), so the NEXT request in the batch must use
     // this rotated value - hand it back to the client, which threads it through.
     $rotatedExportKey = $keyMatch[1];
+    // Persist the rotated key BEFORE applying anything: if this request dies while
+    // applying, a resume re-pulls the same page (upserts are idempotent) with this key.
+    $checkpoint['export_key'] = $rotatedExportKey;
+    dbir_checkpoint_save($conDB, $checkpoint);
 
     // download_db_export.php prints "-- Table: name (N rows)" per table it dumps -
     // reuse that instead of re-deriving counts, so the reported numbers always match
@@ -298,6 +409,12 @@ if ($action === 'run_import') {
     // which happens when the source data has many rows sharing the same unique key value.
     $insertDiagnostics = [];
 
+    // One transaction per page: a page lands completely or not at all, so the saved
+    // cursor always matches what is really in the table. Also far fewer log flushes.
+    $sql = "START TRANSACTION;\n" . $sql . "\nCOMMIT;\n";
+    $appliedRows = 0;
+    dbir_progress(['phase' => 'apply', 'applied' => 0], true);
+
     if (mysqli_multi_query($mysqli, $sql)) {
         do {
             if ($res = mysqli_store_result($mysqli)) {
@@ -310,12 +427,18 @@ if ($action === 'run_import') {
                 $info = mysqli_info($mysqli);
                 if ($info) {
                     $insertDiagnostics[] = $info;
+                    if (preg_match('/Records:\s*(\d+)/', $info, $rm)) {
+                        $appliedRows += (int) $rm[1];
+                        dbir_progress(['applied' => $appliedRows]);
+                    }
                 }
             }
         } while (mysqli_more_results($mysqli) && mysqli_next_result($mysqli));
     } else {
         $errors[] = mysqli_error($mysqli);
     }
+
+    dbir_progress(['phase' => empty($errors) ? 'committed' : 'failed', 'applied' => $appliedRows], true);
 
     if (!empty($errors)) {
         mysqli_close($mysqli);
@@ -332,6 +455,18 @@ if ($action === 'run_import') {
         ]);
         exit;
     }
+
+    $checkpoint['imported'] = $importedBefore + (int) $totalRecords;
+    if ($tableCounts && isset($tableCounts[$tables[0]])) {
+        $checkpoint['table_total'] = $tableCounts[$tables[0]];
+    }
+    if (!$isLastPage) {
+        $checkpoint['cursor'] = (string) $paging['next_cursor'];
+    } else {
+        $checkpoint['cursor'] = '';
+        $checkpoint['table_done'] = true;
+    }
+    dbir_checkpoint_save($conDB, $checkpoint);
 
     // Middle page of a paged pull - nothing to verify yet, hand the cursor back.
     if (!$isLastPage) {
