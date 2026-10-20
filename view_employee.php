@@ -3079,7 +3079,7 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 												<!-- Same status tiles + date filter as attendance.php (includes/attendance_ui.php) -->
-												<?= attendance_tiles_html('attStats') ?>
+												<?= attendance_tiles_html('attStats', attendance_total_tile_html()) /* + Total hours of the rows shown */ ?>
 
 												<div class="att-toolbar">
 													<div class="sr-search">
@@ -4944,14 +4944,19 @@ if (mysqli_num_rows($query) == 1) {
 
 				function updateAttendanceStats(rows) {
 					AttUI.setCounts('#attStats', AttUI.count(rows));
-					// Period + worked time under the title (worked hours used to be its own tile)
-					let mins = 0, worked = 0;
-					rows.forEach(r => { const m = aHm(r.hours); if (m !== null) { mins += m; worked++; } });
+					// Selected period under the title
 					const [from, to] = attDates.values();
 					const fmtD = d => { const x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); };
-					const period = !from && !to ? __('all_records', 'All records') : `${fmtD(from || to)} – ${fmtD(to || from)}`;
-					const hrs = worked ? ` · ${Math.floor(mins / 60).toLocaleString('en-US')}h ${__('worked', 'worked')} · ${__('avg', 'Avg')} ${aDur(Math.round(mins / worked))}` : '';
-					$('#attTabPeriod').text(period + hrs);
+					$('#attTabPeriod').text(!from && !to ? __('all_records', 'All records') : `${fmtD(from || to)} – ${fmtD(to || from)}`);
+				}
+
+				// "Total hours" tile: worked time of the rows currently shown (period + tile filter + search),
+				// refreshed on every table draw. Days without both punches have no hours and are skipped.
+				function updateAttendanceTotalHours() {
+					let mins = 0, days = 0;
+					attendanceTable.rows({ search: 'applied' }).data().each(r => { const m = aHm(r.hours); if (m !== null) { mins += m; days++; } });
+					$('#attTotalHours').text(aDur(mins));
+					$('#attTotalAvg').text(days ? `${days} ${__('days', 'days')} · ${__('avg', 'Avg')} ${aDur(Math.round(mins / days))}` : ' ');
 				}
 
 				attendanceTable = $('#attendance_tbl').DataTable({
@@ -5027,6 +5032,8 @@ if (mysqli_num_rows($query) == 1) {
 				});
 				// Export buttons next to the search box instead of above the table
 				attendanceTable.buttons().container().appendTo('#attExport');
+				attendanceTable.on('draw', updateAttendanceTotalHours);
+				$('#attStats').addClass('has-total'); // Total hours tile always shown here (one employee)
 				let attSearchTimer;
 				$('#attTabSearch').on('input', function() {
 					clearTimeout(attSearchTimer);

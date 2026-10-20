@@ -19,8 +19,8 @@ if (!function_exists('attendance_tile_defs')) {
 }
 
 if (!function_exists('attendance_tiles_html')) {
-    /** Clickable status tiles; counts go into [data-count="all|present|..."] */
-    function attendance_tiles_html($id) {
+    /** Clickable status tiles; counts go into [data-count="all|present|..."]. $extraHtml: more (non-filter) tiles appended to the grid */
+    function attendance_tiles_html($id, $extraHtml = '') {
         $html = '<div class="sr-tiles att-tiles" id="' . htmlspecialchars($id) . '">';
         foreach (attendance_tile_defs() as $key => $t) {
             $html .= '<button type="button" class="sr-tile' . ($key === '' ? ' active' : '') . '" data-group="' . $key . '">'
@@ -29,7 +29,7 @@ if (!function_exists('attendance_tiles_html')) {
                 . '<span class="att-tile-ico tone-' . $t[2] . '"><i class="fa-solid ' . $t[3] . '"></i></span>'
                 . '</button>';
         }
-        return $html . '</div>';
+        return $html . $extraHtml . '</div>';
     }
 }
 
@@ -50,5 +50,15 @@ if (!function_exists('attendance_datefilter_html')) {
             . '</div>'
             . $date($ids['from'], __('from', 'From')) . '<span class="att-sep">&ndash;</span>' . $date($ids['to'], __('to', 'To'))
             . '</div>';
+    }
+}
+
+if (!function_exists('attendance_total_tile_html')) {
+    /** "Total hours" tile (not a filter): pass as attendance_tiles_html()'s $extraHtml. Filled via #attTotalHours / #attTotalAvg. */
+    function attendance_total_tile_html($hidden = false) {
+        return '<div class="sr-tile att-total"' . ($hidden ? ' style="display:none;"' : '') . '><span class="sr-tile-label"><span class="sr-dot dot-indigo"></span>'
+            . htmlspecialchars(__('total_hours', 'Total hours')) . '</span>'
+            . '<span class="sr-tile-value" id="attTotalHours">0h</span><small class="att-total-sub" id="attTotalAvg">&nbsp;</small>'
+            . '<span class="att-tile-ico tone-indigo"><i class="fa-solid fa-business-time"></i></span></div>';
     }
 }

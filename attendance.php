@@ -102,7 +102,7 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                         <?php endif; ?>
                     </div>
 
-                    <?= attendance_tiles_html('attTiles') ?>
+                    <?= attendance_tiles_html('attTiles', attendance_total_tile_html(true)) /* Total hours: shown only when one employee is selected */ ?>
 
                     <div class="sr-card">
                         <div class="sr-toolbar">
@@ -227,6 +227,14 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                         const v = c[$(this).data('count')];
                         $(this).text(v == null ? 0 : Number(v).toLocaleString('en-US'));
                     });
+                    // "Total hours" tile: only when one employee is selected (server sends total_hours then)
+                    const th = json.total_hours;
+                    const dur = m => Math.floor(m / 60).toLocaleString('en-US') + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+                    $('#attTiles').toggleClass('has-total', !!th).find('.att-total').toggle(!!th);
+                    if (th) {
+                        $('#attTotalHours').text(dur(th.minutes || 0));
+                        $('#attTotalAvg').text(th.days ? `${th.days} ${t('days', 'days')} · ${t('avg', 'Avg')} ${dur(Math.round(th.minutes / th.days))}` : ' ');
+                    }
                     return json.data || [];
                 }
             },

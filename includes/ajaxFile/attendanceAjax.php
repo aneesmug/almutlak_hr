@@ -101,6 +101,19 @@ function list_attendance($conDB) {
          LIMIT {$start}, {$length}"
     );
 
+    // "Total hours" tile (only when one employee is selected): worked time of every row matching the
+    // current filters (dates + tile + search), not just this page. Same rule as the Employee Profile tab:
+    // a day counts only when it has both punches and check-out is after check-in.
+    $totalHours = null;
+    if ($empFilter !== '') {
+        $worked = "TIME_TO_SEC(a.time_out) - TIME_TO_SEC(a.time_in)";
+        $hasBoth = "a.time_in <> '' AND a.time_out <> '' AND TIME_TO_SEC(a.time_out) > TIME_TO_SEC(a.time_in)";
+        $th = mysqli_query($conDB, "SELECT COALESCE(SUM(IF({$hasBoth}, {$worked}, 0)), 0) AS secs, COALESCE(SUM({$hasBoth}), 0) AS days
+             FROM attendance a LEFT JOIN employees e ON e.emp_id = CAST(a.emp_id AS CHAR CHARACTER SET latin1) WHERE {$whereSql}");
+        $thRow = $th ? mysqli_fetch_assoc($th) : null;
+        $totalHours = ['minutes' => (int) floor(((int) ($thRow['secs'] ?? 0)) / 60), 'days' => (int) ($thRow['days'] ?? 0)];
+    }
+
     $data = [];
     while ($row = mysqli_fetch_assoc($rows)) {
         // Some rows written before the pairing fix (or a face-scan device
@@ -154,6 +167,7 @@ function list_attendance($conDB) {
         'recordsFiltered' => $filteredRecords,
         'data' => $data,
         'counts' => $counts,
+        'total_hours' => $totalHours,
     ]);
 }
 

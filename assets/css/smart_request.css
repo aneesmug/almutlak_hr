@@ -1274,3 +1274,10 @@ button.sr-open-btn { border: 0; cursor: pointer; }
 .sr-page .att-range button:hover { color: var(--sr-accent-strong); }
 .sr-page .att-range button.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
 .sr-page .att-datefilter { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* "Total hours" tile next to the status tiles; grid grows to 7 columns while it is shown (.has-total) */
+.sr-page .sr-tiles.att-tiles.has-total { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+@media (max-width: 1399px) { .sr-page .sr-tiles.att-tiles.has-total { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .sr-page .sr-tiles.att-tiles.has-total { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sr-page .att-total { cursor: default; background: linear-gradient(135deg, var(--sr-surface), var(--tone-indigo-bg)); }
+.sr-page .att-total:hover { transform: none; }
+.sr-page .att-total-sub { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--tone-indigo-fg); white-space: nowrap; }

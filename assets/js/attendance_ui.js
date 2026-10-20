@@ -54,7 +54,7 @@
                 if (!silent && onChange) onChange(current);
             }
         };
-        $(tilesSel).on('click', '.sr-tile', function () {
+        $(tilesSel).on('click', '.sr-tile[data-group]', function () {
             var g = $(this).data('group') || '';
             api.set(g && g === current ? '' : g);
         });
