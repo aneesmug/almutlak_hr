@@ -74,6 +74,12 @@ if ($res && ($row = $res->fetch_assoc())) {
         .dbi-flow-node { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 0; }
         .dbi-flow-node > i { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
         .dbi-flow-node b { display: block; color: var(--sr-text); font-size: 12.5px; }
+        .dbi-flow-node > div { min-width: 0; line-height: 1.4; }
+        .dbi-conn-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+        .dbi-conn-btns .sr-btn { height: 40px; }
+        .dbi-head-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .dbi-updated { font-size: 11.5px; color: var(--sr-muted); }
+        .dbi-refresh.is-busy i { animation: fa-spin 1s linear infinite; }
         .dbi-flow-node span { display: block; color: var(--sr-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "SFMono-Regular", Consolas, monospace; font-size: 11.5px; }
         .dbi-flow-node.is-live > i { background: var(--tone-sky-bg); color: var(--tone-sky-fg); }
         .dbi-flow-node.is-local > i { background: var(--tone-green-bg); color: var(--tone-green-fg); }
@@ -378,7 +384,10 @@ if ($res && ($row = $res->fetch_assoc())) {
                                                     <input type="checkbox" id="rememberUrl">
                                                     <span>Remember URL on this browser<small>(the key is never saved)</small></span>
                                                 </label>
-                                                <button type="button" class="sr-btn sr-btn-primary" id="testConnBtn"><i class="fa-solid fa-plug"></i> Connect &amp; Compare</button>
+                                                <div class="dbi-conn-btns">
+                                                    <button type="button" class="sr-btn dbi-refresh" id="refreshTablesBtn" style="display:none;" title="Re-compare row counts with live (does not use up the key)"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+                                                    <button type="button" class="sr-btn sr-btn-primary" id="testConnBtn"><i class="fa-solid fa-plug"></i> Connect &amp; Compare</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -412,10 +421,14 @@ if ($res && ($row = $res->fetch_assoc())) {
                                 <div class="sr-card">
                                     <div class="sr-card-head">
                                         <h5 class="sr-card-title"><i class="fa-solid fa-database"></i> Tables <span class="sr-count"><span id="tableCount">0</span></span></h5>
-                                        <div class="dbi-filter" role="tablist" aria-label="Table filter">
-                                            <button type="button" class="active" data-filter="diff">Differences <span class="sr-count" id="cntDiff">0</span></button>
-                                            <button type="button" data-filter="missing">Missing <span class="sr-count" id="cntMissing">0</span></button>
-                                            <button type="button" data-filter="all">All <span class="sr-count" id="tableTotalCount">0</span></button>
+                                        <div class="dbi-head-tools">
+                                            <span class="dbi-updated" id="tablesUpdated"></span>
+                                            <div class="dbi-filter" role="tablist" aria-label="Table filter">
+                                                <button type="button" class="active" data-filter="diff">Differences <span class="sr-count" id="cntDiff">0</span></button>
+                                                <button type="button" data-filter="missing">Missing <span class="sr-count" id="cntMissing">0</span></button>
+                                                <button type="button" data-filter="all">All <span class="sr-count" id="tableTotalCount">0</span></button>
+                                            </div>
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-icon dbi-refresh" title="Refresh counts"><i class="fa-solid fa-arrows-rotate"></i></button>
                                         </div>
                                     </div>
                                     <div class="sr-toolbar">
@@ -560,7 +573,7 @@ if ($res && ($row = $res->fetch_assoc())) {
             if (e.key === 'Enter') $('#testConnBtn').trigger('click');
         });
 
-        function renderTableList(tables) {
+        function renderTableList(tables, keepFilter) {
             liveTables = tables;
             const diffCount = tables.filter(t => (t.diff || 0) !== 0 || !t.exists_locally).length;
             const missingCount = tables.filter(t => !t.exists_locally).length;
@@ -604,8 +617,10 @@ if ($res && ($row = $res->fetch_assoc())) {
             $tbody.append('<tr class="dbi-empty-row" style="display:none;"><td colspan="5"><div class="sr-empty"><i class="fa-solid fa-circle-check"></i><div>No tables match this view.</div></div></td></tr>');
             $wrap.append($table);
             $('#pickerSection').show();
-            // Open on "Differences" when there are any, otherwise show everything
-            setFilterMode(diffCount ? 'diff' : 'all');
+            // Open on "Differences" when there are any, otherwise show everything.
+            // A refresh keeps the tab the user is on.
+            setFilterMode(keepFilter ? tableFilterMode : (diffCount ? 'diff' : 'all'));
+            $('#tablesUpdated').text('Updated ' + new Date().toLocaleTimeString());
         }
 
         function setFilterMode(mode) {
@@ -703,7 +718,7 @@ if ($res && ($row = $res->fetch_assoc())) {
 
         // Shared by the "Connect" button and the post-import refresh below - both
         // just need the current Local/Live/Diff counts re-pulled and re-rendered.
-        function refreshConnectionAndTables(baseUrl, exportKey, onDone) {
+        function refreshConnectionAndTables(baseUrl, exportKey, onDone, keepFilter) {
             $('#connStatus').html('<span class="sr-pill tone-slate"><i class="fa-solid fa-spinner fa-spin"></i> Connecting...</span>');
 
             $.ajax({
@@ -716,8 +731,9 @@ if ($res && ($row = $res->fetch_assoc())) {
                     const db = escHtml(res.database);
                     $('#connStatus').html('<span class="sr-pill tone-green"><span class="sr-dot"></span>Connected &middot; ' + db + '</span>');
                     $('#sumDb').html('Live database <b class="sr-mono">' + db + '</b>');
-                    renderTableList(res.tables || []);
+                    renderTableList(res.tables || [], keepFilter);
                     setWizardStep(2);
+                    $('#refreshTablesBtn').show();
                 } else {
                     $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>' + escHtml(res.message || 'Connection failed') + '</span>');
                     $('#pickerSection').hide();
@@ -752,6 +768,19 @@ if ($res && ($row = $res->fetch_assoc())) {
             const original = $btn.html();
             $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> Connecting...');
             refreshConnectionAndTables(baseUrl, exportKey, () => $btn.prop('disabled', false).html(original));
+        });
+
+        // Re-pull Local/Live/Diff counts after a sync (test_connection only reads - the
+        // single-use key is not consumed)
+        $(document).on('click', '.dbi-refresh', function() {
+            const baseUrl = $baseUrl.val().trim();
+            const exportKey = $exportKey.val().trim();
+            if (!baseUrl || !exportKey) {
+                Swal.fire({ title: 'Missing info', text: 'Enter both the live server URL and the export key.', icon: 'warning', allowOutsideClick: false });
+                return;
+            }
+            const $btns = $('.dbi-refresh').prop('disabled', true).addClass('is-busy');
+            refreshConnectionAndTables(baseUrl, exportKey, () => $btns.prop('disabled', false).removeClass('is-busy'), true);
         });
 
         // --- Two-step progress UI: Step 1 (only when Truncate is checked) truncates the
@@ -1613,7 +1642,13 @@ if ($res && ($row = $res->fetch_assoc())) {
                 ? '<div class="dbs-note is-err" style="margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> Indexes were not compared - upload the latest <code>includes/api/db_export_schema.php</code> to live.</div>'
                 : '';
             const quick = idxHint + '<div class="dbs-quick">' + (ok ? '' :
-                '<span>Quick select:</span>' +
+SQL query: Copy
+
+-- Run on LIVE database
+ALTER TABLE `zk_attendance` ADD UNIQUE KEY `uniq_emp_punch` (`emp_id`, `punch_datetime`);
+
+MySQL said: Documentation
+#1062 - Duplicate entry '3294-2026-09-09 09:47:06' for key 'uniq_emp_punch'                '<span>Quick select:</span>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="local"><i class="fa-solid fa-laptop-code"></i> Make Local match Live</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="live"><i class="fa-solid fa-cloud"></i> Make Live match Local</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="none"><i class="fa-regular fa-square"></i> Clear</button>') +

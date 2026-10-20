@@ -303,19 +303,36 @@ if (!function_exists('dbss_ident')) {
         return $results;
     }
 
-    // Preview text for add_index (no DB access needed beyond the plain statement)
+    // SQL shown by "Generate SQL" for add_index. A UNIQUE key is given as the full copy-swap
+    // script (works with or without duplicates), so it can be copied into phpMyAdmin as-is -
+    // a bare ALTER ... ADD UNIQUE fails with #1062 when the table already holds duplicates.
     function dbss_add_index_preview(array $op): array
     {
         [$sql, $err] = dbss_build_sql($op);
-        if ($err) {
-            return [null, $err];
+        if ($err || empty($op['index']['unique'])) {
+            return [$sql, $err];
         }
-        if (empty($op['index']['unique'])) {
-            return [$sql, null];
-        }
-        return [$sql . "
--- if duplicates exist: rebuilt by copy-swap (CREATE ... LIKE, INSERT IGNORE copy keeping the earliest row per key,
---   RENAME swap, catch-up of new rows). The original table is kept as `" . $op['table'] . "__bak_<timestamp>`.", null];
+        [$def] = dbss_index_def((array) $op['index']);
+        $table = (string) $op['table'];
+        $t = dbss_ident($table);
+        $n = dbss_ident(substr($table, 0, 64 - 7) . '__dedup');
+        $suffix = '__bak_' . date('YmdHis');
+        $b = dbss_ident(substr($table, 0, 64 - strlen($suffix)) . $suffix);
+        $script = [
+            "-- Unique key on `$table`: removes duplicate rows (keeps the earliest row per key).",
+            "-- Run all statements together in ONE session. The original table is kept as $b.",
+            "DROP TABLE IF EXISTS $n;",
+            "CREATE TABLE $n LIKE $t;",
+            "ALTER TABLE $n ADD $def;",
+            "SET @dbss_max_id := (SELECT MAX(`id`) FROM $t);",
+            "INSERT IGNORE INTO $n SELECT * FROM $t WHERE `id` <= @dbss_max_id ORDER BY `id`;",
+            "RENAME TABLE $t TO $b, $n TO $t;",
+            "INSERT IGNORE INTO $t SELECT * FROM $b WHERE `id` > @dbss_max_id ORDER BY `id`;",
+            "SELECT COUNT(*) AS rows_after FROM $t;",
+            "-- Check the app, then free the space: DROP TABLE $b;",
+        ];
+        return [implode("
+", $script), null];
     }
 
     function dbss_table_exists(mysqli $db, string $table): bool
