@@ -819,6 +819,7 @@ $newinvgr = "GR" . ($empid ?? '') . date('ymdis');
 $newquonr = "QUO" . ($empid ?? '') . date('ymdis');
 ?>
 <link rel="stylesheet" href="assets/css/sidebar_v2.css?v=<?= @filemtime(__DIR__ . '/../assets/css/sidebar_v2.css') ?>">
+<script>window.SBV2_USER = <?= json_encode((string)($empid ?? '')) ?>; // per-user key for the remembered expanded/collapsed menu</script>
 <script src="assets/js/sidebar_v2.js?v=<?= @filemtime(__DIR__ . '/../assets/js/sidebar_v2.js') ?>"></script>
 <?php $appDarkTheme = function_exists('app_dark_theme_enabled') ? app_dark_theme_enabled($conDB) : get_setting($conDB, 'app_theme') === 'dark'; // per-user Screen Settings theme (theme_dark.php, via session_check.php), else global App theme ?>
 <?php if ($appDarkTheme && !defined('APP_DARK_THEME_BUFFERED')) { // normally injected into <head> by theme_dark.php ?>

@@ -10,7 +10,14 @@
     // sbv2-rail below, so drop that class whenever something adds it.
     function stripEnlarged() { if (body.classList.contains('enlarged')) body.classList.remove('enlarged'); }
     stripEnlarged();
-    if (window.matchMedia("(min-width: 992px)").matches) body.classList.add("sbv2-rail"); // no wide flash before init
+
+    // Desktop expanded/collapsed choice is remembered per user (key includes the emp_id set by
+    // includes/main_menu.php), so each person who signs in on this browser keeps their own.
+    var PREF_KEY = 'sbv2-expanded:' + (window.SBV2_USER || 'guest');
+    function prefExpanded() { try { return localStorage.getItem(PREF_KEY) === '1'; } catch (e) { return false; } }
+    function savePref(on) { try { localStorage.setItem(PREF_KEY, on ? '1' : '0'); } catch (e) { /* storage blocked */ } }
+
+    if (window.matchMedia("(min-width: 992px)").matches && !prefExpanded()) body.classList.add("sbv2-rail"); // no wide flash before init
     new MutationObserver(stripEnlarged).observe(body, { attributes: true, attributeFilter: ['class'] });
 
     var mq = window.matchMedia("(min-width: 992px)");
@@ -451,7 +458,7 @@
         var current = markCurrent();
         buildTabbar();
         buildSheet();
-        setRail(true);
+        setRail(!prefExpanded());
         if (current) {
             // make sure the current item is visible in the scroll area
             setTimeout(function () { try { current.scrollIntoView({ block: 'nearest' }); } catch (e) { /* old browser */ } }, 60);
@@ -468,7 +475,8 @@
             e.preventDefault();
             e.stopPropagation();
             // mobile: the hamburger opens the full menu sheet (old drawer only if the sheet failed to build)
-            if (isDesktop()) setPeek(!isPeek());
+            // desktop: hamburger switches between icon rail and the full (pinned) menu, and remembers it
+            if (isDesktop()) { var expand = isRail(); closeAllFly(); setRail(!expand); savePref(expand); }
             else if (sheet) { if (body.classList.contains('sbv2-sheet-open')) closeSheet(); else openSheet(null); }
             else setDrawer(!body.classList.contains('sbv2-drawer'));
             return;
@@ -504,7 +512,7 @@
     });
 
     var onChange = function () {
-        if (isDesktop()) { setDrawer(false); closeSheet(); setRail(true); }
+        if (isDesktop()) { setDrawer(false); closeSheet(); setRail(!prefExpanded()); }
         else { body.classList.remove('sbv2-rail'); }
     };
     if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
