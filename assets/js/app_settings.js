@@ -1987,39 +1987,16 @@ function __(key, def) {
                 const WEEKDAY_ABBR = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
                 const todayStr = new Date().toISOString().slice(0, 10);
                 const pill = (tone, text) => `<span class="sr-pill tone-${tone}"><span class="sr-dot"></span>${escapeHtml(text)}</span>`;
-                let rowsHtml = '';
+                let cardsHtml = '';
+                const toMin = v => {
+                    const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || ''));
+                    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+                };
+                const fmtHours = n => String(Math.round(n * 10) / 10);
+                const CHIP_LIMIT = 6;
 
                 timetables.forEach(t => {
                     const isTemporary = Number(t.is_temporary) === 1;
-                    let typeHtml;
-                    let assignedTo;
-                    if (isTemporary) {
-                        const hasRange = !!(t.start_date && t.end_date);
-                        const inRange = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
-                        const rangePill = !hasRange
-                            ? pill('green', __('permanent', 'Permanent'))
-                            : pill(inRange ? 'green' : 'slate', inRange ? __('active', 'Active') : __('expired', 'Expired'));
-                        typeHtml = `<div class="as-pill-stack">${pill('indigo', __('employee_wise', 'Employee-wise'))}${rangePill}</div>`;
-                        const empNames = (t.employees || []).map(e => escapeHtml(e.name)).join(', ') || `<span class="ac-muted">${__('none', 'None')}</span>`;
-                        assignedTo = `<div class="as-assigned">${empNames}</div>` + (hasRange ? `<div class="sr-cell-sub sr-mono">${escapeHtml(t.start_date)} &rarr; ${escapeHtml(t.end_date)}</div>` : '');
-                    } else {
-                        typeHtml = pill('sky', __('company', 'Company'));
-                        const companyList = t.company_list || [];
-                        assignedTo = companyList.length
-                            ? `<div class="as-chip-wrap">${companyList.map(c => `<span class="sr-chip" title="${escapeHtml(c.comp_name)}"><i class="mdi mdi-office"></i> ${escapeHtml(c.comp_name)}</span>`).join('')}</div>`
-                            : `<span class="ac-muted">${__('none', 'None')}</span>`;
-                    }
-
-                    const days = t.days || {};
-                    const scheduleHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
-                        const d = days[w] || days[String(w)];
-                        if (!d || Number(d.is_off) === 1) {
-                            return `<span class="tt-day is-off" title="${__('day_off', 'Day off')}">${WEEKDAY_ABBR[w]}</span>`;
-                        }
-                        const tip = `${d.check_in_start} - ${d.check_in_end} / ${d.check_out_start} - ${d.check_out_end} (${d.standard_hours}h)`;
-                        return `<span class="tt-day" title="${escapeHtml(tip)}"><b>${WEEKDAY_ABBR[w]}</b> ${escapeHtml(d.check_in)}-${escapeHtml(d.check_out)}</span>`;
-                    }).join('');
-
                     const isActive = Number(t.is_active) === 1;
                     // Default (id 1) is always active and locked - every other timetable
                     // is a draft (built with its days/companies/employees) until
@@ -2028,49 +2005,103 @@ function __(key, def) {
                     // active timetables at once (see toggle_timetable_active()).
                     const isDefault = Number(t.id) === 1;
                     const name = escapeHtml(t.name);
-                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon btn-toggle-timetable-active ${isActive ? '' : 'is-activate'}" data-id="${escapeHtml(t.id)}" data-name="${name}" data-active="${isActive ? 0 : 1}" title="${isActive ? __('deactivate', 'Deactivate') : __('activate', 'Activate')}">
-                            <i class="mdi ${isActive ? 'mdi-toggle-switch-off' : 'mdi-toggle-switch'}"></i>
+
+                    // Type / validity / status pills
+                    const pills = [];
+                    let rangeHtml = '';
+                    if (isTemporary) {
+                        pills.push(pill('indigo', __('employee_wise', 'Employee-wise')));
+                        const hasRange = !!(t.start_date && t.end_date);
+                        const inRange = hasRange && todayStr >= t.start_date && todayStr <= t.end_date;
+                        if (hasRange) {
+                            pills.push(pill(inRange ? 'green' : 'slate', inRange ? __('in_range', 'In range') : __('expired', 'Expired')));
+                            rangeHtml = `<span class="ttc-range"><i class="fa-solid fa-calendar-days"></i> <span class="sr-mono">${escapeHtml(t.start_date)} &rarr; ${escapeHtml(t.end_date)}</span></span>`;
+                        } else {
+                            pills.push(pill('sky', __('permanent', 'Permanent')));
+                        }
+                    } else {
+                        pills.push(pill('sky', __('company', 'Company')));
+                    }
+                    pills.push(pill(isActive ? 'green' : 'slate', isActive ? __('active', 'Active') : __('inactive', 'Inactive')));
+
+                    // Week strip + totals
+                    const days = t.days || {};
+                    let workDays = 0;
+                    let weekHours = 0;
+                    const weekHtml = [1, 2, 3, 4, 5, 6, 7].map(w => {
+                        const d = days[w] || days[String(w)];
+                        if (!d || Number(d.is_off) === 1) {
+                            return `<div class="ttc-day is-off" title="${__('day_off', 'Day off')}"><b>${WEEKDAY_ABBR[w]}</b><span class="ttc-off">${__('off', 'Off')}</span></div>`;
+                        }
+                        workDays++;
+                        const inM = toMin(d.check_in);
+                        const outM = toMin(d.check_out);
+                        let hrs = parseFloat(d.standard_hours);
+                        if (inM !== null && outM !== null) hrs = ((outM - inM + 1440) % 1440) / 60;
+                        if (!isNaN(hrs)) weekHours += hrs;
+                        const tip = `${__('check_in', 'Check-In')}: ${d.check_in_start} - ${d.check_in_end} | ${__('check_out', 'Check-Out')}: ${d.check_out_start} - ${d.check_out_end}`;
+                        return `<div class="ttc-day" title="${escapeHtml(tip)}">
+                                    <b>${WEEKDAY_ABBR[w]}</b>
+                                    <span class="ttc-in">${escapeHtml(d.check_in)}</span>
+                                    <span class="ttc-out">${escapeHtml(d.check_out)}</span>
+                                    ${isNaN(hrs) ? '' : `<span class="ttc-hrs">${fmtHours(hrs)}h</span>`}
+                                </div>`;
+                    }).join('');
+
+                    // Assigned companies / employees (first few, rest behind "+N")
+                    const assignedItems = isTemporary
+                        ? (t.employees || []).map(e => `<span class="sr-chip" title="${escapeHtml(e.emp_id || '')}"><i class="fa-solid fa-user"></i> ${escapeHtml(e.name)}</span>`)
+                        : (t.company_list || []).map(c => `<span class="sr-chip" title="${escapeHtml(c.comp_name)}"><i class="fa-solid fa-building"></i> ${escapeHtml(c.comp_name)}</span>`);
+                    const extra = assignedItems.length - CHIP_LIMIT;
+                    const assignedHtml = assignedItems.length
+                        ? `<div class="ttc-chips">${assignedItems.slice(0, CHIP_LIMIT).join('')}${extra > 0
+                            ? `<span class="ttc-more-wrap" hidden>${assignedItems.slice(CHIP_LIMIT).join('')}</span><button type="button" class="ttc-more" data-more="+${extra}" data-less="${__('show_less', 'Show less')}">+${extra}</button>`
+                            : ''}</div>`
+                        : `<span class="ac-muted">${__('none', 'None')}</span>`;
+
+                    const toggleBtnHtml = isDefault ? '' : `<button type="button" class="sr-btn sr-btn-sm ${isActive ? 'sr-btn-ghost' : 'sr-btn-success'} btn-toggle-timetable-active" data-id="${escapeHtml(t.id)}" data-name="${name}" data-active="${isActive ? 0 : 1}">
+                            <i class="fa-solid ${isActive ? 'fa-toggle-off' : 'fa-toggle-on'}"></i> ${isActive ? __('deactivate', 'Deactivate') : __('activate', 'Activate')}
                         </button>`;
-                    rowsHtml += `
-                        <tr${isActive ? '' : ' class="is-inactive"'}>
-                            <td>
-                                <div class="org-name">
-                                    <span class="ac-ico"><i class="mdi mdi-calendar-clock"></i></span>
-                                    <div class="org-name-text">
-                                        <span class="sr-cell-title">${name}</span>
-                                        ${isDefault ? `<span class="sr-cell-sub">${__('default', 'Default')}</span>` : ''}
-                                    </div>
+
+                    cardsHtml += `
+                        <article class="ttc${isActive ? '' : ' is-inactive'}${isDefault ? ' is-default' : ''}">
+                            <header class="ttc-head">
+                                <span class="ttc-ico"><i class="fa-solid ${isTemporary ? 'fa-user-clock' : 'fa-calendar-week'}"></i></span>
+                                <div class="ttc-title">
+                                    <div class="ttc-name">${name}${isDefault ? ` <span class="ttc-lock"><i class="fa-solid fa-lock"></i> ${__('default', 'Default')}</span>` : ''}</div>
+                                    <div class="ttc-pills">${pills.join('')}${rangeHtml}</div>
                                 </div>
-                            </td>
-                            <td>${typeHtml}</td>
-                            <td>${pill(isActive ? 'green' : 'slate', isActive ? __('active', 'Active') : __('inactive', 'Inactive'))}</td>
-                            <td><div class="tt-week">${scheduleHtml}</div></td>
-                            <td>${assignedTo}</td>
-                            <td class="aca-actions">
-                                ${toggleBtnHtml}
-                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon btn-edit-timetable" data-id="${escapeHtml(t.id)}" title="${__('edit')}"><i class="mdi mdi-pencil"></i></button>
-                                ${isDefault ? '' : `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove btn-delete-timetable" data-id="${escapeHtml(t.id)}" data-name="${name}" title="${__('delete')}"><i class="mdi mdi-delete"></i></button>`}
-                            </td>
-                        </tr>
+                                <div class="ttc-actions">
+                                    ${toggleBtnHtml}
+                                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon btn-edit-timetable" data-id="${escapeHtml(t.id)}" title="${__('edit')}"><i class="fa-solid fa-pen"></i></button>
+                                    ${isDefault ? '' : `<button type="button" class="sr-btn sr-btn-ghost sr-btn-sm sr-btn-icon ac-remove btn-delete-timetable" data-id="${escapeHtml(t.id)}" data-name="${name}" title="${__('delete')}"><i class="fa-solid fa-trash"></i></button>`}
+                                </div>
+                            </header>
+                            <div class="ttc-week">${weekHtml}</div>
+                            <footer class="ttc-foot">
+                                <div class="ttc-stats">
+                                    <span><b>${workDays}</b> ${__('working_days', 'working days')}</span>
+                                    <span><b>${fmtHours(weekHours)}</b> ${__('hours_per_week', 'hrs / week')}</span>
+                                </div>
+                                <div class="ttc-assigned">
+                                    <span class="ttc-label">${isTemporary ? __('assigned_employees', 'Assigned Employees') : __('assigned_companies', 'Assigned Companies')} <b>${assignedItems.length}</b></span>
+                                    ${assignedHtml}
+                                </div>
+                            </footer>
+                        </article>
                     `;
                 });
 
-                container.innerHTML = `
-                    <div class="sr-table-wrap aca-table-wrap">
-                        <table class="sr-table aca-table org-table tt-table">
-                            <thead>
-                                <tr>
-                                    <th>${__('name')}</th>
-                                    <th>${__('type', 'Type')}</th>
-                                    <th>${__('status', 'Status')}</th>
-                                    <th>${__('weekly_schedule', 'Weekly Schedule')}</th>
-                                    <th>${__('assigned_to', 'Assigned To')}</th>
-                                    <th class="aca-actions">${__('actions')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>${rowsHtml}</tbody>
-                        </table>
-                    </div>`;
+                container.innerHTML = `<div class="ttc-grid">${cardsHtml}</div>`;
+
+                container.querySelectorAll('.ttc-more').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const wrap = btn.previousElementSibling;
+                        const open = wrap.hidden;
+                        wrap.hidden = !open;
+                        btn.textContent = open ? btn.dataset.less : btn.dataset.more;
+                    });
+                });
 
                 container.querySelectorAll('.btn-edit-timetable').forEach(btn => {
                     btn.addEventListener('click', () => showTimetableModal(timetables.find(t => Number(t.id) === Number(btn.dataset.id))));
@@ -2130,30 +2161,32 @@ function __(key, def) {
             // stacked card per day - keeps the modal wide/short instead of tall.
             // Day Off just greys/disables that row's time fields in place rather
             // than hiding/reflowing them, so every row keeps the same column shape.
-            const timeCell = (cls, d, disabled) => `
-                <td>
-                    <div class="input-group input-group-sm clockpicker" style="min-width: 92px; ${disabled ? 'opacity: 0.5; pointer-events: none;' : ''}">
-                        <input type="text" class="form-control ${cls} tt-time-input" autocomplete="off" ${disabled ? 'disabled' : ''} value="${d[cls.replace('tt-', '')] || ''}">
-                        <span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
-                    </div>
+            const timeCell = (cls, d, disabled, extra = '') => `
+                <td class="${extra}">
+                    <span class="clockpicker tt-tp" style="${disabled ? 'opacity: 0.45; pointer-events: none;' : ''}">
+                        <input type="text" class="${cls} tt-time-input" autocomplete="off" maxlength="5" ${disabled ? 'disabled' : ''} value="${d[cls.replace('tt-', '')] || ''}">
+                    </span>
                 </td>`;
             let dayRowsHtml = '';
             [1, 2, 3, 4, 5, 6, 7].forEach(iso => {
                 const d = (t.days && (t.days[iso] || t.days[String(iso)])) || defaultDayFor(iso);
                 const isOff = Number(d.is_off) === 1;
                 dayRowsHtml += `
-                    <tr class="tt-day-row" data-weekday="${iso}">
-                        <td class="align-middle"><strong>${DAY_OFF_LABELS[iso]}</strong></td>
-                        <td class="align-middle text-center">
-                            <input type="checkbox" class="tt-day-off" id="tt-day-off-${iso}" style="width: 18px; height: 18px; margin: 0;" ${isOff ? 'checked' : ''}>
+                    <tr class="tt-day-row ${isOff ? 'is-off' : ''}" data-weekday="${iso}">
+                        <th scope="row">${DAY_OFF_LABELS[iso]}</th>
+                        <td class="tt-c-off">
+                            <label class="tt-off-toggle" title="${__('day_off', 'Day Off')}">
+                                <input type="checkbox" class="tt-day-off" id="tt-day-off-${iso}" ${isOff ? 'checked' : ''}>
+                                <span>${__('off', 'Off')}</span>
+                            </label>
                         </td>
-                        ${timeCell('tt-check_in_start', d, isOff)}
-                        ${timeCell('tt-check_in', d, isOff)}
-                        ${timeCell('tt-check_in_end', d, isOff)}
-                        ${timeCell('tt-check_out_start', d, isOff)}
-                        ${timeCell('tt-check_out', d, isOff)}
-                        ${timeCell('tt-check_out_end', d, isOff)}
-                        <td><input type="text" class="form-control form-control-sm tt-standard_hours" style="min-width: 60px;" readonly value="${d.standard_hours}"></td>
+                        ${timeCell('tt-check_in_start', d, isOff, 'tt-g-in')}
+                        ${timeCell('tt-check_in', d, isOff, 'tt-g-in tt-main')}
+                        ${timeCell('tt-check_in_end', d, isOff, 'tt-g-in')}
+                        ${timeCell('tt-check_out_start', d, isOff, 'tt-g-out')}
+                        ${timeCell('tt-check_out', d, isOff, 'tt-g-out tt-main')}
+                        ${timeCell('tt-check_out_end', d, isOff, 'tt-g-out')}
+                        <td class="tt-c-hrs"><input type="text" class="tt-standard_hours" readonly tabindex="-1" value="${d.standard_hours}"></td>
                     </tr>
                 `;
             });
@@ -2169,81 +2202,97 @@ function __(key, def) {
                 const currentlyOn = timetableNameById[c.timetable_id] || 'Default';
                 const lockedElsewhere = compTimetableId !== 1 && compTimetableId !== tId && timetableActiveById[compTimetableId];
                 companyCheckboxesHtml += `
-                    <div class="custom-control custom-checkbox">
-                        <input type="checkbox" class="custom-control-input tt-company" id="tt-company-${c.comp_id}" value="${c.comp_id}"
+                    <label class="tt-comp ${lockedElsewhere ? 'is-locked' : ''}" ${lockedElsewhere ? `title="${__('remove_from_other_timetable_first', 'Assigned elsewhere - remove it there first')}"` : ''}>
+                        <input type="checkbox" class="tt-company" id="tt-company-${c.comp_id}" value="${c.comp_id}"
                             ${assignedCompanyIds.has(Number(c.comp_id)) ? 'checked' : ''} ${lockedElsewhere ? 'disabled' : ''}>
-                        <label class="custom-control-label" for="tt-company-${c.comp_id}">${c.comp_name}
-                            <small class="text-muted">(${__('currently', 'currently')}: ${currentlyOn})</small>
-                            ${lockedElsewhere ? `<i class="mdi mdi-lock text-warning" title="${__('remove_from_other_timetable_first', 'Assigned elsewhere - remove it there first')}"></i>` : ''}
-                        </label>
-                    </div>
+                        <span class="tt-comp-body">
+                            <span class="tt-comp-name">${c.comp_name}</span>
+                            <span class="tt-comp-sub">${lockedElsewhere ? '<i class="fa-solid fa-lock"></i> ' : ''}${currentlyOn}</span>
+                        </span>
+                    </label>
                 `;
             });
 
             const result = await Swal.fire({
                 title: isEdit ? '' + __('edit_timetable', 'Edit Timetable') + '' : '' + __('add_timetable', 'Add Timetable') + '',
-                width: '90%',
+                width: 780,
+                customClass: { popup: 'sr-addline-popup sr-page tt-popup' },
                 html: `
-                    <div class="form-group text-left">
-                        <label>${__('name')} *</label>
-                        <input type="text" id="tt-name" class="form-control" value="${t.name}" ${tId === 1 ? 'readonly' : ''}>
-                    </div>
-                    <ul class="nav nav-tabs mb-3">
-                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link active tt-tab-link" data-target="tt-tab-assignment">${__('assignment', 'Assignment')}</a></li>
-                        <li class="nav-item"><a href="javascript:void(0)" class="nav-link tt-tab-link" data-target="tt-tab-schedule">${__('weekly_schedule', 'Weekly Schedule')}</a></li>
-                    </ul>
-                    <div id="tt-tab-assignment" class="tt-tab-pane">
-                        ${tId !== 1 ? `
-                        <div class="form-group text-left">
-                            <div class="custom-control custom-radio custom-control-inline">
-                                <input type="radio" name="tt-assign-type" id="tt-assign-company" class="custom-control-input" value="company" ${!isTemporary ? 'checked' : ''}>
-                                <label class="custom-control-label" for="tt-assign-company">${__('company_wise', 'Company-wise')}</label>
+                    <div class="sr-form tt-form">
+                        <div class="tt-top">
+                            <div class="tt-name-col">
+                                <label for="tt-name">${__('name')} *</label>
+                                <input type="text" id="tt-name" class="form-control" value="${t.name}" ${tId === 1 ? 'readonly' : ''}>
                             </div>
-                            <div class="custom-control custom-radio custom-control-inline">
-                                <input type="radio" name="tt-assign-type" id="tt-assign-employee" class="custom-control-input" value="employee" ${isTemporary ? 'checked' : ''}>
-                                <label class="custom-control-label" for="tt-assign-employee">${__('employee_wise', 'Employee-wise')}</label>
-                            </div>
-                            <small class="form-text text-muted">${__('employee_wise_hint', "Employee-wise overrides those specific employees' company timetable directly - permanently, or optionally only for a date range.")}</small>
-                        </div>
-                        ` : ''}
-                        <div id="tt-company-section" class="form-group text-left">
-                            <label>${__('assigned_companies', 'Assigned Companies')}</label>
-                            <div style="max-height: 260px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 8px;">${companyCheckboxesHtml}</div>
-                        </div>
-                        <div id="tt-employee-section" class="form-group text-left" style="display:none;">
-                            <label>${__('assigned_employees', 'Assigned Employees')} *</label>
-                            <select id="tt-employees" class="form-control" multiple style="width: 100%;"></select>
-                            <div class="custom-control custom-checkbox mt-2">
-                                <input type="checkbox" class="custom-control-input" id="tt-use-daterange" ${(t.start_date && t.end_date) ? 'checked' : ''}>
-                                <label class="custom-control-label" for="tt-use-daterange">${__('limit_to_date_range', 'Limit to a date range (leave unchecked to always apply)')}</label>
-                            </div>
-                            <div id="tt-daterange-wrap" class="mt-2" style="${(t.start_date && t.end_date) ? '' : 'display:none;'}">
-                                <input type="text" id="tt-daterange" class="form-control" readonly placeholder="${__('select_date_range', 'Select date range')}" value="${t.start_date && t.end_date ? `${t.start_date} - ${t.end_date}` : ''}">
-                                <small class="form-text text-muted" id="tt-daterange-duration"></small>
+                            <div class="tt-tabs" role="tablist">
+                                <button type="button" class="tt-tab-link active" data-target="tt-tab-assignment"><i class="fa-solid fa-building"></i> ${__('assignment', 'Assignment')}</button>
+                                <button type="button" class="tt-tab-link" data-target="tt-tab-schedule"><i class="fa-solid fa-clock"></i> ${__('weekly_schedule', 'Weekly Schedule')}</button>
                             </div>
                         </div>
-                    </div>
-                    <div id="tt-tab-schedule" class="tt-tab-pane" style="display:none;">
-                        <div class="form-group text-left">
-                            <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 4px;">
-                                <table class="table table-sm table-bordered mb-0 align-middle">
-                                    <thead class="bg-light">
-                                        <tr>
-                                            <th>${__('day', 'Day')}</th>
-                                            <th class="text-center">${__('day_off', 'Day Off')}</th>
-                                            <th>${__('check_in_start', 'Check-In Earliest')}</th>
-                                            <th>${__('check_in', 'Check-In')}</th>
-                                            <th>${__('check_in_end', 'Late After')}</th>
-                                            <th>${__('check_out_start', 'Early Before')}</th>
-                                            <th>${__('check_out', 'Check-Out')}</th>
-                                            <th>${__('check_out_end', 'Check-Out Latest')}</th>
-                                            <th>${__('hours', 'Hours')}</th>
+
+                        <div id="tt-tab-assignment" class="tt-tab-pane">
+                            ${tId !== 1 ? `
+                            <div class="tt-assign-type">
+                                <div class="sr-seg">
+                                    <label class="sr-seg-opt"><input type="radio" name="tt-assign-type" id="tt-assign-company" value="company" ${!isTemporary ? 'checked' : ''}><span><i class="fa-solid fa-building"></i> ${__('company_wise', 'Company-wise')}</span></label>
+                                    <label class="sr-seg-opt"><input type="radio" name="tt-assign-type" id="tt-assign-employee" value="employee" ${isTemporary ? 'checked' : ''}><span><i class="fa-solid fa-user"></i> ${__('employee_wise', 'Employee-wise')}</span></label>
+                                </div>
+                                <span class="sr-fhint">${__('employee_wise_hint', "Employee-wise overrides those specific employees' company timetable directly - permanently, or optionally only for a date range.")}</span>
+                            </div>
+                            ` : ''}
+                            <div id="tt-company-section">
+                                <div class="tt-sec-head">
+                                    <span>${__('assigned_companies', 'Assigned Companies')} <b class="tt-comp-count"></b></span>
+                                    <input type="search" class="tt-comp-search" placeholder="${__('search', 'Search')}...">
+                                </div>
+                                <div class="tt-comp-grid">${companyCheckboxesHtml || `<div class="sr-fhint">${__('no_data', 'No data')}</div>`}</div>
+                            </div>
+                            <div id="tt-employee-section" style="display:none;">
+                                <div class="tt-sec-head">
+                                    <span>${__('assigned_employees', 'Assigned Employees')} * <b class="tt-emp-count">0</b></span>
+                                    <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm tt-emp-clear"><i class="fa-solid fa-xmark"></i> ${__('clear_all', 'Clear all')}</button>
+                                </div>
+                                <div class="tt-emp-box">
+                                    <select id="tt-employees" multiple style="width: 100%;"></select>
+                                </div>
+                                <label class="sr-check tt-range-check">
+                                    <input type="checkbox" id="tt-use-daterange" ${(t.start_date && t.end_date) ? 'checked' : ''}>
+                                    ${__('limit_to_date_range', 'Limit to a date range (leave unchecked to always apply)')}
+                                </label>
+                                <div id="tt-daterange-wrap" style="${(t.start_date && t.end_date) ? '' : 'display:none;'}">
+                                    <input type="text" id="tt-daterange" class="form-control" readonly placeholder="${__('select_date_range', 'Select date range')}" value="${t.start_date && t.end_date ? `${t.start_date} - ${t.end_date}` : ''}">
+                                    <span class="sr-fhint" id="tt-daterange-duration"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tt-tab-schedule" class="tt-tab-pane" style="display:none;">
+                            <div class="tt-sched-wrap">
+                                <table class="tt-sched">
+                                    <thead>
+                                        <tr class="tt-grp">
+                                            <th rowspan="2" class="tt-c-day">${__('day', 'Day')}</th>
+                                            <th rowspan="2" class="tt-c-off"></th>
+                                            <th colspan="3" class="tt-g-in"><i class="fa-solid fa-right-to-bracket"></i> ${__('check_in', 'Check-In')}</th>
+                                            <th colspan="3" class="tt-g-out"><i class="fa-solid fa-right-from-bracket"></i> ${__('check_out', 'Check-Out')}</th>
+                                            <th rowspan="2" class="tt-c-hrs">${__('hours', 'Hours')}</th>
+                                        </tr>
+                                        <tr class="tt-sub">
+                                            <th class="tt-g-in" title="${__('check_in_start', 'Check-In Earliest')}">${__('tt_from', 'From')}</th>
+                                            <th class="tt-g-in tt-main">${__('tt_on_time', 'On time')}</th>
+                                            <th class="tt-g-in" title="${__('check_in_end', 'Late After')}">${__('check_in_end', 'Late After')}</th>
+                                            <th class="tt-g-out" title="${__('check_out_start', 'Early Before')}">${__('check_out_start', 'Early Before')}</th>
+                                            <th class="tt-g-out tt-main">${__('tt_on_time', 'On time')}</th>
+                                            <th class="tt-g-out" title="${__('check_out_end', 'Check-Out Latest')}">${__('tt_until', 'Until')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>${dayRowsHtml}</tbody>
                                 </table>
                             </div>
-                            <small class="form-text text-muted">${__('standard_hours_auto_hint', 'Hours column auto-calculates from Check-In / Check-Out.')}</small>
+                            <div class="tt-sched-foot">
+                                <span class="sr-fhint">${__('standard_hours_auto_hint', 'Hours column auto-calculates from Check-In / Check-Out.')}</span>
+                                <button type="button" class="sr-btn sr-btn-ghost sr-btn-sm tt-copy-first"><i class="fa-solid fa-clone"></i> ${__('tt_copy_first_day', 'Copy first working day to all')}</button>
+                            </div>
                         </div>
                     </div>
                 `,
@@ -2259,10 +2308,23 @@ function __(key, def) {
                     const $employeeSection = $('#tt-employee-section');
                     const $empSelect = $('#tt-employees');
 
+                    const escTt = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+                    // "1234 - NAME" -> id badge + name (results list and chips)
+                    const empTpl = (item, isChip) => {
+                        if (!item.id) return item.text;
+                        const m = String(item.text || '').match(/^\s*([^-\s]+)\s*-\s*(.*)$/);
+                        const id = m ? m[1] : item.id;
+                        const name = m ? m[2] : item.text;
+                        const initials = String(name).trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+                        return $(isChip
+                            ? `<span class="tt-chip"><b>${escTt(id)}</b>${escTt(name)}</span>`
+                            : `<span class="tt-emp-opt"><span class="tt-emp-av">${escTt(initials)}</span><span class="tt-emp-nm">${escTt(name)}</span><span class="tt-emp-id">${escTt(id)}</span></span>`);
+                    };
                     $empSelect.select2({
-                        theme: 'bootstrap4',
                         dropdownParent: $(Swal.getPopup()),
                         placeholder: '' + __('search_employees', 'Search employees...') + '',
+                        templateResult: item => empTpl(item, false),
+                        templateSelection: item => empTpl(item, true),
                         ajax: {
                             url: './includes/ajaxFile/timetableAjax.php',
                             type: 'POST',
@@ -2275,6 +2337,13 @@ function __(key, def) {
                     (t.employees || []).forEach(emp => {
                         $empSelect.append(new Option(`${emp.emp_id} - ${emp.name}`, emp.emp_id, true, true));
                     });
+                    const updateEmpCount = () => {
+                        const n = ($empSelect.val() || []).length;
+                        $(Swal.getPopup()).find('.tt-emp-count').text(n);
+                        $(Swal.getPopup()).find('.tt-emp-clear').toggle(n > 0);
+                    };
+                    $empSelect.on('change', updateEmpCount);
+                    $(Swal.getPopup()).on('click', '.tt-emp-clear', () => $empSelect.val(null).trigger('change'));
                     $empSelect.trigger('change');
 
                     if (window.AppDate && typeof moment !== 'undefined') {
@@ -2355,8 +2424,39 @@ function __(key, def) {
                     $popup.on('change', '.tt-day-off', function () {
                         const $row = $(this).closest('.tt-day-row');
                         const off = this.checked;
+                        $row.toggleClass('is-off', off);
                         $row.find('.tt-time-input').prop('disabled', off);
-                        $row.find('.clockpicker').css({ opacity: off ? 0.5 : 1, pointerEvents: off ? 'none' : 'auto' });
+                        $row.find('.clockpicker').css({ opacity: off ? 0.45 : 1, pointerEvents: off ? 'none' : 'auto' });
+                    });
+
+                    // Copy the first non-off day's times onto every other working day
+                    $popup.on('click', '.tt-copy-first', function () {
+                        const $rows = $popup.find('.tt-day-row');
+                        const $src = $rows.filter(function () { return !$(this).find('.tt-day-off').prop('checked'); }).first();
+                        if (!$src.length) return;
+                        const fields = ['tt-check_in_start', 'tt-check_in', 'tt-check_in_end', 'tt-check_out_start', 'tt-check_out', 'tt-check_out_end', 'tt-standard_hours'];
+                        $rows.not($src).each(function () {
+                            if ($(this).find('.tt-day-off').prop('checked')) return;
+                            fields.forEach(f => $(this).find('.' + f).val($src.find('.' + f).val()));
+                        });
+                    });
+
+                    // Company list: live count + filter
+                    const updateCompCount = () => {
+                        const total = $popup.find('.tt-company').length;
+                        $popup.find('.tt-comp-count').text(`${$popup.find('.tt-company:checked').length} / ${total}`);
+                    };
+                    $popup.on('change', '.tt-company', function () {
+                        $(this).closest('.tt-comp').toggleClass('is-checked', this.checked);
+                        updateCompCount();
+                    });
+                    $popup.find('.tt-company:checked').closest('.tt-comp').addClass('is-checked');
+                    updateCompCount();
+                    $popup.on('input', '.tt-comp-search', function () {
+                        const q = this.value.trim().toLowerCase();
+                        $popup.find('.tt-comp').each(function () {
+                            $(this).toggle(!q || $(this).find('.tt-comp-name').text().toLowerCase().includes(q));
+                        });
                     });
                 },
                 preConfirm: () => {
