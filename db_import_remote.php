@@ -33,7 +33,14 @@ if ($res && ($row = $res->fetch_assoc())) {
     <style>
         .dbi-max { max-width: 1440px; }
 
-        .dbi-activity { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: -4px 0 12px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; color: #3730a3; background: #eef2ff; border: 1px solid #c7d2fe; }
+        .dbi-act-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 12px; flex: 0 0 auto; line-height: 1.5; min-height: 19px; }
+        .dbi-act-line.is-stalled { color: #b45309; font-weight: 600; }
+        .dbi-act-line.is-idle, .dbi-act-line.is-queue { color: #64748b; }
+        .dbi-q { display: inline-flex; gap: 3px; vertical-align: middle; margin: 0 4px; }
+        .dbi-q-slot { width: 18px; height: 8px; border-radius: 3px; border: 1px solid #a5b4fc; background: transparent; }
+        .dbi-q-slot.is-full { background: #6366f1; border-color: #6366f1; }
+        html.app-dark .dbi-act-line.is-stalled { color: #fcd34d; }
+        .dbi-activity { display: flex; flex-direction: column; flex: 0 0 auto; gap: 4px; margin: -4px 0 12px; padding: 8px 12px; border-radius: 10px; font-size: 12.5px; color: #3730a3; background: #eef2ff; border: 1px solid #c7d2fe; }
         .dbi-activity i { margin-right: 4px; }
         .dbi-activity-age { font-size: 11.5px; color: #64748b; font-variant-numeric: tabular-nums; }
         .dbi-activity.is-stalled { color: #b45309; background: #fffbeb; border-color: #fcd34d; }
@@ -219,6 +226,7 @@ if ($res && ($row = $res->fetch_assoc())) {
         .dbs-col .dbs-seg { opacity: .45; transition: opacity .15s; }
         .dbs-col.is-picked { background: #eef2ff; border-color: #c7d2fe; }
         .dbs-col.is-picked .dbs-seg { opacity: 1; }
+        .dbs-idx-note { flex-basis: 100%; font-size: 11.5px; color: #b45309; }
         .dbs-types span { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
         /* sr-btn colours inside the Swal popup (outside .sr-page, so the tokens are not inherited) */
         .swal2-popup.dbi-popup { --sr-accent: #6366f1; --sr-accent-strong: #4f46e5; --sr-surface: #fff; --sr-border-strong: #d4d9e3; --sr-text-2: #334155; --sr-surface-2: #f8fafc; }
@@ -940,7 +948,8 @@ if ($res && ($row = $res->fetch_assoc())) {
         // minimum visible spinner time so a fast/small table doesn't just flash past -
         // the point of this step is to actually SEE it move table by table.
         const MIN_ROW_VISIBLE_MS = 350;
-        const IMPORT_PAGE_SIZE = 20000; // rows per live request
+        const IMPORT_PAGE_SIZE = 35000; // rows per live request
+        const MAX_QUEUED = 3; // downloaded batches kept ready for the writer
         const PAGE_TIMEOUT_MS = 16 * 60 * 1000; // server caps the live fetch at 15 min
         const RETRY_DELAYS_S = [5, 15, 30, 60, 120, 300];
 
@@ -980,10 +989,24 @@ if ($res && ($row = $res->fetch_assoc())) {
         // Posts one page; on a retryable failure waits (counting down in the row) and
         // re-reads the server checkpoint first - the live key may have been rotated by a
         // request whose response never arrived, and the cursor tells which page is next.
-        async function postPageWithRetry(payload, onWait, onAttempt) {
+        function getLatestKey() {
+            return $.ajax({ url: './includes/ajaxFile/ajaxDbImportRemote.php', type: 'POST', dataType: 'json', timeout: 20000, data: { action: 'get_checkpoint' } })
+                .then(res => (res && res.export_key) || '', () => '');
+        }
+
+        function newToken() {
+            return Date.now() + '-' + Math.random().toString(36).slice(2);
+        }
+
+        // One request with automatic retry (countdown shown via onWait).
+        //  fetch: same page is downloaded again. The newest key the server saved is used
+        //         when it differs (a lost response may have rotated it); keys live rejects
+        //         are remembered so an old saved key can't shadow the one the user pasted.
+        //  apply: the same spool file is sent again - upserts are idempotent and a file
+        //         that is already gone was committed by the earlier attempt.
+        async function postWithRetry(kind, payload, onWait, keys) {
             for (let attempt = 0; ; attempt++) {
                 let res;
-                if (onAttempt) onAttempt();
                 try {
                     res = await $.ajax({ url: './includes/ajaxFile/ajaxDbImportRemote.php', type: 'POST', dataType: 'json', timeout: PAGE_TIMEOUT_MS, data: payload });
                 } catch (xhr) {
@@ -991,20 +1014,13 @@ if ($res && ($row = $res->fetch_assoc())) {
                 }
                 if (res.status === 'success' || res.status === 'warning') return res;
 
-                // Live rejected the key: the only fix is a different key. Try the one in the
-                // saved checkpoint if it is newer (a lost response may have rotated it);
-                // otherwise stop right away - retrying the same dead key is pointless.
-                if (isKeyError(res)) {
-                    const cp = await getCheckpoint();
-                    if (cp && cp.table === payload['tables[]'] && cp.export_key && cp.export_key !== payload.export_key) {
-                        payload.export_key = cp.export_key;
-                        $exportKey.val(cp.export_key);
-                        if (cp.table_done) {
-                            return { status: 'success', paged: true, has_more: false, table_counts: { [cp.table]: cp.table_total || cp.imported }, _fromCheckpoint: cp };
-                        }
-                        payload.cursor = cp.cursor || '';
-                        payload.imported = cp.imported || 0;
-                        if (cp.table_total) payload.table_total = cp.table_total;
+                if (kind === 'fetch' && isKeyError(res)) {
+                    keys.rejected.add(payload.export_key);
+                    const latest = await getLatestKey();
+                    if (latest && !keys.all.includes(latest)) keys.all.unshift(latest);
+                    const next = keys.all.find(k => k && !keys.rejected.has(k));
+                    if (next) {
+                        payload.export_key = next;
                         continue;
                     }
                     res._keyRejected = true;
@@ -1019,20 +1035,12 @@ if ($res && ($row = $res->fetch_assoc())) {
                 }
                 onWait('retrying...', res.message);
 
-                const cp = await getCheckpoint();
-                if (cp && cp.table === payload['tables[]']) {
-                    if (cp.export_key) {
-                        payload.export_key = cp.export_key;
-                        $exportKey.val(cp.export_key);
+                if (kind === 'fetch') {
+                    const latest = await getLatestKey();
+                    if (latest && !keys.rejected.has(latest)) {
+                        if (!keys.all.includes(latest)) keys.all.unshift(latest);
+                        payload.export_key = latest;
                     }
-                    if (cp.table_done) {
-                        // The last page actually landed - only its response was lost
-                        return { status: 'success', paged: true, has_more: false, table_counts: { [cp.table]: cp.table_total || cp.imported }, _fromCheckpoint: cp };
-                    }
-                    payload.cursor = cp.cursor || '';
-                    payload.imported = cp.imported || 0;
-                    if (cp.table_total) payload.table_total = cp.table_total;
-                    res._fromCheckpoint = cp;
                 }
             }
         }
@@ -1043,57 +1051,63 @@ if ($res && ($row = $res->fetch_assoc())) {
             return b + ' B';
         }
 
-        // Polls the server's progress file every second while one page request is running:
-        // download size while live is sending, then rows committed statement by statement.
-        // "Last activity" makes a stall obvious instead of a frozen counter.
+        // Polls both server progress files every second: the downloader (bytes received)
+        // and the writer (rows committed). Each line shows its own "last activity", so a
+        // stall on either side is obvious.
         const STALL_SECONDS = 45;
-        function startPagePoll(payload, table, getImported, getTotal, stepLabel, ui, tables, states) {
-            let active = true, paused = false, busy = false;
-            const started = Date.now();
+        function startPipelinePoll(act, applied, totals, stepLabel, ui, tables, states, queue) {
+            let active = true, busy = false;
+            const ageOf = (p, token, since) => (p && p.token === token) ? (p.age || 0) : Math.round((Date.now() - since) / 1000);
+            const ageHtml = (age) => '<span class="dbi-activity-age">' + (age >= STALL_SECONDS ? '<i class="fa fa-exclamation-triangle"></i> no activity for ' + formatDuration(age * 1000) : 'last activity ' + formatDuration(age * 1000) + ' ago') + '</span>';
             const timer = setInterval(function() {
-                if (!active || paused || busy) return;
+                if (!active || busy) return;
                 busy = true;
                 $.ajax({ url: './includes/ajaxFile/ajaxDbImportRemote.php', type: 'POST', dataType: 'json', timeout: 8000, data: { action: 'get_progress' } })
                     .done(function(res) {
-                        if (!active || paused) return;
-                        const p = res && res.progress;
-                        const base = getImported();
-                        const total = getTotal();
-                        const of = total ? ' / ' + total.toLocaleString() : '';
-                        let rows = base, phaseText, age;
-                        if (!p || p.token !== payload.page_token) {
-                            age = Math.round((Date.now() - started) / 1000);
-                            phaseText = '<i class="fa fa-paper-plane"></i> Requesting next ' + IMPORT_PAGE_SIZE.toLocaleString() + ' rows from live';
-                        } else {
-                            age = p.age || 0;
-                            if (p.phase === 'download') {
-                                phaseText = '<i class="fa fa-cloud-download"></i> Downloading from live &middot; <b>' + fmtBytes(p.bytes || 0) + '</b> received';
-                            } else if (p.phase === 'received') {
-                                phaseText = '<i class="fa fa-check"></i> Downloaded <b>' + fmtBytes(p.bytes || 0) + '</b> &middot; starting to write rows';
-                            } else {
-                                rows = base + (p.applied || 0);
-                                phaseText = '<i class="fa fa-database"></i> Writing to local database &middot; <b>' + (p.applied || 0).toLocaleString() + '</b> of ' + IMPORT_PAGE_SIZE.toLocaleString() + ' rows in this batch written';
-                            }
+                        if (!active) return;
+                        const p = (res && res.progress) || {};
+                        let html = '', stalled = false;
+
+                        if (act.dl) {
+                            const d = act.dl, pd = p.dl && p.dl.token === d.token ? p.dl : null;
+                            const age = ageOf(p.dl, d.token, d.since);
+                            stalled = stalled || age >= STALL_SECONDS;
+                            html += '<div class="dbi-act-line' + (age >= STALL_SECONDS ? ' is-stalled' : '') + '"><span><i class="fa fa-cloud-download"></i> <b>Download</b> ' + escHtml(d.t) + ' &middot; ' +
+                                (pd && pd.bytes > 0 ? fmtBytes(pd.bytes) + ' received'
+                                    : 'live is preparing the next ' + IMPORT_PAGE_SIZE.toLocaleString() + ' rows (' + formatDuration(Date.now() - d.since) + ')') + '</span>' + ageHtml(age) + '</div>';
+                        } else if (act.dlWaiting) {
+                            html += '<div class="dbi-act-line is-idle"><span><i class="fa fa-pause"></i> <b>Download</b> paused - queue is full, waiting for the writer</span></div>';
                         }
-                        const stalled = age >= STALL_SECONDS;
-                        ui.activity = phaseText + '<span class="dbi-activity-age">' + (stalled ? '<i class="fa fa-exclamation-triangle"></i> no activity for ' : 'last activity ') + formatDuration(age * 1000) + (stalled ? '' : ' ago') + '</span>';
+                        html += '<div class="dbi-act-line is-queue"><span><i class="fa fa-inbox"></i> <b>Queue</b> ' +
+                            '<span class="dbi-q">' + Array.from({ length: MAX_QUEUED }, (_, k) => '<span class="dbi-q-slot' + (k < queue.length ? ' is-full' : '') + '"></span>').join('') + '</span> ' +
+                            queue.length + ' of ' + MAX_QUEUED + ' downloaded batch(es) waiting to be written</span></div>';
+                        if (act.ap) {
+                            const a = act.ap, pa = p.ap && p.ap.token === a.token ? p.ap : null;
+                            const age = ageOf(p.ap, a.token, a.since);
+                            stalled = stalled || age >= STALL_SECONDS;
+                            const done = pa ? (pa.applied || 0) : 0;
+                            html += '<div class="dbi-act-line' + (age >= STALL_SECONDS ? ' is-stalled' : '') + '"><span><i class="fa fa-database"></i> <b>Write</b> ' + escHtml(a.t) + ' &middot; ' +
+                                done.toLocaleString() + ' / ' + (a.pageRows || 0).toLocaleString() + ' rows of this batch</span>' + ageHtml(age) + '</div>';
+                            const rows = (applied[a.t] || 0) + done;
+                            const tot = totals[a.t];
+                            states[a.t] = { kind: 'running', text: rows.toLocaleString() + (tot ? ' / ' + tot.toLocaleString() : '') + ' rows', rows: rows };
+                        } else if (act.dl && !queue.length) {
+                            html += '<div class="dbi-act-line is-idle"><span><i class="fa fa-hourglass-half"></i> <b>Write</b> idle - waiting for the download (live is the slower side)</span></div>';
+                        }
+                        ui.activity = html;
                         ui.activityStalled = stalled;
-                        states[table] = { kind: 'running', text: rows.toLocaleString() + of + ' rows', rows: rows };
                         renderStep(stepLabel, ui, tables, states);
                     })
                     .always(() => { busy = false; });
             }, 1000);
-            return {
-                pause: () => { paused = true; },
-                resume: () => { paused = false; },
-                stop: () => { active = false; clearInterval(timer); }
-            };
+            return { stop: () => { active = false; clearInterval(timer); } };
         }
 
-        // resume = { index, cursor, imported, tableTotal } - continue a checkpointed batch
+        // Pipelined import: while batch N is written into the local database (apply_page),
+        // batch N+1 is already downloading from live (fetch_page). Downloads run one after
+        // another (each returns the next single-use key), writes run one after another in
+        // order; the two overlap. resume = { index, cursor, imported, tableTotal }.
         async function runImportStepPerTable(baseUrl, exportKey, tables, since, truncate, stepLabel, states, resume) {
-            // Expected total = live row counts shown in the table list. Not used for a
-            // "changed since" delta pull - that only fetches a fraction of each table.
             let expected = 0;
             if (!since) {
                 tables.forEach(t => {
@@ -1105,124 +1119,185 @@ if ($res && ($row = $res->fetch_assoc())) {
             const ui = {
                 truncate: truncate && !resume,
                 phase: 'import',
-                sub: resume ? 'Resuming the interrupted import from the last saved page.' : 'Importing tables one at a time from the live server.',
-                timing: { start: Date.now(), expected: expected, startRows: resume ? (resume.imported || 0) : 0 },
-                stoppable: true
+                sub: resume ? 'Resuming from the last saved batch. Downloading and writing run in parallel.' : 'Downloading ahead (up to 2 batches queued) while the current batch is written locally.',
+                timing: { start: Date.now(), expected: expected, startRows: resume ? (resume.imported || 0) : 0 }
             };
             startElapsedTicker();
             tables.forEach((t, i) => { states[t] = i < startIndex ? { kind: 'done', text: 'done earlier' } : { kind: 'pending', text: 'waiting' }; });
-            renderStep(stepLabel, ui, tables, states);
-            await sleep(50); // let the fresh table paint before the first request fires
 
-            const tableCounts = {};
-            const errors = [];
-            let stopped = false;
-            let stopReason = '';
+            const tableCounts = {}, errors = [], applied = {}, totals = {};
+            const act = { dl: null, ap: null, dlWaiting: false };
+            const keys = { all: [exportKey], rejected: new Set() };
+            let key = exportKey;
+            let stopped = false, stopReason = '';
 
-            for (let i = startIndex; i < tables.length; i++) {
+            if (resume && startIndex < tables.length) {
+                applied[tables[startIndex]] = resume.imported || 0;
+                if (resume.tableTotal) totals[tables[startIndex]] = resume.tableTotal;
+            }
+            const rowsText = t => (applied[t] || 0).toLocaleString() + (totals[t] ? ' / ' + totals[t].toLocaleString() : '') + ' rows';
+            const render = () => renderStep(stepLabel, ui, tables, states);
+            const onWait = (t) => (waitText, why) => {
+                states[t] = { kind: 'running', text: waitText, rows: applied[t] || 0 };
+                ui.alert = '<i class="fa fa-refresh"></i> ' + escHtml(why || 'Connection problem') + ' - retrying automatically.';
+                ui.alertWarn = true;
+                render();
+            };
+
+            function startFetch(i, cursor) {
                 const t = tables[i];
-                if (importStopRequested) {
-                    stopped = true;
-                    break;
-                }
-                const startedAt = Date.now();
-                const resumeHere = resume && i === startIndex;
-                let cursor = resumeHere ? (resume.cursor || '') : '';
-                let tableTotal = resumeHere && resume.tableTotal ? resume.tableTotal : null;
-                let importedSoFar = resumeHere ? (resume.imported || 0) : 0;
-                states[t] = { kind: 'running', text: importedSoFar ? importedSoFar.toLocaleString() + ' rows...' : 'importing...', rows: importedSoFar };
-                renderStep(stepLabel, ui, tables, states);
-
-                // Pull the table in pages of IMPORT_PAGE_SIZE rows (one request each) until the
-                // live server says there's no more - a million-row table in one response blows
-                // the live host's time limit and gets cut off. A live server without paging
-                // support just sends the whole table in the first response (has_more absent).
-                let res;
-                while (true) {
-                    const payload = {
-                        action: 'run_import', base_url: baseUrl, export_key: exportKey, 'tables[]': t, since: since,
-                        truncate: truncate ? 1 : 0, page_size: IMPORT_PAGE_SIZE, cursor: cursor,
-                        imported: importedSoFar, queue: JSON.stringify(tables)
-                    };
-                    if (tableTotal !== null) payload.table_total = tableTotal;
-
-                    payload.page_token = Date.now() + '-' + Math.random().toString(36).slice(2);
-                    const poll = startPagePoll(payload, t, () => importedSoFar, () => tableTotal, stepLabel, ui, tables, states);
-                    res = await postPageWithRetry(payload, function(waitText, why) {
-                        poll.pause();
-                        states[t] = { kind: 'running', text: waitText, rows: importedSoFar };
-                        renderStep(stepLabel, Object.assign({}, ui, { activity: '', alert: '<i class="fa fa-refresh"></i> ' + escHtml(why || 'Connection problem') + ' - retrying automatically.', alertWarn: true }), tables, states);
-                    }, () => poll.resume());
-                    poll.stop();
-                    ui.activity = '';
-                    // A retry may have moved to the checkpoint's key/cursor
-                    exportKey = payload.export_key;
-                    if (res._fromCheckpoint) {
-                        importedSoFar = res._fromCheckpoint.imported || importedSoFar;
-                    }
-
-                    // The export key is single-use - the live server rotates it on every
-                    // successful pull (every page too), so the NEXT request must use the value
-                    // it just handed back. Also reflect it in the visible field so the user has
-                    // the current key if this wizard gets interrupted partway through.
+                const token = newToken();
+                act.dl = { token: token, t: t, since: Date.now() };
+                if (states[t].kind === 'pending') states[t] = { kind: 'running', text: applied[t] ? rowsText(t) : 'downloading...', rows: applied[t] || 0 };
+                const payload = {
+                    action: 'fetch_page', base_url: baseUrl, export_key: key, table: t, cursor: cursor || '',
+                    page_size: IMPORT_PAGE_SIZE, since: since, truncate: truncate ? 1 : 0, page_token: token
+                };
+                if (totals[t] != null) payload.table_total = totals[t];
+                return postWithRetry('fetch', payload, onWait(t), keys).then(function(res) {
+                    if (act.dl && act.dl.token === token) act.dl = null;
                     if (res.next_export_key) {
-                        exportKey = res.next_export_key;
-                        $exportKey.val(exportKey);
+                        key = res.next_export_key;
+                        keys.all.unshift(key);
+                        $exportKey.val(key);
                     }
-
-                    if (res.status !== 'success' && res.status !== 'warning') break;
-                    if (tableTotal === null && res.table_counts && res.table_counts[t] !== undefined) {
-                        tableTotal = res.table_counts[t];
-                    }
-                    if (!res.paged || !res.has_more) break;
-
-                    importedSoFar += res.page_rows || 0;
-                    cursor = String(res.next_cursor);
-                    states[t] = {
-                        kind: 'running',
-                        text: importedSoFar.toLocaleString() + (tableTotal ? ' / ' + tableTotal.toLocaleString() : '') + ' rows',
-                        rows: importedSoFar
-                    };
-                    renderStep(stepLabel, ui, tables, states);
-
-                    if (importStopRequested) {
-                        res = { status: 'stopped' };
-                        break;
-                    }
-                }
-
-                const elapsed = Date.now() - startedAt;
-                if (elapsed < MIN_ROW_VISIBLE_MS) {
-                    await sleep(MIN_ROW_VISIBLE_MS - elapsed);
-                }
-
-                if (res.status === 'success' || res.status === 'warning') {
-                    const count = tableTotal !== null ? tableTotal : ((res.table_counts && res.table_counts[t]) || 0);
-                    tableCounts[t] = count;
-                    states[t] = { kind: res.status === 'warning' ? 'warn' : 'done', text: count.toLocaleString() + ' rows', rows: count };
-                    if (res.status === 'warning') errors.push(t + ': ' + res.message);
-                } else if (res._keyRejected) {
-                    // Pause (progress kept) so the user can paste a fresh key and Resume
-                    states[t] = { kind: 'warn', text: 'paused at ' + importedSoFar.toLocaleString() + (tableTotal ? ' / ' + tableTotal.toLocaleString() : ''), rows: importedSoFar };
-                    stopped = true;
-                    stopReason = 'the live server rejected the export key. Open Database Export on live, copy the current key into the Export Key field here, then click Resume';
-                } else if (res.status === 'stopped' || (importStopRequested && isRetryable(res))) {
-                    states[t] = { kind: 'warn', text: 'stopped at ' + importedSoFar.toLocaleString() + (tableTotal ? ' / ' + tableTotal.toLocaleString() : ''), rows: importedSoFar };
-                    stopped = true;
-                } else if (isRetryable(res)) {
-                    // Gave up after all retries - stop the batch so Resume continues right here
-                    states[t] = { kind: 'error', text: 'interrupted at ' + importedSoFar.toLocaleString(), rows: importedSoFar };
-                    errors.push(t + ': ' + (res.message || 'Connection lost'));
-                    stopped = true;
-                    stopReason = res.message || 'Connection lost';
-                } else {
-                    states[t] = { kind: 'error', text: 'failed' };
-                    errors.push(t + ': ' + (res.message || 'Import failed'));
-                }
-                renderStep(stepLabel, ui, tables, states);
-                if (stopped) break;
+                    return { i: i, t: t, res: res };
+                });
             }
 
+            // Producer / consumer with a bounded queue: the downloader keeps fetching until
+            // MAX_QUEUED downloaded batches are waiting, the writer takes them in order; each
+            // batch the writer takes frees a slot and the downloader refills it.
+            const queue = [];
+            const failedTables = new Set();
+            let abort = false;
+            let producerFinishedAll = false;
+            let lastQueued = null; // { i, hasMore } of the last batch handed to the queue
+
+            const poll = startPipelinePoll(act, applied, totals, stepLabel, ui, tables, states, queue);
+            render();
+
+            async function producer() {
+                let i = startIndex;
+                let cursor = resume ? (resume.cursor || '') : '';
+                while (i < tables.length) {
+                    if (abort || importStopRequested) return;
+                    if (failedTables.has(i)) { i++; cursor = ''; continue; }
+                    if (queue.length >= MAX_QUEUED) {
+                        act.dlWaiting = true;
+                        await sleep(150);
+                        continue;
+                    }
+                    act.dlWaiting = false;
+
+                    const f = await startFetch(i, cursor);
+                    const t = f.t;
+                    if (f.res.status !== 'success') {
+                        if (f.res._keyRejected || isRetryable(f.res)) {
+                            abort = true;
+                            stopped = true;
+                            stopReason = f.res._keyRejected
+                                ? 'the live server rejected the export key. Open Database Export on live, copy the current key into the Export Key field here, then click Resume'
+                                : (f.res.message || 'Connection lost');
+                            return;
+                        }
+                        failedTables.add(i);
+                        states[t] = { kind: 'error', text: 'download failed' };
+                        errors.push(t + ': ' + (f.res.message || 'Download failed'));
+                        render();
+                        i++;
+                        cursor = '';
+                        continue;
+                    }
+                    ui.alert = '';
+                    if (f.res.table_total != null) totals[t] = f.res.table_total;
+                    if (failedTables.has(i)) { i++; cursor = ''; continue; } // writer failed this table meanwhile
+                    queue.push(f);
+                    lastQueued = { i: i, hasMore: !!f.res.has_more };
+                    render();
+                    if (f.res.has_more) {
+                        cursor = String(f.res.next_cursor);
+                    } else {
+                        i++;
+                        cursor = '';
+                    }
+                }
+                producerFinishedAll = true;
+            }
+
+            let producerDone = false;
+            async function writer() {
+                while (true) {
+                    if (!queue.length) {
+                        if (producerDone || abort) return;
+                        await sleep(100);
+                        continue;
+                    }
+                    const f = queue.shift(); // frees a slot -> downloader continues
+                    const t = f.t;
+                    if (failedTables.has(f.i)) continue;
+
+                    const apToken = newToken();
+                    act.ap = { token: apToken, t: t, pageRows: f.res.page_rows || 0, since: Date.now() };
+                    states[t] = { kind: 'running', text: rowsText(t), rows: applied[t] || 0 };
+                    render();
+                    const a = await postWithRetry('apply', {
+                        action: 'apply_page', base_url: baseUrl, export_key: key, table: t, file_id: f.res.file_id,
+                        has_more: f.res.has_more ? 1 : 0, next_cursor: f.res.next_cursor, page_rows: f.res.page_rows || 0,
+                        imported: applied[t] || 0, table_total: totals[t] != null ? totals[t] : '', since: since,
+                        truncate: truncate ? 1 : 0, queue: JSON.stringify(tables), page_token: apToken
+                    }, onWait(t), keys);
+                    act.ap = null;
+
+                    if (a.status === 'success' || a.status === 'warning') {
+                        ui.alert = '';
+                        applied[t] = (applied[t] || 0) + (f.res.page_rows || 0);
+                        if (!f.res.has_more) {
+                            const count = totals[t] != null ? totals[t] : applied[t];
+                            tableCounts[t] = count;
+                            states[t] = { kind: a.status === 'warning' ? 'warn' : 'done', text: count.toLocaleString() + ' rows', rows: count };
+                            if (a.status === 'warning') errors.push(t + ': ' + a.message);
+                        } else {
+                            states[t] = { kind: 'running', text: rowsText(t), rows: applied[t] };
+                        }
+                    } else if (isRetryable(a)) {
+                        // Stop everything; Resume restarts from the last written batch
+                        abort = true;
+                        stopped = true;
+                        stopReason = a.message || 'Connection lost';
+                        states[t] = { kind: 'error', text: 'interrupted at ' + rowsText(t), rows: applied[t] || 0 };
+                        render();
+                        return;
+                    } else {
+                        // Local SQL error: fail this table, drop its queued batches, go on
+                        failedTables.add(f.i);
+                        states[t] = { kind: 'error', text: 'failed at ' + rowsText(t), rows: applied[t] || 0 };
+                        errors.push(t + ': ' + (a.message || 'Write failed'));
+                    }
+                    render();
+                }
+            }
+
+            const producerRun = producer().finally(() => { producerDone = true; act.dl = null; act.dlWaiting = false; });
+            await Promise.all([producerRun, writer()]);
+
+            poll.stop();
+            act.dl = act.ap = null;
+            ui.activity = '';
+
+            if (stopped) {
+                const t = lastQueued ? tables[lastQueued.i] : tables[startIndex];
+                if (t && states[t] && states[t].kind === 'running') states[t] = { kind: 'warn', text: 'paused at ' + rowsText(t), rows: applied[t] || 0 };
+            }
+            const lastIndex = lastQueued ? lastQueued.i : startIndex;
+            const lastHadMore = lastQueued ? lastQueued.hasMore : true;
+
+            // Stop button: the queue drained without starting new downloads
+            if (!stopped && importStopRequested && !producerFinishedAll) {
+                stopped = true;
+                const t = tables[lastIndex];
+                if (lastHadMore) states[t] = { kind: 'warn', text: 'stopped at ' + rowsText(t), rows: applied[t] || 0 };
+            }
             if (stopped) {
                 tables.forEach(t => { if (states[t].kind === 'pending') states[t] = { kind: 'skipped', text: 'not started' }; });
             }
@@ -1413,7 +1488,9 @@ if ($res && ($row = $res->fetch_assoc())) {
             type: [
                 { value: 'modify_local', label: 'Live → Local', side: 'local' },
                 { value: 'modify_live', label: 'Local → Live', side: 'live' }
-            ]
+            ],
+            index_live: [{ value: 'add_index_live', label: 'Add to Live', side: 'live', tone: 'is-ok' }],
+            index_local: [{ value: 'add_index_local', label: 'Add to Local', side: 'local', tone: 'is-ok' }]
         };
         const CHOICE_SIDE = {};
         Object.values(SCHEMA_CHOICES).forEach(list => list.forEach(c => { CHOICE_SIDE[c.value] = c.side; }));
@@ -1459,7 +1536,9 @@ if ($res && ($row = $res->fetch_assoc())) {
                 const missLocal = r.missing_in_local || [];
                 const missLive = r.missing_in_live || [];
                 const types = r.type_mismatches || [];
-                const issues = r.exists_locally ? missLocal.length + missLive.length + types.length : 1;
+                const idxLive = r.index_missing_in_live || [];
+                const idxLocal = r.index_missing_in_local || [];
+                const issues = r.exists_locally ? missLocal.length + missLive.length + types.length + idxLive.length + idxLocal.length : 1;
                 let body = '';
 
                 if (!r.exists_locally) {
@@ -1481,6 +1560,16 @@ if ($res && ($row = $res->fetch_assoc())) {
                                 '</code><span>live</span><code>' + escHtml(m.live_type) + '</code></span>';
                             body += schemaRowHtml(table, m.column, 'type', info, false);
                         });
+                    }
+                    const idxInfo = i => '<code>' + escHtml(i.name) + '</code><span class="dbs-col-type">' + escHtml(i.label) + '</span>' +
+                        (i.unique ? '<span class="dbs-idx-note">duplicates are removed (earliest row kept, original table kept as backup)</span>' : '');
+                    if (idxLive.length) {
+                        body += '<div class="dbs-sec is-warn"><i class="fa-solid fa-key"></i> Index only on local <span>missing on live</span></div>';
+                        idxLive.forEach(i => { body += schemaRowHtml(table, i.name, 'index_live', idxInfo(i), false); });
+                    }
+                    if (idxLocal.length) {
+                        body += '<div class="dbs-sec is-warn"><i class="fa-solid fa-key"></i> Index only on live <span>missing in local</span></div>';
+                        idxLocal.forEach(i => { body += schemaRowHtml(table, i.name, 'index_local', idxInfo(i), false); });
                     }
                 }
 
@@ -1520,7 +1609,10 @@ if ($res && ($row = $res->fetch_assoc())) {
                 '</div>';
 
             const refreshBtn = '<button type="button" class="sr-btn sr-btn-sm dbs-refresh" id="dbsRefreshBtn" title="Compare the schema again"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>';
-            const quick = '<div class="dbs-quick">' + (ok ? '' :
+            const idxHint = res.indexes_checked === false
+                ? '<div class="dbs-note is-err" style="margin-bottom:10px;"><i class="fa-solid fa-circle-info"></i> Indexes were not compared - upload the latest <code>includes/api/db_export_schema.php</code> to live.</div>'
+                : '';
+            const quick = idxHint + '<div class="dbs-quick">' + (ok ? '' :
                 '<span>Quick select:</span>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="local"><i class="fa-solid fa-laptop-code"></i> Make Local match Live</button>' +
                 '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="live"><i class="fa-solid fa-cloud"></i> Make Live match Local</button>' +

@@ -24,11 +24,15 @@ if (!is_array($ops) || !$ops || count($ops) > 500) {
     exit;
 }
 foreach ($ops as $op) {
-    if (!is_array($op) || !in_array($op['op'] ?? '', ['add', 'modify', 'drop'], true)) {
-        echo json_encode(['status' => 'error', 'message' => 'Only add / modify / drop column operations are allowed.']);
+    if (!is_array($op) || !in_array($op['op'] ?? '', ['add', 'modify', 'drop', 'add_index'], true)) {
+        echo json_encode(['status' => 'error', 'message' => 'Only add / modify / drop column and add index operations are allowed.']);
         exit;
     }
 }
+
+// Adding a unique key to a big table with duplicates rebuilds it (copy-swap) - minutes
+set_time_limit(0);
+ignore_user_abort(true);
 
 $newKey = bin2hex(random_bytes(32));
 $rotate = mysqli_prepare($conDB, "UPDATE app_settings SET setting_value = ? WHERE setting_name = 'db_export_secret_key'");

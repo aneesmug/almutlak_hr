@@ -49,6 +49,27 @@ foreach ($tables as $table) {
     }, $cols);
 }
 
+// Indexes per table (PRIMARY excluded) so the importer can spot missing (unique) keys
+$indexes = [];
+foreach ($tables as $table) {
+    $rows = $pdo->query('SHOW INDEX FROM `' . str_replace('`', '``', $table) . '`')->fetchAll(PDO::FETCH_ASSOC);
+    $byName = [];
+    foreach ($rows as $r) {
+        if ($r['Key_name'] === 'PRIMARY') {
+            continue;
+        }
+        $n = $r['Key_name'];
+        $byName[$n] = $byName[$n] ?? ['name' => $n, 'unique' => (int) $r['Non_unique'] === 0, 'columns' => []];
+        $byName[$n]['columns'][(int) $r['Seq_in_index']] = ['name' => $r['Column_name'], 'sub_part' => $r['Sub_part']];
+    }
+    foreach ($byName as &$i) {
+        ksort($i['columns']);
+        $i['columns'] = array_values($i['columns']);
+    }
+    unset($i);
+    $indexes[$table] = array_values($byName);
+}
+
 // Optional CREATE TABLE statements so the importer can create a table that is
 // missing on its side. Only for explicitly requested tables.
 $createSql = [];
@@ -66,4 +87,5 @@ echo json_encode([
     'database' => $currentDbName,
     'schema' => $schema,
     'create_sql' => $createSql,
+    'indexes' => $indexes,
 ]);

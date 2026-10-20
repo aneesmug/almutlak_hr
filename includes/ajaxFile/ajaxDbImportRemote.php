@@ -23,45 +23,126 @@ function dbir_checkpoint_get(mysqli $db): ?array
     $res = mysqli_query($db, "SELECT setting_value FROM app_settings WHERE setting_name = 'db_import_remote_checkpoint'");
     $row = $res ? mysqli_fetch_row($res) : null;
     $data = $row ? json_decode((string) $row[0], true) : null;
-    return is_array($data) && !empty($data['table']) ? $data : null;
+    if (!is_array($data) || empty($data['table'])) {
+        return null;
+    }
+    $key = dbir_setting_get($db, 'db_import_remote_key');
+    if ($key !== '') {
+        $data['export_key'] = $key;
+    }
+    return $data;
+}
+
+function dbir_setting_get(mysqli $db, string $name): string
+{
+    $stmt = mysqli_prepare($db, "SELECT setting_value FROM app_settings WHERE setting_name = ?");
+    mysqli_stmt_bind_param($stmt, 's', $name);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_row(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    return $row ? (string) $row[0] : '';
+}
+
+function dbir_setting_set(mysqli $db, string $name, string $value): void
+{
+    $stmt = mysqli_prepare($db, "INSERT INTO app_settings (setting_name, setting_value) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+    mysqli_stmt_bind_param($stmt, 'ss', $name, $value);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+}
+
+// Latest rotated live export key - saved the moment a download completes
+function dbir_key_save(mysqli $db, string $key): void
+{
+    dbir_setting_set($db, 'db_import_remote_key', $key);
 }
 
 function dbir_checkpoint_save(mysqli $db, array $data): void
 {
+    if (!empty($data['export_key'])) {
+        dbir_key_save($db, $data['export_key']);
+    }
+    unset($data['export_key']);
     $data['updated_at'] = date('Y-m-d H:i:s');
-    $json = json_encode($data);
-    $stmt = mysqli_prepare($db, "INSERT INTO app_settings (setting_name, setting_value) VALUES ('db_import_remote_checkpoint', ?)
-        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-    mysqli_stmt_bind_param($stmt, 's', $json);
-    mysqli_stmt_execute($stmt);
-    mysqli_stmt_close($stmt);
+    dbir_setting_set($db, 'db_import_remote_checkpoint', json_encode($data));
+}
+
+// Downloaded-but-not-yet-applied pages wait here (one .sql file per page)
+function dbir_spool_dir(): string
+{
+    $dir = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'dbir_spool_' . md5(DB_NAME);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    return $dir;
+}
+
+function dbir_spool_path(string $id): ?string
+{
+    return preg_match('/^[a-f0-9]{32}$/', $id) ? dbir_spool_dir() . DIRECTORY_SEPARATOR . $id . '.sql' : null;
+}
+
+function dbir_spool_cleanup(int $olderThanSeconds): void
+{
+    foreach ((array) glob(dbir_spool_dir() . DIRECTORY_SEPARATOR . '*.sql') as $f) {
+        if ($f && @filemtime($f) < time() - $olderThanSeconds) {
+            @unlink($f);
+        }
+    }
+}
+
+// Reads up to $bytes from the start / end of a file (markers live there, not in the middle)
+function dbir_file_head(string $path, int $bytes): string
+{
+    $h = @fopen($path, 'rb');
+    if (!$h) {
+        return '';
+    }
+    $data = (string) fread($h, $bytes);
+    fclose($h);
+    return $data;
+}
+
+function dbir_file_tail(string $path, int $bytes): string
+{
+    $size = (int) @filesize($path);
+    $h = @fopen($path, 'rb');
+    if (!$h) {
+        return '';
+    }
+    fseek($h, max(0, $size - $bytes));
+    $data = (string) fread($h, $bytes);
+    fclose($h);
+    return $data;
 }
 
 // Live progress of the page currently being imported (download bytes, rows applied),
 // written to a small temp file while run_import works and polled by the browser every
 // second - so a 20,000-row page visibly moves instead of jumping at the end, and a stall
 // shows up as "no activity for Xs". Throttled to at most ~3 writes per second.
-function dbir_progress_file(): string
+function dbir_progress_file(string $channel = 'ap'): string
 {
-    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'dbir_progress_' . md5(DB_NAME) . '.json';
+    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'dbir_progress_' . md5(DB_NAME) . '_' . $channel . '.json';
 }
 
-function dbir_progress(array $data, bool $force = false): void
+function dbir_progress(array $data, bool $force = false, string $channel = 'ap'): void
 {
-    static $last = 0.0, $state = [];
-    $state = array_merge($state, $data);
+    static $last = [], $state = [];
+    $state[$channel] = array_merge($state[$channel] ?? [], $data);
     $now = microtime(true);
-    if (!$force && $now - $last < 0.3) {
+    if (!$force && $now - ($last[$channel] ?? 0) < 0.3) {
         return;
     }
-    $last = $now;
-    $state['ts'] = time();
-    @file_put_contents(dbir_progress_file(), json_encode($state), LOCK_EX);
+    $last[$channel] = $now;
+    $state[$channel]['ts'] = time();
+    @file_put_contents(dbir_progress_file($channel), json_encode($state[$channel]), LOCK_EX);
 }
 
 function dbir_checkpoint_clear(mysqli $db): void
 {
     mysqli_query($db, "UPDATE app_settings SET setting_value = '' WHERE setting_name = 'db_import_remote_checkpoint'");
+    dbir_spool_cleanup(0);
 }
 
 // Returns the column name immediately before $target in $orderedNames (ordinal order),
@@ -77,8 +158,12 @@ function db_import_remote_predecessor(array $orderedNames, string $target) {
     return null;
 }
 
-function db_import_remote_curl(string $url, array $postFields, int $timeoutSeconds, ?callable $onProgress = null) {
+function db_import_remote_curl(string $url, array $postFields, int $timeoutSeconds, ?callable $onProgress = null, ?string $saveTo = null) {
     $ch = curl_init($url);
+    $fh = null;
+    if ($saveTo !== null) {
+        $fh = fopen($saveTo, 'wb');
+    }
     if ($onProgress) {
         curl_setopt($ch, CURLOPT_NOPROGRESS, false);
         curl_setopt($ch, CURLOPT_XFERINFOFUNCTION, function ($ch, $dlTotal, $dlNow) use ($onProgress) {
@@ -89,7 +174,6 @@ function db_import_remote_curl(string $url, array $postFields, int $timeoutSecon
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => http_build_query($postFields),
-        CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => $timeoutSeconds,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
@@ -100,12 +184,42 @@ function db_import_remote_curl(string $url, array $postFields, int $timeoutSecon
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AlmutlakDbSync/1.0',
         CURLOPT_HTTPHEADER => ['Accept: */*', 'Expect:'],
     ]);
+    // Output target LAST: setting CURLOPT_RETURNTRANSFER (even to false) after
+    // CURLOPT_FILE silently switches the output to stdout, i.e. the HTTP response.
+    if ($fh) {
+        curl_setopt($ch, CURLOPT_FILE, $fh);
+    } else {
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    }
     $body = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     curl_close($ch);
+    if ($fh) {
+        fclose($fh);
+        $body = null;
+    }
 
     return ['body' => $body, 'http_code' => $httpCode, 'error' => $error];
+}
+
+// Index signature: unique flag + ordered columns (with prefix length). Indexes are matched
+// by shape, so the same key under a different name on each side is not a difference.
+function dbir_index_sig(array $idx): string
+{
+    return (!empty($idx['unique']) ? 'U:' : 'K:') . implode(',', array_map(fn ($c) => strtolower($c['name']) . (isset($c['sub_part']) && $c['sub_part'] !== null && $c['sub_part'] !== '' ? '(' . (int) $c['sub_part'] . ')' : ''), $idx['columns'] ?? []));
+}
+
+function dbir_index_label(array $idx): string
+{
+    return (!empty($idx['unique']) ? 'UNIQUE ' : '') . $idx['name'] . ' (' . implode(', ', array_map(fn ($c) => $c['name'], $idx['columns'] ?? [])) . ')';
+}
+
+// Indexes on one side that have no same-shaped index on the other side
+function dbir_index_missing(array $from, array $other): array
+{
+    $sigs = array_flip(array_map('dbir_index_sig', $other));
+    return array_values(array_filter($from, fn ($i) => !isset($sigs[dbir_index_sig($i)])));
 }
 
 function db_import_remote_normalize_base_url(string $raw): ?string {
@@ -119,16 +233,24 @@ function db_import_remote_normalize_base_url(string $raw): ?string {
 $action = $_POST['action'] ?? '';
 
 if ($action === 'get_checkpoint') {
-    echo json_encode(['status' => 'success', 'checkpoint' => dbir_checkpoint_get($conDB)]);
+    echo json_encode([
+        'status' => 'success',
+        'checkpoint' => dbir_checkpoint_get($conDB),
+        'export_key' => dbir_setting_get($conDB, 'db_import_remote_key'),
+    ]);
     exit;
 }
 if ($action === 'get_progress') {
-    $raw = @file_get_contents(dbir_progress_file());
-    $data = $raw ? json_decode($raw, true) : null;
-    if (is_array($data)) {
-        $data['age'] = max(0, time() - (int) ($data['ts'] ?? 0));
+    $out = [];
+    foreach (['dl', 'ap'] as $ch) {
+        $raw = @file_get_contents(dbir_progress_file($ch));
+        $data = $raw ? json_decode($raw, true) : null;
+        if (is_array($data)) {
+            $data['age'] = max(0, time() - (int) ($data['ts'] ?? 0));
+        }
+        $out[$ch] = is_array($data) ? $data : null;
     }
-    echo json_encode(['status' => 'success', 'progress' => is_array($data) ? $data : null]);
+    echo json_encode(['status' => 'success', 'progress' => $out]);
     exit;
 }
 if ($action === 'clear_checkpoint') {
@@ -269,6 +391,191 @@ if ($action === 'truncate_tables') {
         'truncated_tables' => $truncatedTables,
         'skipped_tables' => $skippedTables,
     ]);
+    exit;
+}
+
+// ---------------------------------------------------------------------------------
+// Pipelined import: fetch_page and apply_page run AT THE SAME TIME from the browser -
+// while page N is being written into MySQL, page N+1 is already downloading. Downloads
+// stay strictly sequential (each one returns the next single-use live key); applies stay
+// sequential too (same table, in order). Pages travel through a spool file on disk.
+
+if ($action === 'fetch_page') {
+    $table = trim((string) ($_POST['table'] ?? ''));
+    if ($table === '') {
+        echo json_encode(['status' => 'error', 'message' => 'No table given.']);
+        exit;
+    }
+    $sinceRaw = trim((string) ($_POST['since'] ?? ''));
+    if (!empty($_POST['truncate']) && $_POST['truncate'] !== '0' && $sinceRaw !== '') {
+        echo json_encode(['status' => 'error', 'message' => '"Only rows changed since" cannot be combined with Truncate.']);
+        exit;
+    }
+    set_time_limit(0);
+    ignore_user_abort(true);
+    dbir_spool_cleanup(86400);
+
+    $pageSize = max(1, min(100000, (int) ($_POST['page_size'] ?? 20000)));
+    $cursor = trim((string) ($_POST['cursor'] ?? ''));
+    $postFields = ['export_key' => $exportKey, 'tables' => $table, 'page_size' => $pageSize];
+    if ($cursor !== '') {
+        $postFields['cursor'] = $cursor;
+    }
+    if ($sinceRaw !== '') {
+        $postFields['since'] = $sinceRaw;
+    }
+
+    $fileId = bin2hex(random_bytes(16));
+    $path = dbir_spool_path($fileId);
+    $token = (string) ($_POST['page_token'] ?? '');
+    dbir_progress(['token' => $token, 'table' => $table, 'phase' => 'download', 'bytes' => 0], true, 'dl');
+    $result = db_import_remote_curl($baseUrl . '/download_db_export.php', $postFields, 900, function (int $bytes) {
+        dbir_progress(['bytes' => $bytes], false, 'dl');
+    }, $path);
+    $size = (int) @filesize($path);
+    dbir_progress(['phase' => 'done', 'bytes' => $size], true, 'dl');
+
+    if ($result['error'] || $result['http_code'] !== 200) {
+        $snippet = trim(dbir_file_head($path, 300));
+        @unlink($path);
+        echo json_encode(['status' => 'error', 'message' => $result['error']
+            ? 'Fetch failed: ' . $result['error']
+            : 'Live server returned HTTP ' . $result['http_code'] . ': ' . $snippet]);
+        exit;
+    }
+
+    // Completeness + key + paging markers sit at the very end of the dump
+    $tail = dbir_file_tail($path, 16384);
+    if (strpos($tail, 'SET FOREIGN_KEY_CHECKS=1;') === false || !preg_match('/^-- NEW_EXPORT_KEY: (\S+)\s*$/m', $tail, $km)) {
+        @unlink($path);
+        echo json_encode(['status' => 'error', 'message' => 'The download from the live server looks incomplete (cut off before finishing) - this page will be downloaded again.']);
+        exit;
+    }
+    $nextKey = $km[1];
+    dbir_key_save($conDB, $nextKey);
+
+    $tableTotal = isset($_POST['table_total']) && $_POST['table_total'] !== '' ? (int) $_POST['table_total'] : null;
+    if (preg_match('/^-- Table: \S+ \((\d+) rows\)/m', dbir_file_head($path, 16384), $tm)) {
+        $tableTotal = (int) $tm[1];
+    }
+    $pageRows = 0;
+    $hasMore = false;
+    $nextCursor = '';
+    if (preg_match('/^-- PAGE: rows=(\d+) next=(-?\d+) more=([01])\s*$/m', $tail, $pm)) {
+        $pageRows = (int) $pm[1];
+        $nextCursor = $pm[2];
+        $hasMore = $pm[3] === '1';
+    } else {
+        // Live without paging support sends the whole table in one go
+        $pageRows = (int) $tableTotal;
+    }
+
+    echo json_encode([
+        'status' => 'success',
+        'file_id' => $fileId,
+        'bytes' => $size,
+        'page_rows' => $pageRows,
+        'has_more' => $hasMore,
+        'next_cursor' => $nextCursor,
+        'table_total' => $tableTotal,
+        'next_export_key' => $nextKey,
+    ]);
+    exit;
+}
+
+if ($action === 'apply_page') {
+    $table = trim((string) ($_POST['table'] ?? ''));
+    $path = dbir_spool_path((string) ($_POST['file_id'] ?? ''));
+    if ($table === '' || $path === null) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid page reference.']);
+        exit;
+    }
+    set_time_limit(0);
+    ignore_user_abort(true);
+
+    $hasMore = !empty($_POST['has_more']) && $_POST['has_more'] !== '0';
+    $pageRows = max(0, (int) ($_POST['page_rows'] ?? 0));
+    $importedBefore = max(0, (int) ($_POST['imported'] ?? 0));
+    $tableTotal = isset($_POST['table_total']) && $_POST['table_total'] !== '' ? (int) $_POST['table_total'] : null;
+    $sinceRaw = trim((string) ($_POST['since'] ?? ''));
+    $queueRaw = json_decode((string) ($_POST['queue'] ?? ''), true);
+    $checkpoint = [
+        'base_url' => $baseUrl,
+        'queue' => is_array($queueRaw) ? array_values(array_map('strval', $queueRaw)) : [$table],
+        'table' => $table,
+        'cursor' => $hasMore ? trim((string) ($_POST['next_cursor'] ?? '')) : '',
+        'table_total' => $tableTotal,
+        'imported' => $importedBefore + $pageRows,
+        'table_done' => !$hasMore,
+        'truncate' => !empty($_POST['truncate']) && $_POST['truncate'] !== '0',
+        'since' => $sinceRaw,
+    ];
+
+    // The file is deleted only after its transaction committed - a missing file means a
+    // previous attempt already applied it (its response was lost), so this is a success.
+    if (!is_file($path)) {
+        echo json_encode(['status' => 'success', 'already_applied' => true, 'page_rows' => $pageRows]);
+        exit;
+    }
+
+    $token = (string) ($_POST['page_token'] ?? '');
+    dbir_progress(['token' => $token, 'table' => $table, 'phase' => 'apply', 'applied' => 0, 'page_rows' => $pageRows], true, 'ap');
+
+    $sql = "START TRANSACTION;\n" . (string) file_get_contents($path) . "\nCOMMIT;\n";
+    $mysqli = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+    if (!$mysqli) {
+        echo json_encode(['status' => 'error', 'message' => 'Could not connect to local database: ' . mysqli_connect_error()]);
+        exit;
+    }
+
+    $errors = [];
+    $applied = 0;
+    try {
+        if (mysqli_multi_query($mysqli, $sql)) {
+            do {
+                if ($res = mysqli_store_result($mysqli)) {
+                    mysqli_free_result($res);
+                }
+                if (mysqli_errno($mysqli)) {
+                    $errors[] = mysqli_error($mysqli);
+                } elseif (($info = mysqli_info($mysqli)) && preg_match('/Records:\s*(\d+)/', $info, $rm)) {
+                    $applied += (int) $rm[1];
+                    dbir_progress(['applied' => $applied], false, 'ap');
+                }
+            } while (mysqli_more_results($mysqli) && mysqli_next_result($mysqli));
+        } else {
+            $errors[] = mysqli_error($mysqli);
+        }
+    } catch (Throwable $e) {
+        $errors[] = $e->getMessage();
+    }
+    unset($sql);
+    dbir_progress(['phase' => $errors ? 'failed' : 'committed', 'applied' => $applied], true, 'ap');
+
+    if ($errors) {
+        mysqli_close($mysqli); // uncommitted transaction rolls back
+        echo json_encode(['status' => 'error', 'message' => 'Local SQL error: ' . $errors[0], 'errors' => array_slice($errors, 0, 10)]);
+        exit;
+    }
+
+    @unlink($path);
+    dbir_checkpoint_save($conDB, $checkpoint);
+
+    $status = 'success';
+    $message = '';
+    $localCount = null;
+    if (!$hasMore) {
+        // Last page of the table: compare the real local row count with live's
+        $countRes = @mysqli_query($mysqli, 'SELECT COUNT(*) FROM `' . str_replace('`', '``', $table) . '`');
+        $localCount = $countRes ? (int) mysqli_fetch_row($countRes)[0] : null;
+        if ($localCount !== null && $tableTotal !== null && $sinceRaw === '' && $localCount < $tableTotal) {
+            $status = 'warning';
+            $message = number_format($localCount) . ' local rows vs ' . number_format($tableTotal) . ' on live - the live table probably has rows sharing a unique key that merge locally.';
+        }
+    }
+    mysqli_close($mysqli);
+
+    echo json_encode(['status' => $status, 'message' => $message, 'page_rows' => $pageRows, 'applied' => $applied, 'local_count' => $localCount]);
     exit;
 }
 
@@ -575,6 +882,7 @@ if ($action === 'check_schema') {
         exit;
     }
     $liveSchema = $data['schema'] ?? [];
+    $liveIndexes = $data['indexes'] ?? null; // null = live has an older db_export_schema.php
 
     $localTableNames = [];
     $namesRes = mysqli_query($conDB, 'SHOW TABLES');
@@ -661,7 +969,17 @@ if ($action === 'check_schema') {
             }
         }
 
-        if (!empty($missingInLocal) || !empty($missingInLive) || !empty($typeMismatches)) {
+        $idxMissingLive = [];
+        $idxMissingLocal = [];
+        if (is_array($liveIndexes)) {
+            $localIdx = array_values(dbss_table_indexes($conDB, $table));
+            $liveIdx = $liveIndexes[$table] ?? [];
+            $toItem = fn ($i) => ['name' => $i['name'], 'unique' => !empty($i['unique']), 'label' => dbir_index_label($i)];
+            $idxMissingLive = array_map($toItem, dbir_index_missing($localIdx, $liveIdx));
+            $idxMissingLocal = array_map($toItem, dbir_index_missing($liveIdx, $localIdx));
+        }
+
+        if (!empty($missingInLocal) || !empty($missingInLive) || !empty($typeMismatches) || $idxMissingLive || $idxMissingLocal) {
             $anyMismatch = true;
         }
 
@@ -670,11 +988,14 @@ if ($action === 'check_schema') {
             'missing_in_local' => $missingInLocal,
             'missing_in_live' => $missingInLive,
             'type_mismatches' => $typeMismatches,
+            'index_missing_in_live' => $idxMissingLive,
+            'index_missing_in_local' => $idxMissingLocal,
         ];
     }
 
     echo json_encode([
         'status' => 'success',
+        'indexes_checked' => is_array($liveIndexes),
         'any_mismatch' => $anyMismatch,
         'report' => $report,
     ]);
@@ -691,7 +1012,7 @@ function db_import_remote_schema_plan(mysqli $conDB, string $baseUrl, string $ex
     foreach ($changes as $c) {
         $table = (string) ($c['table'] ?? '');
         $choice = (string) ($c['choice'] ?? '');
-        if (!dbss_valid_ident($table) || !in_array($choice, ['create_local', 'add_local', 'drop_local', 'modify_local', 'add_live', 'remove_live', 'modify_live'], true)) {
+        if (!dbss_valid_ident($table) || !in_array($choice, ['create_local', 'add_local', 'drop_local', 'modify_local', 'add_live', 'remove_live', 'modify_live', 'add_index_live', 'add_index_local'], true)) {
             continue;
         }
         $byTable[$table][] = ['column' => (string) ($c['column'] ?? ''), 'choice' => $choice];
@@ -711,12 +1032,13 @@ function db_import_remote_schema_plan(mysqli $conDB, string $baseUrl, string $ex
     }
     $liveSchema = $data['schema'] ?? [];
     $liveCreate = $data['create_sql'] ?? [];
+    $liveIndexes = $data['indexes'] ?? [];
 
     $localStmt = mysqli_prepare($conDB, "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
         FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION");
 
     $plan = ['local' => [], 'live' => []];
-    $rank = ['create_local' => 0, 'add_local' => 1, 'add_live' => 1, 'modify_local' => 2, 'modify_live' => 2, 'drop_local' => 3, 'remove_live' => 3];
+    $rank = ['create_local' => 0, 'add_local' => 1, 'add_live' => 1, 'modify_local' => 2, 'modify_live' => 2, 'drop_local' => 3, 'remove_live' => 3, 'add_index_local' => 4, 'add_index_live' => 4];
 
     foreach ($byTable as $table => $items) {
         $live = [];
@@ -816,10 +1138,27 @@ function db_import_remote_schema_plan(mysqli $conDB, string $baseUrl, string $ex
                         $op = ['op' => 'drop', 'table' => $table, 'column' => ['name' => $col]];
                     }
                     break;
+                case 'add_index_live':
+                case 'add_index_local':
+                    // $col carries the index name; its definition is read from the side that has it
+                    $source = $choice === 'add_index_live'
+                        ? dbss_table_indexes($conDB, $table)
+                        : array_column($liveIndexes[$table] ?? [], null, 'name');
+                    if (!isset($source[$col])) {
+                        $err = 'Index no longer exists on the ' . ($choice === 'add_index_live' ? 'local' : 'live') . ' side.';
+                    } else {
+                        $op = ['op' => 'add_index', 'table' => $table, 'index' => $source[$col]];
+                    }
+                    break;
             }
 
             $sql = null;
-            if ($op) {
+            if ($op && $op['op'] === 'add_index') {
+                [$sql, $err] = dbss_add_index_preview($op);
+                if ($err) {
+                    $op = null;
+                }
+            } elseif ($op) {
                 [$sql, $err] = dbss_build_sql($op);
                 if ($err) {
                     $op = null;
@@ -865,6 +1204,10 @@ if ($action === 'schema_plan' || $action === 'apply_schema') {
         exit;
     }
 
+    // Index rebuilds (copy-swap) can take minutes on big tables
+    set_time_limit(0);
+    ignore_user_abort(true);
+
     $nextKey = null;
     if ($target === 'local') {
         $results = dbss_apply($conDB, $ops);
@@ -872,7 +1215,7 @@ if ($action === 'schema_plan' || $action === 'apply_schema') {
         $result = db_import_remote_curl($baseUrl . '/includes/api/db_apply_schema.php', [
             'export_key' => $exportKey,
             'ops' => json_encode($ops),
-        ], 120);
+        ], 3600); // a unique key on a big table with duplicates is a table rebuild
         $data = json_decode((string) $result['body'], true);
         if ($result['error'] || !is_array($data) || !isset($data['results'])) {
             $msg = $result['error'] ? 'Connection failed: ' . $result['error'] : (($data['message'] ?? null) ?: 'Live server returned HTTP ' . $result['http_code'] . '.');
