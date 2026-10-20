@@ -93,7 +93,7 @@ if (!function_exists('zk_attendance_retention_days')) {
      * never wipe the attendance tables.
      */
     function zk_attendance_retention_days($conn = null) {
-        $days = 60;
+        $days = 180;
         if ($conn) {
             $result = mysqli_query($conn, "SELECT setting_value FROM app_settings WHERE setting_name = 'attendance_retention_days' LIMIT 1");
             if ($result) {
@@ -104,7 +104,7 @@ if (!function_exists('zk_attendance_retention_days')) {
                 }
             }
         }
-        return max(7, $days);
+        return min(3650, max(7, $days));
     }
 }
 

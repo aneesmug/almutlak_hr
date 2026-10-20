@@ -373,29 +373,49 @@ function ensure_report_visibility_setting($conDB) {
 }
 
 /**
- * Ensure the attendance data-retention days setting exists (App Settings > Attendance
- * Config > Data Retention). Read by zk_attendance_retention_days() in zk_helpers.php.
+ * Ensure the attendance sync/retention days setting exists (App Settings > Attendance
+ * Config > Sync Settings, default 180). Rolling window: punches older than this are not
+ * stored, and once a day everything older is deleted - on day N+1 the oldest day goes.
+ * Read by zk_attendance_retention_days() in zk_helpers.php.
+ *
+ * One-time migration: the row used to live in its own "Data Retention" sub-tab
+ * (setting_group 'attendance_retention', default 60) - it is moved into Sync Settings,
+ * and the old 60-day default is raised to 180 (a custom value is kept).
  */
 function ensure_attendance_retention_setting($conDB) {
-    $check = $conDB->prepare("SELECT id FROM app_settings WHERE setting_name = 'attendance_retention_days' LIMIT 1");
+    $description = 'Attendance days to sync & keep (rolling window - older punch and attendance records are deleted automatically once a day, minimum 7)';
+    $options = '{"min":7,"max":3650,"suffix":"days"}';
+
+    $check = $conDB->prepare("SELECT setting_value, setting_group FROM app_settings WHERE setting_name = 'attendance_retention_days' LIMIT 1");
     if (!$check) {
         return;
     }
     $check->execute();
     $result = $check->get_result();
-    $exists = ($result && $result->num_rows > 0);
+    $row = $result ? $result->fetch_assoc() : null;
     if ($result) {
         $result->free();
     }
     $check->close();
-    if ($exists) {
+
+    if (!$row) {
+        $insert = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES ('attendance_retention_days', '180', 'sync_settings', ?, 'number', ?)");
+        if ($insert) {
+            $insert->bind_param('ss', $description, $options);
+            $insert->execute();
+            $insert->close();
+        }
         return;
     }
 
-    $insert = $conDB->prepare("INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES ('attendance_retention_days', '60', 'attendance_retention', 'Days of attendance data to keep (older attendance and punch records are deleted automatically once a day - minimum 7)', 'text', NULL)");
-    if ($insert) {
-        $insert->execute();
-        $insert->close();
+    if ($row['setting_group'] !== 'sync_settings') {
+        $value = trim((string) $row['setting_value']) === '60' ? '180' : $row['setting_value'];
+        $update = $conDB->prepare("UPDATE app_settings SET setting_group = 'sync_settings', setting_value = ?, description = ?, input_type = 'number', options = ? WHERE setting_name = 'attendance_retention_days'");
+        if ($update) {
+            $update->bind_param('sss', $value, $description, $options);
+            $update->execute();
+            $update->close();
+        }
     }
 }
 

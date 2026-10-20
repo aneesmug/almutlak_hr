@@ -1541,6 +1541,18 @@ function __(key, def) {
                             }
                             inputHtml += `</select>`;
                             break;
+                        case 'number': {
+                            // options JSON: {"min":7,"max":3650,"suffix":"days"}
+                            let numOpts = {};
+                            try { numOpts = JSON.parse(setting.options || '{}') || {}; } catch (e) { numOpts = {}; }
+                            const minAttr = numOpts.min !== undefined ? ` min="${escapeHtml(String(numOpts.min))}"` : '';
+                            const maxAttr = numOpts.max !== undefined ? ` max="${escapeHtml(String(numOpts.max))}"` : '';
+                            inputHtml = `<div class="input-group" style="max-width: 260px;">
+                                <input type="number" id="${id}" name="${setting.setting_name}" class="form-control"${minAttr}${maxAttr} step="1" value="${escapeHtml(setting.setting_value || '')}">
+                                ${numOpts.suffix ? `<div class="input-group-append"><span class="input-group-text">${escapeHtml(__(numOpts.suffix, numOpts.suffix))}</span></div>` : ''}
+                            </div>`;
+                            break;
+                        }
                         case 'password':
                             // Secrets (e.g. D365 client secret): masked, with a show/hide toggle
                             inputHtml = `<div class="input-group">
@@ -1864,7 +1876,6 @@ function __(key, def) {
             if (showDeviceMonitor) {
                 attTabs.push(
                     { key: 'device_monitor', icon: 'mdi-monitor', label: __('device_monitor', 'Device Monitor') },
-                    { key: 'attendance_retention', icon: 'mdi-database', label: __('data_retention', 'Data Retention') },
                     { key: 'sync_settings', icon: 'mdi-cloud-sync', label: __('sync_settings', 'Sync Settings') }
                 );
             }
@@ -1913,11 +1924,12 @@ function __(key, def) {
                 if (saveBtnWrapper) {
                     // Timetables self-saves per-row via its own modal; Device Monitor / Data
                     // Retention / Sync Settings use the generic outer Save button.
-                    saveBtnWrapper.style.display = (key === 'device_monitor' || key === 'attendance_retention' || key === 'sync_settings') ? '' : 'none';
+                    saveBtnWrapper.style.display = (key === 'device_monitor' || key === 'sync_settings') ? '' : 'none';
                 }
-                if (key === 'device_monitor' || key === 'attendance_retention' || key === 'sync_settings') {
+                if (key === 'device_monitor' || key === 'sync_settings') {
                     renderSettingsGroup(key, subContent);
-                    if (key === 'attendance_retention') {
+                    // Days to sync & keep (attendance_retention_days) lives in Sync Settings
+                    if (key === 'sync_settings') {
                         subContent.insertAdjacentHTML('beforeend', `<div class="sr-notice tone-amber as-notice"><i class="mdi mdi-alert-outline"></i><div>${__('attendance_retention_warning', 'Attendance, punch and raw punch records older than this many days are permanently deleted (once a day, when the device sync runs), and older punches are no longer stored. Payroll auto Late/Early/Overtime deductions read these records, so keep at least the months you may still need to regenerate. Minimum 7 days.')}</div></div>`);
                     }
                     if (key === 'sync_settings') {
