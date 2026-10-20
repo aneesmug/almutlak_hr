@@ -391,6 +391,21 @@ if (!function_exists('get_special_access_key_category')) {
     }
 }
 
+if (!function_exists('get_app_settings_access_keys')) {
+    /**
+     * Every Special Access key that opens at least one tab on app_settings.php -
+     * the "App Settings Tabs" category plus tabs whose key lives in another
+     * category (Attendance Config). Holding any one of them must show the
+     * App Settings menu link and let the page through the role gate.
+     */
+    function get_app_settings_access_keys() {
+        $categories = get_special_access_categories();
+        $keys = $categories['App Settings Tabs']['keys'] ?? [];
+        $keys[] = 'manage_attendance_config';
+        return array_values(array_unique($keys));
+    }
+}
+
 if (!function_exists('decode_special_access_map')) {
     function decode_special_access_map($rawValue) {
         if (!is_string($rawValue) || trim($rawValue) === '') {

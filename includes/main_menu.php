@@ -109,7 +109,7 @@ $isAllVacationMenuBlocked = is_employee_request_blocked($conDB, $empid ?? '', 'v
 // Value can be a single access key, or an array of keys where any one grants access.
 $page_special_access_bypass = [
     'vacation_balance_history.php' => 'view_vacation_balance_history',
-    'app_settings.php' => ['manage_department_settings', 'manage_job_title_settings', 'manage_global_request_blocks', 'manage_own_screen_settings'],
+    'app_settings.php' => get_app_settings_access_keys(),
     'all_applied_vac.php' => 'access_all_applied_vac',
     'all_applied_loan.php' => 'access_all_applied_loan',
     'all_applied_business_trip.php' => 'access_all_applied_business_trip',
@@ -993,11 +993,12 @@ if ($sbv2Logo === '') { $sbv2Logo = (string) get_setting($conDB, 'logo'); }
 
         <?php
         $can_view_vac_balance_history = $is_system_admin || user_has_special_access($conDB, $empid ?? '', 'view_vacation_balance_history', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
-        $can_access_app_settings = $is_system_admin
-            || user_has_special_access($conDB, $empid ?? '', 'manage_department_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-            || user_has_special_access($conDB, $empid ?? '', 'manage_job_title_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-            || user_has_special_access($conDB, $empid ?? '', 'manage_global_request_blocks', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-            || user_has_special_access($conDB, $empid ?? '', 'manage_own_screen_settings', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        // Any App Settings tab key (incl. Attendance Config) - same list as the page-gate bypass above.
+        $can_access_app_settings = $is_system_admin;
+        foreach (get_app_settings_access_keys() as $appSettingsKey) {
+            if ($can_access_app_settings) break;
+            $can_access_app_settings = user_has_special_access($conDB, $empid ?? '', $appSettingsKey, $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+        }
         $can_see_vacation_date_editor = in_array($user_role, $page_roles['vacation_dates_by_inv.php'] ?? []) || in_array($user_type, $page_roles['vacation_dates_by_inv.php'] ?? []);
         $can_see_manage_supervisors_tool = in_array($user_role, $page_roles['manage_employee_supervisors.php'] ?? []) || in_array($user_type, $page_roles['manage_employee_supervisors.php'] ?? []);
         $can_import_medical_insurance = $is_system_admin
