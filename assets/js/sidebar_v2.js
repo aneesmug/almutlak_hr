@@ -1,4 +1,4 @@
-/* Sidebar v2 behaviour: accordion, icon rail with hover flyouts (desktop), off-canvas drawer (mobile).
+/* Sidebar v2 behaviour: accordion, icon rail with hover flyouts (desktop), bottom tab bar + menu sheet (mobile).
    Vanilla JS. Loaded synchronously from includes/main_menu.php so body.sbv2 is set before first paint. */
 (function () {
     'use strict';
@@ -70,8 +70,10 @@
     }
 
     function labelFor(a) {
-        var s = a.querySelector(':scope > span:not(.fa):not(.badge):not(.badgez)');
-        return ((s || a).textContent || '').replace(/\s+/g, ' ').trim();
+        var s = (a.querySelector(':scope > span:not(.fa):not(.badge):not(.badgez)') || a).cloneNode(true);
+        // some labels carry their count badge inside the span ("Vacations <span class=badgez>16</span>")
+        Array.prototype.forEach.call(s.querySelectorAll('.badge, .badgez, .fa'), function (b) { b.remove(); });
+        return (s.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
     // ---------- Rail hover flyouts (desktop icon rail, not while peeking) ----------
@@ -196,6 +198,231 @@
         window.addEventListener('resize', closeAllFly);
     }
 
+    // ---------- Mobile (< 992px): bottom tab bar + drill-down bottom sheet ----------
+    // Both are built from #side-menu, so they show exactly the items (and badges) the server
+    // rendered for this user. The first TAB_COUNT top-level items become tabs; "More" (and the
+    // top bar hamburger) opens the sheet with every item. Groups drill down one level per tap.
+    var TAB_COUNT = 4;
+    var tabbar, sheet, sheetBackdrop, sheetStack = [];
+
+    function topItems() {
+        return Array.prototype.filter.call(document.querySelectorAll('#side-menu > li'), function (li) {
+            return !!li.querySelector(':scope > a');
+        });
+    }
+    function subItems(ul) {
+        return Array.prototype.filter.call(ul.children, function (li) {
+            return li.tagName === 'LI' && !li.classList.contains('sbv2-fly-title') && !!li.querySelector(':scope > a');
+        });
+    }
+    function isCurrent(li) { return li.classList.contains('sbv2-current') || li.classList.contains('sbv2-current-branch'); }
+    function cloneIcon(a) {
+        var i = a.querySelector(':scope > i');
+        var c = i ? i.cloneNode(true) : document.createElement('i');
+        if (!i) c.className = 'fa-duotone fa-circle-dot';
+        c.setAttribute('aria-hidden', 'true');
+        return c;
+    }
+    function badgeOf(a) {
+        var b = a.querySelector('.badgez, .badge');
+        var n = b ? (b.textContent || '').trim() : '';
+        if (!n || n === '0') return null;
+        var s = document.createElement('span');
+        s.className = 'sbv2-m-badge';
+        s.textContent = n;
+        return s;
+    }
+    // leaf -> real <a> (keeps href/target); group -> <button> that drills down
+    function itemEl(li, cls) {
+        var a = li.querySelector(':scope > a');
+        var group = hasSub(li);
+        var el = document.createElement(group ? 'button' : 'a');
+        el.className = cls + (isCurrent(li) ? ' is-current' : '');
+        if (group) { el.type = 'button'; el._sbv2Li = li; }
+        else {
+            el.href = a.getAttribute('href');
+            if (a.target) el.target = a.target;
+        }
+        var c = a.style.getPropertyValue('--sb-item');
+        if (c) el.style.setProperty('--sb-item', c);
+        return el;
+    }
+
+    function buildTabbar() {
+        var items = topItems();
+        if (!items.length) return;
+        tabbar = document.createElement('nav');
+        tabbar.className = 'sbv2-tabbar';
+        tabbar.setAttribute('aria-label', 'Main menu');
+        var anyCurrent = false, tabbed = items.slice(0, items.length > TAB_COUNT + 1 ? TAB_COUNT : TAB_COUNT + 1);
+        tabbed.forEach(function (li) {
+            var a = li.querySelector(':scope > a');
+            var el = itemEl(li, 'sbv2-tab');
+            var ic = document.createElement('span');
+            ic.className = 'sbv2-tab-ic';
+            ic.appendChild(cloneIcon(a));
+            var b = badgeOf(a);
+            if (b) ic.appendChild(b);
+            var lb = document.createElement('span');
+            lb.className = 'sbv2-tab-lb';
+            lb.textContent = labelFor(a);
+            el.appendChild(ic);
+            el.appendChild(lb);
+            if (isCurrent(li)) { anyCurrent = true; el.setAttribute('aria-current', 'page'); }
+            tabbar.appendChild(el);
+        });
+        if (items.length > tabbed.length) {
+            var more = document.createElement('button');
+            more.type = 'button';
+            more.className = 'sbv2-tab sbv2-tab-more';
+            more._sbv2More = true;
+            var rest = items.slice(tabbed.length);
+            if (!anyCurrent && rest.some(isCurrent)) more.classList.add('is-current');
+            // sum of the badges hidden behind "More"
+            var total = rest.reduce(function (n, li) {
+                var b = badgeOf(li.querySelector(':scope > a'));
+                return n + (b ? (parseInt(b.textContent, 10) || 0) : 0);
+            }, 0);
+            more.innerHTML = '<span class="sbv2-tab-ic"><i class="fa-solid fa-grid-2" aria-hidden="true"></i>' +
+                (total ? '<span class="sbv2-m-badge">' + total + '</span>' : '') + '</span><span class="sbv2-tab-lb"></span>';
+            more.querySelector('.sbv2-tab-lb').textContent = moreLabel();
+            tabbar.appendChild(more);
+        }
+        tabbar.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('button.sbv2-tab');
+            if (!btn) return;
+            e.preventDefault();
+            if (btn._sbv2More) openSheet(null); else openSheet(btn._sbv2Li);
+        });
+        document.body.appendChild(tabbar);
+        body.classList.add('sbv2-has-tabbar');
+    }
+    function moreLabel() { return isRtl() ? 'المزيد' : 'More'; }
+    function menuLabel() { return isRtl() ? 'القائمة' : 'Menu'; }
+
+    function buildSheet() {
+        sheetBackdrop = document.createElement('div');
+        sheetBackdrop.className = 'sbv2-sheet-backdrop';
+        sheetBackdrop.addEventListener('click', closeSheet);
+        sheet = document.createElement('div');
+        sheet.className = 'sbv2-sheet';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        sheet.setAttribute('aria-hidden', 'true');
+        sheet.innerHTML =
+            '<div class="sbv2-sheet-grip" aria-hidden="true"></div>' +
+            '<div class="sbv2-sheet-head">' +
+                '<button type="button" class="sbv2-sheet-btn sbv2-sheet-back" aria-label="Back"><i class="fa-solid fa-chevron-left"></i></button>' +
+                '<div class="sbv2-sheet-title"></div>' +
+                '<button type="button" class="sbv2-sheet-btn sbv2-sheet-close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+            '</div>' +
+            '<div class="sbv2-sheet-body"></div>';
+        sheet.querySelector('.sbv2-sheet-back').addEventListener('click', function () { sheetStack.pop(); renderSheet(-1); });
+        sheet.querySelector('.sbv2-sheet-close').addEventListener('click', closeSheet);
+        sheet.querySelector('.sbv2-sheet-body').addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('button[class*="sbv2-sheet-"]');
+            if (btn && btn._sbv2Li) { sheetStack.push(btn._sbv2Li); renderSheet(1); return; }
+            if (e.target.closest && e.target.closest('a')) closeSheet();
+        });
+        // drag the grip/header down to dismiss
+        var startY = null, dy = 0;
+        function down(e) { startY = (e.touches ? e.touches[0] : e).clientY; dy = 0; sheet.style.transition = 'none'; }
+        function move(e) {
+            if (startY === null) return;
+            dy = Math.max(0, (e.touches ? e.touches[0] : e).clientY - startY);
+            sheet.style.transform = 'translateY(' + dy + 'px)';
+        }
+        function up() {
+            if (startY === null) return;
+            startY = null;
+            sheet.style.transition = '';
+            sheet.style.transform = '';
+            if (dy > 90) closeSheet();
+        }
+        ['.sbv2-sheet-grip', '.sbv2-sheet-head'].forEach(function (sel) {
+            var h = sheet.querySelector(sel);
+            h.addEventListener('touchstart', down, { passive: true });
+            h.addEventListener('touchmove', move, { passive: true });
+            h.addEventListener('touchend', up);
+        });
+        document.body.appendChild(sheetBackdrop);
+        document.body.appendChild(sheet);
+    }
+
+    function renderSheet(dir) {
+        var level = sheetStack[sheetStack.length - 1]; // null = root
+        var bodyEl = sheet.querySelector('.sbv2-sheet-body');
+        var title = sheet.querySelector('.sbv2-sheet-title');
+        bodyEl.innerHTML = '';
+        sheet.classList.toggle('is-root', !level);
+        if (!level) {
+            title.textContent = menuLabel();
+            var grid = document.createElement('div');
+            grid.className = 'sbv2-sheet-grid';
+            topItems().forEach(function (li) {
+                var a = li.querySelector(':scope > a');
+                var el = itemEl(li, 'sbv2-sheet-tile');
+                var ic = document.createElement('span');
+                ic.className = 'sbv2-sheet-ic';
+                ic.appendChild(cloneIcon(a));
+                var b = badgeOf(a);
+                if (b) ic.appendChild(b);
+                var lb = document.createElement('span');
+                lb.className = 'sbv2-sheet-lb';
+                lb.textContent = labelFor(a);
+                el.appendChild(ic);
+                el.appendChild(lb);
+                grid.appendChild(el);
+            });
+            bodyEl.appendChild(grid);
+        } else {
+            title.textContent = labelFor(level.querySelector(':scope > a'));
+            var list = document.createElement('div');
+            list.className = 'sbv2-sheet-list';
+            subItems(level.querySelector(':scope > ul')).forEach(function (li) {
+                var a = li.querySelector(':scope > a');
+                var el = itemEl(li, 'sbv2-sheet-row');
+                var ic = document.createElement('span');
+                ic.className = 'sbv2-sheet-ic';
+                ic.appendChild(cloneIcon(a));
+                var lb = document.createElement('span');
+                lb.className = 'sbv2-sheet-lb';
+                lb.textContent = labelFor(a);
+                el.appendChild(ic);
+                el.appendChild(lb);
+                var b = badgeOf(a);
+                if (b) el.appendChild(b);
+                if (hasSub(li)) {
+                    var ch = document.createElement('i');
+                    ch.className = 'fa-solid fa-chevron-right sbv2-sheet-chev';
+                    ch.setAttribute('aria-hidden', 'true');
+                    el.appendChild(ch);
+                }
+                list.appendChild(el);
+            });
+            bodyEl.appendChild(list);
+        }
+        sheet.setAttribute('aria-label', title.textContent);
+        bodyEl.scrollTop = 0;
+        bodyEl.classList.remove('sbv2-in-fwd', 'sbv2-in-back');
+        if (dir) { void bodyEl.offsetWidth; bodyEl.classList.add(dir > 0 ? 'sbv2-in-fwd' : 'sbv2-in-back'); }
+        var first = bodyEl.querySelector('a, button');
+        if (first && body.classList.contains('sbv2-sheet-open')) { try { first.focus({ preventScroll: true }); } catch (e) { /* old browser */ } }
+    }
+
+    function openSheet(groupLi) {
+        if (!sheet) return;
+        sheetStack = groupLi ? [groupLi] : [];
+        body.classList.add('sbv2-sheet-open');
+        sheet.setAttribute('aria-hidden', 'false');
+        renderSheet(0);
+    }
+    function closeSheet() {
+        if (!sheet || !body.classList.contains('sbv2-sheet-open')) return;
+        body.classList.remove('sbv2-sheet-open');
+        sheet.setAttribute('aria-hidden', 'true');
+    }
+
     function init() {
         // stop slimScroll fighting the CSS scroll container
         try {
@@ -222,6 +449,8 @@
         initFlyouts();
 
         var current = markCurrent();
+        buildTabbar();
+        buildSheet();
         setRail(true);
         if (current) {
             // make sure the current item is visible in the scroll area
@@ -238,7 +467,10 @@
         if (burger) {
             e.preventDefault();
             e.stopPropagation();
-            if (isDesktop()) setPeek(!isPeek()); else setDrawer(!body.classList.contains('sbv2-drawer'));
+            // mobile: the hamburger opens the full menu sheet (old drawer only if the sheet failed to build)
+            if (isDesktop()) setPeek(!isPeek());
+            else if (sheet) { if (body.classList.contains('sbv2-sheet-open')) closeSheet(); else openSheet(null); }
+            else setDrawer(!body.classList.contains('sbv2-drawer'));
             return;
         }
 
@@ -268,11 +500,11 @@
     }, true);
 
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { setDrawer(false); setPeek(false); closeAllFly(); }
+        if (e.key === 'Escape') { setDrawer(false); setPeek(false); closeAllFly(); closeSheet(); }
     });
 
     var onChange = function () {
-        if (isDesktop()) { setDrawer(false); setRail(true); }
+        if (isDesktop()) { setDrawer(false); closeSheet(); setRail(true); }
         else { body.classList.remove('sbv2-rail'); }
     };
     if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);

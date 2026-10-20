@@ -1,4 +1,4 @@
-/* Sidebar v2 - accordion menu, own scrollbar, icon rail with hover flyouts on desktop, off-canvas drawer on mobile.
+/* Sidebar v2 - accordion menu, own scrollbar, icon rail with hover flyouts on desktop, bottom tab bar + menu sheet on mobile.
    Activated by assets/js/sidebar_v2.js (adds body.sbv2). Flyouts are position:fixed (placed by the script),
    so the sidebar's overflow never clips them. */
 
@@ -426,7 +426,266 @@ body.sbv2 #sidebar-menu .sbv2-fly-title { display: none; }
     body.sbv2 #sidebar-menu li > a { min-height: 48px; }   /* comfortable touch targets */
 }
 
+/* ---------- Mobile / tablet: bottom tab bar + drill-down menu sheet (built by sidebar_v2.js) ----------
+   Colours come from the same --sb-fly-* tokens as the desktop flyouts, so the Theme Config
+   menu theme (dark/light) and icon style (colourful/white) apply here too. */
+.sbv2-tabbar, .sbv2-sheet, .sbv2-sheet-backdrop { display: none; }
+@media (max-width: 991.98px) {
+    body.sbv2 { --sb-tab-h: 64px; }
+    body.sbv2.sbv2-has-tabbar .content-page { padding-bottom: calc(var(--sb-tab-h) + env(safe-area-inset-bottom, 0px)) !important; }
+    body.sbv2.sbv2-has-tabbar .footer { bottom: calc(var(--sb-tab-h) + env(safe-area-inset-bottom, 0px)) !important; }
+    body.sbv2.sbv2-has-tabbar #wrapper .left.side-menu { visibility: hidden; } /* sheet replaces the drawer */
+
+    .sbv2-tabbar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1030;
+        height: calc(var(--sb-tab-h) + env(safe-area-inset-bottom, 0px));
+        padding: 6px 6px env(safe-area-inset-bottom, 0px);
+        background: var(--sb-fly-bg);
+        border-top: 1px solid var(--sb-fly-line);
+        box-shadow: 0 -6px 20px rgba(15, 23, 42, .12);
+    }
+    .sbv2-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 0 2px;
+        border: 0;
+        background: transparent;
+        color: var(--sb-fly-text);
+        font: inherit;
+        text-decoration: none !important;
+        -webkit-tap-highlight-color: transparent;
+        cursor: pointer;
+    }
+    .sbv2-tab-ic {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 30px;
+        border-radius: 999px;
+        font-size: 17px;
+        transition: background-color .15s ease;
+    }
+    .sbv2-tab-lb {
+        max-width: 100%;
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sbv2-tab:active .sbv2-tab-ic { background: var(--sb-fly-hover); }
+    /* current tab: pill filled with the item's own colour, like the desktop rail block */
+    .sbv2-tab.is-current { color: var(--sb-fly-text-strong); }
+    .sbv2-tab.is-current .sbv2-tab-lb { font-weight: 700; }
+    .sbv2-tab.is-current .sbv2-tab-ic { background: var(--sb-item, var(--sb-accent)); color: #fff; }
+    .sbv2-tab.is-current .sbv2-tab-ic > i,
+    .sbv2-sheet-tile.is-current .sbv2-sheet-ic > i {
+        color: #fff !important;
+        --fa-primary-color: #fff !important;
+        --fa-secondary-color: #fff !important;
+        --fa-secondary-opacity: .55 !important;
+    }
+    .sbv2-tab-more .sbv2-tab-ic > i { color: var(--sb-accent); }
+    .sbv2-tab-more.is-current .sbv2-tab-ic > i { color: #fff; }
+
+    .sbv2-m-badge {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #f1556c;
+        color: #fff;
+        font-size: 10.5px;
+        font-weight: 700;
+        line-height: 18px;
+        text-align: center;
+        box-shadow: 0 0 0 2px var(--sb-fly-bg);
+    }
+    .sbv2-tab-ic .sbv2-m-badge,
+    .sbv2-sheet-ic .sbv2-m-badge { position: absolute; top: -6px; right: -4px; }
+
+    /* ----- sheet ----- */
+    .sbv2-sheet-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 1045;
+        background: rgba(15, 20, 30, .5);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .22s ease, visibility .22s ease;
+    }
+    .sbv2-sheet {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1046;
+        max-height: 85vh;
+        max-height: 85dvh;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: var(--sb-fly-bg);
+        color: var(--sb-fly-text);
+        border-radius: 20px 20px 0 0;
+        box-shadow: 0 -12px 40px rgba(0, 0, 0, .3);
+        transform: translateY(105%);
+        visibility: hidden;
+        transition: transform .28s cubic-bezier(.2, .8, .2, 1), visibility .28s;
+    }
+    body.sbv2-sheet-open { overflow: hidden; }
+    body.sbv2-sheet-open .sbv2-sheet-backdrop { opacity: 1; visibility: visible; }
+    body.sbv2-sheet-open .sbv2-sheet { transform: none; visibility: visible; }
+    @media (min-width: 600px) {
+        .sbv2-sheet { left: 50%; right: auto; width: 560px; margin-left: -280px; }
+    }
+
+    .sbv2-sheet-grip { flex: 0 0 auto; width: 40px; height: 5px; margin: 8px auto 0; border-radius: 9px; background: var(--sb-fly-line); filter: contrast(2.5); }
+    .sbv2-sheet-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 10px;
+        border-bottom: 1px solid var(--sb-fly-line);
+        touch-action: none;
+    }
+    .sbv2-sheet-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--sb-fly-text-strong);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sbv2-sheet.is-root .sbv2-sheet-title { padding-inline-start: 8px; }
+    .sbv2-sheet-btn {
+        flex: 0 0 auto;
+        width: 38px;
+        height: 38px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--sb-fly-hover);
+        color: var(--sb-fly-text-strong);
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sbv2-sheet.is-root .sbv2-sheet-back { display: none; }
+
+    .sbv2-sheet-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding: 14px 12px 18px;
+    }
+    .sbv2-sheet-body.sbv2-in-fwd { animation: sbv2-in-fwd .22s ease; }
+    .sbv2-sheet-body.sbv2-in-back { animation: sbv2-in-back .22s ease; }
+    @keyframes sbv2-in-fwd { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+    @keyframes sbv2-in-back { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+
+    /* icon square: soft tint of the item's own colour */
+    .sbv2-sheet-ic {
+        position: relative;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 16px;
+        font-size: 21px;
+        background: var(--sb-fly-hover);
+        background: color-mix(in srgb, var(--sb-item, var(--sb-accent)) 16%, transparent);
+    }
+
+    /* root level: grid of tiles */
+    .sbv2-sheet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    @media (min-width: 420px) { .sbv2-sheet-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .sbv2-sheet-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 4px;
+        border: 0;
+        border-radius: 14px;
+        background: transparent;
+        color: var(--sb-fly-text);
+        font: inherit;
+        text-decoration: none !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .sbv2-sheet-tile:active { background: var(--sb-fly-hover); }
+    .sbv2-sheet-tile .sbv2-sheet-lb {
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.25;
+        text-align: center;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+    }
+    .sbv2-sheet-tile.is-current { color: var(--sb-fly-text-strong); }
+    .sbv2-sheet-tile.is-current .sbv2-sheet-lb { font-weight: 700; }
+    .sbv2-sheet-tile.is-current .sbv2-sheet-ic { background: var(--sb-item, var(--sb-accent)); box-shadow: 0 8px 16px -8px var(--sb-item, var(--sb-accent)); }
+
+    /* group level: list rows */
+    .sbv2-sheet-list { display: flex; flex-direction: column; gap: 2px; }
+    .sbv2-sheet-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        min-height: 56px;
+        padding: 6px 10px;
+        border: 0;
+        border-radius: 14px;
+        background: transparent;
+        color: var(--sb-fly-text);
+        font: inherit;
+        font-size: 15px;
+        text-align: start;
+        text-decoration: none !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .sbv2-sheet-row .sbv2-sheet-ic { width: 42px; height: 42px; border-radius: 12px; font-size: 17px; }
+    .sbv2-sheet-row .sbv2-sheet-lb { flex: 1 1 auto; min-width: 0; }
+    .sbv2-sheet-row:active { background: var(--sb-fly-hover); }
+    .sbv2-sheet-row.is-current { background: var(--sb-current-bg); color: var(--sb-accent); font-weight: 600; }
+    .sbv2-sheet-chev { font-size: 12px; opacity: .5; }
+    .sbv2-sheet a:focus-visible, .sbv2-sheet button:focus-visible,
+    .sbv2-tabbar a:focus-visible, .sbv2-tabbar button:focus-visible { outline: 2px solid var(--sb-accent); outline-offset: 2px; }
+}
+
 /* ---------- RTL ---------- */
+html[dir="rtl"] .sbv2-sheet-back i, html[dir="rtl"] .sbv2-sheet-chev { transform: scaleX(-1); }
+html[dir="rtl"] .sbv2-tab-ic .sbv2-m-badge, html[dir="rtl"] .sbv2-sheet-ic .sbv2-m-badge { right: auto; left: -4px; }
+@media (max-width: 991.98px) and (min-width: 600px) {
+    html[dir="rtl"] .sbv2-sheet { left: auto; right: 50%; margin-left: 0; margin-right: -280px; }
+}
 html[dir="rtl"] body.sbv2 #wrapper .left.side-menu { left: auto; right: 0; }
 html[dir="rtl"] body.sbv2 #sidebar-menu ul ul { margin: 0 21px 4px 0; padding: 0 10px 0 0; border-left: 0; border-right: 1px solid var(--sb-line); }
 html[dir="rtl"] body.sbv2 #sidebar-menu li > a > span.fa { margin-left: 0; margin-right: auto; }
@@ -512,12 +771,16 @@ html[dir="rtl"] body.sbv2 .navbar-custom .menu-left > li.float-left { float: rig
    inline --fa-primary-color/--fa-secondary-color (needs !important to beat inline style).
    White mode auto-flips to near-black when the menu theme is Light, so icons stay visible
    on a white sidebar instead of vanishing. */
-body.sbv2.sbv2-icons-white:not(.sbv2-light) #sidebar-menu i.fa-duotone {
+body.sbv2.sbv2-icons-white:not(.sbv2-light) #sidebar-menu i.fa-duotone,
+body.sbv2.sbv2-icons-white:not(.sbv2-light) .sbv2-tabbar i.fa-duotone,
+body.sbv2.sbv2-icons-white:not(.sbv2-light) .sbv2-sheet i.fa-duotone {
     --fa-primary-color: #ffffff !important;
     --fa-secondary-color: #ffffff !important;
     --fa-secondary-opacity: .45 !important;
 }
-body.sbv2.sbv2-icons-white.sbv2-light #sidebar-menu i.fa-duotone {
+body.sbv2.sbv2-icons-white.sbv2-light #sidebar-menu i.fa-duotone,
+body.sbv2.sbv2-icons-white.sbv2-light .sbv2-tabbar i.fa-duotone,
+body.sbv2.sbv2-icons-white.sbv2-light .sbv2-sheet i.fa-duotone {
     --fa-primary-color: #1f2937 !important;
     --fa-secondary-color: #1f2937 !important;
     --fa-secondary-opacity: .45 !important;
