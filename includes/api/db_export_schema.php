@@ -49,8 +49,21 @@ foreach ($tables as $table) {
     }, $cols);
 }
 
+// Optional CREATE TABLE statements so the importer can create a table that is
+// missing on its side. Only for explicitly requested tables.
+$createSql = [];
+if (!empty($_POST['include_create']) && $onlyTables) {
+    foreach ($tables as $table) {
+        $row = $pdo->query('SHOW CREATE TABLE `' . str_replace('`', '``', $table) . '`')->fetch(PDO::FETCH_NUM);
+        if ($row && isset($row[1])) {
+            $createSql[$table] = $row[1];
+        }
+    }
+}
+
 echo json_encode([
     'status' => 'success',
     'database' => $currentDbName,
     'schema' => $schema,
+    'create_sql' => $createSql,
 ]);

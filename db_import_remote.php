@@ -198,6 +198,53 @@ if ($res && ($row = $res->fetch_assoc())) {
         .dbs-sql-btns { display: flex; gap: 6px; }
         .dbs-sql-out { width: 100%; margin-top: 10px; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; border-radius: 8px; border: 1px solid #1e293b; background: #0f172a; color: #e2e8f0; padding: 10px; resize: vertical; }
         .dbs-sql-hint { margin-top: 6px; font-size: 11.5px; color: #64748b; }
+        .dbs-list { max-height: 46vh; }
+        .dbs-card-head .dbs-pick-table, .dbs-col .dbs-pick { width: 16px; height: 16px; flex: 0 0 auto; cursor: pointer; accent-color: #6366f1; margin: 0; }
+        .dbs-col { border: 1px solid transparent; transition: background .15s, border-color .15s; }
+        .dbs-col-info { margin: 0; cursor: pointer; flex: 1 1 auto; flex-wrap: wrap; }
+        .dbs-col .dbs-seg { opacity: .45; transition: opacity .15s; }
+        .dbs-col.is-picked { background: #eef2ff; border-color: #c7d2fe; }
+        .dbs-col.is-picked .dbs-seg { opacity: 1; }
+        .dbs-types span { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+        /* sr-btn colours inside the Swal popup (outside .sr-page, so the tokens are not inherited) */
+        .swal2-popup.dbi-popup { --sr-accent: #6366f1; --sr-accent-strong: #4f46e5; --sr-surface: #fff; --sr-border-strong: #d4d9e3; --sr-text-2: #334155; --sr-surface-2: #f8fafc; }
+        html.app-dark .swal2-popup.dbi-popup { --sr-accent: #6366f1; --sr-accent-strong: #818cf8; --sr-surface: #1d2436; --sr-border-strong: #3a4560; --sr-text-2: #d8dee9; --sr-surface-2: #252e44; }
+        .dbs-quick .dbs-refresh { margin-inline-start: auto; }
+        .dbs-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 12px; font-weight: 600; color: #64748b; }
+        .dbs-foot { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; }
+        .dbs-foot-info { display: flex; gap: 8px; }
+        .dbs-foot-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+        .dbs-side { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+        .dbs-side b { font-variant-numeric: tabular-nums; }
+        .dbs-side.is-local { background: #f0fdf4; color: #15803d; }
+        .dbs-side.is-live { background: #f0f9ff; color: #0369a1; }
+        #dbsOut { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        #dbsOut:empty { display: none; }
+        .dbs-sql-head .dbs-side { font-size: 12px; }
+        .dbs-wait { font-size: 13px; color: #64748b; padding: 8px 2px; }
+        .dbs-note code { font-size: 12px; background: transparent; color: inherit; font-weight: 700; }
+        .dbs-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; border: 1px solid #86efac; background: #f0fdf4; color: #166534; }
+        .dbs-confirm.is-live { border-color: #fca5a5; background: #fef2f2; color: #991b1b; }
+        .dbs-confirm > div:first-child { flex: 1 1 300px; }
+        .dbs-confirm-btns { display: flex; gap: 6px; justify-content: flex-end; }
+        .dbs-result { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
+        .dbs-result-head { font-size: 13px; font-weight: 700; }
+        .dbs-result.is-ok .dbs-result-head { color: #15803d; }
+        .dbs-result.is-warn .dbs-result-head { color: #b45309; }
+        .dbs-result.is-err .dbs-result-head { color: #b91c1c; }
+        .dbs-result-row { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; }
+        .dbs-result-row > i { margin-top: 3px; }
+        .dbs-result-row.is-ok > i { color: #16a34a; }
+        .dbs-result-row.is-err > i { color: #dc2626; }
+        .dbs-result-row code { display: block; font-size: 11.5px; color: #334155; background: transparent; white-space: pre-wrap; word-break: break-all; padding: 0; }
+        .dbs-result-row small { display: block; color: #b91c1c; }
+        html.app-dark .dbs-col.is-picked { background: #252b4a; border-color: #4547a0; }
+        html.app-dark .dbs-foot, html.app-dark .dbs-result { background: #161c2a; border-color: #2a3348; }
+        html.app-dark .dbs-side.is-local { background: #12301f; color: #86efac; }
+        html.app-dark .dbs-side.is-live { background: #102c3d; color: #7dd3fc; }
+        html.app-dark .dbs-confirm { background: #12301f; border-color: #1f6a3c; color: #86efac; }
+        html.app-dark .dbs-confirm.is-live { background: #3a1717; border-color: #7a2a2a; color: #fca5a5; }
+        html.app-dark .dbs-result-row code { color: #d8dee9; }
         html.app-dark .dbs-card, html.app-dark .dbs-seg { background: #1d2436; border-color: #2a3348; }
         html.app-dark .dbs-card.has-diff { border-color: #6b5417; }
         html.app-dark .dbs-card-name, html.app-dark .dbs-sql-head { color: #f1f5f9; }
@@ -1024,206 +1071,319 @@ if ($res && ($row = $res->fetch_assoc())) {
             });
         }
 
-        // Builds one column definition fragment (used inside ADD COLUMN / for display) from
-        // the {name, type, nullable, default, extra} shape returned by check_schema.
-        function buildColumnDefSql(col) {
-            let sql = '`' + col.name + '` ' + col.type;
-            sql += col.nullable ? ' NULL' : ' NOT NULL';
-            if (col.default !== null && col.default !== undefined) {
-                sql += /^CURRENT_TIMESTAMP/i.test(col.default)
-                    ? ' DEFAULT ' + col.default
-                    : " DEFAULT '" + String(col.default).replace(/'/g, "''") + "'";
-            }
-            if (col.extra) {
-                sql += ' ' + col.extra;
-            }
-            sql += col.after ? ' AFTER `' + col.after + '`' : ' FIRST';
-            return sql;
-        }
+        // --- Schema check modal ---------------------------------------------------------
+        // Every difference is one row with its own checkbox + direction choice. Ticked rows
+        // are sent as {table, column, choice}; the server re-reads both schemas, builds the
+        // SQL itself (includes/db_schema_sync.php) and either previews or applies it.
+        const SCHEMA_CHOICES = {
+            create: [{ value: 'create_local', label: 'Create on Local', side: 'local', tone: 'is-ok' }],
+            missing_local: [
+                { value: 'add_local', label: 'Add to Local', side: 'local', tone: 'is-ok' },
+                { value: 'remove_live', label: 'Drop from Live', side: 'live', tone: 'is-err' }
+            ],
+            missing_live: [
+                { value: 'add_live', label: 'Add to Live', side: 'live', tone: 'is-ok' },
+                { value: 'drop_local', label: 'Drop from Local', side: 'local', tone: 'is-err' }
+            ],
+            type: [
+                { value: 'modify_local', label: 'Live → Local', side: 'local' },
+                { value: 'modify_live', label: 'Local → Live', side: 'live' }
+            ]
+        };
+        const CHOICE_SIDE = {};
+        Object.values(SCHEMA_CHOICES).forEach(list => list.forEach(c => { CHOICE_SIDE[c.value] = c.side; }));
 
-        function generateAlterSql(report) {
-            const localStatements = [];
-            const liveStatements = [];
+        let schemaRowSeq = 0;
+        let schemaTables = [];
 
-            Object.keys(report).forEach(function(table) {
-                const r = report[table];
-                const localClauses = [];
-                const liveClauses = [];
-
-                (r.missing_in_local || []).forEach(function(col) {
-                    const action = $('input[name="oiAction_' + table + '_' + col.name + '"]:checked').val();
-                    if (action === 'add_local') {
-                        localClauses.push('ADD COLUMN ' + buildColumnDefSql(col));
-                    } else if (action === 'remove_live') {
-                        liveClauses.push('DROP COLUMN `' + col.name + '`');
-                    }
-                });
-                (r.missing_in_live || []).forEach(function(col) {
-                    const action = $('input[name="oiAction_' + table + '_' + col.name + '"]:checked').val();
-                    if (action === 'drop_local') {
-                        localClauses.push('DROP COLUMN `' + col.name + '`');
-                    } else if (action === 'add_live') {
-                        liveClauses.push('ADD COLUMN ' + buildColumnDefSql(col));
-                    }
-                });
-
-                if (localClauses.length) {
-                    localStatements.push('ALTER TABLE `' + table + '`\n  ' + localClauses.join(',\n  ') + ';');
-                }
-                if (liveClauses.length) {
-                    liveStatements.push('ALTER TABLE `' + table + '`\n  ' + liveClauses.join(',\n  ') + ';');
-                }
-            });
-
-            let out = '';
-            if (localStatements.length) {
-                out += '-- Run on LOCAL database\n' + localStatements.join('\n\n');
-            }
-            if (liveStatements.length) {
-                out += (out ? '\n\n' : '') + '-- Run on LIVE database\n' + liveStatements.join('\n\n');
-            }
-            return out;
-        }
-
-        // Segmented radio choice per column - radio name/values stay as generateAlterSql() reads them
-        function schemaChoiceHtml(name, options) {
-            return '<div class="dbs-seg">' + options.map(function(o, i) {
-                const id = name + '_' + o.value;
-                return '<input type="radio" name="' + escHtml(name) + '" id="' + escHtml(id) + '" value="' + o.value + '"' + (i === 0 ? ' checked' : '') + '>' +
-                    '<label for="' + escHtml(id) + '" class="' + (o.tone || '') + '">' + o.label + '</label>';
+        function schemaRowHtml(table, column, kind, infoHtml, checked) {
+            const id = 'dbsRow' + (++schemaRowSeq);
+            const seg = '<div class="dbs-seg">' + SCHEMA_CHOICES[kind].map(function(o, i) {
+                return '<input type="radio" name="' + id + '" id="' + id + '_' + i + '" value="' + o.value + '"' + (i === 0 ? ' checked' : '') + '>' +
+                    '<label for="' + id + '_' + i + '" class="' + (o.tone || '') + '">' + o.label + '</label>';
             }).join('') + '</div>';
+            return '<div class="dbs-col' + (checked ? ' is-picked' : '') + '">' +
+                '<label class="dbs-col-info"><input type="checkbox" class="dbs-pick" data-table="' + escHtml(table) + '" data-column="' + escHtml(column) + '" data-kind="' + kind + '"' + (checked ? ' checked' : '') + '>' + infoHtml + '</label>' +
+                seg + '</div>';
         }
 
-        function schemaColRow(col, choiceHtml) {
-            return '<div class="dbs-col">' +
-                '<div class="dbs-col-info"><code>' + escHtml(col.name) + '</code><span class="dbs-col-type">' + escHtml(col.type) + (col.nullable === false ? ' NOT NULL' : '') + '</span></div>' +
-                choiceHtml + '</div>';
+        function colInfo(col) {
+            return '<code>' + escHtml(col.name) + '</code><span class="dbs-col-type">' + escHtml(col.type) + (col.nullable === false ? ' NOT NULL' : '') + '</span>';
+        }
+
+        function schemaFooterHtml() {
+            return '<div class="dbs-foot">' +
+                '<div class="dbs-foot-info"><span class="dbs-side is-local"><i class="fa-solid fa-laptop-code"></i> Local <b id="dbsCntLocal">0</b></span>' +
+                '<span class="dbs-side is-live"><i class="fa-solid fa-cloud"></i> Live <b id="dbsCntLive">0</b></span></div>' +
+                '<div class="dbs-foot-btns">' +
+                '<button type="button" class="sr-btn sr-btn-sm" id="dbsPreviewBtn"><i class="fa-solid fa-code"></i> Generate SQL</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-success" id="dbsApplyLocalBtn" data-target="local"><i class="fa-solid fa-laptop-code"></i> Apply to Local</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-danger" id="dbsApplyLiveBtn" data-target="live"><i class="fa-solid fa-cloud-arrow-up"></i> Apply to Live</button>' +
+                '</div></div>' +
+                '<div id="dbsOut"></div>';
         }
 
         function showSchemaDiffModal(res) {
             const report = res.report || {};
             const names = Object.keys(report);
-            let diffTables = 0, colIssues = 0, missingTables = 0;
+            let diffTables = 0, colIssues = 0;
+            schemaRowSeq = 0;
 
             const cards = names.map(function(table) {
                 const r = report[table];
                 const missLocal = r.missing_in_local || [];
                 const missLive = r.missing_in_live || [];
                 const types = r.type_mismatches || [];
-                const issues = missLocal.length + missLive.length + types.length;
+                const issues = r.exists_locally ? missLocal.length + missLive.length + types.length : 1;
                 let body = '';
 
                 if (!r.exists_locally) {
-                    missingTables++;
-                    body += '<div class="dbs-note is-err"><i class="fa fa-times-circle"></i> Table does not exist locally.</div>';
-                }
-                if (missLocal.length) {
-                    body += '<div class="dbs-sec is-err"><i class="fa fa-arrow-down"></i> Missing locally <span>live has these columns</span></div>';
-                    missLocal.forEach(function(col) {
-                        body += schemaColRow(col, schemaChoiceHtml('oiAction_' + table + '_' + col.name, [
-                            { value: 'add_local', label: 'Add to Local', tone: 'is-ok' },
-                            { value: 'remove_live', label: 'Remove from Live', tone: 'is-err' },
-                            { value: 'skip', label: 'Skip' }
-                        ]));
-                    });
-                }
-                if (missLive.length) {
-                    body += '<div class="dbs-sec is-warn"><i class="fa fa-arrow-up"></i> Extra locally <span>live does not have these columns</span></div>';
-                    missLive.forEach(function(col) {
-                        body += schemaColRow(col, schemaChoiceHtml('oiAction_' + table + '_' + col.name, [
-                            { value: 'drop_local', label: 'Drop from Local', tone: 'is-err' },
-                            { value: 'add_live', label: 'Add to Live', tone: 'is-ok' },
-                            { value: 'skip', label: 'Skip' }
-                        ]));
-                    });
-                }
-                if (types.length) {
-                    body += '<div class="dbs-sec is-warn"><i class="fa fa-exchange"></i> Type differs <span>review manually, not auto-generated</span></div>';
-                    types.forEach(function(m) {
-                        body += '<div class="dbs-col"><div class="dbs-col-info"><code>' + escHtml(m.column) + '</code></div>' +
-                            '<div class="dbs-types"><span>local</span><code>' + escHtml(m.local_type) + '</code><i class="fa fa-long-arrow-right"></i><span>live</span><code>' + escHtml(m.live_type) + '</code></div></div>';
-                    });
+                    body += '<div class="dbs-sec is-err"><i class="fa-solid fa-circle-xmark"></i> Table missing locally <span>' + missLocal.length + ' column(s) on live</span></div>';
+                    body += schemaRowHtml(table, '', 'create', '<span class="dbs-col-type">CREATE TABLE <code>' + escHtml(table) + '</code> using the live definition</span>', true);
+                } else {
+                    if (missLocal.length) {
+                        body += '<div class="dbs-sec is-err"><i class="fa-solid fa-arrow-down"></i> Only on live <span>missing in local</span></div>';
+                        missLocal.forEach(col => { body += schemaRowHtml(table, col.name, 'missing_local', colInfo(col), true); });
+                    }
+                    if (missLive.length) {
+                        body += '<div class="dbs-sec is-warn"><i class="fa-solid fa-arrow-up"></i> Only on local <span>missing on live</span></div>';
+                        missLive.forEach(col => { body += schemaRowHtml(table, col.name, 'missing_live', colInfo(col), false); });
+                    }
+                    if (types.length) {
+                        body += '<div class="dbs-sec is-warn"><i class="fa-solid fa-right-left"></i> Type differs</div>';
+                        types.forEach(function(m) {
+                            const info = '<code>' + escHtml(m.column) + '</code><span class="dbs-types"><span>local</span><code>' + escHtml(m.local_type) +
+                                '</code><span>live</span><code>' + escHtml(m.live_type) + '</code></span>';
+                            body += schemaRowHtml(table, m.column, 'type', info, false);
+                        });
+                    }
                 }
 
-                const bad = issues > 0 || !r.exists_locally;
+                const bad = issues > 0;
                 if (bad) { diffTables++; colIssues += issues; }
                 const pill = !r.exists_locally
                     ? '<span class="dbs-pill is-err">Missing locally</span>'
-                    : (issues ? '<span class="dbs-pill is-warn">' + issues + ' difference' + (issues > 1 ? 's' : '') + '</span>' : '<span class="dbs-pill is-ok"><i class="fa fa-check"></i> Matches</span>');
+                    : (issues ? '<span class="dbs-pill is-warn">' + issues + ' difference' + (issues > 1 ? 's' : '') + '</span>' : '<span class="dbs-pill is-ok"><i class="fa-solid fa-check"></i> Matches</span>');
 
-                return '<div class="dbs-card' + (bad ? ' has-diff' : '') + '">' +
-                    '<div class="dbs-card-head"><span class="dbs-card-icon"><i class="fa fa-table"></i></span><span class="dbs-card-name">' + escHtml(table) + '</span>' + pill + '</div>' +
-                    (body ? '<div class="dbs-card-body">' + body + '</div>' : '') +
-                    '</div>';
+                return {
+                    bad: bad,
+                    html: '<div class="dbs-card' + (bad ? ' has-diff' : '') + '">' +
+                        '<div class="dbs-card-head">' +
+                        (bad ? '<input type="checkbox" class="dbs-pick-table" title="Select all in this table">' : '') +
+                        '<span class="dbs-card-icon"><i class="fa-solid fa-table"></i></span><span class="dbs-card-name">' + escHtml(table) + '</span>' + pill + '</div>' +
+                        (body ? '<div class="dbs-card-body">' + body + '</div>' : '') +
+                        '</div>'
+                };
             });
 
             // Tables with differences first
-            const ordered = names.map(function(n, i) { return { bad: /has-diff/.test(cards[i]), html: cards[i] }; })
-                .sort(function(a, b) { return b.bad - a.bad; }).map(function(c) { return c.html; }).join('');
+            const ordered = cards.sort((a, b) => b.bad - a.bad).map(c => c.html).join('');
 
             const ok = !res.any_mismatch;
             const head = '<div class="dbi-done-head">' +
-                '<span class="dbi-done-icon' + (ok ? '' : ' is-warn') + '"><i class="fa ' + (ok ? 'fa-check' : 'fa-exclamation-triangle') + '"></i></span>' +
+                '<span class="dbi-done-icon' + (ok ? '' : ' is-warn') + '"><i class="fa-solid ' + (ok ? 'fa-check' : 'fa-triangle-exclamation') + '"></i></span>' +
                 '<div class="dbi-pg-sub" style="margin:0;">' + (ok
                     ? 'All <strong>' + names.length + '</strong> selected table(s) have the same columns locally and on live.'
-                    : '<strong>' + diffTables + '</strong> of ' + names.length + ' table(s) differ. Pick an action per column, then generate the ALTER SQL.') +
+                    : '<strong>' + diffTables + '</strong> of ' + names.length + ' table(s) differ. Tick the changes you want, pick a direction for each, then generate the SQL or apply it directly.') +
                 '</div></div>';
 
             const stats = '<div class="dbi-stats">' +
                 '<div class="dbi-stat"><span class="dbi-stat-label">Checked</span><span class="dbi-stat-value">' + names.length + '</span></div>' +
                 '<div class="dbi-stat tone-ok"><span class="dbi-stat-label">Matching</span><span class="dbi-stat-value">' + (names.length - diffTables) + '</span></div>' +
                 '<div class="dbi-stat tone-warn"><span class="dbi-stat-label">Differ</span><span class="dbi-stat-value">' + diffTables + '</span></div>' +
-                '<div class="dbi-stat tone-err"><span class="dbi-stat-label">Column issues</span><span class="dbi-stat-value">' + colIssues + '</span></div>' +
+                '<div class="dbi-stat tone-err"><span class="dbi-stat-label">Differences</span><span class="dbi-stat-value">' + colIssues + '</span></div>' +
                 '</div>';
 
-            const sqlBlock = ok ? '' :
-                '<div class="dbs-sql">' +
-                '<div class="dbs-sql-head"><span><i class="fa fa-code"></i> ALTER SQL</span>' +
-                '<span class="dbs-sql-btns"><button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="genAlterBtn"><i class="fa fa-magic"></i> Generate</button>' +
-                '<button type="button" class="sr-btn sr-btn-sm" id="copyAlterBtn" style="display:none;"><i class="fa fa-copy"></i> Copy</button></span></div>' +
-                '<textarea id="alterSqlOut" class="dbs-sql-out" rows="8" readonly style="display:none;"></textarea>' +
-                '<div class="dbs-sql-hint">Output is split into LOCAL and LIVE sections based on your selections - run each on the matching server.</div>' +
-                '</div>';
+            const refreshBtn = '<button type="button" class="sr-btn sr-btn-sm dbs-refresh" id="dbsRefreshBtn" title="Compare the schema again"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>';
+            const quick = '<div class="dbs-quick">' + (ok ? '' :
+                '<span>Quick select:</span>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="local"><i class="fa-solid fa-laptop-code"></i> Make Local match Live</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="live"><i class="fa-solid fa-cloud"></i> Make Live match Local</button>' +
+                '<button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" data-quick="none"><i class="fa-regular fa-square"></i> Clear</button>') +
+                refreshBtn + '</div>';
 
             Swal.fire({
-                title: ok ? 'Schema matches' : 'Schema differences found',
+                title: ok ? 'Schema matches' : 'Schema differences',
                 customClass: { popup: 'dbi-popup' },
-                width: '780px',
-                html: head + stats + '<div class="dbs-list">' + ordered + '</div>' + sqlBlock,
+                width: '880px',
+                html: head + stats + quick + '<div class="dbs-list">' + ordered + '</div>' + (ok ? '' : schemaFooterHtml()),
                 showConfirmButton: true,
-                confirmButtonText: 'Close'
-            });
-
-            $(document).off('click', '#genAlterBtn').on('click', '#genAlterBtn', function() {
-                const sql = generateAlterSql(report);
-                const $out = $('#alterSqlOut');
-                $out.val(sql || '-- No columns selected.').show();
-                $('#copyAlterBtn').show();
-            });
-
-            $(document).off('click', '#copyAlterBtn').on('click', '#copyAlterBtn', function() {
-                const $out = $('#alterSqlOut');
-                $out.select();
-                navigator.clipboard.writeText($out.val()).then(function() {
-                    $('#copyAlterBtn').html('<i class="fa fa-check"></i> Copied!');
-                    setTimeout(function() { $('#copyAlterBtn').html('<i class="fa fa-copy"></i> Copy'); }, 1500);
-                }).catch(function() {
-                    document.execCommand('copy');
-                });
+                confirmButtonText: 'Close',
+                allowOutsideClick: false,
+                didOpen: updateSchemaSelection
             });
         }
 
-        $('#checkSchemaBtn').on('click', function() {
-            const baseUrl = $baseUrl.val().trim();
-            const exportKey = $exportKey.val().trim();
-            const tables = $('.table-check:checked').map(function() { return this.value; }).get();
+        function collectSchemaChanges(side) {
+            const changes = [];
+            $('.dbs-pick:checked').each(function() {
+                const choice = $(this).closest('.dbs-col').find('input[type="radio"]:checked').val();
+                if (!choice || (side && CHOICE_SIDE[choice] !== side)) return;
+                changes.push({ table: this.dataset.table, column: this.dataset.column, choice: choice });
+            });
+            return changes;
+        }
 
-            if (!tables.length) {
-                Swal.fire('Nothing selected', 'Pick at least one table.', 'warning');
-                return;
+        function updateSchemaSelection() {
+            const all = collectSchemaChanges();
+            const local = all.filter(c => CHOICE_SIDE[c.choice] === 'local').length;
+            const live = all.length - local;
+            $('#dbsCntLocal').text(local);
+            $('#dbsCntLive').text(live);
+            $('#dbsPreviewBtn').prop('disabled', !all.length);
+            $('#dbsApplyLocalBtn').prop('disabled', !local);
+            $('#dbsApplyLiveBtn').prop('disabled', !live);
+            $('.dbs-col').each(function() {
+                $(this).toggleClass('is-picked', $(this).find('.dbs-pick').is(':checked'));
+            });
+            $('.dbs-card').each(function() {
+                const $picks = $(this).find('.dbs-pick');
+                const n = $picks.filter(':checked').length;
+                $(this).find('.dbs-pick-table').prop('checked', n > 0 && n === $picks.length).prop('indeterminate', n > 0 && n < $picks.length);
+            });
+        }
+
+        function schemaPost(action, extra) {
+            return ajaxPost(Object.assign({
+                action: action,
+                base_url: $baseUrl.val().trim(),
+                export_key: $exportKey.val().trim()
+            }, extra || {}));
+        }
+
+        function sqlBlockHtml(side, items) {
+            if (!items.length) return '';
+            const okItems = items.filter(i => i.sql && !i.error);
+            const bad = items.filter(i => i.error);
+            const sql = okItems.map(i => i.sql).join('\n');
+            let html = '<div class="dbs-sql">' +
+                '<div class="dbs-sql-head"><span class="dbs-side is-' + side + '"><i class="fa-solid ' + (side === 'live' ? 'fa-cloud' : 'fa-laptop-code') + '"></i> Run on ' + side.toUpperCase() + ' <b>' + okItems.length + '</b></span>' +
+                (okItems.length ? '<button type="button" class="sr-btn sr-btn-sm dbs-copy"><i class="fa-solid fa-copy"></i> Copy</button>' : '') + '</div>';
+            if (okItems.length) {
+                html += '<textarea class="dbs-sql-out" rows="' + Math.min(10, okItems.length + 1) + '" readonly>' + escHtml('-- Run on ' + side.toUpperCase() + ' database\n' + sql) + '</textarea>';
             }
+            bad.forEach(i => {
+                html += '<div class="dbs-note is-err"><i class="fa-solid fa-circle-xmark"></i> <code>' + escHtml(i.table + (i.column ? '.' + i.column : '')) + '</code> ' + escHtml(i.error) + '</div>';
+            });
+            return html + '</div>';
+        }
 
-            const $btn = $(this).prop('disabled', true);
+        function setSchemaBusy(busy) {
+            $('#dbsPreviewBtn, #dbsApplyLocalBtn, #dbsApplyLiveBtn, #dbsConfirmApply, .dbs-quick button').prop('disabled', busy);
+            if (!busy) updateSchemaSelection();
+        }
+
+        function showSchemaOut(html) {
+            const $out = $('#dbsOut').html(html);
+            if ($out[0]) $out[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        $(document).off('.dbs')
+            .on('change.dbs', '.dbs-pick, .dbs-seg input', function() {
+                // Picking a direction implies "include this change"
+                if (this.type === 'radio') $(this).closest('.dbs-col').find('.dbs-pick').prop('checked', true);
+                $('#dbsOut').empty();
+                updateSchemaSelection();
+            })
+            .on('change.dbs', '.dbs-pick-table', function() {
+                $(this).closest('.dbs-card').find('.dbs-pick').prop('checked', this.checked);
+                $('#dbsOut').empty();
+                updateSchemaSelection();
+            })
+            .on('click.dbs', '.dbs-quick button', function() {
+                const mode = this.dataset.quick;
+                $('.dbs-pick').each(function() {
+                    const $row = $(this).closest('.dbs-col');
+                    if (mode === 'none') { this.checked = false; return; }
+                    const $radio = $row.find('input[type="radio"]').filter(function() { return CHOICE_SIDE[this.value] === mode; });
+                    this.checked = $radio.length > 0;
+                    if ($radio.length) $radio.prop('checked', true);
+                });
+                $('#dbsOut').empty();
+                updateSchemaSelection();
+            })
+            .on('click.dbs', '.dbs-copy', function() {
+                const $btn = $(this);
+                const text = $btn.closest('.dbs-sql').find('.dbs-sql-out').val();
+                const done = () => { $btn.html('<i class="fa-solid fa-check"></i> Copied'); setTimeout(() => $btn.html('<i class="fa-solid fa-copy"></i> Copy'), 1500); };
+                if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+                else { $btn.closest('.dbs-sql').find('.dbs-sql-out').select(); document.execCommand('copy'); done(); }
+            })
+            .on('click.dbs', '#dbsPreviewBtn', function() {
+                const changes = collectSchemaChanges();
+                if (!changes.length) return;
+                setSchemaBusy(true);
+                showSchemaOut('<div class="dbs-wait"><i class="fa-solid fa-spinner fa-spin"></i> Building SQL...</div>');
+                schemaPost('schema_plan', { changes: JSON.stringify(changes) }).done(function(res) {
+                    if (res.status !== 'success') {
+                        showSchemaOut('<div class="dbs-note is-err">' + escHtml(res.message || 'Failed to build SQL') + '</div>');
+                        return;
+                    }
+                    showSchemaOut(sqlBlockHtml('local', res.local || []) + sqlBlockHtml('live', res.live || []) +
+                        '<div class="dbs-sql-hint">Statements are built from the current schema on each server. Column comments and per-column collation are not copied.</div>');
+                }).fail(function() {
+                    showSchemaOut('<div class="dbs-note is-err">Request failed.</div>');
+                }).always(() => setSchemaBusy(false));
+            })
+            .on('click.dbs', '#dbsApplyLocalBtn, #dbsApplyLiveBtn', function() {
+                // Step 1: preview exactly what will run + inline confirm (a second Swal would
+                // replace this modal and lose the selection)
+                const target = this.dataset.target;
+                const changes = collectSchemaChanges(target);
+                if (!changes.length) return;
+                setSchemaBusy(true);
+                showSchemaOut('<div class="dbs-wait"><i class="fa-solid fa-spinner fa-spin"></i> Preparing...</div>');
+                schemaPost('schema_plan', { changes: JSON.stringify(changes) }).done(function(res) {
+                    if (res.status !== 'success') {
+                        showSchemaOut('<div class="dbs-note is-err">' + escHtml(res.message || 'Failed to build SQL') + '</div>');
+                        return;
+                    }
+                    const items = res[target] || [];
+                    const runnable = items.filter(i => i.sql && !i.error).length;
+                    const drops = items.filter(i => /^(drop_local|remove_live)$/.test(i.choice) && !i.error).length;
+                    let html = sqlBlockHtml(target, items);
+                    if (runnable) {
+                        html += '<div class="dbs-confirm is-' + target + '">' +
+                            '<div><i class="fa-solid fa-triangle-exclamation"></i> Run <b>' + runnable + '</b> statement(s) directly on the <b>' + target.toUpperCase() + '</b> database' +
+                            (drops ? ' - including <b>' + drops + ' DROP COLUMN</b> (data in those columns is lost permanently)' : '') + '. Schema changes cannot be rolled back.</div>' +
+                            '<div class="dbs-confirm-btns"><button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="dbsCancelApply">Cancel</button>' +
+                            '<button type="button" class="sr-btn sr-btn-sm ' + (target === 'live' ? 'sr-btn-danger' : 'sr-btn-success') + '" id="dbsConfirmApply" data-target="' + target + '">' +
+                            '<i class="fa-solid fa-bolt"></i> Confirm &amp; apply to ' + target + '</button></div></div>';
+                    }
+                    showSchemaOut(html);
+                }).fail(function() {
+                    showSchemaOut('<div class="dbs-note is-err">Request failed.</div>');
+                }).always(() => setSchemaBusy(false));
+            })
+            .on('click.dbs', '#dbsCancelApply', () => $('#dbsOut').empty())
+            .on('click.dbs', '#dbsConfirmApply', function() {
+                const target = this.dataset.target;
+                const changes = collectSchemaChanges(target);
+                setSchemaBusy(true);
+                $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Applying...');
+                schemaPost('apply_schema', { target: target, changes: JSON.stringify(changes) }).done(function(res) {
+                    // Live rotates the single-use key on every apply call
+                    if (res.next_export_key) $exportKey.val(res.next_export_key);
+                    const results = res.results || [];
+                    const tone = res.status === 'success' ? 'is-ok' : (res.status === 'warning' ? 'is-warn' : 'is-err');
+                    let html = '<div class="dbs-result ' + tone + '"><div class="dbs-result-head"><i class="fa-solid ' +
+                        (res.status === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation') + '"></i> ' + escHtml(res.message || '') + '</div>';
+                    results.forEach(r => {
+                        html += '<div class="dbs-result-row ' + (r.ok ? 'is-ok' : 'is-err') + '"><i class="fa-solid ' + (r.ok ? 'fa-check' : 'fa-xmark') + '"></i><div>' +
+                            '<code>' + escHtml(r.sql || r.table || '') + '</code>' + (r.error ? '<small>' + escHtml(r.error) + '</small>' : '') + '</div></div>';
+                    });
+                    html += '<div class="dbs-confirm-btns"><button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="dbsRecheck"><i class="fa-solid fa-rotate"></i> Re-check schema</button></div></div>';
+                    showSchemaOut(html);
+                }).fail(function() {
+                    showSchemaOut('<div class="dbs-note is-err">Request failed - check the server state with Re-check before trying again.</div>' +
+                        '<div class="dbs-confirm-btns"><button type="button" class="sr-btn sr-btn-sm sr-btn-primary" id="dbsRecheck"><i class="fa-solid fa-rotate"></i> Re-check schema</button></div>');
+                }).always(() => setSchemaBusy(false));
+            })
+            .on('click.dbs', '#dbsRecheck, #dbsRefreshBtn', () => runSchemaCheck(schemaTables));
+
+        function runSchemaCheck(tables, $btn) {
+            schemaTables = tables;
+            if ($btn) $btn.prop('disabled', true);
             Swal.fire({
                 title: 'Checking schema...',
                 html: '<div class="dbi-pg-sub" style="margin:0;">Comparing columns for ' + tables.length + ' table(s) against the live server.</div>',
@@ -1233,23 +1393,26 @@ if ($res && ($row = $res->fetch_assoc())) {
                 didOpen: () => Swal.showLoading()
             });
 
-            $.ajax({
-                url: './includes/ajaxFile/ajaxDbImportRemote.php',
-                type: 'POST',
-                dataType: 'json',
-                data: { action: 'check_schema', base_url: baseUrl, export_key: exportKey, tables: tables }
-            }).done(function(res) {
+            schemaPost('check_schema', { tables: tables }).done(function(res) {
                 if (res.status !== 'success') {
-                    Swal.fire('Schema check failed', res.message || 'Unknown error.', 'error');
+                    Swal.fire({ title: 'Schema check failed', text: res.message || 'Unknown error.', icon: 'error', allowOutsideClick: false });
                     return;
                 }
-
                 showSchemaDiffModal(res);
             }).fail(function() {
-                Swal.fire('Request failed', 'Could not reach the local server.', 'error');
+                Swal.fire({ title: 'Request failed', text: 'Could not reach the local server.', icon: 'error', allowOutsideClick: false });
             }).always(function() {
-                $btn.prop('disabled', false);
+                if ($btn) $btn.prop('disabled', false);
             });
+        }
+
+        $('#checkSchemaBtn').on('click', function() {
+            const tables = $('.table-check:checked').map(function() { return this.value; }).get();
+            if (!tables.length) {
+                Swal.fire({ title: 'Nothing selected', text: 'Pick at least one table.', icon: 'warning', allowOutsideClick: false });
+                return;
+            }
+            runSchemaCheck(tables, $(this));
         });
 
         $('#importBtn').on('click', function() {

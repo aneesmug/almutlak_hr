@@ -2,6 +2,7 @@
 header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
+require_once __DIR__ . '/../db_schema_sync.php';
 
 if (!($is_system_admin ?? false)) {
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
@@ -541,6 +542,222 @@ if ($action === 'check_schema') {
         'status' => 'success',
         'any_mismatch' => $anyMismatch,
         'report' => $report,
+    ]);
+    exit;
+}
+
+// Turns the per-column choices ticked in the schema modal into concrete operations
+// for each side. Column definitions are re-read from information_schema (local) and
+// db_export_schema.php (live) - the browser only says WHICH change, never the SQL.
+// Returns ['local' => [items], 'live' => [items]], item = [table, column, choice, op, sql, error].
+function db_import_remote_schema_plan(mysqli $conDB, string $baseUrl, string $exportKey, array $changes): array
+{
+    $byTable = [];
+    foreach ($changes as $c) {
+        $table = (string) ($c['table'] ?? '');
+        $choice = (string) ($c['choice'] ?? '');
+        if (!dbss_valid_ident($table) || !in_array($choice, ['create_local', 'add_local', 'drop_local', 'modify_local', 'add_live', 'remove_live', 'modify_live'], true)) {
+            continue;
+        }
+        $byTable[$table][] = ['column' => (string) ($c['column'] ?? ''), 'choice' => $choice];
+    }
+    if (!$byTable) {
+        return ['error' => 'Select at least one change.'];
+    }
+
+    $result = db_import_remote_curl($baseUrl . '/includes/api/db_export_schema.php', [
+        'export_key' => $exportKey,
+        'tables' => implode(',', array_keys($byTable)),
+        'include_create' => 1,
+    ], 30);
+    $data = json_decode((string) $result['body'], true);
+    if ($result['error'] || $result['http_code'] !== 200 || !is_array($data) || ($data['status'] ?? '') !== 'success') {
+        return ['error' => $result['error'] ? 'Connection failed: ' . $result['error'] : (($data['message'] ?? null) ?: 'Live server returned HTTP ' . $result['http_code'] . '.')];
+    }
+    $liveSchema = $data['schema'] ?? [];
+    $liveCreate = $data['create_sql'] ?? [];
+
+    $localStmt = mysqli_prepare($conDB, "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA
+        FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION");
+
+    $plan = ['local' => [], 'live' => []];
+    $rank = ['create_local' => 0, 'add_local' => 1, 'add_live' => 1, 'modify_local' => 2, 'modify_live' => 2, 'drop_local' => 3, 'remove_live' => 3];
+
+    foreach ($byTable as $table => $items) {
+        $live = [];
+        foreach (($liveSchema[$table] ?? []) as $c) {
+            $live[$c['name']] = ['name' => $c['name'], 'type' => $c['type'], 'nullable' => (bool) $c['nullable'], 'default' => $c['default'], 'extra' => $c['extra']];
+        }
+        mysqli_stmt_bind_param($localStmt, 's', $table);
+        mysqli_stmt_execute($localStmt);
+        $res = mysqli_stmt_get_result($localStmt);
+        $local = [];
+        while ($r = mysqli_fetch_assoc($res)) {
+            $local[$r['COLUMN_NAME']] = ['name' => $r['COLUMN_NAME'], 'type' => $r['COLUMN_TYPE'], 'nullable' => $r['IS_NULLABLE'] === 'YES', 'default' => $r['COLUMN_DEFAULT'], 'extra' => $r['EXTRA']];
+        }
+        $liveOrder = array_keys($live);
+        $localOrder = array_keys($local);
+
+        // Adds run in source-column order so AFTER can point at a column added just before
+        usort($items, function ($a, $b) use ($rank, $liveOrder, $localOrder) {
+            if ($rank[$a['choice']] !== $rank[$b['choice']]) {
+                return $rank[$a['choice']] <=> $rank[$b['choice']];
+            }
+            $order = $a['choice'] === 'add_live' ? $localOrder : $liveOrder;
+            return (int) array_search($a['column'], $order, true) <=> (int) array_search($b['column'], $order, true);
+        });
+
+        $localHas = array_fill_keys($localOrder, true);
+        $liveHas = array_fill_keys($liveOrder, true);
+
+        // Nearest column before $name in $order that already exists on the target side
+        $after = function (array $order, string $name, array $targetHas) {
+            $prev = null;
+            foreach ($order as $n) {
+                if ($n === $name) {
+                    return $prev;
+                }
+                if (isset($targetHas[$n])) {
+                    $prev = $n;
+                }
+            }
+            return $prev;
+        };
+
+        foreach ($items as $it) {
+            $col = $it['column'];
+            $choice = $it['choice'];
+            $side = substr($choice, -5) === '_live' ? 'live' : 'local';
+            $op = null;
+            $err = null;
+
+            switch ($choice) {
+                case 'create_local':
+                    if ($localOrder) {
+                        $err = 'Table already exists locally.';
+                    } elseif (empty($liveCreate[$table])) {
+                        $err = 'Live server did not send CREATE TABLE - upload the latest includes/api/db_export_schema.php to live.';
+                    } else {
+                        $op = ['op' => 'create', 'table' => $table, 'create_sql' => $liveCreate[$table]];
+                    }
+                    break;
+                case 'add_local':
+                    if (!isset($live[$col]) || isset($local[$col])) {
+                        $err = 'Column is no longer missing locally.';
+                    } elseif (!$localOrder) {
+                        $err = 'Table does not exist locally - create it first.';
+                    } else {
+                        $op = ['op' => 'add', 'table' => $table, 'column' => $live[$col], 'after' => $after($liveOrder, $col, $localHas)];
+                        $localHas[$col] = true;
+                    }
+                    break;
+                case 'add_live':
+                    if (!isset($local[$col]) || isset($live[$col])) {
+                        $err = 'Column is no longer missing on live.';
+                    } else {
+                        $op = ['op' => 'add', 'table' => $table, 'column' => $local[$col], 'after' => $after($localOrder, $col, $liveHas)];
+                        $liveHas[$col] = true;
+                    }
+                    break;
+                case 'modify_local':
+                case 'modify_live':
+                    if (!isset($local[$col], $live[$col])) {
+                        $err = 'Column must exist on both sides.';
+                    } else {
+                        $op = ['op' => 'modify', 'table' => $table, 'column' => $choice === 'modify_local' ? $live[$col] : $local[$col]];
+                    }
+                    break;
+                case 'drop_local':
+                    if (!isset($local[$col])) {
+                        $err = 'Column does not exist locally.';
+                    } else {
+                        $op = ['op' => 'drop', 'table' => $table, 'column' => ['name' => $col]];
+                    }
+                    break;
+                case 'remove_live':
+                    if (!isset($live[$col])) {
+                        $err = 'Column does not exist on live.';
+                    } else {
+                        $op = ['op' => 'drop', 'table' => $table, 'column' => ['name' => $col]];
+                    }
+                    break;
+            }
+
+            $sql = null;
+            if ($op) {
+                [$sql, $err] = dbss_build_sql($op);
+                if ($err) {
+                    $op = null;
+                }
+            }
+            $plan[$side][] = ['table' => $table, 'column' => $col, 'choice' => $choice, 'op' => $op, 'sql' => $sql, 'error' => $err];
+        }
+    }
+    mysqli_stmt_close($localStmt);
+    return $plan;
+}
+
+function db_import_remote_plan_public(array $items): array
+{
+    return array_map(fn ($i) => ['table' => $i['table'], 'column' => $i['column'], 'choice' => $i['choice'], 'sql' => $i['sql'], 'error' => $i['error']], $items);
+}
+
+if ($action === 'schema_plan' || $action === 'apply_schema') {
+    $changes = json_decode((string) ($_POST['changes'] ?? ''), true);
+    if (!is_array($changes) || !$changes) {
+        echo json_encode(['status' => 'error', 'message' => 'Select at least one change.']);
+        exit;
+    }
+    $plan = db_import_remote_schema_plan($conDB, $baseUrl, $exportKey, $changes);
+    if (isset($plan['error'])) {
+        echo json_encode(['status' => 'error', 'message' => $plan['error']]);
+        exit;
+    }
+
+    if ($action === 'schema_plan') {
+        echo json_encode(['status' => 'success', 'local' => db_import_remote_plan_public($plan['local']), 'live' => db_import_remote_plan_public($plan['live'])]);
+        exit;
+    }
+
+    $target = ($_POST['target'] ?? '') === 'live' ? 'live' : 'local';
+    $items = $plan[$target];
+    $ops = array_values(array_filter(array_map(fn ($i) => $i['op'], $items)));
+    $skipped = array_values(array_filter($items, fn ($i) => $i['op'] === null));
+    $skippedResults = array_map(fn ($i) => ['ok' => false, 'sql' => $i['sql'], 'error' => $i['error'], 'table' => $i['table']], $skipped);
+
+    if (!$ops) {
+        echo json_encode(['status' => 'error', 'message' => 'Nothing to apply on ' . $target . '.', 'results' => $skippedResults]);
+        exit;
+    }
+
+    $nextKey = null;
+    if ($target === 'local') {
+        $results = dbss_apply($conDB, $ops);
+    } else {
+        $result = db_import_remote_curl($baseUrl . '/includes/api/db_apply_schema.php', [
+            'export_key' => $exportKey,
+            'ops' => json_encode($ops),
+        ], 120);
+        $data = json_decode((string) $result['body'], true);
+        if ($result['error'] || !is_array($data) || !isset($data['results'])) {
+            $msg = $result['error'] ? 'Connection failed: ' . $result['error'] : (($data['message'] ?? null) ?: 'Live server returned HTTP ' . $result['http_code'] . '.');
+            if ($result['http_code'] === 404) {
+                $msg .= ' Upload includes/api/db_apply_schema.php and includes/db_schema_sync.php to the live server first.';
+            }
+            echo json_encode(['status' => 'error', 'message' => $msg, 'next_export_key' => $data['next_export_key'] ?? null]);
+            exit;
+        }
+        $results = $data['results'];
+        $nextKey = $data['next_export_key'] ?? null;
+    }
+
+    $results = array_merge($results, $skippedResults);
+    $failed = count(array_filter($results, fn ($r) => empty($r['ok'])));
+    echo json_encode([
+        'status' => $failed ? ($failed === count($results) ? 'error' : 'warning') : 'success',
+        'message' => $failed ? "$failed of " . count($results) . " change(s) failed on $target." : count($results) . " change(s) applied on $target.",
+        'results' => $results,
+        'next_export_key' => $nextKey,
     ]);
     exit;
 }
