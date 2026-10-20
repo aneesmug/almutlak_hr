@@ -18,6 +18,7 @@
  *
  * Options: format (flatpickr tokens, default 'Y-m-d'; 'Y-m-d H:i' with enableTime),
  * enableTime (adds a 24h time picker), defaultDate, allowInput, inline,
+ * noCalendar (time only - or use AppDate.time(el, opts), value H:i),
  * static, position, onChange(dates, str, fp), onOpen, onClose, onReady.
  *
  * Blocking dates (any combination):
@@ -252,6 +253,7 @@
         var config = {
             dateFormat: o.format || (o.enableTime ? VALUE_FORMAT + ' H:i' : VALUE_FORMAT),
             enableTime: !!o.enableTime,
+            noCalendar: !!o.noCalendar,
             time_24hr: true,
             locale: extend(isArabic() ? arabic : english, o.locale || {}),
             mode: mode,
@@ -754,6 +756,12 @@
         single: function (target, opts) { return create(target, opts, 'single'); },
         range: function (target, opts) { return create(target, opts, 'range'); },
         inline: function (target, opts) { return create(target, extend(opts || {}, { inline: true }), 'single'); },
+        // Time-only picker (no calendar), 24h, value 'H:i' (opts.format to change). defaultDate may be 'HH:MM'.
+        time: function (target, opts) {
+            var p = create(target, extend(opts || {}, { enableTime: true, noCalendar: true, format: (opts && opts.format) || 'H:i' }), 'single');
+            if (p) p.calendarContainer.classList.add('app-dp-time');
+            return p;
+        },
         // Month picker (value 'Y-m' unless opts.format is given); needs plugins/flatpickr/plugins/monthSelect.
         month: function (target, opts) {
             opts = opts || {};

@@ -122,6 +122,7 @@ if (mysqli_num_rows($query) == 1) {
 		// Add Record button (new manual record) needs the separate 'add_manual_attendance' key; editing stays under manage_attendance.
 		$canAddAttendanceRecord = $canManageAttendanceRecord
 			&& user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false);
+		require_once __DIR__ . '/includes/attendance_ui.php'; // shared attendance status tiles + date filter (same as attendance.php)
 
 		// --- START: Loan Summary Calculation ---
 		$loan_summary = null;
@@ -1053,6 +1054,41 @@ if (mysqli_num_rows($query) == 1) {
 				overflow: hidden;
 			}
 			.tab-content.sr-page .card-box { padding: 18px; margin-bottom: 20px; }
+			/* Attendance tab (#attendance) */
+			.sr-page .att-tab-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+			.sr-page .att-tab-head .header-title { display: flex; align-items: center; gap: 8px; }
+			.sr-page .att-tab-head .header-title i { color: var(--sr-accent); font-size: 18px; }
+			.sr-page .att-tab-sub { margin: 0; font-size: 12.5px; color: var(--sr-muted); }
+			.sr-page .att-tab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+			.sr-page .att-toolbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+			.sr-page .att-tab .att-tiles { margin-bottom: 14px; }
+
+			.sr-page .att-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+			.sr-page .att-export .dt-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; float: none; margin: 0; }
+			.sr-page .att-export .dt-button, .sr-page .att-export .btn {
+				display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px !important; margin: 0 !important;
+				border-radius: 10px !important; border: 1px solid var(--sr-border-strong) !important; background: var(--sr-surface) !important;
+				color: var(--sr-text-2) !important; font-size: 12.5px; font-weight: 600; box-shadow: none !important; background-image: none !important;
+			}
+			.sr-page .att-export .dt-button:hover, .sr-page .att-export .btn:hover { border-color: var(--sr-accent) !important; color: var(--sr-accent-strong) !important; background: var(--sr-accent-soft) !important; }
+			.sr-page .att-export .buttons-excel i { color: #16a34a; }
+			.sr-page .att-export .buttons-pdf i { color: #dc2626; }
+
+			.sr-page #attendance_tbl td { vertical-align: middle; }
+			.sr-page .att-weekend small { color: var(--tone-amber-fg); }
+			.sr-page .att-time { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 8px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--sr-text); background: var(--sr-surface-2); }
+			.sr-page .att-time i { font-size: 13px; }
+			.sr-page .att-time.in i { color: #16a34a; }
+			.sr-page .att-time.out i { color: #dc2626; }
+			.sr-page .att-hours { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--sr-text); }
+			.sr-page .att-mins { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+			.sr-page .att-mins.tone-amber { background: var(--tone-amber-bg); color: var(--tone-amber-fg); }
+			.sr-page .att-mins.tone-sky { background: var(--tone-sky-bg); color: var(--tone-sky-fg); }
+			.sr-page .att-muted { color: var(--sr-muted); }
+			.sr-page #attendance_tbl .att-note { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+			.sr-page .att-dt-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 12px; }
+			.sr-page .att-dt-bottom .dataTables_info { padding: 0; font-size: 12.5px; color: var(--sr-muted); }
+			.sr-page .att-dt-bottom .dataTables_paginate { padding: 0; }
 			.tab-content.sr-page .card > .card-header {
 				display: flex; align-items: center; gap: 8px;
 				background: var(--sr-surface-2) !important;
@@ -3028,32 +3064,36 @@ if (mysqli_num_rows($query) == 1) {
 										<?php /*}*/ ?>
 										<?php if ($canViewAttendanceTab): ?>
 										<div class="tab-pane" id="attendance">
-											<div class="card-box">
+											<div class="card-box att-tab">
 
-												<div class="d-flex flex-wrap justify-content-between align-items-start mb-3" style="gap: 1rem;">
-													<div style="min-width: 0;">
-														<h4 class="header-title mb-2"><?= __('attendance_record', 'Attendance Record') ?></h4>
-														<?php if ($canAddAttendanceRecord): ?>
-														<button type="button" class="btn btn-sm btn-success" id="btn-add-attendance-record" style="display:none;"><i class="mdi mdi-plus"></i> <?= __('add_record', 'Add Record') ?></button>
-														<?php endif; ?>
-														<div class="form-check d-inline-block">
-															<input type="checkbox" class="form-check-input" id="attendanceShowAll">
-															<label class="form-check-label" for="attendanceShowAll"><?= __('show_all_records', 'Show all records') ?></label>
-														</div>
+												<div class="att-tab-head">
+													<div class="att-tab-title">
+														<h4 class="header-title mb-1"><i class="mdi mdi-fingerprint"></i> <?= __('attendance_record', 'Attendance Record') ?></h4>
+														<p class="att-tab-sub" id="attTabPeriod">&nbsp;</p>
 													</div>
+													<?php if ($canAddAttendanceRecord): ?>
+													<div class="att-tab-actions">
+														<button type="button" class="sr-btn sr-btn-primary" id="btn-add-attendance-record"><i class="mdi mdi-plus"></i> <?= __('add_record', 'Add Record') ?></button>
+													</div>
+													<?php endif; ?>
+												</div>
 
-													<div style="flex: 0 1 300px;">
-														<div class="input-group">
-															<div class="input-group-prepend">
-																<span class="input-group-text"><i class="mdi mdi-calendar-range"></i></span>
-															</div>
-															<input type="text" id="AttendanceDateRange" class="form-control" placeholder="<?= __('select_date_range', 'Select date range') ?>" readonly>
-														</div>
+												<!-- Same status tiles + date filter as attendance.php (includes/attendance_ui.php) -->
+												<?= attendance_tiles_html('attStats') ?>
+
+												<div class="att-toolbar">
+													<div class="sr-search">
+														<i class="mdi mdi-magnify"></i>
+														<input type="search" id="attTabSearch" placeholder="<?= __('search') ?>..." autocomplete="off" aria-label="<?= __('search') ?>">
+													</div>
+													<div class="att-toolbar-end">
+														<?= attendance_datefilter_html(['range' => 'attTabRange', 'from' => 'attTabFrom', 'to' => 'attTabTo'], 'month') ?>
+														<div class="att-export" id="attExport"></div>
 													</div>
 												</div>
 
-
-												<table id="attendance_tbl" class="table sr-table dt-responsive nowrap" style="border-collapse: collapse; border-spacing: 0; width: 100%;">
+												<div class="sr-table-wrap">
+												<table id="attendance_tbl" class="table sr-table dt-responsive nowrap" style="width: 100%;">
 													<thead>
 														<tr>
 															<th><?= __('date') ?></th>
@@ -3065,11 +3105,12 @@ if (mysqli_num_rows($query) == 1) {
 															<th><?= __('early_leave_minutes', 'Early Leave (min)') ?></th>
 															<th><?= __('note') ?></th>
 															<?php if ($canManageAttendanceRecord): ?>
-															<th><?= __('action') ?></th>
+															<th class="text-right"><?= __('action') ?></th>
 															<?php endif; ?>
 														</tr>
 													</thead>
 												</table>
+												</div>
 
 											</div>
 										</div>
@@ -3316,6 +3357,8 @@ if (mysqli_num_rows($query) == 1) {
 
 		<!-- App js -->
 		<script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
+		<script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
+		<script src="assets/js/attendance_ui.js?v=<?= @filemtime(__DIR__ . '/assets/js/attendance_ui.js') ?>"></script>
 		<script src="assets/js/businessTrip.js?t=<?= time() ?>"></script>
 		<script src="assets/js/employeeTransfer.js?t=<?= time() ?>"></script>
 		<script src="assets/js/salaryIncrement.js?t=<?= time() ?>"></script>
@@ -4875,26 +4918,48 @@ if (mysqli_num_rows($query) == 1) {
 				}
 				attendanceTableInitialized = true;
 
-				const today = new Date();
-				const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-				const fmt = function(d) {
-					return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-				};
-
-				const $range = $('#AttendanceDateRange');
-				$range.val(fmt(firstOfMonth) + ' - ' + fmt(today));
-				AppDate.range($range, {
-					defaultDate: [fmt(firstOfMonth), fmt(today)],
-					onClose: function(selected) {
-						if (selected.length) attendanceTable.ajax.reload();
-					}
+				// Date filter (Today / This week / This month / All + From-To, no future days) and status
+				// tiles: same component + rules as attendance.php (assets/js/attendance_ui.js). Default: this month.
+				const attDates = AttUI.bindDateFilter({
+					range: '#attTabRange', from: '#attTabFrom', to: '#attTabTo', active: 'month',
+					onChange: function() { if (attendanceTable) attendanceTable.ajax.reload(); }
 				});
+
+				// Cell helpers. Renderers only change the 'display' output; sort/search/export
+				// keep the raw values from attendanceEmpAjaxTbl.php.
+				const aEsc = s => $('<div>').text(s == null ? '' : String(s)).html();
+				const aDash = '<span class="att-muted">&ndash;</span>';
+				const aEmpty = v => v == null || v === '' || v === '-';
+				const aTone = s => {
+					s = String(s || '');
+					if (s === 'Present') return 'green';
+					if (s.indexOf('Incomplete') > -1 || s === 'Absent') return 'red';
+					if (s.indexOf('Late') === 0) return 'amber';
+					if (s.indexOf('Early Leave') > -1 || s === 'Half Day') return 'sky';
+					return 'slate';
+				};
+				const aHm = v => { const m = /^(\d{1,3}):(\d{2})/.exec(v || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+				const aDur = mins => Math.floor(mins / 60) + 'h ' + String(mins % 60).padStart(2, '0') + 'm';
+				const aDisplay = fn => (v, type, row) => type === 'display' ? fn(v, row) : v;
+
+				function updateAttendanceStats(rows) {
+					AttUI.setCounts('#attStats', AttUI.count(rows));
+					// Period + worked time under the title (worked hours used to be its own tile)
+					let mins = 0, worked = 0;
+					rows.forEach(r => { const m = aHm(r.hours); if (m !== null) { mins += m; worked++; } });
+					const [from, to] = attDates.values();
+					const fmtD = d => { const x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); };
+					const period = !from && !to ? __('all_records', 'All records') : `${fmtD(from || to)} – ${fmtD(to || from)}`;
+					const hrs = worked ? ` · ${Math.floor(mins / 60).toLocaleString('en-US')}h ${__('worked', 'worked')} · ${__('avg', 'Avg')} ${aDur(Math.round(mins / worked))}` : '';
+					$('#attTabPeriod').text(period + hrs);
+				}
 
 				attendanceTable = $('#attendance_tbl').DataTable({
 					processing: true,
 					serverSide: false,
 					order: [[0, 'desc']],
-					dom: 'Blfrtip',
+					pageLength: 15,
+					dom: 'rt<"att-dt-bottom"ip>',
 					buttons: (function() {
 						const exportColumns = function(idx, data, node) {
 							const colCount = $('#attendance_tbl').DataTable().columns().header().length;
@@ -4904,238 +4969,205 @@ if (mysqli_num_rows($query) == 1) {
 						// pages of the table (not just whatever page happens to be showing),
 						// search/order 'applied' - respect the current search box + sort.
 						const exportModifier = { page: 'all', search: 'applied', order: 'applied' };
-						const btns = [
-							'copy',
-							{
-								extend: 'excel',
-								text: `<i class="mdi mdi-file-excel"></i> ${__('excel', 'Excel')}`,
-								filename: `attendance_${employeeId}`,
-								exportOptions: { columns: exportColumns, modifier: exportModifier }
-							},
-							{
-								extend: 'pdf',
-								filename: `attendance_${employeeId}`,
-								exportOptions: { columns: exportColumns, modifier: exportModifier }
-							},
-							'print'
+						return [
+							{ extend: 'copy', text: `<i class="mdi mdi-content-copy"></i> ${__('copy', 'Copy')}`, exportOptions: { columns: exportColumns, modifier: exportModifier } },
+							{ extend: 'excel', text: `<i class="mdi mdi-file-excel"></i> ${__('excel', 'Excel')}`, filename: `attendance_${employeeId}`, exportOptions: { columns: exportColumns, modifier: exportModifier } },
+							{ extend: 'pdf', text: `<i class="mdi mdi-file-pdf"></i> PDF`, filename: `attendance_${employeeId}`, exportOptions: { columns: exportColumns, modifier: exportModifier } },
+							{ extend: 'print', text: `<i class="mdi mdi-printer"></i> ${__('print', 'Print')}`, exportOptions: { columns: exportColumns, modifier: exportModifier } }
 						];
-						if (canAddAttendanceRecord) {
-							btns.push({
-								text: `<i class="mdi mdi-plus"></i> ${__('add_record', 'Add Record')}`,
-								className: 'btn-success',
-								action: function() {
-									$('#btn-add-attendance-record').trigger('click');
-								}
-							});
-						}
-						return btns;
 					})(),
 					ajax: {
 						url: './includes/ajaxFile/attendanceEmpAjaxTbl.php',
 						type: 'POST',
-						dataSrc: 'data',
+						dataSrc: function(json) {
+							const rows = (json && json.data) || [];
+							updateAttendanceStats(rows);
+							return rows;
+						},
 						data: function(d) {
 							d.emp_id = employeeId;
-							const showAll = $('#attendanceShowAll').is(':checked');
-							const rangeParts = ($range.val() || '').split(' - ');
-							d.fromdate = showAll ? '' : (rangeParts[0] || '');
-							d.todate = showAll ? '' : (rangeParts[1] || '');
+							const [from, to] = attDates.values();
+							d.fromdate = from;
+							d.todate = to;
 						}
 					},
 					columns: (function() {
 						const cols = [
-							{ data: 'date' },
-							{ data: 'check_in' },
-							{ data: 'check_out' },
-							{ data: 'hours' },
-							{ data: 'state' },
-							{ data: 'late_minutes' },
-							{ data: 'early_minutes' },
-							{ data: 'note' }
+							{ data: 'date', render: aDisplay(d => {
+								const x = new Date(d + 'T00:00:00');
+								if (isNaN(x)) return aEsc(d);
+								const wk = x.getDay(); // Fri/Sat = weekend
+								return `<span class="sr-date${wk === 5 || wk === 6 ? ' att-weekend' : ''}">${x.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}<small>${x.toLocaleDateString('en-US', { weekday: 'long' })}</small></span>`;
+							}) },
+							{ data: 'check_in', render: aDisplay(v => aEmpty(v) ? aDash : `<span class="att-time in"><i class="mdi mdi-login"></i>${aEsc(v)}</span>`) },
+							{ data: 'check_out', render: aDisplay(v => aEmpty(v) ? aDash : `<span class="att-time out"><i class="mdi mdi-logout"></i>${aEsc(v)}</span>`) },
+							{ data: 'hours', render: aDisplay(v => { const m = aHm(v); return m === null ? aDash : `<span class="att-hours">${aDur(m)}</span>`; }) },
+							{ data: 'state', render: aDisplay(s => `<span class="sr-pill sr-pill-xs tone-${aTone(s)}"><span class="sr-dot"></span>${aEsc(pAttStateLabel(s))}</span>`) },
+							{ data: 'late_minutes', render: aDisplay(v => aEmpty(v) ? aDash : `<span class="att-mins tone-amber">${aEsc(v)} ${__('min', 'min')}</span>`) },
+							{ data: 'early_minutes', render: aDisplay(v => aEmpty(v) ? aDash : `<span class="att-mins tone-sky">${aEsc(v)} ${__('min', 'min')}</span>`) },
+							{ data: 'note', render: aDisplay(n => aEmpty(n) ? aDash : `<span class="att-note" title="${aEsc(n)}">${aEsc(n)}</span>`) }
 						];
 						if (canManageAttendanceRecord) {
-							cols.push({ data: 'action', orderable: false, searchable: false });
+							cols.push({ data: 'action', orderable: false, searchable: false, className: 'text-right', render: aDisplay(html =>
+								// Server sends a Bootstrap dropdown; restyle its toggle like the other sr tables
+								String(html || '').replace('table-action-btn dropdown-toggle arrow-none btn btn-light btn-sm', 'sr-more-btn dropdown-toggle arrow-none')
+									.replace('mdi-dots-horizontal', 'mdi-dots-vertical')) });
 						}
 						return cols;
 					})(),
 					language: {
-						search: `<span>${__('search')}:</span> _INPUT_`,
-						searchPlaceholder: `${__('search')}...`,
-						lengthMenu: `${__('show')} _MENU_ ${__('entries')}`,
 						info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+						infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+						infoFiltered: '',
 						paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
-						emptyTable: __('no_data_available_in_table'),
-						zeroRecords: __('no_matching_records_found'),
+						emptyTable: `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_data_available_in_table')}</div>`,
+						zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+						processing: __('processing', 'Processing...')
 					}
 				});
+				// Export buttons next to the search box instead of above the table
+				attendanceTable.buttons().container().appendTo('#attExport');
+				let attSearchTimer;
+				$('#attTabSearch').on('input', function() {
+					clearTimeout(attSearchTimer);
+					const v = this.value;
+					attSearchTimer = setTimeout(() => attendanceTable.search(v).draw(), 250);
+				});
 
-				$('#attendanceShowAll').on('change', function() {
-					const showAll = $(this).is(':checked');
-					$range.prop('disabled', showAll);
-					attendanceTable.ajax.reload();
+				// Status tiles filter the loaded rows (AttUI rules = attendance.php server rules);
+				// clicking the active tile again, or "All", shows every row again.
+				const attTiles = AttUI.bindTiles('#attStats', function() { attendanceTable.draw(); });
+				$.fn.dataTable.ext.search.push(function(settings, data, dataIndex, row) {
+					if (settings.nTable.id !== 'attendance_tbl' || !attTiles.get()) return true;
+					return AttUI.matches(attTiles.get(), (row || {}).state);
 				});
 			});
 
 			// Manual add/edit for a forgotten punch - fixed to this employee, reuses the
-			// same includes/ajaxFile/attendanceAjax.php backend as the standalone
-			// Attendance Record page (attendance.php), just without an employee picker.
-			function profileAttendanceFormHtml(date, timeIn, timeOut, state, note) {
-				const stateOptions = ['Present', 'Late', 'Early Leave', 'Late & Early Leave', 'Incomplete', 'Absent', 'Half Day', 'Leave', 'Day Off'].map(function(s) {
-					return `<option value="${s}" ${s === state ? 'selected' : ''}>${s}</option>`;
-				}).join('');
-				// Infer punch type from existing data so editing a partial record keeps its shape
-				let punchType = 'both';
-				if (timeIn && !timeOut) punchType = 'in';
-				else if (!timeIn && timeOut) punchType = 'out';
-				const punchOptions = [
-					['both', __('punch_both', 'Check In & Check Out')],
-					['in', __('punch_in_only', 'Check In Only')],
-					['out', __('punch_out_only', 'Check Out Only')],
-				].map(function(o) {
-					return `<option value="${o[0]}" ${o[0] === punchType ? 'selected' : ''}>${o[1]}</option>`;
-				}).join('');
-				return `
-					<div class="form-group text-left">
-						<label>${__('date')} *</label>
-						<input type="text" id="pAttDate" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" value="${date || ''}" ${date ? 'disabled' : ''}>
-						<input type="hidden" id="pAttDateValue" value="${date || ''}">
-					</div>
-					<div class="form-group text-left">
-						<label>${__('punch_type', 'Punch Type')} *</label>
-						<select id="pAttPunchType" class="form-control">${punchOptions}</select>
-					</div>
-					<div class="form-group text-left" id="pAttTimeInGroup">
-						<label>${__('check_in', 'Check In')} *</label>
-						<div class="input-group clockpicker">
-							<input type="text" id="pAttTimeIn" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeIn || ''}">
-							<span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
-						</div>
-					</div>
-					<div class="form-group text-left" id="pAttTimeOutGroup">
-						<label>${__('check_out', 'Check Out')} *</label>
-						<div class="input-group clockpicker">
-							<input type="text" id="pAttTimeOut" class="form-control" placeholder="HH:MM" autocomplete="off" value="${timeOut || ''}">
-							<span class="input-group-addon"><i class="mdi mdi-clock"></i></span>
-						</div>
-					</div>
-					<div class="form-group text-left">
-						<label>${__('state', 'State')} *</label>
-						<select id="pAttState" class="form-control">${stateOptions}</select>
-					</div>
-					<div class="form-group text-left">
-						<label>${__('note')}</label>
-						<textarea id="pAttNote" class="form-control">${note || ''}</textarea>
-					</div>
-				`;
+			// same includes/ajaxFile/attendanceAjax.php backend and the same SRForm layout as the
+			// standalone Attendance Record page (attendance.php), just without an employee picker.
+			const P_ATT_STATES = ['Present', 'Late', 'Early Leave', 'Late & Early Leave', 'Incomplete', 'Late & Incomplete', 'Half Day', 'Leave', 'Day Off', 'Absent'];
+			const P_ATT_EMP_LABEL = <?= json_encode(($emprow['empid'] ?? '') . ' - ' . ($emprow['name'] ?? '')) ?>;
+			const pAttHm = v => String(v || '').slice(0, 5); // 'HH:MM:SS' -> 'HH:MM'
+			const pAttMinutes = hm => { const m = /^(\d{1,2}):(\d{2})/.exec(hm || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+			const pAttStateLabel = s => __(String(s || '').toLowerCase().replace(/ & /g, '_and_').replace(/ /g, '_'), s);
+
+			function profileAttendanceFormHtml(v) {
+				const F = window.SRForm, t = F.t, esc = F.esc;
+				const isEdit = !!v.date;
+				let punch = 'both';
+				if (v.timeIn && !v.timeOut) punch = 'in';
+				else if (!v.timeIn && v.timeOut) punch = 'out';
+				const states = P_ATT_STATES.indexOf(v.state) > -1 || !v.state ? P_ATT_STATES : P_ATT_STATES.concat([v.state]);
+				const seg = (val, icon, label) => `<label class="sr-seg-opt ${punch === val ? 'checked' : ''}"><input type="radio" name="punch" value="${val}" ${punch === val ? 'checked' : ''}><span><i class="mdi ${icon}"></i> ${esc(label)}</span></label>`;
+				return '<form id="pAttForm" class="sr-page sr-form text-left" autocomplete="off" novalidate>' +
+					F.section('mdi-account', t('employee', 'Employee'),
+						F.field({ col: 8, name: '_emp', label: t('employee', 'Employee'),
+							html: `<input type="text" class="form-control" value="${esc(P_ATT_EMP_LABEL)}" readonly>` }) +
+						F.field({ col: 4, name: 'date', id: 'pAttDate', label: t('date', 'Date'), req: !isEdit, value: v.date || F.today(), ph: 'YYYY-MM-DD',
+							attrs: isEdit ? ' readonly' : '', msg: t('select_date', 'Select the date') })
+					) +
+					F.section('mdi-clock', t('punches', 'Punches'),
+						F.field({ col: 12, name: 'punch', label: t('punch_type', 'Punch type'),
+							html: '<div class="sr-seg att-punch">' +
+								seg('both', 'mdi-swap-horizontal', t('punch_both', 'Check in & out')) +
+								seg('in', 'mdi-login', t('punch_in_only', 'Check in only')) +
+								seg('out', 'mdi-logout', t('punch_out_only', 'Check out only')) +
+							'</div>' }) +
+						F.field({ col: 4, name: 'time_in', id: 'pAttTimeIn', label: t('check_in', 'Check in'), req: true, value: pAttHm(v.timeIn), ph: 'HH:MM',
+							msg: t('enter_check_in', 'Enter the check-in time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-in') +
+						F.field({ col: 4, name: 'time_out', id: 'pAttTimeOut', label: t('check_out', 'Check out'), req: true, value: pAttHm(v.timeOut), ph: 'HH:MM',
+							msg: t('enter_check_out', 'Enter the check-out time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-out') +
+						F.field({ col: 4, name: '_hours', label: t('hours', 'Hours'), html: '<div class="sr-fstats" style="grid-template-columns:1fr;"><div><span>' + esc(t('worked', 'Worked')) + '</span><b class="js-hours">&ndash;</b></div></div>' })
+					) +
+					F.section('mdi-information-outline', t('details', 'Details'),
+						F.field({ col: 5, name: 'state', label: t('state', 'State'), req: true,
+							html: F.select({ name: 'state', id: 'pAttState', req: true, options: states.map(s => ({ v: s, l: pAttStateLabel(s) })) }) }) +
+						F.field({ col: 7, name: 'note', id: 'pAttNote', label: t('note', 'Note'), value: v.note || '', ph: t('optional', 'Optional') })
+					) +
+				'</form>';
 			}
 
-			function applyProfilePunchTypeVisibility() {
-				const type = $('#pAttPunchType').val();
-				$('#pAttTimeInGroup').toggle(type === 'both' || type === 'in');
-				$('#pAttTimeOutGroup').toggle(type === 'both' || type === 'out');
-				if (type === 'in') $('#pAttTimeOut').val('');
-				if (type === 'out') $('#pAttTimeIn').val('');
-			}
-
-			function initProfileAttendancePickers(dateDisabled) {
-				if (!dateDisabled) {
-					AppDate.single('#pAttDate');
-				}
-				if ($.fn.clockpicker) {
-					$('.clockpicker').clockpicker({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' });
-				}
-				applyProfilePunchTypeVisibility();
-				$('#pAttPunchType').on('change', applyProfilePunchTypeVisibility);
-			}
-
-			function saveProfileAttendanceRecord(date) {
-				const punchType = $('#pAttPunchType').val();
-				const timeIn = $('#pAttTimeIn').val();
-				const timeOut = $('#pAttTimeOut').val();
-				const punchOk = (punchType === 'both' && timeIn && timeOut) ||
-								(punchType === 'in' && timeIn) ||
-								(punchType === 'out' && timeOut);
-				if (!date || !punchOk) {
-					Swal.showValidationMessage(__('fill_required_fields', 'Please fill all required fields.'));
-					return false;
-				}
-				return new Promise(function(resolve, reject) {
-					$.ajax({
-						url: './includes/ajaxFile/attendanceAjax.php',
-						type: 'POST',
-						dataType: 'json',
-						data: {
-							action: 'add_edit_attendance',
-							emp_id: employeeId,
-							date: date,
-							time_in: timeIn,
-							time_out: timeOut,
-							state: $('#pAttState').val(),
-							note: $('#pAttNote').val(),
-						},
-					}).done(function(res) {
-						if (res.status !== 'success') {
-							reject(res.message);
-							return;
+			function openProfileAttendanceForm(v) {
+				const F = window.SRForm, t = F.t;
+				const isEdit = !!v.date;
+				F.open({
+					title: isEdit ? t('edit_attendance', 'Edit record') : t('add_attendance', 'Add record'),
+					html: profileAttendanceFormHtml(v),
+					width: '760px',
+					confirm: t('save', 'Save'),
+					didOpen: function() {
+						const $form = $('#pAttForm');
+						F.liveClear($form);
+						$('#pAttState').val(v.state || 'Present');
+						// AppDate calendar for the date (no future days); clock-face pickers (same as Timetables) for the punches
+						if (window.AppDate && !isEdit) AppDate.single('#pAttDate', { maxDate: 'today' });
+						// Empty Check In / Check Out clocks open on this employee's scheduled times for that day
+						F.clockDefault($('#pAttTimeIn'), '08:00');
+						F.clockDefault($('#pAttTimeOut'), '17:00');
+						F.clock($('#pAttTimeIn, #pAttTimeOut'));
+						const loadScheduled = function() {
+							const day = isEdit ? v.date : $('#pAttDate').val();
+							if (!day) return;
+							$.post('./includes/ajaxFile/attendanceAjax.php', { action: 'timetable_for', emp_id: employeeId, date: day }, null, 'json').done(function(r) {
+								if (!r || r.status !== 'success') return;
+								F.clockDefault($('#pAttTimeIn'), r.check_in);
+								F.clockDefault($('#pAttTimeOut'), r.check_out);
+							});
+						};
+						$form.on('change', '#pAttDate', loadScheduled);
+						loadScheduled();
+						function refresh() {
+							const p = $form.find('input[name="punch"]:checked').val();
+							$form.find('.js-in').toggle(p !== 'out').find('input').attr('data-required', p !== 'out' ? '1' : null);
+							$form.find('.js-out').toggle(p !== 'in').find('input').attr('data-required', p !== 'in' ? '1' : null);
+							const a = p === 'out' ? null : pAttMinutes($('#pAttTimeIn').val()), b = p === 'in' ? null : pAttMinutes($('#pAttTimeOut').val());
+							let txt = '–';
+							if (a !== null && b !== null) { let m = b - a; if (m < 0) m += 1440; txt = Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm'; }
+							$form.find('.js-hours').text(txt);
 						}
-						resolve(res);
-					}).fail(function() {
-						reject(__('unexpected_error', 'Unexpected error.'));
-					});
+						$form.on('change', 'input[name="punch"]', refresh);
+						$form.on('input change', '#pAttTimeIn, #pAttTimeOut', refresh);
+						refresh();
+					},
+					preConfirm: function() {
+						const $form = $('#pAttForm');
+						const msg = F.validate($form);
+						if (msg) { Swal.showValidationMessage(msg); return false; }
+						const p = $form.find('input[name="punch"]:checked').val();
+						return $.ajax({
+							url: './includes/ajaxFile/attendanceAjax.php', type: 'POST', dataType: 'json',
+							data: {
+								action: 'add_edit_attendance',
+								emp_id: employeeId,
+								date: isEdit ? v.date : $('#pAttDate').val(),
+								time_in: p === 'out' ? '' : $('#pAttTimeIn').val(),
+								time_out: p === 'in' ? '' : $('#pAttTimeOut').val(),
+								state: $('#pAttState').val(),
+								note: $('#pAttNote').val()
+							}
+						}).then(function(res) {
+							if (!res || res.status !== 'success') throw new Error((res && res.message) || 'Error');
+							return res;
+						}).catch(function(err) {
+							Swal.showValidationMessage((err && err.responseJSON && err.responseJSON.message) || (err && err.message) || t('unexpected_error', 'Unexpected error.'));
+						});
+					}
+				}).then(function(result) {
+					if (!(result.isConfirmed && result.value)) return;
+					Swal.fire({ title: t('saved', 'Saved'), text: result.value.message, icon: 'success', timer: 1400, showConfirmButton: false, allowOutsideClick: false });
+					if (attendanceTable) attendanceTable.ajax.reload(null, false);
 				});
 			}
 
 			$(document).on('click', '#btn-add-attendance-record', function() {
-				Swal.fire({
-					title: __('add_attendance', 'Add Record'),
-					html: profileAttendanceFormHtml('', '', '', 'Present', ''),
-					showCancelButton: true,
-					confirmButtonColor: APP_COLORS.primary,
-					cancelButtonColor: APP_COLORS.danger_dark,
-					confirmButtonText: __('save', 'Save'),
-					cancelButtonText: __('cancel'),
-					showLoaderOnConfirm: true,
-					allowOutsideClick: false,
-					didOpen: function() {
-						initProfileAttendancePickers(false);
-					},
-					preConfirm: function() {
-						return saveProfileAttendanceRecord($('#pAttDate').val());
-					},
-				}).then(function(result) {
-					if (result.isConfirmed && attendanceTable) {
-						attendanceTable.ajax.reload(null, false);
-					}
-				});
+				openProfileAttendanceForm({});
 			});
 
 			$(document).on('click', '.btn-edit-attendance-record', function() {
-				const date = $(this).data('date');
-				const timeIn = $(this).data('time-in');
-				const timeOut = $(this).data('time-out');
-				const state = $(this).data('state');
-				const note = $(this).data('note');
-
-				Swal.fire({
-					title: __('edit_attendance', 'Edit Record'),
-					html: profileAttendanceFormHtml(date, timeIn, timeOut, state, note),
-					showCancelButton: true,
-					confirmButtonColor: APP_COLORS.primary,
-					cancelButtonColor: APP_COLORS.danger_dark,
-					confirmButtonText: __('save', 'Save'),
-					cancelButtonText: __('cancel'),
-					showLoaderOnConfirm: true,
-					allowOutsideClick: false,
-					didOpen: function() {
-						initProfileAttendancePickers(true);
-					},
-					preConfirm: function() {
-						return saveProfileAttendanceRecord($('#pAttDateValue').val());
-					},
-				}).then(function(result) {
-					if (result.isConfirmed && attendanceTable) {
-						attendanceTable.ajax.reload(null, false);
-					}
+				const d = $(this).data();
+				openProfileAttendanceForm({
+					date: d.date, timeIn: d.timeIn || '', timeOut: d.timeOut || '', state: d.state, note: d.note || ''
 				});
 			});
 

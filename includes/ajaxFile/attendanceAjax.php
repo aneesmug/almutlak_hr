@@ -28,6 +28,9 @@ switch ($action) {
     case 'add_edit_attendance':
         add_edit_attendance($conDB);
         break;
+    case 'timetable_for':
+        timetable_for($conDB);
+        break;
     default:
         echo json_encode(['status' => 'error', 'message' => 'Invalid action.']);
 }
@@ -151,6 +154,31 @@ function list_attendance($conDB) {
         'recordsFiltered' => $filteredRecords,
         'data' => $data,
         'counts' => $counts,
+    ]);
+}
+
+// Scheduled check-in / check-out for one employee on one day (resolved timetable) - used as the
+// starting time of the Add/Edit record clock pickers (attendance.php, view_employee.php).
+function timetable_for($conDB) {
+    $empId = (int) ($_POST['emp_id'] ?? 0);
+    $date = trim((string) ($_POST['date'] ?? ''));
+    $d = DateTime::createFromFormat('Y-m-d', $date);
+    if ($empId <= 0 || !$d || $d->format('Y-m-d') !== $date) {
+        echo json_encode(['status' => 'error', 'message' => 'Employee and date are required.']);
+        return;
+    }
+    $stmt = mysqli_prepare($conDB, "SELECT comp_no FROM employees WHERE emp_id = ? LIMIT 1");
+    $empIdStr = (string) $empId;
+    mysqli_stmt_bind_param($stmt, 's', $empIdStr);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    $tt = attendance_resolve_timetable($conDB, $empId, $row['comp_no'] ?? '', $date);
+    echo json_encode([
+        'status' => 'success',
+        'check_in' => substr((string) ($tt['check_in'] ?? '08:00'), 0, 5),
+        'check_out' => substr((string) ($tt['check_out'] ?? '17:00'), 0, 5),
+        'is_off' => !empty($tt['is_off']) ? 1 : 0,
     ]);
 }
 

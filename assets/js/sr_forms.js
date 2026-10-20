@@ -179,6 +179,41 @@
         return $el;
     }
 
+    // Clock-face time picker (bootstrap-clockpicker, same as App Settings > Timetables), 24h, value HH:MM.
+    // jquery.app.js loads the plugin async, so load it (and its CSS) here when it is not there yet.
+    var CLOCK_JS = './plugins/clockpicker/js/bootstrap-clockpicker.min.js';
+    var CLOCK_CSS = './plugins/clockpicker/css/bootstrap-clockpicker.min.css';
+    var clockLoading = null;
+    function clock($el, opts) {
+        if (!$el.length) return $el;
+        if (!document.querySelector('link[href*="bootstrap-clockpicker"]')) {
+            $('<link rel="stylesheet">').attr('href', CLOCK_CSS).appendTo('head');
+        }
+        var init = function () {
+            $el.attr('autocomplete', 'off').each(function () {
+                var $i = $(this);
+                // opts.default / clockDefault(): time the clock opens on while the field is still empty
+                $i.clockpicker($.extend({ autoclose: true, twelvehour: false, placement: 'bottom', align: 'left' },
+                    opts || {}, $i.data('clockDefault') ? { 'default': $i.data('clockDefault') } : {}));
+            });
+        };
+        if ($.fn.clockpicker) { init(); return $el; }
+        clockLoading = clockLoading || $.ajax({ url: CLOCK_JS, dataType: 'script', cache: true });
+        clockLoading.done(init);
+        return $el;
+    }
+
+    // Change the time an (empty) clock picker opens on, e.g. the employee's scheduled check-in.
+    // Safe before or after clock() has initialised the field.
+    function clockDefault($el, hm) {
+        if (!/^\d{1,2}:\d{2}$/.test(hm || '')) return $el;
+        return $el.each(function () {
+            $(this).data('clockDefault', hm);
+            var cp = $(this).data('clockpicker');
+            if (cp && cp.options) cp.options['default'] = hm;
+        });
+    }
+
     /* POST that resolves with the server JSON or shows the error inside the popup (resolves undefined).
        Understands both {type:'success', title, message} and {success:true, message, data}. */
     function post(url, data, isMultipart) {
@@ -232,6 +267,6 @@
         field: field, select: select, section: section, statusSeg: statusSeg, choices: choices,
         filePicker: filePicker, bindFilePicker: bindFilePicker, checkFile: checkFile,
         validate: validate, liveClear: liveClear, setSeg: setSeg,
-        select2: select2, datepicker: datepicker, post: post, open: open, done: done
+        select2: select2, datepicker: datepicker, clock: clock, clockDefault: clockDefault, post: post, open: open, done: done
     };
 })(window, jQuery);

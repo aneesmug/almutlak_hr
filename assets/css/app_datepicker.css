@@ -205,3 +205,14 @@ html.app-dark .form-control.app-dp-input[readonly]:not(.app-dp-locked):not(:disa
 .app-dp .app-dp-year.is-view { background: var(--dp-accent-soft); color: var(--dp-accent-strong); font-weight: 700; }
 .app-dp .app-dp-year.is-selected { background: var(--dp-accent); border-color: var(--dp-accent); color: #fff; font-weight: 700; }
 .app-dp .app-dp-year:disabled { color: var(--dp-muted); background: var(--dp-block-bg); cursor: not-allowed; text-decoration: line-through; opacity: .7; }
+
+/* Time-only picker (AppDate.time) */
+.flatpickr-calendar.app-dp.app-dp-time { width: 190px; padding: 6px; }
+.app-dp-time .flatpickr-time { height: 52px; max-height: 52px; line-height: 52px; border: 0 !important; display: flex; align-items: center; }
+.app-dp-time .flatpickr-time .numInputWrapper { height: 44px; flex: 1; border-radius: 10px; background: var(--dp-surface-2); }
+.app-dp-time .flatpickr-time input.flatpickr-hour,
+.app-dp-time .flatpickr-time input.flatpickr-minute { height: 44px; font-size: 22px; font-weight: 700; color: var(--dp-ink); background: transparent; font-variant-numeric: tabular-nums; }
+.app-dp-time .flatpickr-time .flatpickr-time-separator { width: 14px; font-size: 22px; font-weight: 700; color: var(--dp-muted); text-align: center; }
+.app-dp-time .flatpickr-time input:hover,
+.app-dp-time .flatpickr-time input:focus { background: var(--dp-accent-soft); border-radius: 10px; }
+.flatpickr-calendar.app-dp-time.app-dp-rtl .flatpickr-time { direction: ltr; }

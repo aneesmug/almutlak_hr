@@ -584,6 +584,7 @@ html.app-dark .swal2-popup.sr-addline-popup { background: var(--ad-surface, #161
 }
 .sr-seg-opt.is-on.checked span { border-color: #16a34a; background: var(--tone-green-bg); color: var(--tone-green-fg); box-shadow: 0 0 0 1px #16a34a inset; }
 .sr-seg-opt.is-off.checked span { border-color: #dc2626; background: var(--tone-red-bg); color: var(--tone-red-fg); box-shadow: 0 0 0 1px #dc2626 inset; }
+.sr-seg-opt.checked:not(.is-on):not(.is-off) span { border-color: var(--sr-accent); background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
 .sr-ftotal {
     display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px;
     background: var(--sr-accent-soft); color: var(--sr-accent-strong); font-weight: 700;
@@ -1241,3 +1242,35 @@ button.sr-open-btn { border: 0; cursor: pointer; }
 .sr-scard.active .sr-scard-bar { background: var(--sr-surface); }
 @media (prefers-reduced-motion: reduce) { .sr-scard-bar i { transition: none; } }
 }
+
+/* ===== Attendance tiles + date filter (shared: attendance.php, view_employee.php Attendance tab) ===== */
+.sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1199px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 575px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sr-page .att-tiles .sr-tile { position: relative; padding-inline-end: 64px; }
+.sr-page .att-tile-ico {
+    position: absolute; top: 50%; inset-inline-end: 14px; transform: translateY(-50%);
+    width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 17px;
+    background: var(--tone-slate-bg); color: var(--tone-slate-fg); transition: background .15s ease, color .15s ease;
+}
+.sr-page .att-tile-ico.tone-indigo { background: var(--tone-indigo-bg); color: var(--tone-indigo-fg); }
+.sr-page .att-tile-ico.tone-green { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+.sr-page .att-tile-ico.tone-amber { background: var(--tone-amber-bg); color: var(--tone-amber-fg); }
+.sr-page .att-tile-ico.tone-sky { background: var(--tone-sky-bg); color: var(--tone-sky-fg); }
+.sr-page .att-tile-ico.tone-red { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+.sr-page .att-tiles .sr-tile.active .att-tile-ico { background: var(--sr-accent); color: #fff; }
+.sr-page .att-date { position: relative; display: inline-block; }
+.sr-page .att-date i { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); pointer-events: none; }
+.sr-page .att-date input {
+    height: 38px; width: 150px; padding: 0 10px 0 32px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text);
+}
+[dir="rtl"] .sr-page .att-date input { padding: 0 32px 0 10px; }
+.sr-page .att-date input:focus { outline: 0; border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
+.sr-page .att-sep { color: var(--sr-muted); font-size: 12px; }
+.sr-page .att-range { display: inline-flex; border: 1px solid var(--sr-border-strong); border-radius: 10px; overflow: hidden; }
+.sr-page .att-range button { height: 36px; padding: 0 12px; border: 0; background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sr-page .att-range button + button { border-inline-start: 1px solid var(--sr-border-strong); }
+.sr-page .att-range button:hover { color: var(--sr-accent-strong); }
+.sr-page .att-range button.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+.sr-page .att-datefilter { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }

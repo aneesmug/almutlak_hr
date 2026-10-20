@@ -20,14 +20,7 @@ if (!$canManageAttendance) {
 // "Add Record" (manual entry) is its own Special Access key; editing existing rows stays under manage_attendance.
 $canAddAttendance = $isSystemAdmin || user_has_special_access($conDB, $empid ?? '', 'add_manual_attendance', $user_role ?? '', $user_type ?? '', $isSystemAdmin);
 
-$tiles = [
-    ''           => ['dot-all', __('all', 'All')],
-    'present'    => ['dot-green', __('present', 'Present')],
-    'late'       => ['dot-amber', __('late', 'Late')],
-    'early'      => ['dot-indigo', __('early_leave', 'Early leave')],
-    'incomplete' => ['dot-red', __('incomplete', 'Incomplete')],
-    'dayoff'     => ['dot-slate', __('day_off', 'Day off')],
-];
+require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + date filter
 ?>
 
 <!doctype html>
@@ -56,22 +49,8 @@ $tiles = [
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
     <style>
-        .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-        @media (max-width: 1199px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 575px) { .sr-page .sr-tiles.att-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         .att-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
         .att-filters .att-emp { width: 300px; max-width: 100%; }
-        .att-filters input[type=date] {
-            height: 38px; width: 150px; padding: 0 10px; border-radius: 10px; font-size: 13px;
-            border: 1px solid var(--sr-border-strong); background: var(--sr-surface-2); color: var(--sr-text);
-        }
-        .att-filters input[type=date]:focus { outline: 0; border-color: var(--sr-accent); box-shadow: 0 0 0 3px rgba(99, 102, 241, .16); }
-        .att-sep { color: var(--sr-muted); font-size: 12px; }
-        .att-range { display: inline-flex; border: 1px solid var(--sr-border-strong); border-radius: 10px; overflow: hidden; }
-        .att-range button { height: 36px; padding: 0 12px; border: 0; background: var(--sr-surface); color: var(--sr-text-2); font-size: 12px; font-weight: 600; cursor: pointer; }
-        .att-range button + button { border-inline-start: 1px solid var(--sr-border-strong); }
-        .att-range button:hover { color: var(--sr-accent-strong); }
-        .att-range button.active { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
         .att-filters .select2-container--default .select2-selection--single {
             height: 38px; border-radius: 10px; border-color: var(--sr-border-strong); background: var(--sr-surface-2);
         }
@@ -123,14 +102,7 @@ $tiles = [
                         <?php endif; ?>
                     </div>
 
-                    <div class="sr-tiles att-tiles" id="attTiles">
-                        <?php foreach ($tiles as $key => $tile): ?>
-                            <button type="button" class="sr-tile <?= $key === '' ? 'active' : '' ?>" data-group="<?= $key ?>">
-                                <span class="sr-tile-label"><span class="sr-dot <?= $tile[0] ?>"></span><?= htmlspecialchars($tile[1]) ?></span>
-                                <span class="sr-tile-value" data-count="<?= $key === '' ? 'all' : $key ?>">&ndash;</span>
-                            </button>
-                        <?php endforeach; ?>
-                    </div>
+                    <?= attendance_tiles_html('attTiles') ?>
 
                     <div class="sr-card">
                         <div class="sr-toolbar">
@@ -140,15 +112,7 @@ $tiles = [
                             </div>
                             <div class="att-filters">
                                 <div class="att-emp"><select id="filterEmployee" style="width: 100%;"></select></div>
-                                <div class="att-range" id="attRange">
-                                    <button type="button" data-range="today"><?= __('today', 'Today') ?></button>
-                                    <button type="button" data-range="week"><?= __('this_week', 'This week') ?></button>
-                                    <button type="button" data-range="month"><?= __('this_month', 'This month') ?></button>
-                                    <button type="button" data-range="" class="active"><?= __('all', 'All') ?></button>
-                                </div>
-                                <input type="date" id="filterFromDate" aria-label="<?= __('from', 'From') ?>">
-                                <span class="att-sep">&ndash;</span>
-                                <input type="date" id="filterToDate" aria-label="<?= __('to', 'To') ?>">
+                                <?= attendance_datefilter_html(['range' => 'attRange', 'from' => 'filterFromDate', 'to' => 'filterToDate']) ?>
                             </div>
                         </div>
 
@@ -196,6 +160,7 @@ $tiles = [
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script src="assets/js/sr_forms.js?v=<?= @filemtime(__DIR__ . '/assets/js/sr_forms.js') ?>"></script>
+    <script src="assets/js/attendance_ui.js?v=<?= @filemtime(__DIR__ . '/assets/js/attendance_ui.js') ?>"></script>
 
     <script>
     $(document).ready(function() {
@@ -213,7 +178,6 @@ $tiles = [
             return 'slate';
         }
         function stateLabel(s) { return t(String(s || '').toLowerCase().replace(/ & /g, '_and_').replace(/ /g, '_'), s); }
-        function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
         function minutes(hm) { const m = /^(\d{1,2}):(\d{2})/.exec(hm || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
 
         // Employee search (shared by the filter and the form)
@@ -316,30 +280,13 @@ $tiles = [
             searchTimer = setTimeout(() => table.search(v).draw(), 350);
         });
         $('#filterEmployee').on('change', reload);
-        $('#filterFromDate, #filterToDate').on('change', function() {
-            $('#attRange button').removeClass('active');
-            reload();
-        });
-        $('#attTiles').on('click', '.sr-tile', function() {
-            $('#attTiles .sr-tile').removeClass('active');
-            $(this).addClass('active');
-            stateGroup = $(this).data('group') || '';
-            reload();
-        });
-        $('#attRange').on('click', 'button', function() {
-            $('#attRange button').removeClass('active');
-            $(this).addClass('active');
-            const now = new Date(), r = $(this).data('range');
-            let from = '', to = '';
-            if (r === 'today') { from = to = ymd(now); }
-            else if (r === 'week') { const s = new Date(now); s.setDate(now.getDate() - ((now.getDay() + 1) % 7)); from = ymd(s); to = ymd(now); } // week starts Saturday
-            else if (r === 'month') { from = ymd(new Date(now.getFullYear(), now.getMonth(), 1)); to = ymd(now); }
-            $('#filterFromDate').val(from);
-            $('#filterToDate').val(to);
-            reload();
-        });
+        // Status tiles + date filter: shared with the Employee Profile attendance tab (assets/js/attendance_ui.js)
+        AttUI.bindTiles('#attTiles', function(g) { stateGroup = g; reload(); });
+        AttUI.bindDateFilter({ range: '#attRange', from: '#filterFromDate', to: '#filterToDate', active: '', onChange: reload });
 
         /* ---------------- Add / edit form ---------------- */
+
+        const hm = v => String(v || '').slice(0, 5); // 'HH:MM:SS' -> 'HH:MM' for the time pickers
 
         function formHtml(v) {
             const isEdit = !!v.empId;
@@ -354,8 +301,8 @@ $tiles = [
                         html: isEdit
                             ? `<input type="text" class="form-control" value="${esc(v.empLabel)}" readonly>`
                             : `<select id="attEmpId" name="emp_id" data-required="1" data-msg="${esc(t('select_employee', 'Select the employee'))}"></select>` }) +
-                    F.field({ col: 4, name: 'date', id: 'attDate', type: 'date', label: t('date', 'Date'), req: !isEdit, value: v.date || F.today(),
-                        attrs: isEdit ? ' readonly' : ` max="${F.today()}"`, msg: t('select_date', 'Select the date') })
+                    F.field({ col: 4, name: 'date', id: 'attDate', label: t('date', 'Date'), req: !isEdit, value: v.date || F.today(), ph: 'YYYY-MM-DD',
+                        attrs: isEdit ? ' readonly' : '', msg: t('select_date', 'Select the date') })
                 ) +
                 F.section('mdi-clock', t('punches', 'Punches'),
                     F.field({ col: 12, name: 'punch', label: t('punch_type', 'Punch type'),
@@ -364,9 +311,9 @@ $tiles = [
                             seg('in', 'mdi-login', t('punch_in_only', 'Check in only')) +
                             seg('out', 'mdi-logout', t('punch_out_only', 'Check out only')) +
                         '</div>' }) +
-                    F.field({ col: 4, name: 'time_in', id: 'attTimeIn', type: 'time', label: t('check_in', 'Check in'), req: true, value: v.timeIn || '',
+                    F.field({ col: 4, name: 'time_in', id: 'attTimeIn', label: t('check_in', 'Check in'), req: true, value: hm(v.timeIn), ph: 'HH:MM',
                         msg: t('enter_check_in', 'Enter the check-in time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-in') +
-                    F.field({ col: 4, name: 'time_out', id: 'attTimeOut', type: 'time', label: t('check_out', 'Check out'), req: true, value: v.timeOut || '',
+                    F.field({ col: 4, name: 'time_out', id: 'attTimeOut', label: t('check_out', 'Check out'), req: true, value: hm(v.timeOut), ph: 'HH:MM',
                         msg: t('enter_check_out', 'Enter the check-out time') }).replace('sr-fcol c-4', 'sr-fcol c-4 js-out') +
                     F.field({ col: 4, name: '_hours', label: t('hours', 'Hours'), html: '<div class="sr-fstats" style="grid-template-columns:1fr;"><div><span>' + esc(t('worked', 'Worked')) + '</span><b class="js-hours">&ndash;</b></div></div>' })
                 ) +
@@ -403,6 +350,24 @@ $tiles = [
                         if (a !== null && b !== null) { let m = b - a; if (m < 0) m += 1440; txt = Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm'; }
                         $form.find('.js-hours').text(txt);
                     }
+                    // AppDate calendar for the date (no future days); clock-face pickers (same as Timetables) for the punches
+                    if (window.AppDate && !isEdit) AppDate.single('#attDate', { maxDate: 'today' });
+                    // Empty Check In / Check Out clocks open on the employee's scheduled times for that day
+                    F.clockDefault($('#attTimeIn'), '08:00');
+                    F.clockDefault($('#attTimeOut'), '17:00');
+                    F.clock($('#attTimeIn, #attTimeOut'));
+                    const loadScheduled = function() {
+                        const emp = isEdit ? v.empId : $('#attEmpId').val();
+                        const day = isEdit ? v.date : $('#attDate').val();
+                        if (!emp || !day) return;
+                        $.post(AJAX_URL, { action: 'timetable_for', emp_id: emp, date: day }, null, 'json').done(function(r) {
+                            if (!r || r.status !== 'success') return;
+                            F.clockDefault($('#attTimeIn'), r.check_in);
+                            F.clockDefault($('#attTimeOut'), r.check_out);
+                        });
+                    };
+                    $form.on('change', '#attEmpId, #attDate', loadScheduled);
+                    loadScheduled();
                     $form.on('change', 'input[name="punch"]', refresh);
                     $form.on('input change', '#attTimeIn, #attTimeOut', refresh);
                     refresh();
