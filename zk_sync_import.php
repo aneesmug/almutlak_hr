@@ -295,4 +295,7 @@ echo json_encode([
     'terminals_received' => count($terminals),
     'attendance_paired' => $attendancePaired,
     'inserted_punches' => $insertedPunches,
+    // App Settings > Attendance Config > Sync Settings - the agent sizes its window with these
+    'retention_days' => zk_attendance_retention_days($conn),
+    'retention_cutoff' => $retentionCutoff,
 ]);
