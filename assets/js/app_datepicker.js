@@ -16,7 +16,8 @@
  *   AppDate.setMin('#el', '+0d') / AppDate.setMax('#el', date)
  *   $('#el').appDate({...}) / $('#el').appDate('setDate', '2026-01-01')
  *
- * Options: format (flatpickr tokens, default 'Y-m-d'), defaultDate, allowInput, inline,
+ * Options: format (flatpickr tokens, default 'Y-m-d'; 'Y-m-d H:i' with enableTime),
+ * enableTime (adds a 24h time picker), defaultDate, allowInput, inline,
  * static, position, onChange(dates, str, fp), onOpen, onClose, onReady.
  *
  * Blocking dates (any combination):
@@ -249,7 +250,9 @@
         var userOnChange = o.onChange, userOnClose = o.onClose, userOnOpen = o.onOpen, userOnReady = o.onReady;
 
         var config = {
-            dateFormat: o.format || VALUE_FORMAT,
+            dateFormat: o.format || (o.enableTime ? VALUE_FORMAT + ' H:i' : VALUE_FORMAT),
+            enableTime: !!o.enableTime,
+            time_24hr: true,
             locale: extend(isArabic() ? arabic : english, o.locale || {}),
             mode: mode,
             inline: mode !== 'range' && !!o.inline,

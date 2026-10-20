@@ -6,6 +6,12 @@ if (!($is_system_admin ?? false)) {
     header("Location: error403.php?page=" . urlencode(basename(__FILE__)));
     exit;
 }
+
+$localDbName = '';
+$res = $conDB->query("SELECT DATABASE() AS db");
+if ($res && ($row = $res->fetch_assoc())) {
+    $localDbName = (string) $row['db'];
+}
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -25,16 +31,83 @@ if (!($is_system_admin ?? false)) {
     <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
     <style>
-        .dbi-max { max-width: 1100px; }
-        #tableListWrap { max-height: 440px; overflow-y: auto; }
-        #tableListWrap thead th { position: sticky; top: 0; background: var(--sr-surface) !important; z-index: 1; }
-        #tableListWrap .table-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--sr-accent); }
-        .dbi-check { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; color: var(--sr-text-2); cursor: pointer; }
-        .dbi-check input { margin-top: 3px; accent-color: var(--sr-accent); }
-        .dbi-check small { display: block; font-weight: 400; color: var(--sr-muted); margin-top: 2px; }
-        .dbi-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-        .dbi-tools .form-control { height: 34px; max-width: 220px; border-radius: 8px; font-size: 13px; }
-        .dbi-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 18px; border-top: 1px solid var(--sr-border); }
+        .dbi-max { max-width: 1440px; }
+
+        /* Wizard stepper */
+        .dbi-wizard { padding: 16px 18px 14px; }
+        .dbi-wizard .sr-steps { margin-top: 0; }
+        .dbi-wizard .sr-step-label small { display: block; font-weight: 500; color: var(--sr-muted); font-size: 11px; margin-top: 1px; }
+
+        /* Connection form */
+        .dbi-input { position: relative; }
+        .dbi-input > i { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--sr-muted); pointer-events: none; font-size: 13px; }
+        .sr-form .dbi-input .form-control { padding-inline-start: 34px; }
+        .sr-form .dbi-input.has-btn .form-control { padding-inline-end: 40px; }
+        .dbi-input-btn { position: absolute; inset-inline-end: 4px; top: 50%; transform: translateY(-50%); width: 32px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--sr-muted); cursor: pointer; }
+        .dbi-input-btn:hover { background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+        .dbi-conn-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+        .sr-form .dbi-conn-foot .sr-check { display: inline-flex; margin: 0; font-size: 13px; color: var(--sr-text-2); }
+        .dbi-conn-foot .sr-check small { font-weight: 400; color: var(--sr-muted); margin-inline-start: 4px; }
+        .dbi-conn-foot .sr-btn-primary { height: 40px; padding: 0 18px; }
+        .dbi-flow { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--sr-surface-2); border: 1px dashed var(--sr-border-strong); font-size: 12.5px; }
+        .dbi-flow-node { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 0; }
+        .dbi-flow-node > i { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+        .dbi-flow-node b { display: block; color: var(--sr-text); font-size: 12.5px; }
+        .dbi-flow-node span { display: block; color: var(--sr-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "SFMono-Regular", Consolas, monospace; font-size: 11.5px; }
+        .dbi-flow-node.is-live > i { background: var(--tone-sky-bg); color: var(--tone-sky-fg); }
+        .dbi-flow-node.is-local > i { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+        .dbi-flow-arrow { flex: 0 0 auto; color: var(--sr-accent); }
+        [dir="rtl"] .dbi-flow-arrow { transform: scaleX(-1); }
+
+        /* Summary stats after connect */
+        .dbi-sum { margin: 0 0 20px; }
+        .dbi-sum .sr-stat { background: var(--sr-surface); box-shadow: var(--sr-shadow); }
+
+        /* Table picker */
+        .dbi-filter { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--sr-surface-3); gap: 2px; }
+        .dbi-filter button { border: 0; background: transparent; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--sr-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .dbi-filter button .sr-count { height: 18px; min-width: 20px; font-size: 11px; }
+        .dbi-filter button.active { background: var(--sr-surface); color: var(--sr-text); box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+        #tableListWrap { max-height: 460px; overflow-y: auto; }
+        #tableListWrap thead th { position: sticky; top: 0; background: var(--sr-surface-2) !important; z-index: 1; }
+        #tableListWrap .table-check, #checkAllVisible { width: 16px; height: 16px; cursor: pointer; accent-color: var(--sr-accent); vertical-align: middle; }
+        #tableListWrap tbody tr { cursor: pointer; }
+        #tableListWrap tbody tr.is-checked td { background: var(--sr-accent-soft); }
+        #tableListWrap .dbi-cb { width: 44px; }
+        #tableListWrap .dbi-num { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .dbi-tname { display: flex; align-items: center; gap: 10px; }
+        .dbi-tname > i { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-surface-3); color: var(--sr-muted); font-size: 11px; }
+        tr.is-diff .dbi-tname > i { background: var(--tone-amber-bg); color: var(--tone-amber-fg); }
+        tr.is-missing .dbi-tname > i { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+        .dbi-empty-row td { cursor: default; }
+
+        /* Import options */
+        .dbi-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        @media (max-width: 767px) { .dbi-modes { grid-template-columns: 1fr; } }
+        .dbi-mode { position: relative; margin: 0 !important; cursor: pointer; }
+        .dbi-mode input { position: absolute; opacity: 0; pointer-events: none; }
+        .dbi-mode-card { display: flex; gap: 12px; align-items: flex-start; height: 100%; padding: 13px 14px; border: 1px solid var(--sr-border-strong); border-radius: 12px; background: var(--sr-surface-2); transition: border-color .15s, background .15s, box-shadow .15s; }
+        .dbi-mode-card > i { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-surface-3); color: var(--sr-muted); font-size: 15px; }
+        .dbi-mode-card b { display: block; font-size: 13.5px; color: var(--sr-text); text-transform: none; letter-spacing: 0; }
+        .dbi-mode-card small { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--sr-muted); line-height: 1.45; text-transform: none; letter-spacing: 0; }
+        .dbi-mode input:checked + .dbi-mode-card { border-color: var(--sr-accent); background: var(--sr-accent-soft); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
+        .dbi-mode input:checked + .dbi-mode-card > i { background: var(--sr-accent); color: #fff; }
+        .dbi-mode.is-danger input:checked + .dbi-mode-card { border-color: #dc2626; background: var(--tone-red-bg); box-shadow: 0 0 0 1px #dc2626 inset; }
+        .dbi-mode.is-danger input:checked + .dbi-mode-card > i { background: #dc2626; }
+        .dbi-mode input:focus-visible + .dbi-mode-card { box-shadow: 0 0 0 3px rgba(99, 102, 241, .25); }
+
+        /* Sticky selection / action bar */
+        .dbi-bar { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--sr-border); background: var(--sr-surface); border-radius: 0 0 var(--sr-radius) var(--sr-radius); box-shadow: 0 -6px 16px rgba(15, 23, 42, .05); }
+        .dbi-bar-info { display: flex; align-items: center; gap: 10px; margin-inline-end: auto; font-size: 13px; color: var(--sr-muted); }
+        .dbi-bar-info > i { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-accent-soft); color: var(--sr-accent-strong); }
+        .dbi-bar-info b { color: var(--sr-text); font-size: 14px; }
+        .dbi-bar .sr-btn-primary { height: 40px; padding: 0 18px; }
+        .dbi-bar .sr-btn-primary.is-danger { background: #dc2626; border-color: #dc2626; }
+
+        .dbi-side-list { margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+        .dbi-side-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--sr-border); }
+        .dbi-side-list li:last-child { border-bottom: 0; }
+        .dbi-side-list span { color: var(--sr-muted); }
 
         /* Import progress modal (lives in the Swal popup, outside .sr-page - so literal colors + app-dark overrides) */
         .swal2-popup.dbi-popup { padding: 22px 22px 18px; border-radius: 16px; }
@@ -174,96 +247,179 @@ if (!($is_system_admin ?? false)) {
                     <div class="sr-head">
                         <div>
                             <h1>Import From Live Server</h1>
-                            <p>Pull data directly from the live server's export API into this local database.</p>
+                            <p>Compare this database with the live server and pull the differences in, table by table.</p>
                         </div>
                         <div class="sr-head-actions">
-                            <span class="sr-pill tone-amber"><i class="mdi mdi-lock"></i> System admin only</span>
+                            <span class="sr-pill tone-amber"><i class="fa-solid fa-lock"></i> System admin only</span>
+                            <a href="db_export.php" class="sr-btn"><i class="fa-solid fa-file-export"></i> Database Export</a>
                         </div>
                     </div>
 
-                    <div class="sr-notice tone-sky">
-                        <i class="mdi mdi-information-outline"></i>
+                    <div class="sr-card dbi-wizard">
+                        <div class="sr-steps" id="dbiWizard">
+                            <div class="sr-step current" data-step="1"><div class="sr-step-dot">1</div><div class="sr-step-label">Connect<small>Live URL + export key</small></div></div>
+                            <div class="sr-step" data-step="2"><div class="sr-step-dot">2</div><div class="sr-step-label">Choose tables<small>Review the differences</small></div></div>
+                            <div class="sr-step" data-step="3"><div class="sr-step-dot">3</div><div class="sr-step-label">Import<small>Upsert or full replace</small></div></div>
+                        </div>
+                    </div>
+
+                    <div class="sr-import">
                         <div>
-                            Every row is upserted: matching rows are updated, new rows inserted, and anything
-                            that only exists locally is left untouched.
-                        </div>
-                    </div>
-                    <div class="sr-notice tone-amber">
-                        <i class="mdi mdi-alert"></i>
-                        <div>
-                            This writes directly to your local database. Only use with a live server URL and
-                            key you trust.
-                        </div>
-                    </div>
-
-                    <div class="sr-card">
-                        <div class="sr-card-head">
-                            <h5 class="sr-card-title"><i class="mdi mdi-server-network"></i> Live Server</h5>
-                            <span id="connStatus"></span>
-                        </div>
-                        <div class="sr-form">
-                            <div class="sr-fgrid" style="padding: 18px;">
-                                <div class="sr-fcol c-8">
-                                    <label for="baseUrl">Live Server URL</label>
-                                    <input type="text" class="form-control" id="baseUrl" placeholder="https://your-live-domain.com">
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h5 class="sr-card-title"><i class="fa-solid fa-server"></i> Live Server</h5>
+                                    <span id="connStatus"><span class="sr-pill tone-slate"><span class="sr-dot"></span>Not connected</span></span>
                                 </div>
-                                <div class="sr-fcol c-4">
-                                    <label for="exportKey">Export Key</label>
-                                    <input type="password" class="form-control" id="exportKey" placeholder="Key from db_export.php on live">
-                                </div>
-                                <div class="sr-fcol c-12">
-                                    <label class="dbi-check" for="rememberUrl">
-                                        <input type="checkbox" id="rememberUrl">
-                                        <span>Remember this URL on this browser <small>The key is never saved.</small></span>
-                                    </label>
-                                </div>
-                                <div class="sr-fcol c-12">
-                                    <button type="button" class="sr-btn sr-btn-primary" id="testConnBtn"><i class="mdi mdi-lan"></i> Test Connection</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="pickerSection" style="display:none;">
-                        <div class="sr-card">
-                            <div class="sr-card-head" style="flex-wrap: wrap;">
-                                <h5 class="sr-card-title"><i class="mdi mdi-database"></i> Tables <span class="sr-count"><span id="tableCount">0</span> / <span id="tableTotalCount">0</span></span></h5>
-                                <div class="dbi-tools">
-                                    <label class="dbi-check" for="showAllTables" style="margin-inline-end: 6px;">
-                                        <input type="checkbox" id="showAllTables"><span>Show all tables</span>
-                                    </label>
-                                    <input type="text" class="form-control" id="tableFilter" placeholder="Filter tables...">
-                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectAllBtn">Select All</button>
-                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectNoneBtn">Select None</button>
-                                    <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectDiffBtn">Select Diff Only</button>
-                                </div>
-                            </div>
-                            <div class="sr-table-wrap" id="tableListWrap"></div>
-
-                            <div class="sr-form">
-                                <div class="sr-fgrid" style="padding: 18px; border-top: 1px solid var(--sr-border);">
-                                    <div class="sr-fcol c-4">
-                                        <label for="sinceInput">Only rows changed since (optional)</label>
-                                        <input type="datetime-local" class="form-control" id="sinceInput">
-                                        <small class="sr-fhint">Applies only to tables with an <code>updated_at</code>/<code>created_at</code> column.</small>
-                                    </div>
-                                    <div class="sr-fcol c-8">
-                                        <label>&nbsp;</label>
-                                        <label class="dbi-check" for="truncateFirst">
-                                            <input type="checkbox" id="truncateFirst">
-                                            <span>Truncate selected tables before import (full replace)
-                                                <small>Deletes all local rows in the selected tables first, then imports live data.
-                                                Use this when local and live have the same row count but different data -
-                                                a plain upsert won't catch that. Cannot be combined with "changed since".</small>
-                                            </span>
-                                        </label>
+                                <div class="sr-form">
+                                    <div class="sr-fgrid" style="padding: 18px;">
+                                        <div class="sr-fcol c-7">
+                                            <label for="baseUrl">Live Server URL</label>
+                                            <div class="dbi-input">
+                                                <i class="fa-solid fa-globe"></i>
+                                                <input type="url" class="form-control" id="baseUrl" placeholder="https://your-live-domain.com" autocomplete="url">
+                                            </div>
+                                        </div>
+                                        <div class="sr-fcol c-5">
+                                            <label for="exportKey">Export Key</label>
+                                            <div class="dbi-input has-btn">
+                                                <i class="fa-solid fa-key"></i>
+                                                <input type="password" class="form-control" id="exportKey" placeholder="From Database Export on live" autocomplete="off" spellcheck="false">
+                                                <button type="button" class="dbi-input-btn" id="toggleKeyBtn" title="Show key" aria-label="Show key"><i class="fa-solid fa-eye"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <div class="dbi-flow">
+                                                <div class="dbi-flow-node is-live"><i class="fa-solid fa-cloud"></i><div><b>Live</b><span id="flowLive">not set</span></div></div>
+                                                <i class="fa-solid fa-arrow-right-long dbi-flow-arrow"></i>
+                                                <div class="dbi-flow-node is-local"><i class="fa-solid fa-laptop-code"></i><div><b>This database</b><span><?= htmlspecialchars($localDbName ?: '-') ?></span></div></div>
+                                            </div>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <div class="dbi-conn-foot">
+                                                <label class="sr-check" for="rememberUrl">
+                                                    <input type="checkbox" id="rememberUrl">
+                                                    <span>Remember URL on this browser<small>(the key is never saved)</small></span>
+                                                </label>
+                                                <button type="button" class="sr-btn sr-btn-primary" id="testConnBtn"><i class="fa-solid fa-plug"></i> Connect &amp; Compare</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="dbi-actions">
-                                <button type="button" class="sr-btn" id="checkSchemaBtn"><i class="mdi mdi-format-list-bulleted"></i> Check Schema Differences</button>
-                                <button type="button" class="sr-btn sr-btn-primary" id="importBtn"><i class="mdi mdi-download"></i> Import Selected Into Local DB</button>
+                            <div id="pickerSection" style="display:none;">
+                                <div class="sr-stats dbi-sum">
+                                    <div class="sr-stat is-sky">
+                                        <div class="sr-stat-label">Live tables <i class="fa-solid fa-table"></i></div>
+                                        <div class="sr-stat-value" id="sumTables">0</div>
+                                        <div class="sr-stat-sub" id="sumDb">-</div>
+                                    </div>
+                                    <div class="sr-stat is-amber">
+                                        <div class="sr-stat-label">With differences <i class="fa-solid fa-code-compare"></i></div>
+                                        <div class="sr-stat-value" id="sumDiff">0</div>
+                                        <div class="sr-stat-sub">Row count differs</div>
+                                    </div>
+                                    <div class="sr-stat is-red">
+                                        <div class="sr-stat-label">Missing locally <i class="fa-solid fa-circle-exclamation"></i></div>
+                                        <div class="sr-stat-value" id="sumMissing">0</div>
+                                        <div class="sr-stat-sub">Create before import</div>
+                                    </div>
+                                    <div class="sr-stat is-green">
+                                        <div class="sr-stat-label">Live rows <i class="fa-solid fa-list-ol"></i></div>
+                                        <div class="sr-stat-value" id="sumRows">0</div>
+                                        <div class="sr-stat-sub" id="sumRowsSub">Across all tables</div>
+                                    </div>
+                                </div>
+
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="fa-solid fa-database"></i> Tables <span class="sr-count"><span id="tableCount">0</span></span></h5>
+                                        <div class="dbi-filter" role="tablist" aria-label="Table filter">
+                                            <button type="button" class="active" data-filter="diff">Differences <span class="sr-count" id="cntDiff">0</span></button>
+                                            <button type="button" data-filter="missing">Missing <span class="sr-count" id="cntMissing">0</span></button>
+                                            <button type="button" data-filter="all">All <span class="sr-count" id="tableTotalCount">0</span></button>
+                                        </div>
+                                    </div>
+                                    <div class="sr-toolbar">
+                                        <div class="sr-search">
+                                            <i class="fa-solid fa-magnifying-glass"></i>
+                                            <input type="text" id="tableFilter" placeholder="Search tables...">
+                                        </div>
+                                        <div class="sr-toolbar-right">
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectAllBtn"><i class="fa-solid fa-square-check"></i> All</button>
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectNoneBtn"><i class="fa-regular fa-square"></i> None</button>
+                                            <button type="button" class="sr-btn sr-btn-sm sr-btn-ghost" id="selectDiffBtn"><i class="fa-solid fa-code-compare"></i> Differences only</button>
+                                        </div>
+                                    </div>
+                                    <div class="sr-table-wrap" id="tableListWrap"></div>
+
+                                    <div class="sr-form">
+                                        <div class="sr-fgrid" style="padding: 18px; border-top: 1px solid var(--sr-border);">
+                                            <div class="sr-fcol c-12">
+                                                <label>Import mode</label>
+                                                <div class="dbi-modes">
+                                                    <label class="dbi-mode">
+                                                        <input type="radio" name="importMode" id="modeUpsert" value="upsert" checked>
+                                                        <span class="dbi-mode-card"><i class="fa-solid fa-code-merge"></i><span><b>Merge (upsert)</b><small>Update matching rows, insert new ones. Local-only rows are kept.</small></span></span>
+                                                    </label>
+                                                    <label class="dbi-mode is-danger">
+                                                        <input type="radio" name="importMode" id="truncateFirst" value="replace">
+                                                        <span class="dbi-mode-card"><i class="fa-solid fa-eraser"></i><span><b>Full replace (truncate first)</b><small>Empties the selected local tables, then loads live data. Use when counts match but data differs.</small></span></span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="sr-fcol c-6">
+                                                <label for="sinceInput">Only rows changed since <span style="font-weight: 400; text-transform: none;">(optional)</span></label>
+                                                <input type="text" class="form-control" id="sinceInput" placeholder="Any time" autocomplete="off">
+                                                <small class="sr-fhint" id="sinceHint">Tables with <code>updated_at</code>/<code>created_at</code> only. Not available with Full replace.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="dbi-bar">
+                                        <div class="dbi-bar-info">
+                                            <i class="fa-solid fa-layer-group"></i>
+                                            <div><b id="selCount">0</b> table(s) selected<br><span id="selRows">0 live rows</span></div>
+                                        </div>
+                                        <button type="button" class="sr-btn" id="checkSchemaBtn"><i class="fa-solid fa-table-columns"></i> Check Schema</button>
+                                        <button type="button" class="sr-btn sr-btn-primary" id="importBtn"><i class="fa-solid fa-cloud-arrow-down"></i> <span>Import Selected</span></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h5 class="sr-card-title"><i class="fa-solid fa-route"></i> How It Works</h5>
+                                </div>
+                                <div class="sr-card-body">
+                                    <ol class="sr-guide">
+                                        <li>On the <b>live</b> server open <b>Database Export</b> and copy the export key.</li>
+                                        <li>Enter the live URL and key here, then <b>Connect &amp; Compare</b>.</li>
+                                        <li>Tables whose row counts differ are <b>pre-selected</b>. Run <b>Check Schema</b> if columns may have changed.</li>
+                                        <li><b>Import</b>. Tables are pulled one at a time in pages of 20,000 rows; the key rotates automatically between requests.</li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            <div class="sr-card">
+                                <div class="sr-card-head">
+                                    <h5 class="sr-card-title"><i class="fa-solid fa-circle-info"></i> Good to Know</h5>
+                                </div>
+                                <div class="sr-card-body">
+                                    <ul class="dbi-side-list">
+                                        <li><span>Matching rows</span><span class="sr-pill sr-pill-xs tone-sky">updated</span></li>
+                                        <li><span>Rows only on live</span><span class="sr-pill sr-pill-xs tone-green">inserted</span></li>
+                                        <li><span>Rows only local</span><span class="sr-pill sr-pill-xs tone-slate">kept</span></li>
+                                        <li><span>Full replace</span><span class="sr-pill sr-pill-xs tone-red">local rows deleted</span></li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="sr-notice tone-amber">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <div><strong>Writes to this database.</strong> Only connect to a live server and key you trust, and take a local backup before a full replace.</div>
                             </div>
                         </div>
                     </div>
@@ -284,98 +440,193 @@ if (!($is_system_admin ?? false)) {
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
     <script>
         let liveTables = [];
+        let tableFilterMode = 'diff';
 
         const $baseUrl = $('#baseUrl');
         const $exportKey = $('#exportKey');
 
-        const savedUrl = localStorage.getItem('db_import_remote_base_url');
-        if (savedUrl) {
-            $baseUrl.val(savedUrl);
-            $('#rememberUrl').prop('checked', true);
+        // Only the URL is ever remembered. Older versions also stored the key here -
+        // wipe it so a secret doesn't linger in localStorage.
+        try {
+            localStorage.removeItem('db_import_remote_export_key');
+            const savedUrl = localStorage.getItem('db_import_remote_base_url');
+            if (savedUrl) {
+                $baseUrl.val(savedUrl);
+                $('#rememberUrl').prop('checked', true);
+            }
+        } catch (e) { /* storage blocked */ }
+
+        function setWizardStep(step) {
+            $('#dbiWizard .sr-step').each(function() {
+                const n = parseInt(this.dataset.step, 10);
+                $(this).toggleClass('done', n < step).toggleClass('current', n === step);
+                $(this).find('.sr-step-dot').html(n < step ? '<i class="fa-solid fa-check"></i>' : n);
+            });
         }
+
+        function updateFlowLive() {
+            const url = $baseUrl.val().trim();
+            $('#flowLive').text(url ? url.replace(/^https?:\/\//i, '').replace(/\/+$/, '') : 'not set');
+        }
+        $baseUrl.on('input', updateFlowLive);
+        updateFlowLive();
+
+        $('#toggleKeyBtn').on('click', function() {
+            const show = $exportKey.attr('type') === 'password';
+            $exportKey.attr('type', show ? 'text' : 'password');
+            $(this).attr('title', show ? 'Hide key' : 'Show key')
+                .html(show ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>');
+        });
+
+        $baseUrl.add($exportKey).on('keydown', function(e) {
+            if (e.key === 'Enter') $('#testConnBtn').trigger('click');
+        });
 
         function renderTableList(tables) {
             liveTables = tables;
+            const diffCount = tables.filter(t => (t.diff || 0) !== 0 || !t.exists_locally).length;
+            const missingCount = tables.filter(t => !t.exists_locally).length;
+            const liveRows = tables.reduce((s, t) => s + (t.live_rows || 0), 0);
+
             $('#tableTotalCount').text(tables.length);
+            $('#cntDiff').text(diffCount);
+            $('#cntMissing').text(missingCount);
+            $('#sumTables').text(tables.length.toLocaleString());
+            $('#sumDiff').text(diffCount.toLocaleString());
+            $('#sumMissing').text(missingCount.toLocaleString());
+            $('#sumRows').text(liveRows.toLocaleString());
+
             const $wrap = $('#tableListWrap').empty();
             const $table = $('<table class="table sr-table" style="width:100%;"><thead><tr>' +
-                '<th></th><th>Table</th><th class="text-right">Local</th>' +
-                '<th class="text-right">Live</th><th class="text-right">Diff</th>' +
+                '<th class="dbi-cb"><input type="checkbox" id="checkAllVisible" title="Select all visible"></th><th>Table</th><th class="dbi-num">Local</th>' +
+                '<th class="dbi-num">Live</th><th class="dbi-num">Difference</th>' +
                 '</tr></thead><tbody></tbody></table>');
             const $tbody = $table.find('tbody');
 
             tables.forEach(t => {
                 const diff = t.diff || 0;
-                const localLabel = t.exists_locally ? t.local_rows.toLocaleString() : '<span class="sr-pill sr-pill-xs tone-red">missing</span>';
-                let diffLabel = '0';
-                let diffClass = 'slate';
-                if (diff > 0) { diffLabel = '+' + diff.toLocaleString(); diffClass = 'green'; }
-                else if (diff < 0) { diffLabel = diff.toLocaleString(); diffClass = 'red'; }
+                const missing = !t.exists_locally;
+                const name = escHtml(t.name);
+                const localLabel = missing ? '<span class="sr-pill sr-pill-xs tone-red"><span class="sr-dot"></span>missing</span>' : (t.local_rows || 0).toLocaleString();
+                let diffLabel = '<span class="sr-pill sr-pill-xs tone-slate">in sync</span>';
+                if (diff > 0) diffLabel = '<span class="sr-pill sr-pill-xs tone-green"><i class="fa-solid fa-arrow-down"></i> +' + diff.toLocaleString() + '</span>';
+                else if (diff < 0) diffLabel = '<span class="sr-pill sr-pill-xs tone-red"><i class="fa-solid fa-arrow-up"></i> ' + diff.toLocaleString() + '</span>';
+                const changed = diff !== 0 || missing;
 
-                const $row = $(`
-                    <tr class="table-row" data-diff="${diff}">
-                        <td><input type="checkbox" class="table-check" value="${t.name}" data-live-rows="${t.live_rows || 0}" ${diff !== 0 ? 'checked' : ''}></td>
-                        <td><span class="sr-cell-title sr-mono">${t.name}</span></td>
-                        <td class="text-right">${localLabel}</td>
-                        <td class="text-right">${t.live_rows.toLocaleString()}</td>
-                        <td class="text-right"><span class="sr-pill sr-pill-xs tone-${diffClass}">${diffLabel}</span></td>
+                $tbody.append(`
+                    <tr class="table-row${changed ? ' is-diff' : ''}${missing ? ' is-missing' : ''}" data-diff="${diff}" data-missing="${missing ? 1 : 0}">
+                        <td class="dbi-cb"><input type="checkbox" class="table-check" value="${name}" data-live-rows="${t.live_rows || 0}" ${changed ? 'checked' : ''}></td>
+                        <td><span class="dbi-tname"><i class="fa-solid ${missing ? 'fa-circle-exclamation' : (changed ? 'fa-code-compare' : 'fa-table')}"></i><span class="sr-cell-title sr-mono">${name}</span></span></td>
+                        <td class="dbi-num">${localLabel}</td>
+                        <td class="dbi-num">${(t.live_rows || 0).toLocaleString()}</td>
+                        <td class="dbi-num">${diffLabel}</td>
                     </tr>
                 `);
-                $tbody.append($row);
             });
+            $tbody.append('<tr class="dbi-empty-row" style="display:none;"><td colspan="5"><div class="sr-empty"><i class="fa-solid fa-circle-check"></i><div>No tables match this view.</div></div></td></tr>');
             $wrap.append($table);
             $('#pickerSection').show();
+            // Open on "Differences" when there are any, otherwise show everything
+            setFilterMode(diffCount ? 'diff' : 'all');
+        }
+
+        function setFilterMode(mode) {
+            tableFilterMode = mode;
+            $('.dbi-filter button').removeClass('active').filter('[data-filter="' + mode + '"]').addClass('active');
             applyRowVisibility();
         }
 
-        // Default view: only tables with a diff. "Show all tables" reveals the rest;
-        // the text filter narrows within whichever set is currently visible-eligible.
+        // The filter tabs pick the eligible set (differences / missing / all); the search
+        // box narrows within it. Selection is never changed by filtering.
         function applyRowVisibility() {
-            const showAll = $('#showAllTables').is(':checked');
             const q = $('#tableFilter').val().toLowerCase();
             let shown = 0;
             $('.table-row').each(function() {
                 const $row = $(this);
                 const diff = parseInt($row.attr('data-diff'), 10) || 0;
+                const missing = $row.attr('data-missing') === '1';
                 const name = $row.find('.table-check').val().toLowerCase();
-                const matchesFilter = name.includes(q);
-                const matchesDiff = showAll || diff !== 0;
-                const visible = matchesFilter && matchesDiff;
+                let eligible = true;
+                if (tableFilterMode === 'diff') eligible = diff !== 0 || missing;
+                else if (tableFilterMode === 'missing') eligible = missing;
+                const visible = eligible && name.includes(q);
                 $row.toggle(visible);
                 if (visible) shown++;
             });
             $('#tableCount').text(shown);
+            $('.dbi-empty-row').toggle(shown === 0);
+            updateSelectionInfo();
+        }
+
+        function updateSelectionInfo() {
+            let count = 0, rows = 0;
+            $('.table-check').each(function() {
+                $(this).closest('tr').toggleClass('is-checked', this.checked);
+                if (this.checked) {
+                    count++;
+                    rows += parseInt(this.dataset.liveRows, 10) || 0;
+                }
+            });
+            $('#selCount').text(count);
+            $('#selRows').text(rows.toLocaleString() + ' live rows');
+            $('#sumRowsSub').text(rows.toLocaleString() + ' in selection');
+            $('#importBtn, #checkSchemaBtn').prop('disabled', count === 0);
+
+            const $visible = $('.table-row:visible .table-check');
+            const checkedVisible = $visible.filter(':checked').length;
+            $('#checkAllVisible')
+                .prop('checked', $visible.length > 0 && checkedVisible === $visible.length)
+                .prop('indeterminate', checkedVisible > 0 && checkedVisible < $visible.length);
         }
 
         $('#tableFilter').on('input', applyRowVisibility);
-        $('#showAllTables').on('change', applyRowVisibility);
+        $('.dbi-filter').on('click', 'button', function() { setFilterMode(this.dataset.filter); });
+
+        $('#tableListWrap')
+            .on('change', '.table-check', updateSelectionInfo)
+            .on('change', '#checkAllVisible', function() {
+                $('.table-row:visible .table-check').prop('checked', this.checked);
+                updateSelectionInfo();
+            })
+            .on('click', '.table-row', function(e) {
+                if ($(e.target).is('input')) return;
+                const cb = $(this).find('.table-check')[0];
+                cb.checked = !cb.checked;
+                updateSelectionInfo();
+            });
 
         const $sinceInput = $('#sinceInput');
+        AppDate.single('#sinceInput', { enableTime: true, allowInput: true });
         const $truncateFirst = $('#truncateFirst');
 
-        $truncateFirst.on('change', function() {
-            if ($(this).is(':checked')) {
-                $sinceInput.val('').prop('disabled', true);
+        $('input[name="importMode"]').on('change', function() {
+            const replace = $truncateFirst.is(':checked');
+            if (replace) {
+                const fp = AppDate.get('#sinceInput');
+                if (fp) fp.clear(); else $sinceInput.val('');
+                $sinceInput.prop('disabled', true);
             } else {
                 $sinceInput.prop('disabled', false);
             }
+            $('#importBtn').toggleClass('is-danger', replace)
+                .find('span').text(replace ? 'Replace Selected' : 'Import Selected');
         });
 
-        $('#selectAllBtn').on('click', () => $('.table-row:visible .table-check').prop('checked', true));
-        $('#selectNoneBtn').on('click', () => $('.table-row:visible .table-check').prop('checked', false));
+        $('#selectAllBtn').on('click', () => { $('.table-row:visible .table-check').prop('checked', true); updateSelectionInfo(); });
+        $('#selectNoneBtn').on('click', () => { $('.table-row:visible .table-check').prop('checked', false); updateSelectionInfo(); });
         $('#selectDiffBtn').on('click', function() {
-            $('.table-row:visible').each(function() {
+            $('.table-row').each(function() {
                 const $cb = $(this).find('.table-check');
-                const name = $cb.val();
-                const t = liveTables.find(x => x.name === name);
-                $cb.prop('checked', !!(t && t.diff !== 0));
+                const t = liveTables.find(x => x.name === $cb.val());
+                $cb.prop('checked', !!(t && (t.diff !== 0 || !t.exists_locally)));
             });
+            updateSelectionInfo();
         });
 
-        // Shared by the "Test Connection" button and the post-import refresh below - both
+        // Shared by the "Connect" button and the post-import refresh below - both
         // just need the current Local/Live/Diff counts re-pulled and re-rendered.
         function refreshConnectionAndTables(baseUrl, exportKey, onDone) {
-            $('#connStatus').html('<span class="sr-pill tone-slate"><i class="mdi mdi-loading mdi-spin"></i>Connecting...</span>');
+            $('#connStatus').html('<span class="sr-pill tone-slate"><i class="fa-solid fa-spinner fa-spin"></i> Connecting...</span>');
 
             $.ajax({
                 url: './includes/ajaxFile/ajaxDbImportRemote.php',
@@ -384,15 +635,20 @@ if (!($is_system_admin ?? false)) {
                 data: { action: 'test_connection', base_url: baseUrl, export_key: exportKey }
             }).done(function(res) {
                 if (res.status === 'success') {
-                    $('#connStatus').html('<span class="sr-pill tone-green"><span class="sr-dot"></span>Connected - ' + $('<div>').text(res.database).html() + '</span>');
+                    const db = escHtml(res.database);
+                    $('#connStatus').html('<span class="sr-pill tone-green"><span class="sr-dot"></span>Connected &middot; ' + db + '</span>');
+                    $('#sumDb').html('Live database <b class="sr-mono">' + db + '</b>');
                     renderTableList(res.tables || []);
+                    setWizardStep(2);
                 } else {
-                    $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>' + $('<div>').text(res.message || 'Connection failed').html() + '</span>');
+                    $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>' + escHtml(res.message || 'Connection failed') + '</span>');
                     $('#pickerSection').hide();
+                    setWizardStep(1);
                 }
             }).fail(function() {
                 $('#connStatus').html('<span class="sr-pill tone-red"><span class="sr-dot"></span>Request failed</span>');
                 $('#pickerSection').hide();
+                setWizardStep(1);
             }).always(function() {
                 if (onDone) onDone();
             });
@@ -402,20 +658,22 @@ if (!($is_system_admin ?? false)) {
             const baseUrl = $baseUrl.val().trim();
             const exportKey = $exportKey.val().trim();
             if (!baseUrl || !exportKey) {
-                Swal.fire('Missing info', 'Enter both the live server URL and export key.', 'warning');
+                Swal.fire({ title: 'Missing info', text: 'Enter both the live server URL and the export key.', icon: 'warning', allowOutsideClick: false });
                 return;
             }
 
-            if ($('#rememberUrl').is(':checked')) {
-                localStorage.setItem('db_import_remote_base_url', baseUrl);
-                localStorage.setItem('db_import_remote_export_key', exportKey);
-            } else {
-                localStorage.removeItem('db_import_remote_base_url');
-                localStorage.removeItem('db_import_remote_export_key');
-            }
+            try {
+                if ($('#rememberUrl').is(':checked')) {
+                    localStorage.setItem('db_import_remote_base_url', baseUrl);
+                } else {
+                    localStorage.removeItem('db_import_remote_base_url');
+                }
+            } catch (e) { /* storage blocked */ }
 
             const $btn = $(this).prop('disabled', true);
-            refreshConnectionAndTables(baseUrl, exportKey, () => $btn.prop('disabled', false));
+            const original = $btn.html();
+            $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> Connecting...');
+            refreshConnectionAndTables(baseUrl, exportKey, () => $btn.prop('disabled', false).html(original));
         });
 
         // --- Two-step progress UI: Step 1 (only when Truncate is checked) truncates the
@@ -751,6 +1009,7 @@ if (!($is_system_admin ?? false)) {
 
         function doImport(baseUrl, exportKey, tables, since, truncate) {
             const initialStates = makeInitialStates(tables);
+            setWizardStep(3);
             Swal.fire({
                 title: truncate ? 'Truncating Tables' : 'Importing Tables',
                 html: renderProgressHtml(truncate ? TRUNCATE_UI : { truncate: false, phase: 'import', sub: 'Importing tables one at a time from the live server.' }, tables, initialStates),
