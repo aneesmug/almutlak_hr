@@ -888,6 +888,11 @@ function __(key, def) {
                             <div class="ms2fa-bar">
                                 <span class="ms2fa-count" id="msauth-selected-count"></span>
                                 <div class="ms2fa-tools">
+                                    <select class="form-control form-control-sm ms2fa-filter" id="msauth-session-filter" title="${__('msauth_session_filter', 'Session filter')}">
+                                        <option value="">${__('msauth_filter_all_sessions', 'All sessions')}</option>
+                                        <option value="active">${__('msauth_filter_active', 'Active session')}</option>
+                                        <option value="none">${__('msauth_filter_no_session', 'No active session')}</option>
+                                    </select>
                                     <input type="search" class="form-control form-control-sm ms2fa-search" id="msauth-list-search" placeholder="${__('msauth_search_list', 'Search name, ID, email...')}">
                                     <button type="button" class="sr-btn sr-btn-primary sr-btn-sm" id="msauth-add-user"><i class="mdi mdi-plus"></i> ${__('msauth_add_user', 'Add user')}</button>
                                 </div>
@@ -934,13 +939,18 @@ function __(key, def) {
                     // Selected: the users added. Forced for all: everyone who has already linked a Microsoft account.
                     const allRows = msUsers.filter(u => isAll ? u.linked : u.method === 'microsoft');
                     const q = (document.getElementById('msauth-list-search').value || '').trim().toLowerCase();
-                    const rows = q ? allRows.filter(u => [u.name, u.id_iqama, u.emp_id, u.email, u.user_type].join(' ').toLowerCase().includes(q)) : allRows;
-                    document.getElementById('msauth-selected-count').innerHTML = `<b>${allRows.length}</b> ${isAll ? __('msauth_users_linked', 'user(s) signed in with Microsoft') : __('msauth_users_added', 'user(s) added')}`;
+                    const sessionFilter = document.getElementById('msauth-session-filter').value;
+                    const rows = allRows
+                        .filter(u => !sessionFilter || (sessionFilter === 'active' ? u.active_sessions > 0 : !(u.active_sessions > 0)))
+                        .filter(u => !q || [u.name, u.id_iqama, u.emp_id, u.email, u.user_type].join(' ').toLowerCase().includes(q));
+                    const activeCount = allRows.filter(u => u.active_sessions > 0).length;
+                    document.getElementById('msauth-selected-count').innerHTML = `<b>${allRows.length}</b> ${isAll ? __('msauth_users_linked', 'user(s) signed in with Microsoft') : __('msauth_users_added', 'user(s) added')}`
+                        + ` <span class="ms2fa-count-sub">· <b>${activeCount}</b> ${__('msauth_with_active_session', 'with active session')}</span>`;
 
                     const pages = Math.max(1, Math.ceil(rows.length / MS_PAGE_SIZE));
                     msPage = Math.min(Math.max(1, msPage), pages);
                     const pageRows = rows.slice((msPage - 1) * MS_PAGE_SIZE, msPage * MS_PAGE_SIZE);
-                    const emptyText = q ? __('no_records_found', 'No records found')
+                    const emptyText = (q || sessionFilter) ? __('no_records_found', 'No records found')
                         : (isAll ? __('msauth_no_linked', 'Nobody has signed in with Microsoft yet.') : __('msauth_no_users', 'No users added yet - everyone uses email OTP.'));
 
                     msUsersBody.innerHTML = pageRows.length ? pageRows.map(u => `
@@ -992,6 +1002,7 @@ function __(key, def) {
                 const MS_PAGE_SIZE = 10;
                 let msPage = 1;
                 document.getElementById('msauth-list-search').addEventListener('input', () => { msPage = 1; renderMsUsers(); });
+                document.getElementById('msauth-session-filter').addEventListener('change', () => { msPage = 1; renderMsUsers(); });
                 document.getElementById('msauth-pager').addEventListener('click', function (e) {
                     const link = e.target.closest('a.page-link');
                     if (!link || link.closest('.disabled')) { e.preventDefault(); return; }

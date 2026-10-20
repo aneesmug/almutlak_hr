@@ -1,15 +1,29 @@
-/* Sidebar v2 - accordion menu, own scrollbar, icon rail on desktop, off-canvas drawer on mobile.
-   Activated by assets/js/sidebar_v2.js (adds body.sbv2). No hover flyouts, so nothing shifts or gets clipped. */
+/* Sidebar v2 - accordion menu, own scrollbar, icon rail with hover flyouts on desktop, off-canvas drawer on mobile.
+   Activated by assets/js/sidebar_v2.js (adds body.sbv2). Flyouts are position:fixed (placed by the script),
+   so the sidebar's overflow never clips them. */
 
 body.sbv2 {
     --sb-w: 264px;
-    --sb-rail: 72px;
+    --sb-rail: 80px;
     --sb-text: #9aa7b4;
     --sb-text-hover: #ffffff;
     --sb-accent: #02c0ce;
     --sb-hover-bg: rgba(255, 255, 255, .06);
     --sb-current-bg: rgba(2, 192, 206, .14);
     --sb-line: rgba(255, 255, 255, .08);
+    /* rail flyout panels (dark menu) */
+    --sb-fly-bg: #2b2f3a;
+    --sb-fly-line: rgba(255, 255, 255, .08);
+    --sb-fly-text: #c3cbd4;
+    --sb-fly-text-strong: #ffffff;
+    --sb-fly-muted: rgba(195, 203, 212, .6);
+    --sb-fly-hover: rgba(255, 255, 255, .07);
+    --sb-fly-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+}
+/* app-wide dark theme: flyouts follow its surfaces */
+html.app-dark body.sbv2 {
+    --sb-fly-bg: var(--ad-surface-2, #2b2f3a);
+    --sb-fly-line: var(--ad-border, rgba(255, 255, 255, .08));
 }
 
 /* ---------- Sidebar shell ---------- */
@@ -229,23 +243,174 @@ body.sbv2-drawer .sbv2-backdrop { opacity: 1; visibility: visible; }
     body.sbv2 .content-page { margin-left: var(--sb-w) !important; transition: margin-left .2s ease; }
     body.sbv2 .footer { left: var(--sb-w) !important; transition: left .2s ease; }
 
-    /* icon-only rail: no flyouts - clicking a group icon expands the sidebar */
+    /* icon-only rail: hovering a group opens its sub menu as a flyout (sidebar_v2.js positions it);
+       the hamburger still "peeks" the full-width accordion sidebar */
     body.sbv2.sbv2-rail { --sb-w: var(--sb-rail); }
     body.sbv2.sbv2-rail.sbv2-peek #wrapper .left.side-menu { width: 264px; box-shadow: 6px 0 30px rgba(0,0,0,.35); }
     body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left { justify-content: center; padding: 0; }
     body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left .logo span { display: none !important; }
     body.sbv2.sbv2-rail:not(.sbv2-peek) .left.side-menu .topbar-left .logo i { display: block !important; }
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu { padding: 8px 8px 28px; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu { padding: 10px 8px 28px; }
     body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu .menu-title { display: none; }
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a { justify-content: center; padding: 9px 0; }
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a > span:not(.fa):not(.badgez):not(.badge),
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a > span.fa { display: none !important; }
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a .badgez,
-    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li > a .badge {
-        position: absolute; top: 3px; right: 6px; transform: scale(.8);
+
+    /* rail items: rounded square block, filled with the item's own colour on hover / open / current */
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a {
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        min-height: 48px;
+        margin: 10px auto;
+        padding: 0;
+        border-radius: 12px;
+        transition: background-color .15s ease, box-shadow .15s ease, color .15s ease;
     }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a > i { font-size: 17px; flex-basis: 24px; width: 24px; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a > span:not(.fa):not(.badgez):not(.badge),
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a > span.fa { display: none !important; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a .badgez,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a .badge {
+        position: absolute; top: -5px; right: -7px; transform: scale(.8);
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a:hover,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a:focus-visible,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-fly-open > a,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-current > a,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-current-branch > a,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a.active {
+        background: var(--sb-item, var(--sb-accent));
+        color: #fff;
+        box-shadow: 0 6px 14px -6px var(--sb-item, var(--sb-accent));
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a:hover > i,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a:focus-visible > i,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-fly-open > a > i,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-current > a > i,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li.sbv2-current-branch > a > i,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a.active > i {
+        color: #fff !important;
+        --fa-primary-color: #fff !important;
+        --fa-secondary-color: #fff !important;
+        --fa-secondary-opacity: .55 !important;
+    }
+    /* White icon style: every block uses the theme accent instead of the per-item colour */
+    body.sbv2.sbv2-icons-white #side-menu > li > a { --sb-item: var(--sb-accent) !important; }
+
     body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul { display: none !important; }
+
+    /* ---------- Flyout panels (any depth) ---------- */
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li.sbv2-fly-open > ul {
+        display: block !important;
+        position: fixed !important;
+        z-index: 1050;
+        width: max-content !important;
+        min-width: 220px;
+        max-width: 300px;
+        max-height: calc(100vh - 16px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        margin: 0 !important;
+        padding: 8px !important;
+        border: 1px solid var(--sb-fly-line) !important;
+        border-radius: 12px;
+        background: var(--sb-fly-bg) !important;
+        box-shadow: var(--sb-fly-shadow) !important;
+        scrollbar-width: thin;
+        animation: sbv2-fly-in .14s ease;
+    }
+    /* arrow joining the flyout to its parent item; x/y set by sidebar_v2.js (placeFly) */
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li.sbv2-fly-open::after {
+        content: "";
+        position: fixed;
+        z-index: 1051;
+        left: var(--sbv2-arrow-x, -99px);
+        top: var(--sbv2-arrow-y, -99px);
+        width: 14px;
+        height: 14px;
+        background: var(--sb-fly-bg);
+        border: 1px solid var(--sb-fly-line);
+        border-top-color: transparent;
+        border-right-color: transparent;
+        transform: translate(-50%, -50%) rotate(45deg);
+        border-bottom-left-radius: 3px;
+        pointer-events: none;
+        animation: sbv2-fly-in .14s ease;
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu li.sbv2-fly-open.sbv2-fly-left::after {
+        border-color: var(--sb-fly-line) var(--sb-fly-line) transparent transparent;
+        border-radius: 0 3px 0 0;
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a {
+        min-height: 38px;
+        margin: 1px 0;
+        padding: 8px 12px;
+        gap: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        color: var(--sb-fly-text);
+        background: transparent;
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a > i { flex-basis: 18px; width: 18px; font-size: 15px; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a > span:not(.fa):not(.badgez):not(.badge) { white-space: nowrap; overflow-wrap: normal; }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a:hover,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a:focus,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li.sbv2-fly-open > a {
+        background: var(--sb-fly-hover);
+        color: var(--sb-fly-text-strong);
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li.sbv2-current > a,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li.sbv2-current-branch > a,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a.active {
+        background: var(--sb-current-bg);
+        color: var(--sb-accent);
+        font-weight: 600;
+    }
+    /* sub-group arrow becomes a small chevron that points at its own flyout */
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a > span.fa,
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li.sbv2-open > a > span.fa {
+        transform: none;
+        font-size: 10px;
+        opacity: .55;
+        margin-inline-start: auto;
+        padding-inline-start: 10px;
+    }
+    body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu .sbv2-fly-title {
+        display: block;
+        padding: 6px 12px 8px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--sb-fly-line);
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--sb-fly-muted);
+        white-space: nowrap;
+    }
 }
+/* flyout heading only exists for the rail */
+body.sbv2 #sidebar-menu .sbv2-fly-title { display: none; }
+
+@keyframes sbv2-fly-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* name tooltip for single-link rail items */
+.sbv2-tip {
+    position: fixed;
+    z-index: 1060;
+    pointer-events: none;
+    padding: 6px 11px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    background: var(--sb-fly-bg);
+    color: var(--sb-fly-text-strong);
+    border: 1px solid var(--sb-fly-line);
+    box-shadow: var(--sb-fly-shadow);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s ease, visibility .12s ease;
+}
+.sbv2-tip.show { opacity: 1; visibility: visible; }
 
 /* ---------- Mobile / tablet: off-canvas drawer ---------- */
 @media (max-width: 991.98px) {
@@ -265,6 +430,9 @@ body.sbv2-drawer .sbv2-backdrop { opacity: 1; visibility: visible; }
 html[dir="rtl"] body.sbv2 #wrapper .left.side-menu { left: auto; right: 0; }
 html[dir="rtl"] body.sbv2 #sidebar-menu ul ul { margin: 0 21px 4px 0; padding: 0 10px 0 0; border-left: 0; border-right: 1px solid var(--sb-line); }
 html[dir="rtl"] body.sbv2 #sidebar-menu li > a > span.fa { margin-left: 0; margin-right: auto; }
+html[dir="rtl"] body.sbv2.sbv2-rail:not(.sbv2-peek) #sidebar-menu ul ul li > a > span.fa { transform: scaleX(-1); }
+html[dir="rtl"] body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a .badgez,
+html[dir="rtl"] body.sbv2.sbv2-rail:not(.sbv2-peek) #side-menu > li > a .badge { right: auto; left: -7px; }
 @media (min-width: 992px) {
     html[dir="rtl"] body.sbv2 .content-page { margin-left: 0 !important; margin-right: var(--sb-w) !important; }
     html[dir="rtl"] body.sbv2 .footer { left: 0 !important; right: var(--sb-w) !important; }
@@ -290,6 +458,13 @@ body.sbv2.sbv2-light {
     --sb-hover-bg: rgba(15, 23, 42, .06);
     --sb-current-bg: rgba(2, 192, 206, .14);
     --sb-line: rgba(15, 23, 42, .10);
+    --sb-fly-bg: #ffffff;
+    --sb-fly-line: rgba(15, 23, 42, .08);
+    --sb-fly-text: #4b5563;
+    --sb-fly-text-strong: #111827;
+    --sb-fly-muted: #9ca3af;
+    --sb-fly-hover: rgba(15, 23, 42, .05);
+    --sb-fly-shadow: 0 14px 34px rgba(15, 23, 42, .14), 0 2px 6px rgba(15, 23, 42, .06);
 }
 body.sbv2.sbv2-light #wrapper .left.side-menu,
 body.sbv2.sbv2-light #wrapper .left.side-menu .topbar-left,

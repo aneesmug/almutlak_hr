@@ -1001,6 +1001,8 @@
         .ms2fa-note { margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px; background: var(--tone-sky-bg); color: var(--tone-sky-fg); font-size: 12.5px; }
         .ms2fa-tools { display: flex; align-items: center; gap: 8px; }
         .ms2fa-search { width: 240px; max-width: 100%; border-radius: 9px; }
+        .ms2fa-filter { width: 170px; max-width: 100%; border-radius: 9px; }
+        .ms2fa-count-sub { color: var(--sr-muted, #64748b); margin-left: 4px; }
         .ms2fa-table { padding: 0 16px; }
         .ms2fa-table table.sr-table td { vertical-align: middle; }
         .ms2fa-user { display: flex; align-items: center; gap: 10px; min-width: 200px; }
@@ -1018,7 +1020,7 @@
         .ms2fa-empty-cell i { display: block; font-size: 26px; margin-bottom: 4px; opacity: .6; }
         .ms2fa-pager { padding: 10px 16px 16px; }
         .ms2fa-pager-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--sr-muted); }
-        @media (max-width: 640px) { .ms2fa-bar { flex-wrap: wrap; } .ms2fa-tools { width: 100%; } .ms2fa-search { flex: 1; width: auto; } }
+        @media (max-width: 640px) { .ms2fa-bar { flex-wrap: wrap; } .ms2fa-tools { width: 100%; } .ms2fa-search, .ms2fa-filter { flex: 1; width: auto; } }
     </style>
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
