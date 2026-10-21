@@ -121,17 +121,32 @@ $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $psArgs -WorkingD
 # them); also a heartbeat every 30s so the live app knows the run is still alive.
 $lastSent = ''
 $lastSentAt = Get-Date
+$cancelled = $false
 while (-not $proc.HasExited) {
     Start-Sleep -Milliseconds 1500
     $text = ''
     if (Test-Path $ProgressFile) {
         try { $text = [System.IO.File]::ReadAllText($ProgressFile).Trim() } catch { $text = '' }
     }
-    if (($text -and $text -ne $lastSent) -or ((Get-Date) - $lastSentAt).TotalSeconds -ge 30) {
-        $null = Invoke-Live @{ action = 'progress'; id = $requestId; progress = $(if ($text) { $text } else { $lastSent }) }
+    if (($text -and $text -ne $lastSent) -or ((Get-Date) - $lastSentAt).TotalSeconds -ge 10) {
+        $resp = Invoke-Live @{ action = 'progress'; id = $requestId; progress = $(if ($text) { $text } else { $lastSent }) }
         if ($text) { $lastSent = $text }
         $lastSentAt = Get-Date
+        # "Cancel sync" clicked in the app -> stop the export. Batches already sent stay
+        # saved (last_sent_id.txt), the next run continues from there.
+        if ($resp -and $resp.cancel) {
+            $cancelled = $true
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+            Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
+            break
+        }
     }
+}
+if ($cancelled) {
+    Remove-Item $ProgressFile -Force -ErrorAction SilentlyContinue
+    Write-PollLog "Sync $requestId cancelled from the app - export stopped."
+    exit 0
 }
 $proc.WaitForExit()
 $exitCode = $proc.ExitCode

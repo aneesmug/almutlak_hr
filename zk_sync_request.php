@@ -69,7 +69,8 @@ if ($action === 'progress') {
     $request = zk_sync_request_get($conn);
     $id = (string) ($_POST['id'] ?? '');
     if (!$request || $id === '' || !hash_equals((string) $request['id'], $id) || ($request['status'] ?? '') !== 'running') {
-        echo json_encode(['status' => 'error', 'message' => 'Unknown or finished request id.']);
+        // cancel=true -> zk_sync_poll.ps1 stops the running export
+        echo json_encode(['status' => 'error', 'cancel' => true, 'message' => 'Request was cancelled or is no longer running.']);
         exit;
     }
 
@@ -107,6 +108,13 @@ if ($action === 'report') {
     $id = (string) ($_POST['id'] ?? '');
     if (!$request || $id === '' || !hash_equals((string) $request['id'], $id)) {
         echo json_encode(['status' => 'error', 'message' => 'Unknown request id.']);
+        exit;
+    }
+    if (($request['status'] ?? '') === 'cancelled') {
+        // Cancelled from the app meanwhile - keep it cancelled, just note what was sent
+        $request['result'] = ['sent' => (int) ($_POST['sent'] ?? 0), 'inserted' => (int) ($_POST['inserted'] ?? 0), 'duplicates' => (int) ($_POST['duplicates'] ?? 0)];
+        zk_sync_request_save($conn, $request);
+        echo json_encode(['status' => 'success']);
         exit;
     }
 

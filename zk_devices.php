@@ -453,6 +453,9 @@ foreach ($devices as $d) {
             } else if (r.status === 'failed') {
                 cls = 'is-bad';
                 html = '<i class="fa-solid fa-circle-xmark"></i>' + esc(kind + ' ' + __('failed', 'failed') + ' ' + (r.finished_at || '') + ': ' + ((r.result && r.result.message) || __('see_agent_log', 'see zk_biotime_export.log on the ZKT server'))) + details;
+            } else if (r.status === 'cancelled') {
+                cls = 'is-warn';
+                html = '<i class="fa-solid fa-ban"></i>' + esc(kind + ' ' + __('cancelled', 'cancelled') + ' ' + (r.finished_at || '') + '.') + details;
             } else {
                 cls = 'is-warn';
                 html = '<i class="fa-solid fa-triangle-exclamation"></i>' + esc(kind + ' ' + __('requested', 'requested') + who + ' ' + __('at', 'at') + ' ' + r.requested_at + ' ' +
@@ -495,7 +498,7 @@ foreach ($devices as $d) {
             const agentOk = res.agent_seen_ago !== null && res.agent_seen_ago <= AGENT_OK_SECONDS;
             const st = r.status;
             const started = !!r.picked_at;
-            const failed = st === 'failed' || (st === 'stale' && started);
+            const failed = st === 'failed' || st === 'cancelled' || (st === 'stale' && started);
             const idx = !started ? -1 : (st === 'done' ? STAGE_ORDER.length : stageIdx(p.stage));
             const batch = parseInt(p.batch, 10) || 0;
             // state of a step covering stages [from..to]
@@ -517,6 +520,8 @@ foreach ($devices as $d) {
             const s2 = { icon: 'fa-plug', title: __('zks_step_connect', 'Connecting to ZKT server'), time: hms(r.picked_at) };
             if (started) {
                 Object.assign(s2, { state: 'done', title: __('zks_step_connected', 'Connected to ZKT server'), detail: __('zks_connected_detail', 'ZKT server accepted the request') });
+            } else if (st === 'cancelled') {
+                Object.assign(s2, { state: 'error', detail: __('zks_cancelled', 'Cancelled before the ZKT server picked it up.') });
             } else if (st === 'stale') {
                 Object.assign(s2, { state: 'error', detail: __('zks_no_answer', 'The ZKT server did not answer. Check that the server is on and its "ZKT Sync Poll" task is running.') });
             } else {
@@ -572,6 +577,8 @@ foreach ($devices as $d) {
                 fin.state = 'done';
             } else if (st === 'failed') {
                 Object.assign(fin, { state: 'error', title: __('zks_step_failed', 'Sync failed'), detail: (r.result && r.result.message) || __('see_agent_log', 'see zk_biotime_export.log on the ZKT server') });
+            } else if (st === 'cancelled') {
+                Object.assign(fin, { state: 'error', title: __('zks_step_cancelled', 'Sync cancelled'), detail: started ? __('zks_cancelled_run', 'Stopped on the ZKT server. Batches already sent stay saved - the next sync continues from there.') : '' });
             } else if (st === 'stale' && started) {
                 Object.assign(fin, { state: 'error', title: __('zks_step_failed', 'Sync failed'), detail: __('zks_lost', 'Lost contact with the ZKT server during the sync.') });
             } else if (idx === 6) {
@@ -598,11 +605,13 @@ foreach ($devices as $d) {
             $('#zksSteps').html(buildSteps(res).map(stepHtml).join(''));
             $('#zksMode').text(r.mode === 'resync' ? __('full_resync', 'Full re-sync') : __('zks_new_only', 'New punches only'));
 
-            const ended = ['done', 'failed', 'stale'].includes(r.status);
+            const ended = ['done', 'failed', 'stale', 'cancelled'].includes(r.status);
             let result = '';
             if (r.status === 'done') {
                 const x = r.result || {};
                 result = `<div class="zks-result is-ok"><i class="fa-solid fa-circle-check"></i> <b>${esc(num(x.inserted))}</b> ${esc(__('new_punches', 'new punch(es)'))} · ${esc(num(x.sent))} ${esc(__('sent', 'sent'))} · ${esc(num(x.duplicates))} ${esc(__('already_stored', 'already stored'))}</div>`;
+            } else if (r.status === 'cancelled') {
+                result = `<div class="zks-result is-bad"><i class="fa-solid fa-ban"></i> ${esc(__('zks_step_cancelled', 'Sync cancelled'))} - ${esc(__('zks_start_again', 'you can start a new sync now.'))}</div>`;
             } else if (r.status === 'failed' || r.status === 'stale') {
                 result = `<div class="zks-result is-bad"><i class="fa-solid fa-circle-xmark"></i> ${esc(__('zk_sync_failed', 'ZKT sync failed'))}</div>`;
             }
@@ -623,8 +632,11 @@ foreach ($devices as $d) {
                 }
             }
 
-            $(Swal.getTitle()).text(r.status === 'done' ? __('zk_sync_done', 'ZKT sync complete') : r.status === 'failed' || r.status === 'stale' ? __('zk_sync_failed', 'ZKT sync failed') : __('sync_zkt', 'Sync ZKT'));
+            $(Swal.getTitle()).text(r.status === 'done' ? __('zk_sync_done', 'ZKT sync complete') : r.status === 'cancelled' ? __('zks_step_cancelled', 'Sync cancelled') : r.status === 'failed' || r.status === 'stale' ? __('zk_sync_failed', 'ZKT sync failed') : __('sync_zkt', 'Sync ZKT'));
             $(Swal.getConfirmButton()).text(ended ? __('close', 'Close') : __('run_in_background', 'Run in background'));
+            // Cancel: only while pending/running (also for a stuck one, so a new sync can start)
+            $(Swal.getDenyButton()).toggle(['pending', 'running', 'stale'].includes(r.status)).prop('disabled', false)
+                .html('<i class="fa-solid fa-ban"></i> ' + esc(r.status === 'stale' ? __('zks_clear', 'Clear') : __('zks_cancel', 'Cancel sync')));
         }
 
         function openSyncModal() {
@@ -636,7 +648,18 @@ foreach ($devices as $d) {
                        <ol class="zks-steps" id="zksSteps"></ol><div id="zksResult"></div>`,
                 width: 580,
                 confirmButtonText: __('run_in_background', 'Run in background'),
+                showDenyButton: true,
+                denyButtonText: __('zks_cancel', 'Cancel sync'),
+                reverseButtons: true,
                 allowOutsideClick: false,
+                preDeny: () => {
+                    // keep the modal open, show the cancelled state
+                    $(Swal.getDenyButton()).prop('disabled', true);
+                    $.post('includes/ajaxFile/zkDeviceAjax.php', { action: 'sync_cancel' }, null, 'json')
+                        .done(res => { if (res && res.status === 'success') renderSync(res); })
+                        .fail(() => { $(Swal.getDenyButton()).prop('disabled', false); });
+                    return false;
+                },
                 didOpen: () => {
                     if (lastSyncRes) renderSyncModal(lastSyncRes);
                     clearTimeout(syncTimer);

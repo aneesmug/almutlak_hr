@@ -37,6 +37,9 @@ switch ($action) {
     case 'sync_status':
         sync_status($conDB);
         break;
+    case 'sync_cancel':
+        sync_cancel($conDB);
+        break;
     default:
         echo json_encode(['status' => 'error', 'message' => 'Invalid action.']);
 }
@@ -140,6 +143,18 @@ function sync_request($conDB) {
         'requested_at' => date('Y-m-d H:i:s'),
     ]);
     echo json_encode(['status' => 'success', 'already' => false] + sync_status_payload($conDB));
+}
+
+// Stop a pending/running request. A running export on the ZKT server is stopped by
+// zk_sync_poll.ps1 on its next progress call (already-sent batches stay saved).
+function sync_cancel($conDB) {
+    $request = zk_sync_request_get($conDB);
+    if ($request && in_array($request['status'] ?? '', ['pending', 'running'], true)) {
+        $request['status'] = 'cancelled';
+        $request['finished_at'] = date('Y-m-d H:i:s');
+        zk_sync_request_save($conDB, $request);
+    }
+    echo json_encode(['status' => 'success'] + sync_status_payload($conDB));
 }
 
 function sync_status($conDB) {
