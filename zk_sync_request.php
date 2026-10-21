@@ -79,7 +79,9 @@ if ($action === 'progress') {
         exit;
     }
 
-    $in = json_decode((string) ($_POST['progress'] ?? ''), true);
+    // progress_b64 (agent sends base64 - PowerShell 5.1 mangles quotes in curl arguments)
+    $raw = isset($_POST['progress_b64']) ? (string) base64_decode((string) $_POST['progress_b64'], true) : (string) ($_POST['progress'] ?? '');
+    $in = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $raw), true);
     $in = is_array($in) ? $in : [];
     $now = date('Y-m-d H:i:s');
     $stage = (string) ($in['stage'] ?? ($request['progress']['stage'] ?? 'starting'));
@@ -131,7 +133,7 @@ if ($action === 'report') {
         'inserted' => (int) ($_POST['inserted'] ?? 0),
         'duplicates' => (int) ($_POST['duplicates'] ?? 0),
         'last_id' => (string) ($_POST['last_id'] ?? ''),
-        'message' => mb_substr(trim((string) ($_POST['message'] ?? '')), 0, 500),
+        'message' => mb_substr(trim(isset($_POST['message_b64']) ? (string) base64_decode((string) $_POST['message_b64'], true) : (string) ($_POST['message'] ?? '')), 0, 500),
     ];
     zk_sync_request_save($conn, $request);
 

@@ -83,7 +83,7 @@ function Invoke-Live([hashtable]$fields) {
 # Each Task Scheduler run (every minute) checks every $PollEverySeconds for ~$PollForSeconds,
 # so a click on "Sync ZKT" is picked up within a few seconds, not up to a minute.
 $PollEverySeconds = 5
-$PollForSeconds = 50
+$PollForSeconds = 40   # must end well before the next 1-minute trigger ("Do not start a new instance" skips it otherwise)
 $deadline = (Get-Date).AddSeconds($PollForSeconds)
 $request = $null
 while ($true) {
@@ -129,7 +129,10 @@ while (-not $proc.HasExited) {
         try { $text = [System.IO.File]::ReadAllText($ProgressFile).Trim() } catch { $text = '' }
     }
     if (($text -and $text -ne $lastSent) -or ((Get-Date) - $lastSentAt).TotalSeconds -ge 10) {
-        $resp = Invoke-Live @{ action = 'progress'; id = $requestId; progress = $(if ($text) { $text } else { $lastSent }) }
+        # Base64: Windows PowerShell 5.1 strips the " characters from arguments passed to
+        # curl.exe, which would turn the JSON into something the live app can't parse.
+        $json = $(if ($text) { $text } else { $lastSent })
+        $resp = Invoke-Live @{ action = 'progress'; id = $requestId; progress_b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json)) }
         if ($text) { $lastSent = $text }
         $lastSentAt = Get-Date
         # "Cancel sync" clicked in the app -> stop the export. Batches already sent stay
@@ -167,7 +170,7 @@ $report = Invoke-Live @{
     inserted   = $(if ($run) { [string]$run.inserted } else { '0' })
     duplicates = $(if ($run) { [string]$run.duplicates } else { '0' })
     last_id    = $(if ($run) { [string]$run.last_id } else { '' })
-    message    = $message
+    message_b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$message))
 }
 Write-PollLog "Sync $(if ($ok) { 'finished' } else { 'FAILED' }): $(if ($run) { "$($run.inserted) new of $($run.sent) sent" } else { 'no result' })$(if ($message) { " - $message" }). Reported: $(if ($report -and $report.status -eq 'success') { 'yes' } else { 'NO' })."
 if ($ok) { exit 0 } else { exit 1 }
