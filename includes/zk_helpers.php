@@ -341,3 +341,72 @@ if (!function_exists('zk_get_offline_threshold_minutes')) {
         return $minutes > 0 ? $minutes : 3;
     }
 }
+
+// ---------------------------------------------------------------------------------
+// "Sync ZKT now" (Device Monitor): the button stores a request here, the agent on the
+// local BioTime server polls zk_sync_request.php every minute, runs the normal export
+// (or a full -Resync) and reports back. Nothing on the office network is opened to the
+// internet - the BioTime server only ever calls OUT to the live app.
+// State: app_settings 'zk_sync_request' (JSON) + 'zk_sync_agent_seen' (last poll time).
+
+if (!function_exists('zk_sync_request_get')) {
+    function zk_sync_setting_get($conn, $name) {
+        $stmt = mysqli_prepare($conn, "SELECT setting_value FROM app_settings WHERE setting_name = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt, 's', $name);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_row(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+        return $row ? (string) $row[0] : '';
+    }
+
+    function zk_sync_setting_set($conn, $name, $value) {
+        $stmt = mysqli_prepare(
+            $conn,
+            "INSERT INTO app_settings (setting_name, setting_value, setting_group, description, input_type)
+             VALUES (?, ?, 'zk_sync_status', 'Internal: Sync ZKT now request state', 'text')
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+        );
+        mysqli_stmt_bind_param($stmt, 'ss', $name, $value);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
+
+    /** Current/last request: [id, mode new|resync, status pending|running|done|failed, requested_*, picked_at, finished_at, result] */
+    function zk_sync_request_get($conn) {
+        $data = json_decode(zk_sync_setting_get($conn, 'zk_sync_request'), true);
+        return is_array($data) && !empty($data['id']) ? $data : null;
+    }
+
+    function zk_sync_request_save($conn, array $request) {
+        zk_sync_setting_set($conn, 'zk_sync_request', json_encode($request));
+    }
+
+    /** A pending/running request older than this is treated as abandoned (agent offline / crashed) */
+    function zk_sync_request_is_stale(array $request) {
+        $since = strtotime($request['picked_at'] ?? $request['requested_at'] ?? '') ?: 0;
+        $limit = ($request['status'] ?? '') === 'running' ? 7200 : 1800;
+        return time() - $since > $limit;
+    }
+
+    function zk_sync_request_is_active($request) {
+        return $request && in_array($request['status'] ?? '', ['pending', 'running'], true) && !zk_sync_request_is_stale($request);
+    }
+
+    /**
+     * Same checks as zk_sync_import.php for the agent-facing endpoints: shared secret
+     * (X-Sync-Secret header or POST secret) + optional allowed-IP list.
+     * Returns null when allowed, otherwise [httpCode, message].
+     */
+    function zk_sync_agent_auth_error($conn) {
+        $provided = $_SERVER['HTTP_X_SYNC_SECRET'] ?? ($_POST['secret'] ?? '');
+        if ($provided === '' || !hash_equals(zk_get_sync_secret($conn), (string) $provided)) {
+            return [403, 'Invalid secret.'];
+        }
+        $remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+        if (!zk_sync_ip_is_allowed(zk_get_sync_allowed_ip($conn), $remoteIp)) {
+            zk_record_sync_rejected_ip($conn, $remoteIp);
+            return [403, 'IP address not allowed (request came from ' . $remoteIp . ').'];
+        }
+        return null;
+    }
+}

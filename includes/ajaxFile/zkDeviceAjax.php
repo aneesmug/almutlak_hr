@@ -3,6 +3,7 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../session_check.php';
 require_once __DIR__ . '/../special_access_helper.php';
+require_once __DIR__ . '/../zk_helpers.php';
 // Attendance switched off in App Settings > Integrations
 if (!attendance_enabled($conDB)) {
     http_response_code(403);
@@ -29,6 +30,12 @@ switch ($action) {
         break;
     case 'poll_state':
         poll_state($conDB);
+        break;
+    case 'sync_request':
+        sync_request($conDB);
+        break;
+    case 'sync_status':
+        sync_status($conDB);
         break;
     default:
         echo json_encode(['status' => 'error', 'message' => 'Invalid action.']);
@@ -99,4 +106,56 @@ function poll_state($conDB) {
         ];
     }
     echo json_encode(['status' => 'success', 'devices' => $devices]);
+}
+
+// --- "Sync ZKT now": queue a request for the agent on the local BioTime server
+// (zk_local_agent/zk_sync_poll.ps1 picks it up within a minute via zk_sync_request.php)
+function sync_request($conDB) {
+    global $empid;
+    $mode = ($_POST['mode'] ?? '') === 'resync' ? 'resync' : 'new';
+
+    $current = zk_sync_request_get($conDB);
+    if (zk_sync_request_is_active($current)) {
+        echo json_encode(['status' => 'success', 'already' => true] + sync_status_payload($conDB));
+        return;
+    }
+
+    $name = '';
+    $stmt = mysqli_prepare($conDB, "SELECT name FROM employees WHERE emp_id = ? LIMIT 1");
+    if ($stmt) {
+        $eid = (string) ($empid ?? '');
+        mysqli_stmt_bind_param($stmt, 's', $eid);
+        mysqli_stmt_execute($stmt);
+        $row = mysqli_fetch_row(mysqli_stmt_get_result($stmt));
+        $name = $row ? trim((string) $row[0]) : '';
+        mysqli_stmt_close($stmt);
+    }
+
+    zk_sync_request_save($conDB, [
+        'id' => bin2hex(random_bytes(8)),
+        'mode' => $mode,
+        'status' => 'pending',
+        'requested_by' => (string) ($empid ?? ''),
+        'requested_name' => $name,
+        'requested_at' => date('Y-m-d H:i:s'),
+    ]);
+    echo json_encode(['status' => 'success', 'already' => false] + sync_status_payload($conDB));
+}
+
+function sync_status($conDB) {
+    echo json_encode(['status' => 'success'] + sync_status_payload($conDB));
+}
+
+function sync_status_payload($conDB) {
+    $request = zk_sync_request_get($conDB);
+    if ($request && zk_sync_request_is_active($request) === false && in_array($request['status'] ?? '', ['pending', 'running'], true)) {
+        $request['status'] = 'stale'; // agent never answered / never reported back
+    }
+    $seen = zk_sync_setting_get($conDB, 'zk_sync_agent_seen');
+    $seenTs = $seen !== '' ? strtotime($seen) : false;
+    return [
+        'request' => $request,
+        'agent_seen' => $seen,
+        'agent_seen_ago' => $seenTs ? max(0, time() - $seenTs) : null,
+    ];
 }

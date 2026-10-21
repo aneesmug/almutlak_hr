@@ -62,6 +62,18 @@ foreach ($devices as $d) {
         .zk-avatar { width: 40px; height: 40px; border-radius: 10px; font-size: 20px; }
         .zk-avatar.is-offline { background: var(--tone-red-bg); color: var(--tone-red-fg); }
         .zk-avatar.is-online { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+        /* Sync ZKT now */
+        .zk-sync-group { display: inline-flex; }
+        .zk-sync-group .sr-btn:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
+        .zk-sync-group .sr-btn + .sr-btn { border-start-start-radius: 0; border-end-start-radius: 0; margin-inline-start: -1px; padding: 0 10px; }
+        .zk-sync-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; margin-bottom: 20px; border-radius: 12px; border: 1px solid var(--sr-border); background: var(--sr-surface); box-shadow: var(--sr-shadow); font-size: 13px; color: var(--sr-text-2); }
+        .zk-sync-bar .zk-sync-agent { display: inline-flex; align-items: center; gap: 6px; }
+        .zk-sync-bar .zk-sync-msg { flex: 1 1 320px; min-width: 0; }
+        .zk-sync-bar .zk-sync-msg i { margin-inline-end: 6px; }
+        .zk-sync-bar .zk-sync-msg.is-busy { color: var(--tone-indigo-fg); }
+        .zk-sync-bar .zk-sync-msg.is-ok { color: var(--tone-green-fg); }
+        .zk-sync-bar .zk-sync-msg.is-bad { color: var(--tone-red-fg); }
+        .zk-sync-bar .zk-sync-msg.is-warn { color: var(--tone-amber-fg); }
     </style>
     <script>
         window.lang = <?= json_encode($GLOBALS['translations'] ?? []) ?>;
@@ -95,8 +107,17 @@ foreach ($devices as $d) {
                             <p><?= __('device_offline_note', 'A device is marked Offline after') ?> <?= (int)$thresholdMinutes ?> <?= __('minutes_of_silence', 'minute(s) of silence.') ?></p>
                         </div>
                         <div class="sr-head-actions">
+                            <div class="zk-sync-group">
+                                <button id="btn-zk-sync" type="button" class="sr-btn" title="<?= $h(__('zk_sync_now_hint', 'Ask the ZKT (BioTime) server to send its new punches now')) ?>"><i class="fa-solid fa-cloud-arrow-down"></i> <?= __('sync_zkt', 'Sync ZKT') ?></button>
+                                <button id="btn-zk-resync" type="button" class="sr-btn" title="<?= $h(__('zk_full_resync_hint', 'Full re-sync: re-send the whole sync window (e.g. 180 days)')) ?>"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                            </div>
                             <button id="btn-add-device" type="button" class="sr-btn sr-btn-primary"><i class="mdi mdi-plus"></i> <?= __('add_device', 'Add Device') ?></button>
                         </div>
+                    </div>
+
+                    <div class="zk-sync-bar" id="zkSyncBar">
+                        <span class="zk-sync-agent" id="zkSyncAgent"><span class="sr-pill tone-slate"><span class="sr-dot"></span><?= __('zkt_server', 'ZKT server') ?></span></span>
+                        <span class="zk-sync-msg" id="zkSyncMsg"><?= __('loading', 'Loading') ?>...</span>
                     </div>
 
                     <div class="sr-tiles zk-tiles" id="zkTiles">
@@ -346,6 +367,119 @@ foreach ($devices as $d) {
             });
         }
         setInterval(pollDeviceState, 15000);
+
+        /* ---------- Sync ZKT now ----------
+           The button only queues a request; the agent on the ZKT (BioTime) server
+           (zk_local_agent/zk_sync_poll.ps1) checks every minute, runs the sync and
+           reports back. Polls fast while a request is active, slowly otherwise. */
+        const AGENT_OK_SECONDS = 180;
+        let syncTimer = null;
+        let lastSyncStatus = null;
+
+        function ago(sec) {
+            if (sec === null || sec === undefined) return __('never', 'never');
+            if (sec < 60) return sec + 's';
+            if (sec < 3600) return Math.floor(sec / 60) + 'm';
+            if (sec < 86400) return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+            return Math.floor(sec / 86400) + 'd';
+        }
+
+        function renderSync(res) {
+            const agentOk = res.agent_seen_ago !== null && res.agent_seen_ago <= AGENT_OK_SECONDS;
+            $('#zkSyncAgent').html(`<span class="sr-pill tone-${agentOk ? 'green' : 'red'}" title="${esc(res.agent_seen || '')}"><span class="sr-dot"></span>${esc(__('zkt_server', 'ZKT server'))}: ${agentOk
+                ? esc(__('connected', 'connected')) + ' · ' + esc(ago(res.agent_seen_ago))
+                : esc(__('not_responding', 'not responding')) + ' · ' + esc(__('last_seen', 'last seen')) + ' ' + esc(ago(res.agent_seen_ago))}</span>`);
+
+            const r = res.request;
+            const $msg = $('#zkSyncMsg').removeClass('is-busy is-ok is-bad is-warn');
+            const who = r && r.requested_name ? ' ' + __('by', 'by') + ' ' + r.requested_name : '';
+            const kind = r && r.mode === 'resync' ? __('full_resync', 'Full re-sync') : __('sync', 'Sync');
+            let html = '', cls = '';
+            if (!r) {
+                html = '<i class="fa-solid fa-circle-info"></i>' + esc(__('zk_sync_none', 'No manual sync yet. The ZKT server also sends new punches automatically every 15 minutes.'));
+            } else if (r.status === 'pending') {
+                cls = 'is-busy';
+                html = '<i class="fa-solid fa-spinner fa-spin"></i>' + esc(kind + ' ' + __('requested', 'requested') + who + ' ' + __('at', 'at') + ' ' + r.requested_at + ' - ' +
+                    (agentOk ? __('zk_sync_waiting', 'waiting for the ZKT server to pick it up (within a minute)...') : __('zk_sync_waiting_offline', 'the ZKT server has not checked in recently, it will run once it is back.')));
+            } else if (r.status === 'running') {
+                cls = 'is-busy';
+                html = '<i class="fa-solid fa-spinner fa-spin"></i>' + esc(kind + ' ' + __('running_on_zkt', 'running on the ZKT server since') + ' ' + r.picked_at + '...');
+            } else if (r.status === 'done') {
+                cls = 'is-ok';
+                const x = r.result || {};
+                html = '<i class="fa-solid fa-circle-check"></i>' + esc(kind + ' ' + __('finished', 'finished') + ' ' + r.finished_at + who + ': ' +
+                    (x.inserted || 0).toLocaleString() + ' ' + __('new_punches', 'new punch(es)') + ' (' + (x.sent || 0).toLocaleString() + ' ' + __('sent', 'sent') + ', ' +
+                    (x.duplicates || 0).toLocaleString() + ' ' + __('already_stored', 'already stored') + ').');
+            } else if (r.status === 'failed') {
+                cls = 'is-bad';
+                html = '<i class="fa-solid fa-circle-xmark"></i>' + esc(kind + ' ' + __('failed', 'failed') + ' ' + (r.finished_at || '') + ': ' + ((r.result && r.result.message) || __('see_agent_log', 'see zk_biotime_export.log on the ZKT server')));
+            } else {
+                cls = 'is-warn';
+                html = '<i class="fa-solid fa-triangle-exclamation"></i>' + esc(kind + ' ' + __('requested', 'requested') + who + ' ' + __('at', 'at') + ' ' + r.requested_at + ' ' +
+                    __('zk_sync_stale', 'was never completed - check that the ZKT server and its "ZKT Sync Poll" task are running.'));
+            }
+            $msg.addClass(cls).html(html);
+
+            const busy = r && (r.status === 'pending' || r.status === 'running');
+            $('#btn-zk-sync, #btn-zk-resync').prop('disabled', !!busy);
+
+            // Finished since the last check -> toast
+            if (lastSyncStatus && lastSyncStatus.id === (r && r.id) && ['pending', 'running'].includes(lastSyncStatus.status) && r && ['done', 'failed'].includes(r.status)) {
+                Swal.fire({
+                    toast: true, position: 'top-end', timer: 5000, showConfirmButton: false,
+                    icon: r.status === 'done' ? 'success' : 'error',
+                    title: r.status === 'done'
+                        ? ((r.result && r.result.inserted) || 0) + ' ' + __('new_punches', 'new punch(es)') + ' ' + __('synced', 'synced')
+                        : __('zk_sync_failed', 'ZKT sync failed')
+                });
+                pollDeviceState();
+            }
+            lastSyncStatus = r ? { id: r.id, status: r.status } : null;
+
+            clearTimeout(syncTimer);
+            syncTimer = setTimeout(loadSyncStatus, busy ? 3000 : 30000);
+        }
+
+        function loadSyncStatus() {
+            $.post('includes/ajaxFile/zkDeviceAjax.php', { action: 'sync_status' }, null, 'json')
+                .done(res => { if (res && res.status === 'success') renderSync(res); })
+                .fail(() => { clearTimeout(syncTimer); syncTimer = setTimeout(loadSyncStatus, 30000); });
+        }
+
+        function requestSync(mode) {
+            $('#btn-zk-sync, #btn-zk-resync').prop('disabled', true);
+            $.post('includes/ajaxFile/zkDeviceAjax.php', { action: 'sync_request', mode: mode }, null, 'json')
+                .done(res => {
+                    if (!res || res.status !== 'success') {
+                        Swal.fire({ icon: 'error', title: __('error', 'Error'), text: (res && res.message) || __('request_failed', 'Request failed'), allowOutsideClick: false });
+                        loadSyncStatus();
+                        return;
+                    }
+                    if (res.already) {
+                        Swal.fire({ toast: true, position: 'top-end', timer: 4000, showConfirmButton: false, icon: 'info', title: __('zk_sync_already', 'A sync is already in progress') });
+                    }
+                    renderSync(res);
+                })
+                .fail(() => {
+                    Swal.fire({ icon: 'error', title: __('error', 'Error'), text: __('request_failed', 'Request failed'), allowOutsideClick: false });
+                    loadSyncStatus();
+                });
+        }
+
+        $('#btn-zk-sync').on('click', () => requestSync('new'));
+        $('#btn-zk-resync').on('click', function() {
+            Swal.fire({
+                icon: 'warning',
+                title: __('full_resync', 'Full re-sync'),
+                html: esc(__('zk_full_resync_confirm', 'Re-send ALL punches of the sync window (e.g. 180 days) from the ZKT server? Only needed after the attendance tables were emptied. Already stored punches are skipped. This can take several minutes.')),
+                showCancelButton: true,
+                confirmButtonText: __('full_resync', 'Full re-sync'),
+                cancelButtonText: __('cancel', 'Cancel'),
+                allowOutsideClick: false
+            }).then(r => { if (r.isConfirmed) requestSync('resync'); });
+        });
+
+        loadSyncStatus();
     });
     </script>
 </body>

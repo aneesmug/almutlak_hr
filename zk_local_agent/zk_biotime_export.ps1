@@ -78,7 +78,13 @@ function Write-Log($message) {
     # Write-Host, not Write-Output: output would leak into function return values
     Write-Host $line
     Add-Content -Path $LogFile -Value $line
+    if ($message -like 'ERROR*') { $script:LastError = $message }
 }
+
+# Totals of this run, written to last_run.json at the end (read by zk_sync_poll.ps1 to
+# report a "Sync ZKT" button run back to the live app)
+$script:LastError = ''
+$script:RunTotals = @{ sent = 0; inserted = 0; duplicates = 0; last_id = 0 }
 
 # Legacy MSSQL nvarchar text (device aliases/work codes typed on device
 # keypads over the years) can contain lone/unpaired UTF-16 surrogate
@@ -334,6 +340,7 @@ function Invoke-Sync {
 
     $connection.Close()
     Write-Log "Run done: $totalSent punch(es) sent, $totalInserted new, $totalDuplicate duplicate(s), $totalOld outside the $($state.syncDays)-day window. Last BioTime id $($state.lastId)."
+    $script:RunTotals = @{ sent = $totalSent; inserted = $totalInserted; duplicates = $totalDuplicate; last_id = $state.lastId }
     if ($failed) { return 1 }
     return 0
 }
@@ -344,4 +351,16 @@ try {
 } finally {
     Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
 }
+
+try {
+    @{
+        ok         = ($exitCode -eq 0)
+        sent       = $script:RunTotals.sent
+        inserted   = $script:RunTotals.inserted
+        duplicates = $script:RunTotals.duplicates
+        last_id    = $script:RunTotals.last_id
+        message    = $script:LastError
+        finished   = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    } | ConvertTo-Json | Set-Content -Path "$PSScriptRoot\last_run.json" -Encoding UTF8
+} catch { }
 exit $exitCode
