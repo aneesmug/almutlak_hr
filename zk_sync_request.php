@@ -26,6 +26,11 @@ if (!$conn) {
     exit;
 }
 
+// Same timezone as the app (includes/db.php is not loaded here) - otherwise the
+// times stored below are UTC and the Device Monitor sees the run as hours old.
+$appTimezone = trim(zk_sync_setting_get($conn, 'timezone'));
+date_default_timezone_set(in_array($appTimezone, timezone_identifiers_list(), true) ? $appTimezone : 'Asia/Riyadh');
+
 $authError = zk_sync_agent_auth_error($conn);
 if ($authError) {
     error_log('[ZK] zk_sync_request.php rejected request from ' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . ': ' . $authError[1]);
