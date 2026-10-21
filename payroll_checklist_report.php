@@ -505,13 +505,14 @@ if ($isFinanceChecklistUser) {
         if (!empty($companyPlaceholders)) {
             $companyFilter = ' AND e.comp_no IN (' . implode(', ', $companyPlaceholders) . ')';
         }
-
-        if ($selectedCompany !== '' && in_array($selectedCompany, $assignedFinanceCompanyIds, true)) {
-            $companyFilter .= ' AND e.comp_no = :filter_company';
-            $params[':filter_company'] = $selectedCompany;
-        }
     }
-    // When toggle OFF: show all, no company filter
+
+    // The Company dropdown narrows the list in both toggle states (inside the assigned
+    // scope when it applies - a company outside it simply returns no rows).
+    if ($selectedCompany !== '') {
+        $companyFilter .= ' AND e.comp_no = :filter_company';
+        $params[':filter_company'] = $selectedCompany;
+    }
 } else {
     if ($selectedCompany !== '') {
         $companyFilter = ' AND e.comp_no = :filter_company';
