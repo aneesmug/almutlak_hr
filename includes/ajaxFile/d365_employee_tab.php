@@ -14,21 +14,23 @@ header('Content-Type: text/html; charset=utf-8');
 @set_time_limit(120);
 
 $e = function ($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); };
+// Translated + escaped label
+$t = function ($key, $default) use ($e) { return $e(__($key, $default)); };
 
 if (!d365_enabled($conDB)) {
     http_response_code(403);
-    exit('<div class="sr-notice tone-amber">Microsoft Dynamics 365 integration is turned off.</div>');
+    exit('<div class="sr-notice tone-amber">' . $t('d365t_integration_off', 'Microsoft Dynamics 365 integration is turned off.') . '</div>');
 }
 if (!user_has_special_access($conDB, $empid ?? '', 'view_employee_d365_tab', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)) {
     http_response_code(403);
-    exit('<div class="sr-notice tone-red">You do not have access to D365 data.</div>');
+    exit('<div class="sr-notice tone-red">' . $t('d365t_no_access', 'You do not have access to D365 data.') . '</div>');
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_SESSION['d365_csrf']) || !hash_equals($_SESSION['d365_csrf'], (string)($_POST['csrf'] ?? ''))) {
-    exit('<div class="sr-notice tone-amber">Session expired - reload the page.</div>');
+    exit('<div class="sr-notice tone-amber">' . $t('d365t_session_expired', 'Session expired - reload the page.') . '</div>');
 }
 $targetEmp = (string)($_POST['emp_id'] ?? '');
 if (!preg_match('/^[A-Za-z0-9\-]{1,20}$/', $targetEmp)) {
-    exit('<div class="sr-notice tone-red">Invalid employee ID.</div>');
+    exit('<div class="sr-notice tone-red">' . $t('d365t_invalid_employee_id', 'Invalid employee ID.') . '</div>');
 }
 // Report mode (reports.php "D365 Employee Report"): read-only (no Sync / Add buttons) and the journal lines
 // are narrowed to date_from..date_to (yyyy-mm-dd, Riyadh dates, either side optional)
@@ -228,16 +230,16 @@ $money = function ($v) { return number_format((float)$v, 2); };
         <div>
             <span class="sr-pill tone-<?= $env === 'sandbox' ? 'sky' : 'red' ?>"><span class="sr-dot"></span>D365 <?= $e(ucfirst($env)) ?></span>
             <?php if ($worker): ?>
-                <span class="sr-pill tone-green"><span class="sr-dot"></span>Registered<?= $current ? ' · ' . $e(strtoupper($current['LegalEntityId'])) : '' ?></span>
+                <span class="sr-pill tone-green"><span class="sr-dot"></span><?= $t('d365_registered', 'Registered') ?><?= $current ? ' · ' . $e(strtoupper($current['LegalEntityId'])) : '' ?></span>
             <?php else: ?>
-                <span class="sr-pill tone-red"><span class="sr-dot"></span>Not in D365</span>
+                <span class="sr-pill tone-red"><span class="sr-dot"></span><?= $t('d365t_not_in_d365', 'Not in D365') ?></span>
             <?php endif; ?>
             <?php if ($dateFrom !== '' || $dateTo !== ''): ?>
-                <span class="sr-chip"><i class="mdi mdi-calendar-range"></i> <?= $e(($dateFrom ?: 'Start') . ' → ' . ($dateTo ?: 'Today')) ?></span>
+                <span class="sr-chip"><i class="mdi mdi-calendar-range"></i> <?= $e(($dateFrom ?: __('d365t_start', 'Start')) . ' → ' . ($dateTo ?: __('today', 'Today'))) ?></span>
             <?php endif; ?>
-            <span class="d365tab-muted">Loaded <?= $e($loadedAt) ?> · dates in Riyadh time</span>
+            <span class="d365tab-muted"><?= $t('d365t_loaded', 'Loaded') ?> <?= $e($loadedAt) ?> · <?= $t('d365t_dates_riyadh', 'dates in Riyadh time') ?></span>
         </div>
-        <button type="button" class="d365tab-btn" id="d365TabRefresh"><i class="mdi mdi-refresh"></i> Refresh from D365</button>
+        <button type="button" class="d365tab-btn" id="d365TabRefresh"><i class="mdi mdi-refresh"></i> <?= $t('d365t_refresh', 'Refresh from D365') ?></button>
     </div>
 
     <?php foreach ($d['errors'] as $err): ?>
@@ -245,8 +247,8 @@ $money = function ($v) { return number_format((float)$v, 2); };
     <?php endforeach; ?>
 
     <?php if (!$worker && !$d['errors']): ?>
-        <div class="sr-notice tone-amber">Personnel number <b><?= $e($targetEmp) ?></b> is not in D365 <?= $e($env) ?><?= $reportMode ? '.' : ' - register the worker (with contact details and bank account).' ?>
-            <?php if (!$reportMode): ?><button type="button" class="d365tab-btn" id="d365TabRegister" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings &gt; D365 Config)"' ?>><i class="mdi mdi-account-plus"></i> Add to D365</button><?php endif; ?></div>
+        <div class="sr-notice tone-amber"><?= $t('personnel_number', 'Personnel number') ?> <b><?= $e($targetEmp) ?></b> <?= $t('d365t_is_not_in_d365', 'is not in D365') ?> <?= $e($env) ?><?= $reportMode ? '.' : ' - ' . $t('d365t_register_worker_hint', 'register the worker (with contact details and bank account).') ?>
+            <?php if (!$reportMode): ?><button type="button" class="d365tab-btn" id="d365TabRegister" style="margin-inline-start:8px"<?= $client->canWrite() ? '' : ' disabled title="' . $t('d365t_writes_off', 'Writes are off (App Settings > D365 Config)') . '"' ?>><i class="mdi mdi-account-plus"></i> <?= $t('add_to_d365', 'Add to D365') ?></button><?php endif; ?></div>
     <?php endif; ?>
 
     <?php if ($worker):
@@ -263,47 +265,48 @@ $money = function ($v) { return number_format((float)$v, 2); };
         // Cost center is not synced to the D365 employment - payroll lines take it from the HR app (MHO only)
         $ccCompany = $workers->payrollCompany($targetEmp, $current['LegalEntityId'] ?? '');
         $ccUsed = $workers->companyUsesCostCenter($ccCompany) !== false;
-        $ccRow = ['Cost Center (payroll)', $ccUsed ? (string)($local['cost_center'] ?? '') : 'Not used in ' . $ccCompany, 'Taken from HR app on payroll lines', false];
+        $ccRow = [__('d365t_cost_center_payroll', 'Cost Center (payroll)'), $ccUsed ? (string)($local['cost_center'] ?? '') : __('cost_center_not_used_short', 'Not used in') . ' ' . $ccCompany, __('d365t_taken_from_hr_app', 'Taken from HR app on payroll lines'), false];
+        // Gender values compared with D365 stay English ('Male' / 'Female'), so only the label is translated
         $compare = [
-            ['Name', $local['name'] ?? '', $worker['Name'] ?? '', true],
-            ['Joining date', $local['joining_date'] ?? '', d365tab_date($current['EmploymentStartDate'] ?? ''), true],
-            ['Date of birth', $local['dob'] ?? '', d365tab_date($worker['BirthDate'] ?? ''), true],
-            ['Email', ($local['c_email'] ?? '') ?: ($local['email'] ?? ''), $worker['PrimaryContactEmail'] ?? '', true],
-            ['Mobile', $local['mobile'] ?? '', $worker['PrimaryContactPhone'] ?? '', true],
+            [__('d365t_name', 'Name'), $local['name'] ?? '', $worker['Name'] ?? '', true],
+            [__('d365t_joining_date', 'Joining date'), $local['joining_date'] ?? '', d365tab_date($current['EmploymentStartDate'] ?? ''), true],
+            [__('d365t_date_of_birth', 'Date of birth'), $local['dob'] ?? '', d365tab_date($worker['BirthDate'] ?? ''), true],
+            [__('d365t_email', 'Email'), ($local['c_email'] ?? '') ?: ($local['email'] ?? ''), $worker['PrimaryContactEmail'] ?? '', true],
+            [__('d365t_mobile', 'Mobile'), $local['mobile'] ?? '', $worker['PrimaryContactPhone'] ?? '', true],
             ['IBAN', $local['iban'] ?? '', $d['banks'][0]['BankIBAN'] ?? '', true],
-            ['Gender', ['1' => 'Male', '2' => 'Female'][(string)($local['sex'] ?? '')] ?? (string)($local['sex'] ?? ''),d365tab_empty($worker['Gender'] ?? '') ? '' : $worker['Gender'], true],
-            ['Marital status', $local['mar_status'] ?? '', d365tab_empty($worker['MaritalStatus'] ?? '') ? '' : $worker['MaritalStatus'], false],
-            ['Department' . (!empty($local['dep_nme']) ? ' (' . $local['dep_nme'] . ')' : ''), $deptExpected, $deptD365, true],
+            [__('d365t_gender', 'Gender'), ['1' => 'Male', '2' => 'Female'][(string)($local['sex'] ?? '')] ?? (string)($local['sex'] ?? ''),d365tab_empty($worker['Gender'] ?? '') ? '' : $worker['Gender'], true],
+            [__('d365t_marital_status', 'Marital status'), $local['mar_status'] ?? '', d365tab_empty($worker['MaritalStatus'] ?? '') ? '' : $worker['MaritalStatus'], false],
+            [__('d365t_department', 'Department') . (!empty($local['dep_nme']) ? ' (' . $local['dep_nme'] . ')' : ''), $deptExpected, $deptD365, true],
             $ccRow,
-            ['Status', isset($local['status']) ? ((string)$local['status'] === '1' ? 'Active' : ((string)$local['status'] === '2' ? 'Draft' : 'Inactive (' . $local['status'] . ')')) : '', $worker['WorkerStatus'] ?? '', false],
+            [__('d365t_status', 'Status'), isset($local['status']) ? ((string)$local['status'] === '1' ? __('d365t_active', 'Active') : ((string)$local['status'] === '2' ? __('d365t_draft', 'Draft') : __('d365t_inactive', 'Inactive') . ' (' . $local['status'] . ')')) : '', $worker['WorkerStatus'] ?? '', false],
         ]; ?>
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><span class="d365-ti" style="--c: #0078d4;"><i class="fa fa-code-compare"></i></span>HR app vs D365</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #0078d4;"><i class="fa fa-code-compare"></i></span><?= $t('d365t_hr_vs_d365', 'HR app vs D365') ?></div>
                 <div class="sr-card-sub">
-                    <?php if (!$reportMode): ?>Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365
-                    <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-left:8px"<?= $client->canWrite() ? '' : ' disabled title="Writes are off (App Settings > D365 Config)"' ?>><i class="mdi mdi-sync"></i> Sync to D365</button><?php else: ?>Employee record in the HR app compared with D365<?php endif; ?>
+                    <?php if (!$reportMode): ?><?= $t('d365t_sync_sends_hint', 'Sync sends name, birth date, gender, email, mobile, marital status, IBAN and a missing department from the HR app to D365') ?>
+                    <button type="button" class="d365tab-btn" id="d365TabSync" style="margin-inline-start:8px"<?= $client->canWrite() ? '' : ' disabled title="' . $t('d365t_writes_off', 'Writes are off (App Settings > D365 Config)') . '"' ?>><i class="mdi mdi-sync"></i> <?= $t('sync_to_d365', 'Sync to D365') ?></button><?php else: ?><?= $t('d365t_compare_hint', 'Employee record in the HR app compared with D365') ?><?php endif; ?>
                 </div>
             </div>
             <div class="sr-table-wrap">
                 <table class="sr-table">
-                    <thead><tr><th>Field</th><th>HR app</th><th>D365</th><th></th></tr></thead>
+                    <thead><tr><th><?= $t('d365t_field', 'Field') ?></th><th><?= $t('d365t_hr_app', 'HR app') ?></th><th>D365</th><th></th></tr></thead>
                     <tbody>
                     <?php foreach ($compare as $row):
                         [$label, $lv, $dv, $check] = $row;
                         $tone = $row[4] ?? null;
                         if ($check && $local) {
                             if ($lv === '' && $dv === '') { $tone = null; }
-                            elseif ($dv === '') { $tone = ['amber', 'Missing in D365']; }
-                            elseif ($lv === '') { $tone = ['amber', 'Missing in app']; }
-                            elseif (d365tab_norm($lv) === d365tab_norm($dv)) { $tone = ['green', 'Match']; }
-                            else { $tone = ['red', 'Different']; }
+                            elseif ($dv === '') { $tone = ['amber', __('d365t_missing_in_d365', 'Missing in D365')]; }
+                            elseif ($lv === '') { $tone = ['amber', __('d365t_missing_in_app', 'Missing in app')]; }
+                            elseif (d365tab_norm($lv) === d365tab_norm($dv)) { $tone = ['green', __('d365t_match', 'Match')]; }
+                            else { $tone = ['red', __('d365t_different', 'Different')]; }
                         } ?>
                         <tr>
                             <td class="d365tab-muted"><?= $e($label) ?></td>
                             <td><?= $lv !== '' ? $e($lv) : '<span class="d365tab-muted">-</span>' ?></td>
                             <td><?= $dv !== '' ? $e($dv) : '<span class="d365tab-muted">-</span>' ?></td>
-                            <td><?php if ($tone): ?><span class="sr-pill tone-<?= $tone[0] ?>"><span class="sr-dot"></span><?= $tone[1] ?></span><?php endif; ?></td>
+                            <td><?php if ($tone): ?><span class="sr-pill tone-<?= $tone[0] ?>"><span class="sr-dot"></span><?= $e($tone[1]) ?></span><?php endif; ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -313,13 +316,13 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="d365tab-grid">
             <div class="sr-card">
-                <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #2563eb;"><i class="fa fa-id-card"></i></span>D365 worker record</div><div class="sr-card-sub">Filled fields only</div></div>
+                <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #2563eb;"><i class="fa fa-id-card"></i></span><?= $t('d365t_worker_record', 'D365 worker record') ?></div><div class="sr-card-sub"><?= $t('d365t_filled_fields_only', 'Filled fields only') ?></div></div>
                 <div class="sr-card-body">
                     <dl class="sr-kv">
                         <?php foreach ($worker as $k => $v):
                             if (d365tab_empty($v)) continue;
                             if (is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}T/', $v)) $v = d365tab_date($v, true); ?>
-                            <div class="row-kv"><dt><?= $e($k) ?></dt><dd><?= $e(is_bool($v) ? ($v ? 'Yes' : 'No') : $v) ?></dd></div>
+                            <div class="row-kv"><dt><?= $e($k) ?></dt><dd><?= $e(is_bool($v) ? ($v ? __('yes', 'Yes') : __('no', 'No')) : $v) ?></dd></div>
                         <?php endforeach; ?>
                     </dl>
                 </div>
@@ -327,10 +330,10 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
             <div>
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #7c3aed;"><i class="fa fa-briefcase"></i></span>Employments</div><div class="sr-card-sub"><?= count($employments) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #7c3aed;"><i class="fa fa-briefcase"></i></span><?= $t('d365t_employments', 'Employments') ?></div><div class="sr-card-sub"><?= count($employments) ?> <?= $t('d365t_records', 'record(s)') ?></div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
-                            <thead><tr><th>Company</th><th>Start</th><th>End</th><th>Dimensions</th></tr></thead>
+                            <thead><tr><th><?= $t('company', 'Company') ?></th><th><?= $t('d365t_start', 'Start') ?></th><th><?= $t('d365t_end', 'End') ?></th><th><?= $t('d365t_dimensions', 'Dimensions') ?></th></tr></thead>
                             <tbody>
                             <?php foreach ($employments as $emp): ?>
                                 <tr>
@@ -340,17 +343,17 @@ $money = function ($v) { return number_format((float)$v, 2); };
                                     <td class="sr-mono"><?= $e($emp['DimensionDisplayValue'] ?? '') ?></td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$employments): ?><tr><td colspan="4" class="d365tab-muted">None</td></tr><?php endif; ?>
+                            <?php if (!$employments): ?><tr><td colspan="4" class="d365tab-muted"><?= $t('d365t_none', 'None') ?></td></tr><?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #0d9488;"><i class="fa fa-sitemap"></i></span>Position assignments</div><div class="sr-card-sub"><?= count($d['positions']) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #0d9488;"><i class="fa fa-sitemap"></i></span><?= $t('d365t_position_assignments', 'Position assignments') ?></div><div class="sr-card-sub"><?= count($d['positions']) ?> <?= $t('d365t_records', 'record(s)') ?></div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
-                            <thead><tr><th>Position</th><th>From</th><th>To</th></tr></thead>
+                            <thead><tr><th><?= $t('d365t_position', 'Position') ?></th><th><?= $t('d365t_from', 'From') ?></th><th><?= $t('to', 'To') ?></th></tr></thead>
                             <tbody>
                             <?php foreach ($d['positions'] as $p): ?>
                                 <tr>
@@ -359,17 +362,17 @@ $money = function ($v) { return number_format((float)$v, 2); };
                                     <td><?= $e(d365tab_date($p['ValidTo'] ?? '')) ?></td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$d['positions']): ?><tr><td colspan="3" class="d365tab-muted">None</td></tr><?php endif; ?>
+                            <?php if (!$d['positions']): ?><tr><td colspan="3" class="d365tab-muted"><?= $t('d365t_none', 'None') ?></td></tr><?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <div class="sr-card">
-                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #16a34a;"><i class="fa fa-building-columns"></i></span>Bank accounts</div><div class="sr-card-sub"><?= count($d['banks']) ?> record(s)</div></div>
+                    <div class="sr-card-head"><div class="sr-card-title"><span class="d365-ti" style="--c: #16a34a;"><i class="fa fa-building-columns"></i></span><?= $t('d365t_bank_accounts', 'Bank accounts') ?></div><div class="sr-card-sub"><?= count($d['banks']) ?> <?= $t('d365t_records', 'record(s)') ?></div></div>
                     <div class="sr-table-wrap">
                         <table class="sr-table">
-                            <thead><tr><th>Bank</th><th>IBAN</th></tr></thead>
+                            <thead><tr><th><?= $t('d365t_bank', 'Bank') ?></th><th>IBAN</th></tr></thead>
                             <tbody>
                             <?php foreach ($d['banks'] as $b): ?>
                                 <tr>
@@ -377,7 +380,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
                                     <td class="sr-mono"><?= $e($b['BankIBAN'] ?? '') ?></td>
                                 </tr>
                             <?php endforeach; ?>
-                            <?php if (!$d['banks']): ?><tr><td colspan="2" class="d365tab-muted">None</td></tr><?php endif; ?>
+                            <?php if (!$d['banks']): ?><tr><td colspan="2" class="d365tab-muted"><?= $t('d365t_none', 'None') ?></td></tr><?php endif; ?>
                             </tbody>
                         </table>
                     </div>
@@ -389,23 +392,23 @@ $money = function ($v) { return number_format((float)$v, 2); };
     <?php if ($worker): ?>
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><span class="d365-ti" style="--c: #d97706;"><i class="fa fa-chart-line"></i></span>Financial summary</div>
-                <div class="sr-card-sub">General journal lines of <?= $e($targetEmp) ?> in D365 (fees, advances, loans, settlements, transfers...) · payroll shown separately below</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #d97706;"><i class="fa fa-chart-line"></i></span><?= $t('d365t_financial_summary', 'Financial summary') ?></div>
+                <div class="sr-card-sub"><?= $t('d365t_journal_lines_of', 'General journal lines of') ?> <?= $e($targetEmp) ?> <?= $t('d365t_journal_lines_hint', 'in D365 (fees, advances, loans, settlements, transfers...) · payroll shown separately below') ?></div>
             </div>
             <div class="sr-card-body">
                 <div class="d365fin-tiles">
-                    <div class="d365fin-tile"><span>Transactions</span><b><?= count($fin) ?></b><small><?= $postedCount ?> posted · <?= count($fin) - $postedCount ?> not posted</small></div>
-                    <div class="d365fin-tile"><span>Total debit</span><b><?= $money($totDebit) ?></b><small>SAR</small></div>
-                    <div class="d365fin-tile"><span>Total credit</span><b><?= $money($totCredit) ?></b><small>SAR</small></div>
+                    <div class="d365fin-tile"><span><?= $t('d365t_transactions', 'Transactions') ?></span><b><?= count($fin) ?></b><small><?= $postedCount ?> <?= $t('d365t_posted_lc', 'posted') ?> · <?= count($fin) - $postedCount ?> <?= $t('d365t_not_posted_lc', 'not posted') ?></small></div>
+                    <div class="d365fin-tile"><span><?= $t('d365t_total_debit', 'Total debit') ?></span><b><?= $money($totDebit) ?></b><small><?= $t('sar', 'SAR') ?></small></div>
+                    <div class="d365fin-tile"><span><?= $t('d365t_total_credit', 'Total credit') ?></span><b><?= $money($totCredit) ?></b><small><?= $t('sar', 'SAR') ?></small></div>
                     <div class="d365fin-tile is-<?= $totDebit - $totCredit > 0.004 ? 'debit' : ($totCredit - $totDebit > 0.004 ? 'credit' : 'zero') ?>">
-                        <span>Net balance</span><b><?= $money(abs($totDebit - $totCredit)) ?></b>
-                        <small><?= $totDebit - $totCredit > 0.004 ? 'Debit (owed by employee / paid out)' : ($totCredit - $totDebit > 0.004 ? 'Credit (owed to employee / recovered)' : 'Balanced') ?></small>
+                        <span><?= $t('d365t_net_balance', 'Net balance') ?></span><b><?= $money(abs($totDebit - $totCredit)) ?></b>
+                        <small><?= $totDebit - $totCredit > 0.004 ? $t('d365t_debit_hint', 'Debit (owed by employee / paid out)') : ($totCredit - $totDebit > 0.004 ? $t('d365t_credit_hint', 'Credit (owed to employee / recovered)') : $t('d365t_balanced', 'Balanced')) ?></small>
                     </div>
                 </div>
                 <?php if ($byCompany): ?>
                     <div class="d365fin-companies">
                         <?php foreach ($byCompany as $co => $c): ?>
-                            <span class="sr-chip"><?= $e($co) ?> · <?= $c['count'] ?> lines · net <?= $money($c['debit'] - $c['credit']) ?></span>
+                            <span class="sr-chip"><?= $e($co) ?> · <?= $c['count'] ?> <?= $t('d365t_lines_lc', 'lines') ?> · <?= $t('d365t_net_lc', 'net') ?> <?= $money($c['debit'] - $c['credit']) ?></span>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
@@ -414,12 +417,12 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><span class="d365-ti" style="--c: #475569;"><i class="fa fa-book"></i></span>By account</div>
-                <div class="sr-card-sub">Main accounts the worker's transactions were booked to</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #475569;"><i class="fa fa-book"></i></span><?= $t('d365t_by_account', 'By account') ?></div>
+                <div class="sr-card-sub"><?= $t('d365t_by_account_hint', 'Main accounts the worker\'s transactions were booked to') ?></div>
             </div>
             <div class="sr-table-wrap">
                 <table class="sr-table">
-                    <thead><tr><th>Account</th><th class="text-right">Lines</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Net</th><th>Last date</th></tr></thead>
+                    <thead><tr><th><?= $t('d365t_account', 'Account') ?></th><th class="text-right"><?= $t('d365t_lines', 'Lines') ?></th><th class="text-right"><?= $t('d365t_debit', 'Debit') ?></th><th class="text-right"><?= $t('d365t_credit', 'Credit') ?></th><th class="text-right"><?= $t('d365t_net', 'Net') ?></th><th><?= $t('d365t_last_date', 'Last date') ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($byAccount as $acc => $a): $net = $a['debit'] - $a['credit']; ?>
                         <tr>
@@ -431,7 +434,7 @@ $money = function ($v) { return number_format((float)$v, 2); };
                             <td><?= $e(d365tab_date($a['last'])) ?></td>
                         </tr>
                     <?php endforeach; ?>
-                    <?php if (!$byAccount): ?><tr><td colspan="6" class="d365tab-muted">No financial transactions in D365</td></tr><?php endif; ?>
+                    <?php if (!$byAccount): ?><tr><td colspan="6" class="d365tab-muted"><?= $t('d365t_no_financial_transactions', 'No financial transactions in D365') ?></td></tr><?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -439,12 +442,12 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><span class="d365-ti" style="--c: #0891b2;"><i class="fa fa-money-check-dollar"></i></span>Payroll in D365</div>
-                <div class="sr-card-sub">Payroll synced by the HR app, per month (lines "PAY yyyy-mm <?= $e($targetEmp) ?> ...")</div>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #0891b2;"><i class="fa fa-money-check-dollar"></i></span><?= $t('d365t_payroll_in_d365', 'Payroll in D365') ?></div>
+                <div class="sr-card-sub"><?= $t('d365t_payroll_hint', 'Payroll synced by the HR app, per month') ?> (<span class="latin-digits">"PAY yyyy-mm <?= $e($targetEmp) ?> ..."</span>)</div>
             </div>
             <div class="sr-table-wrap">
                 <table class="sr-table">
-                    <thead><tr><th>Month</th><th>Company</th><th>Journal</th><th class="text-right">Lines</th><th class="text-right">Gross (debit)</th><th class="text-right">Net salary</th></tr></thead>
+                    <thead><tr><th><?= $t('d365t_month', 'Month') ?></th><th><?= $t('company', 'Company') ?></th><th><?= $t('journal', 'Journal') ?></th><th class="text-right"><?= $t('d365t_lines', 'Lines') ?></th><th class="text-right"><?= $t('d365t_gross_debit', 'Gross (debit)') ?></th><th class="text-right"><?= $t('d365t_net_salary', 'Net salary') ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($payrollMonths as $m => $pm): ?>
                         <tr>
@@ -452,15 +455,15 @@ $money = function ($v) { return number_format((float)$v, 2); };
                             <td><span class="sr-chip"><?= $e($pm['company']) ?></span></td>
                             <td>
                                 <div class="sr-mono"><?= $e($pm['journal']) ?></div>
-                                <?php if ($pm['posted'] === true): ?><span class="sr-pill tone-green"><span class="sr-dot"></span>Posted</span>
-                                <?php elseif ($pm['posted'] === false): ?><span class="sr-pill tone-amber"><span class="sr-dot"></span>Not posted</span><?php endif; ?>
+                                <?php if ($pm['posted'] === true): ?><span class="sr-pill tone-green"><span class="sr-dot"></span><?= $t('d365t_posted', 'Posted') ?></span>
+                                <?php elseif ($pm['posted'] === false): ?><span class="sr-pill tone-amber"><span class="sr-dot"></span><?= $t('d365t_not_posted', 'Not posted') ?></span><?php endif; ?>
                             </td>
                             <td class="text-right"><?= $pm['lines'] ?></td>
                             <td class="text-right"><?= $money($pm['debit']) ?></td>
                             <td class="text-right"><b class="d365fin-credit"><?= $money($pm['net']) ?></b></td>
                         </tr>
                     <?php endforeach; ?>
-                    <?php if (!$payrollMonths): ?><tr><td colspan="6" class="d365tab-muted">No payroll synced to D365 yet</td></tr><?php endif; ?>
+                    <?php if (!$payrollMonths): ?><tr><td colspan="6" class="d365tab-muted"><?= $t('d365t_no_payroll_synced', 'No payroll synced to D365 yet') ?></td></tr><?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -468,28 +471,29 @@ $money = function ($v) { return number_format((float)$v, 2); };
 
         <div class="sr-card">
             <div class="sr-card-head">
-                <div class="sr-card-title"><span class="d365-ti" style="--c: #db2777;"><i class="fa fa-list-ul"></i></span>Transactions</div>
-                <div class="sr-card-sub">Newest first · amount = debit (+) / credit (-)
-                    <span class="d365fin-filter" style="margin-left:8px">
-                        <button type="button" class="d365tab-btn is-active" data-fin-type="">All (<?= count($allLines) ?>)</button>
-                        <button type="button" class="d365tab-btn" data-fin-type="Payroll">Payroll (<?= count($payroll) ?>)</button>
-                        <button type="button" class="d365tab-btn" data-fin-type="Other">Other (<?= count($fin) ?>)</button>
+                <div class="sr-card-title"><span class="d365-ti" style="--c: #db2777;"><i class="fa fa-list-ul"></i></span><?= $t('d365t_transactions', 'Transactions') ?></div>
+                <div class="sr-card-sub"><?= $t('d365t_transactions_hint', 'Newest first · amount = debit (+) / credit (-)') ?>
+                    <span class="d365fin-filter" style="margin-inline-start:8px">
+                        <button type="button" class="d365tab-btn is-active" data-fin-type=""><?= $t('d365t_all', 'All') ?> (<?= count($allLines) ?>)</button>
+                        <button type="button" class="d365tab-btn" data-fin-type="Payroll"><?= $t('d365t_payroll', 'Payroll') ?> (<?= count($payroll) ?>)</button>
+                        <button type="button" class="d365tab-btn" data-fin-type="Other"><?= $t('d365t_other', 'Other') ?> (<?= count($fin) ?>)</button>
                     </span>
                 </div>
             </div>
             <div class="sr-table-wrap" style="padding:0 12px 12px">
                 <table class="sr-table" id="d365FinTable" style="width:100%">
-                    <thead><tr><th>Date</th><th>Type</th><th>Company</th><th>Journal</th><th>Voucher</th><th>Account</th><th>Description</th><th class="text-right">Amount</th></tr></thead>
+                    <thead><tr><th><?= $t('d365t_date', 'Date') ?></th><th><?= $t('d365t_type', 'Type') ?></th><th><?= $t('company', 'Company') ?></th><th><?= $t('journal', 'Journal') ?></th><th><?= $t('d365t_voucher', 'Voucher') ?></th><th><?= $t('d365t_account', 'Account') ?></th><th><?= $t('d365t_description', 'Description') ?></th><th class="text-right"><?= $t('d365t_amount', 'Amount') ?></th></tr></thead>
                     <tbody>
                     <?php foreach ($allLines as $jl): $amt = (float)$jl['DebitAmount'] - (float)$jl['CreditAmount']; ?>
                         <tr>
                             <td data-order="<?= $e(substr((string)$jl['TransDate'], 0, 10)) ?>"><?= $e(d365tab_date($jl['TransDate'])) ?></td>
-                            <td><?= $jl['_type'] === 'payroll' ? '<span class="sr-pill tone-sky"><span class="sr-dot"></span>Payroll</span>' : '<span class="sr-pill tone-slate"><span class="sr-dot"></span>Other</span>' ?></td>
+                            <?php /* data-search keeps the English value the Payroll / Other filter buttons search for */ ?>
+                            <td data-search="<?= $jl['_type'] === 'payroll' ? 'Payroll' : 'Other' ?>"><?= $jl['_type'] === 'payroll' ? '<span class="sr-pill tone-sky"><span class="sr-dot"></span>' . $t('d365t_payroll', 'Payroll') . '</span>' : '<span class="sr-pill tone-slate"><span class="sr-dot"></span>' . $t('d365t_other', 'Other') . '</span>' ?></td>
                             <td><span class="sr-chip"><?= $e(strtoupper($jl['dataAreaId'])) ?></span></td>
                             <td>
                                 <div class="sr-mono"><?= $e($jl['JournalBatchNumber']) ?></div>
-                                <?php if ($jl['_posted'] === true): ?><span class="sr-pill tone-green"><span class="sr-dot"></span>Posted</span>
-                                <?php elseif ($jl['_posted'] === false): ?><span class="sr-pill tone-amber"><span class="sr-dot"></span>Not posted</span><?php endif; ?>
+                                <?php if ($jl['_posted'] === true): ?><span class="sr-pill tone-green"><span class="sr-dot"></span><?= $t('d365t_posted', 'Posted') ?></span>
+                                <?php elseif ($jl['_posted'] === false): ?><span class="sr-pill tone-amber"><span class="sr-dot"></span><?= $t('d365t_not_posted', 'Not posted') ?></span><?php endif; ?>
                             </td>
                             <td class="sr-mono"><?= $e($jl['Voucher']) ?></td>
                             <td><div class="sr-cell-title"><?= $e($accountNames[$jl['_main']] ?? '') ?></div><div class="sr-cell-sub sr-mono"><?= $e($jl['AccountDisplayValue']) ?></div></td>

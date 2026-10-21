@@ -2633,14 +2633,14 @@ if (mysqli_num_rows($query) == 1) {
 																		</span>
 																	<?php else: ?>
 																		<?php if ($d365_rs === 'error'): ?>
-																			<span class="badge badge-danger" title="<?= htmlspecialchars((string)$d365_row['error']) ?>"><i class="fa fa-times"></i> Failed</span>
+																			<span class="badge badge-danger" title="<?= htmlspecialchars((string)$d365_row['error']) ?>"><i class="fa fa-times"></i> <?= __('failed_status', 'Failed') ?></span>
 																		<?php elseif ($d365_rs === 'removed'): ?>
-																			<span class="badge badge-warning" title="The journal was deleted in D365">Removed</span>
+																			<span class="badge badge-warning" title="<?= htmlspecialchars(__('d365_journal_deleted', 'The journal was deleted in D365')) ?>"><?= __('removed_status', 'Removed') ?></span>
 																		<?php else: ?>
-																			<span class="badge badge-secondary">Not synced</span>
+																			<span class="badge badge-secondary"><?= __('not_synced', 'Not synced') ?></span>
 																		<?php endif; ?>
 																		<?php if ($can_d365_sync): ?>
-																		<button type="button" class="btn btn-sm btn-primary btn-d365-pay ml-1" data-month="<?= htmlspecialchars($payroll_rec['month_year']) ?>"><i class="fa fa-cloud-upload-alt"></i> Sync to D365</button>
+																		<button type="button" class="btn btn-sm btn-primary btn-d365-pay ml-1" data-month="<?= htmlspecialchars($payroll_rec['month_year']) ?>"><i class="fa fa-cloud-upload-alt"></i> <?= __('sync_to_d365', 'Sync to D365') ?></button>
 																		<?php endif; ?>
 																	<?php endif; ?>
 																</td>
@@ -3249,7 +3249,7 @@ if (mysqli_num_rows($query) == 1) {
 										<?php if ($show_d365_tab): ?>
 										<div class="tab-pane" id="d365tab" data-emp="<?= htmlspecialchars($emprow['empid']) ?>" data-csrf="<?= htmlspecialchars($_SESSION['d365_csrf']) ?>" data-loaded="0">
 											<div id="d365TabBody">
-												<div class="text-center text-muted p-4"><i class="mdi mdi-loading mdi-spin"></i> Loading Dynamics 365 data...</div>
+												<div class="text-center text-muted p-4"><i class="mdi mdi-loading mdi-spin"></i> <?= __('loading_d365_data', 'Loading Dynamics 365 data...') ?></div>
 											</div>
 										</div>
 										<?php endif; ?>
@@ -3413,11 +3413,11 @@ if (mysqli_num_rows($query) == 1) {
 				Swal.fire({
 					icon: 'warning',
 					title: <?= json_encode(__('reset_login_password', 'Reset Login Password')) ?>,
-					html: 'Reset the login password for <b>' + $('<div>').text(name).html() + '</b>?<br><br>'
-						+ 'A temporary password will be shown once. The employee must change it at the next login, '
-						+ 'and any "remember me" sign-ins will be ended.',
+					html: <?= json_encode(__('reset_login_password_for', 'Reset the login password for')) ?> + ' <b>' + $('<div>').text(name).html() + '</b>?<br><br>'
+						+ <?= json_encode(__('reset_login_password_note', 'A temporary password will be shown once. The employee must change it at the next login, and any "remember me" sign-ins will be ended.')) ?>,
 					showCancelButton: true,
-					confirmButtonText: 'Reset Password',
+					cancelButtonText: <?= json_encode(__('cancel', 'Cancel')) ?>,
+					confirmButtonText: <?= json_encode(__('reset_password_button', 'Reset Password')) ?>,
 					confirmButtonColor: '#d33',
 					showLoaderOnConfirm: true,
 					allowOutsideClick: () => !Swal.isLoading(),
@@ -3429,12 +3429,12 @@ if (mysqli_num_rows($query) == 1) {
 							data: { iqama: iqama }
 						}).then(res => {
 							if (!res || !res.ok) {
-								Swal.showValidationMessage((res && res.message) || 'Reset failed.');
+								Swal.showValidationMessage((res && res.message) || <?= json_encode(__('reset_failed', 'Reset failed.')) ?>);
 								return false;
 							}
 							return res;
 						}, xhr => {
-							Swal.showValidationMessage((xhr.responseJSON && xhr.responseJSON.message) || 'Reset failed.');
+							Swal.showValidationMessage((xhr.responseJSON && xhr.responseJSON.message) || <?= json_encode(__('reset_failed', 'Reset failed.')) ?>);
 							return false;
 						});
 					}
@@ -3443,11 +3443,11 @@ if (mysqli_num_rows($query) == 1) {
 					const temp = result.value.temp_password;
 					Swal.fire({
 						icon: 'success',
-						title: 'Temporary Password',
-						html: 'Give this password to <b>' + $('<div>').text(name).html() + '</b>. It is shown only once.'
+						title: <?= json_encode(__('temporary_password', 'Temporary Password')) ?>,
+						html: <?= json_encode(__('give_password_to', 'Give this password to')) ?> + ' <b>' + $('<div>').text(name).html() + '</b>. ' + <?= json_encode(__('shown_only_once', 'It is shown only once.')) ?>
 							+ '<div style="margin:16px auto 6px;padding:12px;border-radius:8px;background:#111827;color:#fff;font:700 22px/1.2 monospace;letter-spacing:2px;user-select:all;">'
 							+ $('<div>').text(temp).html() + '</div>',
-						confirmButtonText: 'Copy & Close',
+						confirmButtonText: <?= json_encode(__('copy_and_close', 'Copy & Close')) ?>,
 						allowOutsideClick: false
 					}).then(() => {
 						if (navigator.clipboard) { navigator.clipboard.writeText(temp).catch(() => {}); }
@@ -4457,15 +4457,16 @@ if (mysqli_num_rows($query) == 1) {
 					var month = String($(this).data('month'));
 					var d365Pop = { popup: 'sr-addline-popup sr-page' };
 					Swal.fire({
-						title: 'Sync ' + $('<i>').text(month).html() + ' to D365?',
+						title: <?= json_encode(__('sync_month_to_d365', 'Sync %s to D365?')) ?>.replace('%s', $('<i>').text(month).html()),
 						html: '<div class="sr-form"><dl class="sr-kv">'
-							+ '<div class="row-kv"><dt>Employee</dt><dd><?= htmlspecialchars($emprow['empid'], ENT_QUOTES) ?></dd></div>'
-							+ '<div class="row-kv"><dt>Payroll month</dt><dd>' + $('<i>').text(month).html() + '</dd></div>'
-							+ '<div class="row-kv"><dt>D365 environment</dt><dd><span class="sr-pill sr-pill-xs tone-amber"><?= strtoupper(htmlspecialchars($d365_pay_env, ENT_QUOTES)) ?></span></dd></div>'
-							+ '<div class="row-kv"><dt>Journal</dt><dd>Unposted line in the journal of the employee payroll company</dd></div>'
+							+ '<div class="row-kv"><dt><?= htmlspecialchars(__('employee', 'Employee'), ENT_QUOTES) ?></dt><dd><?= htmlspecialchars($emprow['empid'], ENT_QUOTES) ?></dd></div>'
+							+ '<div class="row-kv"><dt><?= htmlspecialchars(__('payroll_month', 'Payroll month'), ENT_QUOTES) ?></dt><dd>' + $('<i>').text(month).html() + '</dd></div>'
+							+ '<div class="row-kv"><dt><?= htmlspecialchars(__('d365_environment', 'D365 environment'), ENT_QUOTES) ?></dt><dd><span class="sr-pill sr-pill-xs tone-amber"><?= strtoupper(htmlspecialchars($d365_pay_env, ENT_QUOTES)) ?></span></dd></div>'
+							+ '<div class="row-kv"><dt><?= htmlspecialchars(__('journal', 'Journal'), ENT_QUOTES) ?></dt><dd><?= htmlspecialchars(__('d365_unposted_journal_line', 'Unposted line in the journal of the employee payroll company'), ENT_QUOTES) ?></dd></div>'
 							+ '</dl></div>',
 						showCancelButton: true,
-						confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> Sync to D365',
+						cancelButtonText: <?= json_encode(__('cancel', 'Cancel')) ?>,
+						confirmButtonText: '<i class="mdi mdi-cloud-sync"></i> ' + <?= json_encode(__('sync_to_d365', 'Sync to D365')) ?>,
 						confirmButtonColor: (window.APP_COLORS && APP_COLORS.primary) || undefined,
 						cancelButtonColor: (window.APP_COLORS && APP_COLORS.danger_dark) || undefined,
 						width: '560px',
@@ -4489,10 +4490,10 @@ if (mysqli_num_rows($query) == 1) {
 						if (r.ok) {
 							cells.html($('<span class="badge badge-success"><i class="fa fa-check"></i> </span>').append(document.createTextNode((r.entity || '') + ' · ' + (r.journal || ''))));
 							$('.btn-d365-pay[data-month="' + month + '"]').remove(); // copies in responsive child rows
-							Swal.fire({ icon: 'success', title: 'Synced to D365', customClass: d365Pop, html: '<div class="sr-form"><dl class="sr-kv"><div class="row-kv"><dt>Journal</dt><dd>' + $('<i>').text(r.journal || '').html() + '</dd></div><div class="row-kv"><dt>Company</dt><dd>' + $('<i>').text(r.entity || '').html() + '</dd></div></dl><span class="sr-fhint mt-2">Unposted - finance posts it in D365.</span></div>' });
+							Swal.fire({ icon: 'success', title: <?= json_encode(__('synced_to_d365', 'Synced to D365')) ?>, customClass: d365Pop, html: '<div class="sr-form"><dl class="sr-kv"><div class="row-kv"><dt><?= htmlspecialchars(__('journal', 'Journal'), ENT_QUOTES) ?></dt><dd>' + $('<i>').text(r.journal || '').html() + '</dd></div><div class="row-kv"><dt><?= htmlspecialchars(__('company', 'Company'), ENT_QUOTES) ?></dt><dd>' + $('<i>').text(r.entity || '').html() + '</dd></div></dl><span class="sr-fhint mt-2"><?= htmlspecialchars(__('d365_unposted_finance_posts', 'Unposted - finance posts it in D365.'), ENT_QUOTES) ?></span></div>' });
 						} else {
-							cells.find('.badge').replaceWith($('<span class="badge badge-danger"><i class="fa fa-times"></i> Failed</span>').attr('title', r.error || ''));
-							Swal.fire({ icon: 'error', title: 'Sync failed', text: r.error || 'Unknown error', customClass: d365Pop });
+							cells.find('.badge').replaceWith($('<span class="badge badge-danger"><i class="fa fa-times"></i> ' + <?= json_encode(__('failed_status', 'Failed')) ?> + '</span>').attr('title', r.error || ''));
+							Swal.fire({ icon: 'error', title: <?= json_encode(__('sync_failed', 'Sync failed')) ?>, text: r.error || <?= json_encode(__('unknown_error', 'Unknown error')) ?>, customClass: d365Pop });
 						}
 					});
 				});
@@ -4939,7 +4940,7 @@ if (mysqli_num_rows($query) == 1) {
 					return 'slate';
 				};
 				const aHm = v => { const m = /^(\d{1,3}):(\d{2})/.exec(v || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-				const aDur = mins => Math.floor(mins / 60) + 'h ' + String(mins % 60).padStart(2, '0') + 'm';
+				const aDur = mins => Math.floor(mins / 60) + __('hours_short', 'h') + ' ' + String(mins % 60).padStart(2, '0') + __('minutes_short', 'm');
 				const aDisplay = fn => (v, type, row) => type === 'display' ? fn(v, row) : v;
 
 				function updateAttendanceStats(rows) {
@@ -5638,7 +5639,7 @@ if (mysqli_num_rows($query) == 1) {
 							});
 						}
 					}).fail(function (xhr) {
-						$body.html('<div class="sr-notice tone-red">Could not load D365 data (HTTP ' + xhr.status + '). <a href="#" id="d365TabRetry">Retry</a></div>');
+						$body.html('<div class="sr-notice tone-red">' + <?= json_encode(__('could_not_load_d365_data', 'Could not load D365 data')) ?> + ' (HTTP ' + xhr.status + '). <a href="#" id="d365TabRetry">' + <?= json_encode(__('retry', 'Retry')) ?> + '</a></div>');
 					}).always(function () {
 						$body.css({ opacity: '', 'pointer-events': '' });
 					});

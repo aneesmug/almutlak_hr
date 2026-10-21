@@ -7958,7 +7958,7 @@ spans = document.querySelectorAll(".copyToClipboard");
     span.addEventListener("copy", function(event) {
         event.preventDefault();
         if (event.clipboardData) {
-            event.clipboardData.setData("text/plain", span.textContent);
+            event.clipboardData.setData("text/plain", window.SRArabicDigits ? SRArabicDigits.toLatin(span.textContent) : span.textContent);
             // console.log(event.clipboardData.getData("text"))
             Swal.fire({
                 title : __('success_title'),
@@ -10238,7 +10238,7 @@ function htmlspecialcharsJs(str) {
 // =================================================================
 window.copyToClipboard = function(text, iconElement) {
     const textArea = document.createElement('textarea');
-    textArea.value = text;
+    textArea.value = window.SRArabicDigits ? SRArabicDigits.toLatin(text) : text;
     textArea.style.position = 'fixed';
     textArea.style.top = 0;
     textArea.style.left = 0;

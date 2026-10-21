@@ -409,7 +409,7 @@ if ($isEmployee !== true) {
 
 				<!-- QR -> employee card -->
 				<a class="eh-qr" href="./emp_card/index.php?hashcode=<?= $emprow['empid'] ?>&verification=<?= $emprow['eid'] ?>" target="_blank" title="<?= __('view_employee_card') ?>">
-					<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="QR Code" class="qr-code">
+					<img src="./assets/qrcodes/<?= $emprow['eid'] . $emprow['empid'] ?>.png" alt="<?= htmlspecialchars(__('qr_code', 'QR Code')) ?>" class="qr-code">
 					<span><i class="fa fa-id-card"></i> <?= __('view_employee_card') ?></span>
 				</a>
 			</div>
@@ -499,7 +499,7 @@ if ($isEmployee !== true) {
 			<div class="emp-actbar-group">
 				<?php if ($emprow["status"] == 1): ?>
 					<?php if ($current_page_name <> "add_emp_slry.php" && $user_type <> "dept_user" && $emprow['seid'] == ""): ?>
-						<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="eab-btn eab-btn-danger"><i class="mdi mdi-plus-circle-outline"></i> Add Details</a>
+						<a href="add_emp_slry.php?emp_id=<?= $emprow['empid'] ?>" class="eab-btn eab-btn-danger"><i class="mdi mdi-plus-circle-outline"></i> <?= __('add_details', 'Add Details') ?></a>
 					<?php endif ?>
 					<?php if (($is_system_admin || $isHR || $isDeptHr) && $showUpdateSalaryBtn && $current_page_name <> "add_emp_slry.php"): ?>
 						<a href="javascript:void(0);" class="eab-btn eab-btn-primary updateSalaryBtn" data-emp_id="<?= $emprow['empid'] ?>" data-basic="<?= $emprow['basic'] ?>" data-housing="<?= $emprow['housing'] ?>" data-transport="<?= $emprow['transport'] ?>" data-food="<?= $emprow['food'] ?? 0 ?>" data-misc="<?= $emprow['misc'] ?? 0 ?>" data-cashier="<?= $emprow['cashier'] ?? 0 ?>" data-fuel="<?= $emprow['fuel'] ?? 0 ?>" data-tel="<?= $emprow['tel'] ?? 0 ?>" data-other="<?= $emprow['other'] ?? 0 ?>" data-guard="<?= $emprow['guard'] ?? 0 ?>"><i class="mdi mdi-cash-multiple"></i> <?= __('update_salary') ?></a>

@@ -39,7 +39,13 @@ if (!function_exists('app_sr_table_scroll_tag')) {
             $rel = trim(substr($scriptDir, strlen($root)), '\\/');
             $prefix = $rel === '' ? '' : str_repeat('../', count(preg_split('~[\\\\/]+~', $rel)));
         }
+        // Arabic UI: displayed numbers switch to Arabic-Indic digits (assets/js/sr_arabic_digits.js).
+        $lang = $GLOBALS['current_lang'] ?? ($_SESSION['lang'] ?? 'en');
+        $digits = ($lang === 'ar' || !empty($GLOBALS['is_rtl']))
+            ? '<script src="' . $prefix . 'assets/js/sr_arabic_digits.js?v=' . (int) @filemtime($base . '/assets/js/sr_arabic_digits.js') . '"></script>'
+            : '';
         return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>'
+            . $digits
             . app_sr_swal_theme_tags($prefix);
     }
 }

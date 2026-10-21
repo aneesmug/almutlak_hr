@@ -8588,9 +8588,9 @@ elseif ($ajaxType == 'submitAdjustedRejoinDate') {
 
         if ($adjusted < $from || $adjusted > $to) {
             throw new Exception(
-                __("adjusted_date_out_of_range", 
-                    "Adjusted date must be between " . 
-                    $from->format('Y-m-d') . " and " . 
+                sprintf(
+                    __("adjusted_date_out_of_range", "Adjusted date must be between %s and %s"),
+                    $from->format('Y-m-d'),
                     $to->format('Y-m-d')
                 )
             );
