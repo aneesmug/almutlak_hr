@@ -31,6 +31,9 @@ switch ($action) {
     case 'timetable_for':
         timetable_for($conDB);
         break;
+    case 'list_transactions':
+        list_transactions($conDB);
+        break;
     default:
         echo json_encode(['status' => 'error', 'message' => 'Invalid action.']);
 }
@@ -168,6 +171,91 @@ function list_attendance($conDB) {
         'data' => $data,
         'counts' => $counts,
         'total_hours' => $totalHours,
+    ]);
+}
+
+// "Transactions" tab (attendance.php): every raw device punch from zk_attendance, newest first, with its
+// position in that employee's day (1 of 3, ...) and the device it came from. Filters: employee, dates, search.
+function list_transactions($conDB) {
+    $draw = (int) ($_POST['draw'] ?? 1);
+    $start = max(0, (int) ($_POST['start'] ?? 0));
+    $length = (int) ($_POST['length'] ?? 25);
+    if ($length < 1 || $length > 500) $length = 25;
+    $searchValue = trim((string) ($_POST['search']['value'] ?? ''));
+    $empFilter = trim((string) ($_POST['emp_id'] ?? ''));
+    $fromDate = trim((string) ($_POST['from_date'] ?? ''));
+    $toDate = trim((string) ($_POST['to_date'] ?? ''));
+    $isDate = function ($v) { $d = DateTime::createFromFormat('Y-m-d', $v); return $d && $d->format('Y-m-d') === $v; };
+
+    // punch_datetime ranges (not punch_date) so the idx_punch_datetime index serves both the filter and the order
+    $where = ['1=1'];
+    if ($empFilter !== '') {
+        $where[] = "z.emp_id = '" . mysqli_real_escape_string($conDB, $empFilter) . "'";
+    }
+    if ($fromDate !== '' && $isDate($fromDate)) {
+        $where[] = "z.punch_datetime >= '{$fromDate} 00:00:00'";
+    }
+    if ($toDate !== '' && $isDate($toDate)) {
+        $where[] = "z.punch_datetime <= '{$toDate} 23:59:59'";
+    }
+    if ($searchValue !== '') {
+        $s = mysqli_real_escape_string($conDB, $searchValue);
+        $where[] = "(z.emp_name LIKE '%{$s}%' OR z.emp_id LIKE '%{$s}%' OR d.device_name LIKE '%{$s}%' OR d.area LIKE '%{$s}%')";
+    }
+    $whereSql = implode(' AND ', $where);
+    $from = "FROM zk_attendance z LEFT JOIN zk_devices d ON d.serial_number = z.serial_number";
+
+    $res = mysqli_query($conDB, "SELECT COUNT(*) AS cnt, COUNT(DISTINCT z.emp_id) AS emps, COUNT(DISTINCT z.emp_id, z.punch_date) AS days {$from} WHERE {$whereSql}");
+    $sum = $res ? (mysqli_fetch_assoc($res) ?: []) : [];
+    $filtered = (int) ($sum['cnt'] ?? 0);
+
+    $rows = mysqli_query($conDB, "SELECT z.emp_id, z.emp_name, z.punch_date, z.punch_time, z.punch_state, z.serial_number, d.device_name, d.area
+        {$from} WHERE {$whereSql} ORDER BY z.punch_datetime DESC, z.id DESC LIMIT {$start}, {$length}");
+
+    $data = [];
+    $days = []; // "emp|date" => true, for the per-day position below
+    while ($rows && ($r = mysqli_fetch_assoc($rows))) {
+        $data[] = $r;
+        $days[$r['emp_id'] . '|' . $r['punch_date']] = [$r['emp_id'], $r['punch_date']];
+    }
+
+    // Position of each punch inside its employee's day - one indexed (emp_id, punch_date) lookup per day on this page
+    $order = [];
+    if ($days) {
+        $stmt = mysqli_prepare($conDB, "SELECT punch_time FROM zk_attendance WHERE emp_id = ? AND punch_date = ? ORDER BY punch_time");
+        foreach ($days as $key => $pair) {
+            mysqli_stmt_bind_param($stmt, 'ss', $pair[0], $pair[1]);
+            mysqli_stmt_execute($stmt);
+            $rs = mysqli_stmt_get_result($stmt);
+            $order[$key] = [];
+            while ($p = mysqli_fetch_row($rs)) $order[$key][] = $p[0];
+        }
+        mysqli_stmt_close($stmt);
+    }
+
+    $out = [];
+    foreach ($data as $r) {
+        $times = $order[$r['emp_id'] . '|' . $r['punch_date']] ?? [];
+        $pos = array_search($r['punch_time'], $times, true);
+        $out[] = [
+            'emp_id' => $r['emp_id'],
+            'name' => $r['emp_name'],
+            'date' => $r['punch_date'],
+            'time' => $r['punch_time'],
+            'state' => (string) $r['punch_state'],
+            'device' => $r['device_name'] ?: $r['serial_number'],
+            'area' => ($r['area'] && $r['area'] !== $r['device_name']) ? $r['area'] : '',
+            'seq' => $pos === false ? null : $pos + 1,
+            'of' => count($times),
+        ];
+    }
+
+    echo json_encode([
+        'draw' => $draw,
+        'recordsTotal' => $filtered,
+        'recordsFiltered' => $filtered,
+        'data' => $out,
+        'summary' => ['punches' => $filtered, 'employees' => (int) ($sum['emps'] ?? 0), 'days' => (int) ($sum['days'] ?? 0)],
     ]);
 }
 

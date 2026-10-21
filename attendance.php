@@ -62,6 +62,18 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
         .att-time.out i { color: #dc2626; }
         .att-hours { font-variant-numeric: tabular-nums; font-weight: 600; }
         .att-note { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+        .att-tx-tiles.sr-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+        @media (max-width: 767px) { .att-tx-tiles.sr-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+        .att-tiles .sr-tile.is-static { cursor: default; }
+        .att-tiles .sr-tile.is-static:hover { transform: none; }
+        .sr-card > .sr-tabs { padding-inline: 18px; }
+        .sr-tabs .nav-link .sr-count { margin-inline-start: 2px; }
+        .att-seq { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--sr-muted); font-variant-numeric: tabular-nums; }
+        .att-seq b { min-width: 24px; height: 24px; padding: 0 6px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: var(--sr-surface-3); color: var(--sr-text); }
+        .att-seq.is-first b { background: var(--tone-green-bg); color: var(--tone-green-fg); }
+        .att-seq.is-last b { background: var(--tone-red-bg); color: var(--tone-red-fg); }
+        .att-dev { display: inline-flex; align-items: center; gap: 8px; }
+        .att-dev i { color: var(--sr-muted); }
         .sr-form .att-punch .sr-seg-opt.checked span { border-color: var(--sr-accent); background: var(--sr-accent-soft); color: var(--sr-accent-strong); box-shadow: 0 0 0 1px var(--sr-accent) inset; }
     </style>
     <script>
@@ -103,8 +115,24 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                     </div>
 
                     <?= attendance_tiles_html('attTiles', attendance_total_tile_html(true)) /* Total hours: shown only when one employee is selected */ ?>
+                    <div class="sr-tiles att-tiles att-tx-tiles" id="attTxTiles" style="display:none;">
+                        <?php foreach ([
+                            ['punches', __('punches', 'Punches'), 'indigo', 'fa-fingerprint'],
+                            ['employees', __('employees', 'Employees'), 'green', 'fa-users'],
+                            ['days', __('days', 'Days'), 'sky', 'fa-calendar-day'],
+                            ['avg', __('avg_per_day', 'Avg punches / day'), 'amber', 'fa-chart-simple'],
+                        ] as $tx): ?>
+                        <div class="sr-tile is-static"><span class="sr-tile-label"><span class="sr-dot dot-<?= $tx[2] ?>"></span><?= htmlspecialchars($tx[1]) ?></span>
+                            <span class="sr-tile-value" data-tx="<?= $tx[0] ?>">&ndash;</span>
+                            <span class="att-tile-ico tone-<?= $tx[2] ?>"><i class="fa-solid <?= $tx[3] ?>"></i></span></div>
+                        <?php endforeach; ?>
+                    </div>
 
                     <div class="sr-card">
+                        <ul class="sr-tabs" id="attView">
+                            <li><a class="nav-link active" href="#records" data-view="records"><i class="fa-solid fa-calendar-check"></i><?= __('daily_records', 'Daily records') ?></a></li>
+                            <li><a class="nav-link" href="#transactions" data-view="transactions"><i class="fa-solid fa-fingerprint"></i><?= __('transactions', 'Transactions') ?><span class="sr-count" id="attTxCount" style="display:none;"></span></a></li>
+                        </ul>
                         <div class="sr-toolbar">
                             <div class="sr-search">
                                 <i class="mdi mdi-magnify"></i>
@@ -116,7 +144,7 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                             </div>
                         </div>
 
-                        <div class="sr-table-wrap">
+                        <div class="sr-table-wrap" id="attRecordsWrap">
                             <table id="attendance_table" class="table sr-table dt-responsive nowrap" style="width: 100%;">
                                 <thead>
                                     <tr>
@@ -129,6 +157,23 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                                         <th><?= __('source', 'Source') ?></th>
                                         <th><?= __('note') ?></th>
                                         <th class="text-right"><?= __('action_header', 'Action') ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Transactions: every raw device punch (zk_attendance), see list_transactions() -->
+                        <div class="sr-table-wrap" id="attTxWrap" style="display:none;">
+                            <table id="attTxTable" class="table sr-table dt-responsive nowrap" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th><?= __('employee', 'Employee') ?></th>
+                                        <th><?= __('date') ?></th>
+                                        <th><?= __('time', 'Time') ?></th>
+                                        <th><?= __('punch_of_day', 'Punch of day') ?></th>
+                                        <th><?= __('type', 'Type') ?></th>
+                                        <th><?= __('device', 'Device') ?></th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -179,6 +224,26 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
         }
         function stateLabel(s) { return t(String(s || '').toLowerCase().replace(/ & /g, '_and_').replace(/ /g, '_'), s); }
         function minutes(hm) { const m = /^(\d{1,2}):(\d{2})/.exec(hm || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; }
+        function dateCell(d) {
+            const dt = new Date(d + 'T00:00:00');
+            if (isNaN(dt)) return esc(d);
+            return `<span class="sr-date">${dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}<small>${dt.toLocaleDateString('en-US', { weekday: 'long' })}</small></span>`;
+        }
+        function personCell(name, row) {
+            return `<div class="sr-person">
+                <span class="sr-avatar">${esc(String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</span>
+                <div style="min-width:0;"><span class="sr-cell-title">${esc(name || '-')}</span><span class="sr-cell-sub sr-mono">${esc(row.emp_id)}</span></div>
+            </div>`;
+        }
+        const dtLanguage = {
+            info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
+            infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
+            infoFiltered: '',
+            paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
+            emptyTable: `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_data_available_in_table')}</div>`,
+            zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
+            processing: t('processing', 'Processing...')
+        };
 
         // Employee search (shared by the filter and the form)
         function empAjax() {
@@ -239,17 +304,8 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                 }
             },
             columns: [
-                { data: 'name', orderable: false, render: function(name, type, row) {
-                    return `<div class="sr-person">
-                        <span class="sr-avatar">${esc(String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</span>
-                        <div style="min-width:0;"><span class="sr-cell-title">${esc(name || '-')}</span><span class="sr-cell-sub sr-mono">${esc(row.emp_id)}</span></div>
-                    </div>`;
-                } },
-                { data: 'date', render: function(d) {
-                    const dt = new Date(d + 'T00:00:00');
-                    if (isNaN(dt)) return esc(d);
-                    return `<span class="sr-date">${dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}<small>${dt.toLocaleDateString('en-US', { weekday: 'long' })}</small></span>`;
-                } },
+                { data: 'name', orderable: false, render: (name, type, row) => personCell(name, row) },
+                { data: 'date', render: dateCell },
                 { data: 'time_in', orderable: false, render: v => v ? `<span class="att-time in"><i class="mdi mdi-login"></i>${esc(v)}</span>` : '<span class="text-muted">&ndash;</span>' },
                 { data: 'time_out', orderable: false, render: v => v ? `<span class="att-time out"><i class="mdi mdi-logout"></i>${esc(v)}</span>` : '<span class="text-muted">&ndash;</span>' },
                 { data: null, orderable: false, render: function(d, type, row) {
@@ -269,28 +325,102 @@ require_once __DIR__ . '/includes/attendance_ui.php'; // shared status tiles + d
                         .replace('mdi-dots-horizontal', 'mdi-dots-vertical');
                 } }
             ],
-            language: {
-                info: `${__('showing')} _START_ ${__('to')} _END_ ${__('of')} _TOTAL_ ${__('entries')}`,
-                infoEmpty: `${__('showing')} 0 ${__('to')} 0 ${__('of')} 0 ${__('entries')}`,
-                infoFiltered: '',
-                paginate: { first: __('first'), last: __('last'), next: '<i class="mdi mdi-chevron-right"></i>', previous: '<i class="mdi mdi-chevron-left"></i>' },
-                emptyTable: `<div class="sr-empty"><i class="mdi mdi-calendar-blank"></i>${__('no_data_available_in_table')}</div>`,
-                zeroRecords: `<div class="sr-empty"><i class="mdi mdi-magnify"></i>${__('no_matching_records_found')}</div>`,
-                processing: t('processing', 'Processing...')
-            }
+            language: dtLanguage
         });
 
-        const reload = () => table.ajax.reload();
+        /* ---------------- Transactions tab: every device punch ---------------- */
+
+        // ZK device status codes (zk_attendance.punch_state)
+        const PUNCH_TYPES = {
+            '0': ['check_in', 'Check In', 'green', 'mdi-login'],
+            '1': ['check_out', 'Check Out', 'red', 'mdi-logout'],
+            '2': ['break_out', 'Break Out', 'amber', 'mdi-coffee'],
+            '3': ['break_in', 'Break In', 'sky', 'mdi-coffee'],
+            '4': ['overtime_in', 'Overtime In', 'indigo', 'mdi-login'],
+            '5': ['overtime_out', 'Overtime Out', 'indigo', 'mdi-logout']
+        };
+        let txTable = null;
+        function initTxTable() {
+            txTable = $('#attTxTable').DataTable({
+                dom: 'rtip',
+                processing: true,
+                serverSide: true,
+                responsive: true,
+                pageLength: 25,
+                ordering: false,
+                search: { search: $('#attSearch').val() || '' },
+                ajax: {
+                    url: AJAX_URL,
+                    type: 'POST',
+                    data: function(d) {
+                        d.action = 'list_transactions';
+                        d.emp_id = $('#filterEmployee').val() || '';
+                        d.from_date = $('#filterFromDate').val() || '';
+                        d.to_date = $('#filterToDate').val() || '';
+                    },
+                    dataSrc: function(json) {
+                        const s = json.summary || {}, n = v => Number(v || 0).toLocaleString('en-US');
+                        $('#attTxTiles [data-tx="punches"]').text(n(s.punches));
+                        $('#attTxTiles [data-tx="employees"]').text(n(s.employees));
+                        $('#attTxTiles [data-tx="days"]').text(n(s.days));
+                        $('#attTxTiles [data-tx="avg"]').text(s.days ? (s.punches / s.days).toFixed(1) : '0');
+                        $('#attTxCount').text(n(s.punches)).show();
+                        return json.data || [];
+                    }
+                },
+                columns: [
+                    { data: 'name', render: (name, type, row) => personCell(name, row) },
+                    { data: 'date', render: dateCell },
+                    { data: 'time', render: v => `<span class="att-time"><i class="mdi mdi-clock"></i>${esc(v)}</span>` },
+                    { data: 'seq', render: function(seq, type, row) {
+                        if (!seq) return '<span class="text-muted">&ndash;</span>';
+                        const cls = seq === 1 ? ' is-first' : (seq === row.of ? ' is-last' : '');
+                        const tag = seq === 1 ? t('first', 'First') : (seq === row.of ? t('last', 'Last') : '');
+                        return `<span class="att-seq${cls}" title="${esc(seq + ' / ' + row.of)}"><b>${seq}</b>${esc(t('of', 'of'))} ${row.of}${tag ? ' · ' + esc(tag) : ''}</span>`;
+                    } },
+                    { data: 'state', render: function(s) {
+                        const p = PUNCH_TYPES[String(s)];
+                        return p
+                            ? `<span class="sr-pill sr-pill-xs tone-${p[2]}"><i class="mdi ${p[3]}"></i>${esc(t(p[0], p[1]))}</span>`
+                            : `<span class="sr-pill sr-pill-xs tone-slate"><i class="mdi mdi-fingerprint"></i>${esc(t('punch', 'Punch'))}${s !== '' ? ' (' + esc(s) + ')' : ''}</span>`;
+                    } },
+                    { data: 'device', render: (d, type, row) => `<span class="att-dev"><i class="mdi mdi-fingerprint"></i><span><span class="sr-cell-title">${esc(d || '-')}</span>${row.area ? `<span class="sr-cell-sub">${esc(row.area)}</span>` : ''}</span></span>` }
+                ],
+                language: dtLanguage
+            });
+        }
+
+        // Daily records <-> Transactions. Employee, dates and search are shared; status tiles only apply to Daily records.
+        let view = 'records';
+        const activeTable = () => (view === 'transactions' ? txTable : table);
+        function setView(v) {
+            view = v === 'transactions' ? 'transactions' : 'records';
+            $('#attView .nav-link').removeClass('active').filter(`[data-view="${view}"]`).addClass('active');
+            const tx = view === 'transactions';
+            $('#attTiles, #attRecordsWrap').toggle(!tx);
+            $('#attTxTiles, #attTxWrap').toggle(tx);
+            if (tx && !txTable) { initTxTable(); return; }
+            activeTable().search($('#attSearch').val() || '').ajax.reload(() => activeTable().columns.adjust().responsive.recalc());
+        }
+        $('#attView').on('click', '.nav-link', function(e) {
+            e.preventDefault();
+            if ($(this).data('view') === view) return;
+            history.replaceState(null, '', $(this).attr('href'));
+            setView($(this).data('view'));
+        });
+
+        const reload = () => activeTable().ajax.reload();
         let searchTimer;
         $('#attSearch').on('input', function() {
             clearTimeout(searchTimer);
             const v = this.value;
-            searchTimer = setTimeout(() => table.search(v).draw(), 350);
+            searchTimer = setTimeout(() => activeTable().search(v).draw(), 350);
         });
         $('#filterEmployee').on('change', reload);
         // Status tiles + date filter: shared with the Employee Profile attendance tab (assets/js/attendance_ui.js)
         AttUI.bindTiles('#attTiles', function(g) { stateGroup = g; reload(); });
         AttUI.bindDateFilter({ range: '#attRange', from: '#filterFromDate', to: '#filterToDate', active: '', onChange: reload });
+        if (location.hash === '#transactions') setView('transactions');
 
         /* ---------------- Add / edit form ---------------- */
 
