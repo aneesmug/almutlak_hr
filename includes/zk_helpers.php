@@ -383,9 +383,20 @@ if (!function_exists('zk_sync_request_get')) {
 
     /** A pending/running request older than this is treated as abandoned (agent offline / crashed) */
     function zk_sync_request_is_stale(array $request) {
+        $running = ($request['status'] ?? '') === 'running';
+        // While running, the agent sends a progress heartbeat at least every 30s -
+        // 10 min of silence means it crashed / lost the connection.
+        if ($running && !empty($request['progress']['at'])) {
+            return time() - (strtotime($request['progress']['at']) ?: 0) > 600;
+        }
         $since = strtotime($request['picked_at'] ?? $request['requested_at'] ?? '') ?: 0;
-        $limit = ($request['status'] ?? '') === 'running' ? 7200 : 1800;
+        $limit = $running ? 7200 : 1800;
         return time() - $since > $limit;
+    }
+
+    /** Steps the agent reports while a "Sync ZKT" request runs (zk_sync_request.php action=progress) */
+    function zk_sync_progress_stages() {
+        return ['starting', 'db_connect', 'db_ok', 'devices', 'fetch', 'upload', 'finishing'];
     }
 
     function zk_sync_request_is_active($request) {

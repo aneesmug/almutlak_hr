@@ -157,5 +157,6 @@ function sync_status_payload($conDB) {
         'request' => $request,
         'agent_seen' => $seen,
         'agent_seen_ago' => $seenTs ? max(0, time() - $seenTs) : null,
+        'now' => date('Y-m-d H:i:s'),
     ];
 }

@@ -14,9 +14,11 @@
     network. Uses the same $LiveSyncUrl / $LiveSyncSecret as zk_biotime_export.ps1
     (read from that file - configure them once, there).
 
-    Cheap: one small request per minute, no database access unless a sync was
-    requested. If a sync is already running (lock file present) it waits for
-    the next minute.
+    Cheap: one small request every 5 seconds, no database access unless a sync
+    was requested. If a sync is already running (lock file present) it tells the
+    live app "busy" and picks the request up as soon as that run ends. While the
+    export runs, every step (sync_progress.json) is forwarded to the live app so
+    the Sync ZKT modal shows live status.
 
     SCHEDULING (Windows Task Scheduler, separate task "ZKT Sync Poll"):
       Program/script:  C:\Windows\System32\wscript.exe
@@ -78,30 +80,62 @@ function Invoke-Live([hashtable]$fields) {
     }
 }
 
-# A sync (scheduled or previous request) is still running -> check again next minute.
-# Polling now would claim the request while the export would just skip on its lock.
-if (Test-Path $LockFile) {
-    $lockAge = (Get-Date) - (Get-Item $LockFile).LastWriteTime
-    if ($lockAge.TotalMinutes -lt 120) { exit 0 }
+# Each Task Scheduler run (every minute) checks every $PollEverySeconds for ~$PollForSeconds,
+# so a click on "Sync ZKT" is picked up within a few seconds, not up to a minute.
+$PollEverySeconds = 5
+$PollForSeconds = 50
+$deadline = (Get-Date).AddSeconds($PollForSeconds)
+$request = $null
+while ($true) {
+    # A sync (scheduled or previous request) is still running -> tell the live app we're
+    # busy (the modal says so) but don't claim the request: the export would just skip
+    # on its lock.
+    $busy = $false
+    if (Test-Path $LockFile) {
+        $lockAge = (Get-Date) - (Get-Item $LockFile).LastWriteTime
+        if ($lockAge.TotalMinutes -lt 120) { $busy = $true }
+    }
+
+    $poll = Invoke-Live @{ action = 'poll'; busy = $(if ($busy) { '1' } else { '0' }) }
+    if ($null -eq $poll) { exit 1 }
+    if ($poll.status -ne 'success') {
+        Write-PollLog "ERROR: live app refused the poll - $($poll.message)"
+        exit 1
+    }
+    if ($null -ne $poll.request) { $request = $poll.request; break }
+    if ((Get-Date).AddSeconds($PollEverySeconds) -ge $deadline) { exit 0 }   # nothing requested - the normal case
+    Start-Sleep -Seconds $PollEverySeconds
 }
 
-$poll = Invoke-Live @{ action = 'poll' }
-if ($null -eq $poll) { exit 1 }
-if ($poll.status -ne 'success') {
-    Write-PollLog "ERROR: live app refused the poll - $($poll.message)"
-    exit 1
-}
-if ($null -eq $poll.request) { exit 0 }   # nothing requested - the normal case
-
-$requestId = [string]$poll.request.id
-$mode = [string]$poll.request.mode
+$requestId = [string]$request.id
+$mode = [string]$request.mode
 Write-PollLog "Sync requested from the app (id $requestId, mode $mode) - running zk_biotime_export.ps1$(if ($mode -eq 'resync') { ' -Resync' })."
 
+$ProgressFile = "$PSScriptRoot\sync_progress.json"
 $psArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $ExportScript)
 if ($mode -eq 'resync') { $psArgs += "-Resync" }
-Remove-Item "$PSScriptRoot\last_run.json" -Force -ErrorAction SilentlyContinue
-$proc = Start-Process -FilePath "powershell.exe" -ArgumentList $psArgs -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -Wait -PassThru
+Remove-Item "$PSScriptRoot\last_run.json", $ProgressFile -Force -ErrorAction SilentlyContinue
+$proc = Start-Process -FilePath "powershell.exe" -ArgumentList $psArgs -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru
+
+# Forward every step the export writes to sync_progress.json (the Sync ZKT modal shows
+# them); also a heartbeat every 30s so the live app knows the run is still alive.
+$lastSent = ''
+$lastSentAt = Get-Date
+while (-not $proc.HasExited) {
+    Start-Sleep -Milliseconds 1500
+    $text = ''
+    if (Test-Path $ProgressFile) {
+        try { $text = [System.IO.File]::ReadAllText($ProgressFile).Trim() } catch { $text = '' }
+    }
+    if (($text -and $text -ne $lastSent) -or ((Get-Date) - $lastSentAt).TotalSeconds -ge 30) {
+        $null = Invoke-Live @{ action = 'progress'; id = $requestId; progress = $(if ($text) { $text } else { $lastSent }) }
+        if ($text) { $lastSent = $text }
+        $lastSentAt = Get-Date
+    }
+}
+$proc.WaitForExit()
 $exitCode = $proc.ExitCode
+Remove-Item $ProgressFile -Force -ErrorAction SilentlyContinue
 
 $run = $null
 if (Test-Path "$PSScriptRoot\last_run.json") {

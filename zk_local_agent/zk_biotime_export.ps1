@@ -51,8 +51,8 @@ param(
 
 # ---- SETUP: fill these in ----
 $MssqlConnectionString  = "Server=192.168.9.185;Database=zkbiotime;User Id=zkbio;Password=@DmiN56539306#;"
-$LiveSyncUrl            = "https://sys.almutlak.local/zk_sync_import.php"
-$LiveSyncSecret         = "08d7b7df34b6fd1b7ea5dfe4aaf0c7cd00c34693d84e4d74b9d237bd1aa12f9b"
+$LiveSyncUrl            = "https://hr.almutlaksystem.com/zk_sync_import.php"
+$LiveSyncSecret         = "24a4988bd3f4ecf9261d04337915ab8f0897294cbdda94ddb4574630fd3fccbf"
 $BatchSize              = 2000   # punches per request
 $MaxBatchesPerRun       = 100    # safety cap per run (200,000 punches) - the next run continues
 $DefaultSyncDays        = 180    # used until the live app has reported its own setting
@@ -85,6 +85,20 @@ function Write-Log($message) {
 # report a "Sync ZKT" button run back to the live app)
 $script:LastError = ''
 $script:RunTotals = @{ sent = 0; inserted = 0; duplicates = 0; last_id = 0 }
+
+# Live step-by-step status: zk_sync_poll.ps1 forwards sync_progress.json to the live
+# app while a "Sync ZKT" button run is going, so the modal shows every step.
+$ProgressFile = "$PSScriptRoot\sync_progress.json"
+$script:Progress = @{}
+function Set-SyncProgress([string]$stage, [hashtable]$values = @{}) {
+    $script:Progress.stage = $stage
+    foreach ($k in $values.Keys) { $script:Progress[$k] = $values[$k] }
+    try {
+        $tmp = "$ProgressFile.tmp"
+        [System.IO.File]::WriteAllText($tmp, ($script:Progress | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -Path $tmp -Destination $ProgressFile -Force
+    } catch { }
+}
 
 # Legacy MSSQL nvarchar text (device aliases/work codes typed on device
 # keypads over the years) can contain lone/unpaired UTF-16 surrogate
@@ -210,6 +224,7 @@ function Invoke-Sync {
         Write-Log "Resync requested - sending the whole $($state.syncDays)-day window again."
     }
     $windowFrom = (Get-Date).Date.AddDays( - ($state.syncDays - 1))
+    Set-SyncProgress 'db_connect' @{ sync_days = $state.syncDays; window_from = $windowFrom.ToString('yyyy-MM-dd'); batch_size = $BatchSize; batch = 0; fetched = 0; sent = 0; inserted = 0; duplicates = 0 }
 
     try {
         $connection = New-Object System.Data.SqlClient.SqlConnection($MssqlConnectionString)
@@ -218,6 +233,7 @@ function Invoke-Sync {
         Write-Log "ERROR: could not connect to MSSQL - $($_.Exception.Message)"
         return 1
     }
+    Set-SyncProgress 'db_ok'
 
     # --- Device/terminal live status (confirmed schema against the real
     #     iclock_terminal table - state=1 means online, last_activity is the
@@ -245,6 +261,7 @@ function Invoke-Sync {
             }
         }
         $reader2.Close()
+        Set-SyncProgress 'devices' @{ devices = $terminals.Count }
     } catch {
         Write-Log "WARNING: iclock_terminal query failed (non-fatal, punch sync still proceeds) - $($_.Exception.Message)"
     }
@@ -256,6 +273,7 @@ function Invoke-Sync {
 
     while ($true) {
         $batchNo++
+        Set-SyncProgress 'fetch' @{ batch = $batchNo }
         $punches = @()
         $maxId = $state.lastId
         $lastTime = ''
@@ -297,6 +315,7 @@ function Invoke-Sync {
         $sendTerminals = if ($batchNo -eq 1) { $terminals } else { @() }
         if ($punches.Count -eq 0 -and $sendTerminals.Count -eq 0) { break }
 
+        Set-SyncProgress 'upload' @{ fetched = ($totalSent + $punches.Count); last_time = $lastTime; message = "$($punches.Count) punch(es) in this batch" }
         $response = Send-Batch $punches $sendTerminals
         if ($null -eq $response) {
             Write-Log "Stopped after $($batchNo - 1) batch(es); the next run continues after BioTime id $($state.lastId)."
@@ -314,6 +333,7 @@ function Invoke-Sync {
         $totalInserted += [int]$response.inserted
         $totalDuplicate += [int]$response.skipped_duplicate
         $totalOld += [int]$response.skipped_old
+        Set-SyncProgress 'upload' @{ sent = $totalSent; inserted = $totalInserted; duplicates = $totalDuplicate; message = '' }
         if ($batchNo -eq 1) {
             Write-Log "Device status: $($response.devices_synced)/$($response.terminals_received) device(s) state-synced."
         }
@@ -339,6 +359,7 @@ function Invoke-Sync {
     }
 
     $connection.Close()
+    Set-SyncProgress 'finishing' @{ sent = $totalSent; inserted = $totalInserted; duplicates = $totalDuplicate }
     Write-Log "Run done: $totalSent punch(es) sent, $totalInserted new, $totalDuplicate duplicate(s), $totalOld outside the $($state.syncDays)-day window. Last BioTime id $($state.lastId)."
     $script:RunTotals = @{ sent = $totalSent; inserted = $totalInserted; duplicates = $totalDuplicate; last_id = $state.lastId }
     if ($failed) { return 1 }
