@@ -127,7 +127,7 @@ function editEmpBuildHtml(d) {
             <option value="">${__('no_probation_period_option', 'No Probation Period')}</option>
             <option value="3"${parseInt(v('probation'), 10) === 3 ? ' selected' : ''}>3 ${__('months', 'Months')}</option>
             <option value="6"${parseInt(v('probation'), 10) === 6 ? ' selected' : ''}>6 ${__('months', 'Months')}</option>
-        </select>`, 'col-md-2', 'fa-hourglass-half')}
+        </select>`, 'col-md-3', 'fa-hourglass-half')}
     `;
 
     const other = `
@@ -315,7 +315,9 @@ async function openEditEmployeeModal(empId, opts) {
 
     let d;
     try {
+        const ready = newEmpEnsureSelect2(); // select2 css / js, when this page doesn't load them
         d = await editEmpPost({ action: 'get_edit_data', emp_id: empId });
+        await ready;
         if (d.status !== 'success') throw new Error(d.message || 'Failed to load employee.');
     } catch (error) {
         await Swal.fire(__('error', 'Error'), error.message || 'Failed to load employee.', 'error');

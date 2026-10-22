@@ -19,6 +19,37 @@ function newEmpOptionsHtml(items, valueKey, labelEnKey, labelArKey, includeBlank
     return html;
 }
 
+// Base URL of the system root, from this script's own URL (works from sub-folder pages too)
+const NEW_EMP_BASE = (document.currentScript && document.currentScript.src)
+    ? document.currentScript.src.replace(/assets\/js\/newEmployeeModal\.js.*$/, '')
+    : './';
+
+// The Add / Edit Employee popups use select2, but not every page loads it (e.g. dashbydepart.php
+// had no select2 stylesheet -> dropdowns rendered as a stacked list of letters). Load what's missing.
+let newEmpSelect2Ready = null;
+function newEmpEnsureSelect2() {
+    if (newEmpSelect2Ready) return newEmpSelect2Ready;
+    const hasCss = [...document.styleSheets].some(ss => /select2(\.min)?\.css/.test(ss.href || ''))
+        || !!document.querySelector('link[href*="select2"]');
+    if (!hasCss) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = NEW_EMP_BASE + 'plugins/select2/css/select2.min.css';
+        document.head.appendChild(link);
+    }
+    if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
+        newEmpSelect2Ready = Promise.resolve();
+    } else {
+        newEmpSelect2Ready = new Promise(resolve => {
+            const sc = document.createElement('script');
+            sc.src = NEW_EMP_BASE + 'plugins/select2/js/select2.min.js';
+            sc.onload = sc.onerror = () => resolve();
+            document.head.appendChild(sc);
+        });
+    }
+    return newEmpSelect2Ready;
+}
+
 function newEmpInitSelect2() {
     if (window.jQuery && typeof jQuery.fn.select2 === 'function') {
         jQuery('.new-emp-select2').each(function() {
@@ -449,6 +480,7 @@ function newEmpDraftsTableHtml(drafts) {
 // Type picker
 // ---------------------------------------------------------------------------
 async function openNewEmployeeTypeModal() {
+    newEmpEnsureSelect2();
     Swal.fire({
         title: __('loading', 'Loading'),
         allowOutsideClick: false,

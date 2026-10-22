@@ -228,7 +228,22 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
             .dd-tile-pct { font-size: 12px; color: var(--sr-muted, #64748b); }
             .dd-tile-pct b { color: var(--sr-text-2, #334155); font-weight: 700; }
             /* Unassigned / unlisted buckets: same accent, dashed outline marks them as a catch-all */
-            .dd-tile.drilldown-tile-unassigned { border-style: dashed; background: var(--sr-surface-2, #f8fafc); }
+            /* Unlisted / unassigned buckets: same layout, all gray (dashed outline marks them as a catch-all) */
+            .dd-tile.drilldown-tile-unassigned { border-style: dashed; border-color: #cbd5e1; background: var(--sr-surface-2, #f8fafc); }
+            .dd-tile.drilldown-tile-unassigned .dd-tile-ico { background: #e2e8f0; color: #64748b; }
+            .dd-tile.drilldown-tile-unassigned .dd-tile-name,
+            .dd-tile.drilldown-tile-unassigned .dd-tile-count { color: #475569; }
+            .dd-tile.drilldown-tile-unassigned .dd-tile-bar { background: #e2e8f0; }
+            .dd-tile.drilldown-tile-unassigned .dd-tile-bar > span { background: #94a3b8; }
+            .dd-tile.drilldown-tile-unassigned::before { background: #94a3b8; }
+            .dd-tile.drilldown-tile-unassigned:hover,
+            .dd-tile.drilldown-tile-unassigned:focus-visible { border-color: #94a3b8; box-shadow: 0 8px 24px rgba(100, 116, 139, .18); }
+            .dd-tile.drilldown-tile-unassigned:hover .dd-tile-go { color: #64748b; }
+            html.app-dark .dd-tile.drilldown-tile-unassigned { border-color: #3a4560; }
+            html.app-dark .dd-tile.drilldown-tile-unassigned .dd-tile-ico { background: #252e44; color: #94a3b8; }
+            html.app-dark .dd-tile.drilldown-tile-unassigned .dd-tile-name,
+            html.app-dark .dd-tile.drilldown-tile-unassigned .dd-tile-count { color: #cbd5e1; }
+            html.app-dark .dd-tile.drilldown-tile-unassigned .dd-tile-bar { background: #252e44; }
 
             /* Access scope (same design as dashboard.php) */
             .dash-scope { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px; }
