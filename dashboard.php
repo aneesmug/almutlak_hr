@@ -885,30 +885,6 @@ if(isset($_POST['submit'])){
 						<div class="sr-head">
 							<div>
 								<h1><?= __('dashboard') ?></h1>
-								<?php
-								// Saudi official Hijri date (Umm al-Qura calendar, Riyadh time)
-								$hijri_today = '';
-								if (class_exists('IntlDateFormatter')) {
-									$hijri_fmt = new IntlDateFormatter(
-										'ar_SA@calendar=islamic-umalqura;numbers=latn',
-										IntlDateFormatter::FULL, IntlDateFormatter::NONE, 'Asia/Riyadh',
-										IntlDateFormatter::TRADITIONAL, 'd MMMM y'
-									);
-									$hijri_today = $hijri_fmt->format(time()) . ' هـ';
-								}
-								?>
-								<div class="sr-date-chips">
-									<span class="sr-date-chip tone-indigo">
-										<i class="fa fa-calendar-alt"></i>
-										<span><small><?= __('gregorian', 'Gregorian') ?></small><b><?= date('l, d F Y') ?></b></span>
-									</span>
-									<?php if ($hijri_today): ?>
-									<span class="sr-date-chip tone-green">
-										<i class="fa fa-moon"></i>
-										<span><small><?= __('hijri', 'Hijri') ?></small><b><bdi dir="rtl"><?= htmlspecialchars($hijri_today) ?></bdi></b></span>
-									</span>
-									<?php endif; ?>
-								</div>
 							</div>
 							<div class="sr-head-actions">
 								<a href="reg_employee.php" class="sr-btn"><i class="fa fa-users"></i> <?= __('all_employees') ?></a>

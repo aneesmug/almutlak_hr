@@ -218,7 +218,46 @@ include(__DIR__ . '/session_config_js.php');
                 </div>
             </li>
         </ul>
+        <?php
+            // Today's date (Gregorian + Saudi official Hijri, Umm al-Qura / Riyadh time), centred in the bar
+            $tbxHijri = '';
+            if (class_exists('IntlDateFormatter')) {
+                $tbxHijriFmt = new IntlDateFormatter(
+                    'ar_SA@calendar=islamic-umalqura;numbers=latn',
+                    IntlDateFormatter::FULL, IntlDateFormatter::NONE, 'Asia/Riyadh',
+                    IntlDateFormatter::TRADITIONAL, 'd MMMM y'
+                );
+                $tbxHijri = $tbxHijriFmt->format(time()) . ' هـ';
+            }
+        ?>
+        <div class="tbx-dates">
+            <span class="tbx-date tone-indigo">
+                <i class="fa-duotone fa-calendar-days"></i>
+                <span><small><?= __('gregorian', 'Gregorian') ?></small><b><?= date('l, d F Y') ?></b></span>
+            </span>
+            <?php if ($tbxHijri): ?>
+            <span class="tbx-date tone-green">
+                <i class="fa-duotone fa-moon"></i>
+                <span><small><?= __('hijri', 'Hijri') ?></small><b><bdi dir="rtl"><?= $tbxEsc($tbxHijri) ?></bdi></b></span>
+            </span>
+            <?php endif; ?>
+        </div>
                         <style>
+                        /* ---- Today's date chips (centre of the bar) ---- */
+                        .navbar-custom { position:relative; }
+                        .tbx-dates { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; gap:8px; pointer-events:none; }
+                        .tbx-date { display:inline-flex; align-items:center; gap:8px; padding:4px 12px 4px 5px; border:1px solid var(--c); border-radius:10px; background:var(--bg); color:var(--c); line-height:1.15; white-space:nowrap; }
+                        .tbx-date.tone-indigo { --c:#4f46e5; --bg:#eef2ff; }
+                        .tbx-date.tone-green { --c:#15803d; --bg:#f0fdf4; }
+                        .tbx-date > i { width:26px; height:26px; display:inline-grid; place-items:center; border-radius:7px; background:#fff; font-size:13px; box-shadow:0 1px 2px rgba(0,0,0,.06); --fa-primary-color:var(--c); --fa-secondary-color:var(--c); --fa-secondary-opacity:.4; }
+                        .tbx-date small { display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; opacity:.75; }
+                        .tbx-date b { display:block; font-size:13px; font-weight:700; }
+                        [dir="rtl"] .tbx-date { padding:4px 5px 4px 12px; }
+                        html.app-dark .tbx-date { background:rgba(255,255,255,.04); }
+                        html.app-dark .tbx-date.tone-indigo { --c:#a5b4fc; }
+                        html.app-dark .tbx-date.tone-green { --c:#86efac; }
+                        html.app-dark .tbx-date > i { background:rgba(255,255,255,.08); }
+                        @media (max-width: 1399px) { .tbx-dates { display:none; } }
                         /* ---- Top bar actions (search / language / notifications / user) ---- */
                         .topbar-right-menu.tbx { display:flex; align-items:center; gap:8px; height:70px; }
                         .topbar-right-menu.tbx > li { float:none; position:relative; }
