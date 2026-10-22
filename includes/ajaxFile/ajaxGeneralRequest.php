@@ -62,7 +62,7 @@ try {
         }
 
         // Validate required fields
-        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority']) || empty($_POST['comp_no'])) {
+        if (empty($_POST['inv_no']) || empty($_POST['request_title']) || empty($_POST['department_to']) || empty($_POST['request_category']) || empty($_POST['priority']) || empty($_POST['comp_no']) || empty($_POST['user_dept'])) {
             $response['message'] = __('fill_out_form_error', 'Please fill all required fields');
             echo json_encode($response);
             exit;
@@ -91,6 +91,12 @@ try {
         $comp_no = (int)($_POST['comp_no'] ?? 0);
         if ($comp_no <= 0 || !array_key_exists($comp_no, gr_company_options($conDB))) {
             $response['message'] = __('select_valid_company', 'Please select a valid company');
+            echo json_encode($response);
+            exit;
+        }
+        // Requester department (defaults to the user's own, may be changed) must exist
+        if ($user_dept <= 0 || !array_key_exists($user_dept, gr_department_options($conDB))) {
+            $response['message'] = __('select_valid_department', 'Please select a valid department');
             echo json_encode($response);
             exit;
         }

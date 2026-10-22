@@ -169,4 +169,8 @@ INSERT IGNORE INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUE
 ('waiting_for', 'en', 'Waiting for'),
 ('waiting_for', 'ar', 'بانتظار'),
 ('your_decision', 'en', 'Your decision'),
-('your_decision', 'ar', 'قرارك');
+('your_decision', 'ar', 'قرارك'),
+('select_department', 'en', 'Select department'),
+('select_department', 'ar', 'اختر القسم'),
+('select_valid_department', 'en', 'Please select a valid department'),
+('select_valid_department', 'ar', 'يرجى اختيار قسم صحيح');

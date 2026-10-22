@@ -135,3 +135,14 @@ function gr_category_label($value) {
     $map = gr_categories();
     return $map[$value] ?? getDisplayName((string)$value);
 }
+
+// Departments a request can be raised from: id => label (Arabic name in RTL).
+function gr_department_options($conDB) {
+    global $is_rtl;
+    $out = [];
+    $res = mysqli_query($conDB, "SELECT `id`, `dep_nme`, `dep_nme_ar` FROM `department` ORDER BY `dep_nme`");
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $out[(int)$r['id']] = (($is_rtl ?? false) && !empty($r['dep_nme_ar'])) ? $r['dep_nme_ar'] : getDisplayName($r['dep_nme']);
+    }
+    return $out;
+}
