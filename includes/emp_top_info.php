@@ -261,8 +261,8 @@ if ($emprow['status'] == 1 && $user_type === 'archiving') {
 			$ma['manage'][] = "<div class=\"menu-item text-info\" onclick=\"window.open('profile.php?emp_id=" . rawurlencode((string)$emprow['empid']) . "', '_blank')\" role=\"button\"><i class=\"fa fa-id-badge\"></i><span>" . __('employee_profile', 'Employee Profile') . "</span></div>";
 		}
 
-		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant)
-		if (!in_array($current_page_name, ["edit_employee.php"]) && $can_modify_employee) {
+		// Edit Employee (system admin, dept hr, or 'access_edit_employee' special access grant) - only on view_employee.php
+		if ($current_page_name === 'view_employee.php' && $can_modify_employee) {
 			$ma['manage'][] = "<div class=\"menu-item text-primary\" data-edit-employee=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
 		}
 
@@ -331,7 +331,9 @@ if ($emprow['status'] == 1) {
 		$maDraft[] = "<div class=\"menu-item text-primary addEmpDocuAtter\" data-id=\"" . htmlspecialchars($emprow['eid']) . "\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-solid fa-upload\"></i><span>" . __('add_documents') . "</span></div>";
 	}
 	if (!in_array($current_page_name, ["edit_employee.php"]) && !empty($can_modify_employee)) {
-		$maDraft[] = "<div class=\"menu-item text-primary\" data-edit-employee=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+		if ($current_page_name === 'view_employee.php') {
+			$maDraft[] = "<div class=\"menu-item text-primary\" data-edit-employee=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-user-pen\"></i><span>" . __('edit') . "</span></div>";
+		}
 		$maDraft[] = "<div class=\"menu-item text-info addnote\" data-emp_id=\"" . htmlspecialchars($emprow['empid']) . "\" role=\"button\"><i class=\"fa fa-book-user\"></i><span>" . __('note') . "</span></div>";
 	}
 	$moreActionsHtml = '<div class="ma-empty" style="padding-bottom:8px;"><i class="fa fa-file-pen"></i><p>' . __('employee_is_draft', 'This employee is in Draft. Change status to Active from Edit Employee to enable all actions.') . '</p></div>';
@@ -568,7 +570,8 @@ if ($isEmployee !== true) {
 					<?php if ($ehRehiredAs !== ''): ?>
 						<a href="view_employee.php?emp_id=<?= urlencode($ehRehiredAs) ?>" class="eab-btn eab-btn-success"><i class="mdi mdi-account-arrow-right"></i> <?= str_replace('{emp_id}', htmlspecialchars($ehRehiredAs), __('rehired_as_open', 'Re-hired as #{emp_id}')) ?></a>
 					<?php elseif (!empty($can_modify_employee)): ?>
-						<a href="edit_employee.php?emp_id=<?= urlencode((string)$emprow['empid']) ?>" data-edit-employee="<?= htmlspecialchars((string)$emprow['empid']) ?>" class="eab-btn eab-btn-success"><i class="mdi <?= $ehIsRehire ? 'mdi-account-plus' : 'mdi-account-check' ?>"></i> <?= $ehIsRehire ? __('rehire_employee', 'Re-hire Employee') : __('reactivate_employee', 'Reactivate Employee') ?></a>
+						<?php // the edit modal only opens on view_employee.php - elsewhere edit_employee.php redirects there with it open ?>
+						<a href="edit_employee.php?emp_id=<?= urlencode((string)$emprow['empid']) ?>"<?php if ($current_page_name === 'view_employee.php'): ?> data-edit-employee="<?= htmlspecialchars((string)$emprow['empid']) ?>"<?php endif; ?> class="eab-btn eab-btn-success"><i class="mdi <?= $ehIsRehire ? 'mdi-account-plus' : 'mdi-account-check' ?>"></i> <?= $ehIsRehire ? __('rehire_employee', 'Re-hire Employee') : __('reactivate_employee', 'Reactivate Employee') ?></a>
 					<?php endif ?>
 					<a href="./end_of_service_print.php?emp_id=<?= $emprow['empid']; ?>" target="_blank" class="eab-btn eab-btn-danger"><i class="mdi mdi-printer"></i> <?= __('print_end_of_service') ?></a>
 				<?php endif ?>

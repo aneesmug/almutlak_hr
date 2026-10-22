@@ -35,3 +35,73 @@ body.rtl .emp-docs .doc-item-info { text-align: start; }
 .emp-docs .docs-empty { padding: 30px 12px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 14px; }
 .emp-docs .docs-empty i { display: block; font-size: 30px; margin-bottom: 8px; color: #a5b4fc; }
 .emp-docs .docs-empty b { display: block; color: #0f172a; margin-bottom: 2px; }
+
+/* ===== view_employee.php Documents tab (redesign): toolbar + preview cards + modal viewer ===== */
+.emp-docs .vd-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 10px; border-radius: 14px; background: #f8fafc; border: 1px solid #eef1f5; }
+.emp-docs .vd-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.emp-docs .vd-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid #e2e8f0; background: #fff; color: #475569; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all .15s; }
+.emp-docs .vd-chip span { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; background: #eef2f6; color: #475569; }
+.emp-docs .vd-chip:hover { border-color: #a5b4fc; color: #4338ca; }
+.emp-docs .vd-chip.active { background: linear-gradient(135deg, #6366f1, #4338ca); border-color: transparent; color: #fff; box-shadow: 0 4px 10px rgba(99, 102, 241, .25); }
+.emp-docs .vd-chip.active span { background: rgba(255, 255, 255, .22); color: #fff; }
+.emp-docs .vd-search { position: relative; flex: 0 1 240px; }
+.emp-docs .vd-search i { position: absolute; top: 50%; inset-inline-start: 12px; transform: translateY(-50%); font-size: 13px; color: #94a3b8; }
+.emp-docs .vd-search input { width: 100%; height: 34px; padding-inline: 34px 12px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-size: 13px; color: #0f172a; outline: 0; }
+.emp-docs .vd-search input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(99, 102, 241, .15); }
+
+.emp-docs .vd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.emp-docs .vd-card { --doc: #64748b; display: flex; flex-direction: column; border-radius: 16px; background: #fff; border: 1px solid #e8ebf1; overflow: hidden; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.emp-docs .vd-card[hidden] { display: none; }
+.emp-docs .vd-card:hover { border-color: color-mix(in srgb, var(--doc) 45%, white); box-shadow: 0 10px 24px rgba(15, 23, 42, .09); transform: translateY(-2px); }
+.emp-docs .vd-thumb { position: relative; display: flex; align-items: center; justify-content: center; height: 120px; width: 100%; padding: 0; border: 0; cursor: pointer; overflow: hidden;
+	background: radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--doc) 16%, white) 0 40px, transparent 41px), linear-gradient(160deg, color-mix(in srgb, var(--doc) 10%, white), color-mix(in srgb, var(--doc) 4%, white)); }
+.emp-docs .vd-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.emp-docs .vd-thumb-icon { width: 62px; height: 62px; border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; color: var(--doc); background: #fff; box-shadow: 0 8px 20px color-mix(in srgb, var(--doc) 22%, transparent); transition: transform .2s; }
+.emp-docs .vd-card:hover .vd-thumb-icon { transform: scale(1.06) rotate(-3deg); }
+.emp-docs .vd-ext { position: absolute; top: 10px; inset-inline-start: 10px; padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .4px; color: #fff; background: var(--doc); }
+.emp-docs .vd-thumb-hover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 700; color: #fff; background: color-mix(in srgb, var(--doc) 70%, rgba(15, 23, 42, .4)); opacity: 0; transition: opacity .15s; }
+.emp-docs .vd-thumb:hover .vd-thumb-hover, .emp-docs .vd-thumb:focus-visible .vd-thumb-hover { opacity: 1; }
+.emp-docs .vd-body { padding: 12px 14px 4px; min-width: 0; }
+.emp-docs .vd-name { margin: 0 0 6px; font-size: 14px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.emp-docs .vd-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: #64748b; }
+.emp-docs .vd-meta i { margin-inline-end: 3px; opacity: .75; }
+.emp-docs .vd-missing { color: #dc2626; font-weight: 700; }
+.emp-docs .vd-card.is-missing .vd-thumb { filter: grayscale(1); opacity: .7; }
+.emp-docs .vd-actions { display: flex; gap: 6px; padding: 10px 14px 14px; margin-top: auto; }
+.vd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 34px; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; color: #475569 !important; font-size: 13px; font-weight: 700; text-decoration: none !important; cursor: pointer; transition: all .15s; }
+.vd-btn:hover { background: #f1f5f9; color: #0f172a !important; }
+.emp-docs .vd-btn-main, .vd-view .vd-btn-main { flex: 1; color: var(--doc) !important; border-color: color-mix(in srgb, var(--doc) 30%, white); background: color-mix(in srgb, var(--doc) 7%, white); }
+.emp-docs .vd-btn-main:hover, .vd-view .vd-btn-main:hover { color: #fff !important; background: var(--doc); border-color: var(--doc); }
+.emp-docs .vd-btn-del:hover { color: #fff !important; background: #dc2626; border-color: #dc2626; }
+.emp-docs .vd-noresult { padding: 26px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 14px; }
+.emp-docs .vd-noresult i { margin-inline-end: 6px; }
+@media (max-width: 575px) { .emp-docs .vd-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } .emp-docs .vd-search { flex: 1 1 100%; } .emp-docs .vd-btn-main { font-size: 0; gap: 0; } .emp-docs .vd-btn-main i { font-size: 13px; } }
+
+/* modal viewer */
+.vd-view-swal.swal2-popup { padding: 0 !important; border-radius: 18px; overflow: hidden; }
+.vd-view-swal .swal2-html-container { margin: 0 !important; padding: 0 !important; text-align: start; overflow: hidden; }
+.vd-view-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #eef1f5; background: linear-gradient(180deg, color-mix(in srgb, var(--doc) 7%, white), #fff); }
+.vd-view-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; color: var(--doc); background: color-mix(in srgb, var(--doc) 13%, white); }
+.vd-view-ic .vd-thumb-icon { display: contents; }
+.vd-view-ic img { width: 100%; height: 100%; object-fit: cover; }
+.vd-view-title { flex: 1; min-width: 0; }
+.vd-view-title b { display: block; font-size: 15px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vd-view-title small { font-size: 12px; color: #64748b; }
+.vd-view-tools { display: flex; gap: 6px; }
+.vd-view-body { height: min(78vh, 820px); background: #f1f5f9; }
+.vd-view-body iframe { width: 100%; height: 100%; border: 0; display: block; }
+.vd-view-img { height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
+.vd-view-img img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 10px 30px rgba(15, 23, 42, .18); }
+.vd-view-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #64748b; }
+.vd-view-empty > i { font-size: 54px; color: #cbd5e1; }
+
+/* dark */
+html.app-dark .emp-docs .vd-toolbar { background: #1d2436; border-color: #2a3348; }
+html.app-dark .emp-docs .vd-chip, html.app-dark .emp-docs .vd-search input, html.app-dark .vd-btn { background: #242a35; border-color: #323a48; color: #cbd5e1 !important; }
+html.app-dark .emp-docs .vd-chip span { background: #323a48; color: #cbd5e1; }
+html.app-dark .emp-docs .vd-card { background: #242a35; border-color: #323a48; }
+html.app-dark .emp-docs .vd-thumb { background: linear-gradient(160deg, color-mix(in srgb, var(--doc) 20%, #242a35), #1d2436); }
+html.app-dark .emp-docs .vd-thumb-icon { background: #1d2436; }
+html.app-dark .emp-docs .vd-name, html.app-dark .vd-view-title b { color: #e5e7eb; }
+html.app-dark .vd-view-head { background: #1d2436; border-color: #2a3348; }
+html.app-dark .vd-view-body { background: #161c2a; }

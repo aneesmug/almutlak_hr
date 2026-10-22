@@ -784,9 +784,6 @@ $fallback_dept_filter_plain = (!$can_see_all_employees && !$has_explicit_scope_r
                                                         <td class="text-right">
                                                             <div class="sr-actions">
                                                                 <a class="sr-open-btn" href="view_employee.php?emp_id=<?= urlencode($emp_id) ?>"><i class="mdi mdi-eye"></i> <?= __('open') ?></a>
-                                                                <?php if ($emp_status == "1" && ($is_system_admin || $user_type === 'hr_operations' || $user_type === 'hr_recruitment')): ?>
-                                                                    <a class="sr-more-btn" href="edit_employee.php?emp_id=<?= urlencode($emp_id) ?>" data-edit-employee="<?= htmlspecialchars($emp_id) ?>" title="<?= __('edit') ?>"><i class="mdi mdi-pencil"></i></a>
-                                                                <?php endif; ?>
                                                             </div>
                                                         </td>
                                                     </tr>

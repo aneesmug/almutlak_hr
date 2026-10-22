@@ -826,6 +826,12 @@ if (mysqli_num_rows($query) == 1) {
 				box-shadow: 0 4px 10px color-mix(in srgb, var(--ps) 25%, transparent);
 			}
 			.profile-section-header .psh-btn:hover { filter: brightness(1.08); }
+			/* Dynamics 365 header button - Microsoft Dynamics blue gradient */
+			.profile-section-header .psh-btn-d365 { background: linear-gradient(135deg, #0078d4 0%, #0b53ce 55%, #002050 100%); box-shadow: 0 4px 12px rgba(0, 120, 212, .3); }
+			.profile-section-header .psh-btn-d365 .psh-arrow { font-size: 11px; opacity: .8; transition: transform .15s; }
+			.profile-section-header .psh-btn-d365:hover .psh-arrow { transform: translateX(3px); }
+			[dir="rtl"] .profile-section-header .psh-btn-d365 .psh-arrow { transform: scaleX(-1); }
+			[dir="rtl"] .profile-section-header .psh-btn-d365:hover .psh-arrow { transform: scaleX(-1) translateX(3px); }
 			.profile-section .psh-subtitle { display: flex; align-items: center; gap: 8px; margin: 16px 4px 10px; font-size: 13.5px; font-weight: 800; color: #0f172a; }
 			.profile-section .psh-subtitle i { color: var(--ps); }
 			.profile-section .psh-empty { margin: 4px; padding: 22px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 12px; }
@@ -852,16 +858,19 @@ if (mysqli_num_rows($query) == 1) {
 			[dir="rtl"] .vac-sum-tile::before { inset: 0 0 0 auto; }
 			.vac-sum-tile > i { flex: none; width: 46px; height: 46px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; font-size: 19px; color: var(--c); background: color-mix(in srgb, var(--c) 13%, white); }
 			.vac-sum-tile small { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; }
-			.vac-sum-tile b { font-size: 24px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
-			.vac-sum-tile b span { font-size: 12px; font-weight: 600; color: #64748b; margin-inline-start: 4px; }
+			.vac-sum-tile b { display: flex; align-items: flex-end; margin-top: 2px; font-size: 24px; font-weight: 800; line-height: 1.2; color: #0f172a; font-variant-numeric: tabular-nums; }
+			.vac-sum-tile b .vac-unit { font-size: 12px; font-weight: 600; color: #64748b; margin-inline-start: 5px; padding-bottom: 4px; line-height: 1; } /* class only - the number odometer (sr-odo) wraps digits in spans */
 			.vac-sum-bar { margin-bottom: 20px; padding: 12px 16px; border-radius: 14px; background: #fff; border: 1px solid #e8ebf1; }
-			.vac-sum-bar-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px; }
+			.vac-sum-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 700; color: #64748b; margin-bottom: 8px; line-height: 1.2; }
+			.vac-sum-bar-head > span { display: inline-flex; align-items: center; gap: 6px; }
+			.vac-sum-used .vac-pct { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #c2410c; background: #fff1e6; }
 			.vac-sum-bar-track { height: 10px; border-radius: 999px; background: #eef1f5; overflow: hidden; }
 			.vac-sum-bar-track span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #f59e0b, #ea580c); }
 			.vac-sum-empty { margin-bottom: 20px; padding: 20px; text-align: center; color: #64748b; border: 1px dashed #d8dde6; border-radius: 14px; }
 			@media (max-width: 767px) { .vac-sum { grid-template-columns: 1fr; } }
 			html.app-dark .vac-sum-tile, html.app-dark .vac-sum-bar { background: #242a35; border-color: #323a48; }
 			html.app-dark .vac-sum-tile b, html.app-dark .profile-section .psh-subtitle { color: #e5e7eb; }
+			html.app-dark .vac-sum-used .vac-pct { color: #fdba74; background: rgba(234,88,12,.15); }
 
 			.profile-section-header {
 				display: flex; align-items: center; gap: 12px;
@@ -1913,7 +1922,7 @@ if (mysqli_num_rows($query) == 1) {
 														<span class="psh-icon"><i class="fa fa-cloud"></i></span>
 														<span><?= __('d365_details', 'Dynamics 365') ?><?= $d365Info['environment'] !== '' ? ' (' . htmlspecialchars($d365Info['environment']) . ')' : '' ?></span>
 														<?php if (!empty($show_d365_tab)): ?>
-														<a href="javascript:void(0)" onclick="var l=document.getElementById('d365TabLink'); if(l){ l.click(); }" style="margin-left:auto;color:#fff;font-size:13px;font-weight:500;text-decoration:underline"><?= __('open_d365_tab', 'Open D365 tab') ?></a>
+														<button type="button" class="psh-btn psh-btn-d365" onclick="var l=document.getElementById('d365TabLink'); if(l){ l.click(); }"><i class="fa fa-cloud"></i><?= __('open_d365_tab', 'Open D365 tab') ?><i class="fa fa-arrow-right psh-arrow"></i></button>
 														<?php endif; ?>
 													</div>
 													<div class="profile-section-body">
@@ -2040,13 +2049,13 @@ if (mysqli_num_rows($query) == 1) {
 											<?php $vac_used_pct = $vac_total > 0 ? min(100, max(0, round($vac_used / $vac_total * 100))) : 0; ?>
 											<?php if ($vac_total > 0 || $vac_used > 0 || $vac_available > 0): ?>
 											<div class="vac-sum" title="<?= __('vacation_balance_summary') ?>">
-												<div class="vac-sum-tile" style="--c: #2563eb;"><i class="fa fa-calendar-days"></i><div><small><?= __('total_vacation_days') ?></small><b><?= number_format($vac_total, 1) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
-												<div class="vac-sum-tile" style="--c: #d97706;"><i class="fa fa-plane-departure"></i><div><small><?= __('used_days') ?></small><b><?= number_format($vac_used, 1) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
-												<div class="vac-sum-tile" style="--c: #16a34a;"><i class="fa fa-umbrella-beach"></i><div><small><?= __('available_balance') ?></small><b><?= number_format($vac_available, 2) ?><span><?= __('day_s', 'Days') ?></span></b></div></div>
+												<div class="vac-sum-tile" style="--c: #2563eb;"><i class="fa fa-calendar-days"></i><div><small><?= __('total_vacation_days') ?></small><b><?= number_format($vac_total, 1) ?><span class="vac-unit"><?= __('day_s', 'Days') ?></span></b></div></div>
+												<div class="vac-sum-tile" style="--c: #d97706;"><i class="fa fa-plane-departure"></i><div><small><?= __('used_days') ?></small><b><?= number_format($vac_used, 1) ?><span class="vac-unit"><?= __('day_s', 'Days') ?></span></b></div></div>
+												<div class="vac-sum-tile" style="--c: #16a34a;"><i class="fa fa-umbrella-beach"></i><div><small><?= __('available_balance') ?></small><b><?= number_format($vac_available, 2) ?><span class="vac-unit"><?= __('day_s', 'Days') ?></span></b></div></div>
 											</div>
 											<?php if ($vac_total > 0): ?>
 											<div class="vac-sum-bar">
-												<div class="vac-sum-bar-head"><span><i class="fa fa-chart-simple"></i> <?= __('vacation_balance_summary') ?></span><span><?= $vac_used_pct ?>% <?= __('used_days') ?></span></div>
+												<div class="vac-sum-bar-head"><span><i class="fa fa-chart-simple"></i> <?= __('vacation_balance_summary') ?></span><span class="vac-sum-used"><span class="vac-pct"><?= $vac_used_pct ?>%</span><span><?= __('used_days') ?></span></span></div>
 												<div class="vac-sum-bar-track"><span style="width: <?= $vac_used_pct ?>%;"></span></div>
 											</div>
 											<?php endif; ?>
@@ -2938,98 +2947,79 @@ if (mysqli_num_rows($query) == 1) {
 												</div>
 
 												<?php if ($doc_count > 0): ?>
-													<div class="row">
-														<!-- Documents List Column -->
-														<div class="col-12">
-															<div class="documents-list-container">
-																<?php
-																mysqli_data_seek($queryempdocu, 0);
-																while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
-																	$id_empdoc_get = $recempdoc["id"];
-																	$docu_typ_get = $recempdoc["docu_typ"];
-																	$attachment_get = $recempdoc["path"];
-																	$docu_ext_get = strtolower($recempdoc["docu_ext"]);
-																	$doc_date_reg_get = $recempdoc["created_at"];
-																	$times_reg = strtotime("$doc_date_reg_get");
-																	$doc_date_formatted = date('d M Y', $times_reg);
-
-																	// Determine file type and icon
-																	$file_type_map = [
-																		'pdf' => ['icon' => 'fa-file-pdf', 'color' => 'danger', 'label' => 'PDF'],
-																		'xls' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
-																		'xlsx' => ['icon' => 'fa-file-excel', 'color' => 'success', 'label' => 'Excel'],
-																		'doc' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
-																		'docx' => ['icon' => 'fa-file-word', 'color' => 'primary', 'label' => 'Word'],
-																		'jpg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
-																		'jpeg' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
-																		'png' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
-																		'gif' => ['icon' => 'fa-file-image', 'color' => 'info', 'label' => 'Image'],
-																		'zip' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
-																		'rar' => ['icon' => 'fa-file-archive', 'color' => 'warning', 'label' => 'Archive'],
-																		'txt' => ['icon' => 'fa-file-text', 'color' => 'secondary', 'label' => 'Text'],
-																	];
-																	$file_info = $file_type_map[$docu_ext_get] ?? ['icon' => 'fa-file', 'color' => 'secondary', 'label' => 'File'];
-																	$doc_kind = emp_doc_kind($docu_typ_get, $docu_ext_get);
-																?>
-																	<div class="doc-list-item" data-doc-id="<?= $id_empdoc_get ?>"
-																		data-doc-path="./assets/emp_documents/<?= $attachment_get ?>"
-																		data-doc-ext="<?= $docu_ext_get ?>"
-																		data-doc-name="<?= htmlspecialchars($docu_typ_get ?: $file_info['label']) ?>"
-																		style="--doc: <?= $doc_kind[1] ?>;" tabindex="0" role="button">
-																		<div class="doc-item-icon">
-																			<i class="fa <?= $doc_kind[0] ?>"></i>
-																		</div>
-																		<div class="doc-item-info">
-																			<h6 class="doc-item-name"><?= htmlspecialchars(getDisplayName($docu_typ_get ?: $file_info['label'])) ?></h6>
-																			<small class="doc-item-meta">
-																				<span class="doc-ext"><i class="fa <?= $file_info['icon'] ?>"></i> <?= strtoupper($docu_ext_get) ?></span>
-																				<span class="doc-date"><i class="fa fa-calendar"></i> <?= $doc_date_formatted ?></span>
-																			</small>
-																		</div>
-																		<div class="doc-item-actions">
-																			<span class="doc-act doc-act-view" title="<?= __('view', 'View') ?>"><i class="fa fa-eye"></i></span>
-																			<button class="doc-act btn-download-doc" title="<?= __('download', 'Download') ?>" onclick="event.stopPropagation(); window.location.href='./downloadFile.php?file=./assets/emp_documents/<?= $attachment_get ?>'">
-																				<i class="fa fa-download"></i>
-																			</button>
-																			<?php if ($canDeleteEmpDocs): ?>
-																			<button class="doc-act doc-act-delete btn-delete-item deleteAjax" data-id='<?= $recempdoc['id'] ?>' data-tbl='emp_docu' data-file='1' data-column='path' title="<?= __('delete') ?>">
-																				<i class="fa fa-trash"></i>
-																			</button>
-																			<?php endif; ?>
-																		</div>
-																	</div>
-																<?php } ?>
-															</div>
+													<?php
+													// Group documents by type for the filter chips; size read from disk for the meta line
+													$vdDocs = [];
+													$vdTypes = [];
+													mysqli_data_seek($queryempdocu, 0);
+													while ($recempdoc = mysqli_fetch_assoc($queryempdocu)) {
+														$vdExt = strtolower((string)$recempdoc['docu_ext']);
+														$vdType = trim((string)$recempdoc['docu_typ']) !== '' ? trim((string)$recempdoc['docu_typ']) : strtoupper($vdExt);
+														$vdKey = strtolower($vdType);
+														$vdTypes[$vdKey] = ['label' => getDisplayName($vdType), 'count' => ($vdTypes[$vdKey]['count'] ?? 0) + 1];
+														$vdFile = __DIR__ . '/assets/emp_documents/' . $recempdoc['path'];
+														$vdSize = is_file($vdFile) ? filesize($vdFile) : null;
+														$recempdoc['_ext'] = $vdExt;
+														$recempdoc['_type'] = $vdType;
+														$recempdoc['_key'] = $vdKey;
+														$recempdoc['_size'] = $vdSize === null ? '' : ($vdSize >= 1048576 ? number_format($vdSize / 1048576, 1) . ' MB' : max(1, round($vdSize / 1024)) . ' KB');
+														$recempdoc['_missing'] = $vdSize === null;
+														$vdDocs[] = $recempdoc;
+													}
+													$vdImageExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+													?>
+													<div class="vd-toolbar">
+														<div class="vd-chips" role="tablist">
+															<button type="button" class="vd-chip active" data-vd-filter=""><?= __('all', 'All') ?> <span><?= (int)$doc_count ?></span></button>
+															<?php foreach ($vdTypes as $vdKey => $vdT): ?>
+																<button type="button" class="vd-chip" data-vd-filter="<?= htmlspecialchars($vdKey) ?>"><?= htmlspecialchars($vdT['label']) ?> <span><?= (int)$vdT['count'] ?></span></button>
+															<?php endforeach; ?>
 														</div>
-
-														<!-- Document Viewer Column -->
-														<div class="col-md-7">
-															<div class="document-viewer-container" style="display:none;">
-																<div class="viewer-header">
-																	<h5 class="viewer-title"><i class="fa fa-file"></i> <span id="viewer-doc-name"><?= __('select_document') ?></span></h5>
-																	<div class="viewer-actions">
-																		<div class="btn-group" role="group">
-																			<button class="btn btn-sm btn-light" id="viewer-fullscreen" title="<?= __('fullscreen') ?>">
-																				<i class="fa fa-expand"></i>
-																			</button>
-																			<button class="btn btn-sm btn-light" id="viewer-download" title="<?= __('download', 'Download') ?>" style="display:none;">
-																				<i class="fa fa-download"></i>
-																			</button>
-																			<button class="btn btn-sm btn-light" id="viewer-clear" title="<?= __('close') ?>">
-																				<i class="fa fa-times"></i>
-																			</button>
-																		</div>
-																	</div>
-																</div>
-																<div class="viewer-body" id="document-viewer">
-																	<div class="viewer-placeholder">
-																		<i class="fa fa-file-text" style="font-size: 64px; color: #ddd;"></i>
-																		<p class="text-muted mt-3"><?= __('select_document_to_view') ?></p>
-																	</div>
-																</div>
-															</div>
-														</div>
+														<div class="vd-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="vdSearch" placeholder="<?= __('search', 'Search') ?>" autocomplete="off"></div>
 													</div>
+													<div class="vd-grid">
+														<?php foreach ($vdDocs as $vd):
+															$vdKind = emp_doc_kind($vd['docu_typ'], $vd['_ext']);
+															$vdPath = './assets/emp_documents/' . $vd['path'];
+															$vdName = getDisplayName($vd['_type']);
+															$vdDate = date('d M Y', strtotime((string)$vd['created_at']));
+															$vdIsImg = in_array($vd['_ext'], $vdImageExt, true) && !$vd['_missing'];
+														?>
+														<div class="vd-card<?= $vd['_missing'] ? ' is-missing' : '' ?>" style="--doc: <?= $vdKind[1] ?>;"
+															data-doc-path="<?= htmlspecialchars($vdPath) ?>" data-doc-ext="<?= htmlspecialchars($vd['_ext']) ?>"
+															data-doc-name="<?= htmlspecialchars($vdName) ?>" data-doc-type="<?= htmlspecialchars($vd['_key']) ?>"
+															data-doc-search="<?= htmlspecialchars(mb_strtolower($vdName . ' ' . $vd['_type'] . ' ' . $vd['_ext'] . ' ' . $vdDate)) ?>">
+															<button type="button" class="vd-thumb vd-open" title="<?= __('view', 'View') ?>">
+																<?php if ($vdIsImg): ?>
+																	<img src="<?= htmlspecialchars($vdPath) ?>" alt="" loading="lazy">
+																<?php else: ?>
+																	<span class="vd-thumb-icon"><i class="fa <?= $vdKind[0] ?>"></i></span>
+																<?php endif; ?>
+																<span class="vd-ext"><?= htmlspecialchars(strtoupper($vd['_ext'])) ?></span>
+																<span class="vd-thumb-hover"><i class="fa fa-eye"></i> <?= __('preview', 'Preview') ?></span>
+															</button>
+															<div class="vd-body">
+																<h6 class="vd-name" title="<?= htmlspecialchars($vdName) ?>"><?= htmlspecialchars($vdName) ?></h6>
+																<div class="vd-meta">
+																	<span><i class="fa fa-calendar"></i> <?= $vdDate ?></span>
+																	<?php if ($vd['_missing']): ?>
+																		<span class="vd-missing"><i class="fa fa-triangle-exclamation"></i> <?= __('file_not_found', 'File not found') ?></span>
+																	<?php elseif ($vd['_size'] !== ''): ?>
+																		<span><i class="fa fa-hard-drive"></i> <?= $vd['_size'] ?></span>
+																	<?php endif; ?>
+																</div>
+															</div>
+															<div class="vd-actions">
+																<button type="button" class="vd-btn vd-btn-main vd-open"><i class="fa fa-eye"></i> <?= __('view', 'View') ?></button>
+																<a class="vd-btn" href="./downloadFile.php?file=<?= htmlspecialchars(rawurlencode($vdPath)) ?>" title="<?= __('download', 'Download') ?>"><i class="fa fa-download"></i></a>
+																<?php if ($canDeleteEmpDocs): ?>
+																<button type="button" class="vd-btn vd-btn-del deleteAjax" data-id="<?= (int)$vd['id'] ?>" data-tbl="emp_docu" data-file="1" data-column="path" title="<?= __('delete') ?>"><i class="fa fa-trash"></i></button>
+																<?php endif; ?>
+															</div>
+														</div>
+														<?php endforeach; ?>
+													</div>
+													<div class="vd-noresult" hidden><i class="fa fa-magnifying-glass"></i> <?= __('no_matching_documents', 'No matching documents') ?></div>
 												<?php else: ?>
 													<div class="docs-empty"><i class="fa fa-folder-open"></i><b><?= __('no_documents_found') ?></b><?= __('no_documents_have_been_uploaded_yet') ?></div>
 												<?php endif; ?>
@@ -4048,78 +4038,63 @@ if (mysqli_num_rows($query) == 1) {
 				});
 			}
 
+			// Documents tab (redesign): type chips + search, preview in a SweetAlert2 viewer
 			$(function() {
-				var currentDocPath = '';
-
-				// Delegated click for dynamic items
-				// Keyboard: Enter / Space on a document tile opens the preview
-				$(document).on('keydown', '.doc-list-item', function(e) {
-					if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $(this).trigger('click'); }
-				});
-				$(document).on('click', '.doc-list-item', function() {
-					$('.doc-list-item').removeClass('active');
-					$(this).addClass('active');
-
-					var docPath = $(this).data('doc-path');
-					var docExt = $(this).data('doc-ext');
-					var docName = $(this).data('doc-name');
-					currentDocPath = docPath;
-
-					// Show viewer
-					$('.document-viewer-container').show();
-
-					// Adjust columns: list -> col-md-5, viewer -> col-md-7
-					var $listCol = $('.documents-list-container').closest('.col-12, .col-md-5');
-					$listCol.removeClass('col-12').addClass('col-md-5');
-					var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
-					$viewerCol.removeClass('col-12').addClass('col-md-7');
-
-					// Update title and download
-					$('#viewer-doc-name').text(docName);
-					$('#viewer-download').show().off('click').on('click', function() {
-						window.location.href = './downloadFile.php?file=' + docPath;
+				var $docs = $('#documents');
+				if (!$docs.length) return;
+				function vdApply() {
+					var f = $docs.find('.vd-chip.active').data('vd-filter') || '';
+					var q = String($('#vdSearch').val() || '').trim().toLowerCase();
+					var shown = 0;
+					$docs.find('.vd-card').each(function() {
+						var ok = (!f || this.getAttribute('data-doc-type') === f) && (!q || this.getAttribute('data-doc-search').indexOf(q) !== -1);
+						this.hidden = !ok;
+						if (ok) shown++;
 					});
+					$docs.find('.vd-noresult').prop('hidden', shown > 0);
+				}
+				$docs.on('click', '.vd-chip', function() {
+					$docs.find('.vd-chip').removeClass('active');
+					$(this).addClass('active');
+					vdApply();
+				});
+				$docs.on('input', '#vdSearch', vdApply);
 
-					var viewer = $('#document-viewer');
-					if (docExt === 'pdf') {
-						viewer.html('<embed src="' + docPath + '" type="application/pdf" width="100%" height="100%">');
-					} else if (['jpg', 'jpeg', 'png', 'gif'].includes(docExt)) {
-						viewer.html('<img src="' + docPath + '" alt="' + docName + '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">');
-					} else if (['doc', 'docx', 'xls', 'xlsx'].includes(docExt)) {
-						viewer.html('<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + docPath) + '" width="100%" height="100%" frameborder="0"></iframe>');
-					} else if (docExt === 'txt') {
-						$.get(docPath, function(data) {
-							viewer.html('<pre style="padding: 20px; white-space: pre-wrap; word-wrap: break-word;">' + $('<div>').text(data).html() + '</pre>');
-						});
+				function esc(v) { return $('<div>').text(v == null ? '' : String(v)).html(); }
+				$docs.on('click', '.vd-open', function() {
+					var $card = $(this).closest('.vd-card');
+					var path = $card.data('doc-path'), ext = String($card.data('doc-ext') || ''), name = $card.data('doc-name');
+					var dl = './downloadFile.php?file=' + encodeURIComponent(path);
+					var body;
+					if ($card.hasClass('is-missing')) {
+						body = '<div class="vd-view-empty"><i class="fa fa-triangle-exclamation"></i><p><?= __('file_not_found', 'File not found') ?></p></div>';
+					} else if (ext === 'pdf') {
+						body = '<iframe src="' + esc(path) + '#view=FitH" title="' + esc(name) + '"></iframe>';
+					} else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].indexOf(ext) !== -1) {
+						body = '<div class="vd-view-img"><img src="' + esc(path) + '" alt="' + esc(name) + '"></div>';
+					} else if (['doc', 'docx', 'xls', 'xlsx'].indexOf(ext) !== -1) {
+						body = '<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + String(path).replace(/^\.\//, '')) + '"></iframe>';
 					} else {
-						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3"><?= __('preview_not_available_for_file_type', 'Preview not available for this file type') ?></p><a href="' + docPath + '" download class="btn btn-primary mt-3"><i class="fa fa-download"></i> <?= __('download_file', 'Download File') ?></a></div>');
+						body = '<div class="vd-view-empty"><i class="fa fa-file"></i><p><?= __('preview_not_available_for_file_type', 'Preview not available for this file type') ?></p>'
+							+ '<a href="' + dl + '" class="vd-btn vd-btn-main"><i class="fa fa-download"></i> <?= __('download_file', 'Download File') ?></a></div>';
 					}
-				});
-
-				// Fullscreen toggle
-				$('#viewer-fullscreen').on('click', function() {
-					var container = $('.document-viewer-container')[0];
-					if (container.requestFullscreen) container.requestFullscreen();
-					else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
-					else if (container.msRequestFullscreen) container.msRequestFullscreen();
-				});
-
-				// Clear selection and hide viewer
-				$('#viewer-clear').on('click', function() {
-					$('.doc-list-item').removeClass('active');
-					$('#viewer-download').hide();
-					$('#viewer-doc-name').text('<?= __('select_document') ?>');
-					$('#document-viewer').html(`
-						<div class="viewer-placeholder">
-							<i class="fa fa-file-text" style="font-size: 64px; color: #ddd;"></i>
-							<p class="text-muted mt-3"><?= __('select_document_to_view') ?></p>
-						</div>
-					`);
-					$('.document-viewer-container').hide();
-					var $listCol = $('.documents-list-container').closest('.col-md-5, .col-12');
-					$listCol.removeClass('col-md-5').addClass('col-12');
-					var $viewerCol = $('.document-viewer-container').closest('.col-md-7, .col-12');
-					$viewerCol.removeClass('col-md-7').addClass('col-12');
+					Swal.fire({
+						html: '<div class="vd-view" style="--doc:' + esc($card[0].style.getPropertyValue('--doc')) + '">'
+							+ '<div class="vd-view-head"><span class="vd-view-ic">' + $card.find('.vd-thumb-icon, .vd-thumb img').first().prop('outerHTML') + '</span>'
+							+ '<div class="vd-view-title"><b>' + esc(name) + '</b><small>' + esc(ext.toUpperCase()) + ' · ' + esc($card.find('.vd-meta > span').map(function() { return $(this).text().trim(); }).get().join(' · ')) + '</small></div>'
+							+ '<div class="vd-view-tools">'
+							+ '<a href="' + esc(path) + '" target="_blank" rel="noopener" class="vd-btn" title="<?= __('open_in_new_tab', 'Open in new tab') ?>"><i class="fa fa-up-right-from-square"></i></a>'
+							+ '<a href="' + dl + '" class="vd-btn" title="<?= __('download', 'Download') ?>"><i class="fa fa-download"></i></a>'
+							+ '<button type="button" class="vd-btn vd-view-close" title="<?= __('close') ?>"><i class="fa fa-xmark"></i></button>'
+							+ '</div></div><div class="vd-view-body">' + body + '</div></div>',
+						showConfirmButton: false,
+						width: 'min(1100px, 96vw)',
+						padding: 0,
+						customClass: { popup: 'vd-view-swal srs-skip' },
+						didOpen: function(popup) {
+							$(popup).on('click', '.vd-view-close', function() { Swal.close(); });
+						}
+					});
 				});
 			});
 		</script>
@@ -5273,74 +5248,6 @@ if (mysqli_num_rows($query) == 1) {
 
 		</script>
 
-		<!-- Document Viewer JavaScript -->
-		<script>
-			$(document).ready(function() {
-				let currentDocPath = '';
-
-				// Handle document item click
-				$('.doc-list-item').on('click', function() {
-					$('.doc-list-item').removeClass('active');
-					$(this).addClass('active');
-
-					const docPath = $(this).data('doc-path');
-					const docExt = $(this).data('doc-ext');
-					const docName = $(this).data('doc-name');
-
-					currentDocPath = docPath;
-
-					$('#viewer-doc-name').text(docName);
-					$('#viewer-download').attr('onclick', "window.location.href='./downloadFile.php?file=" + docPath + "'").show();
-
-					loadDocument(docPath, docExt);
-				});
-
-				// Load document into viewer
-				function loadDocument(path, ext) {
-					const viewer = $('#document-viewer');
-
-					if (ext === 'pdf') {
-						viewer.html('<embed src="' + path + '" type="application/pdf" />');
-					} else if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-						viewer.html('<img src="' + path + '" alt="<?= __('document', 'Document') ?>" />');
-					} else if (['doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
-						viewer.html('<iframe src="https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(window.location.origin + '/' + path) + '"></iframe>');
-					} else if (ext === 'txt') {
-						$.get(path, function(data) {
-							viewer.html('<div style="padding: 20px; background: #fff; height: 100%; overflow: auto;"><pre style="white-space: pre-wrap; font-family: monospace;">' + data + '</pre></div>');
-						});
-					} else {
-						viewer.html('<div class="viewer-placeholder"><i class="fa fa-file" style="font-size: 64px; color: #ddd;"></i><p class="text-muted mt-3"><?= __('preview_not_available_for_file_type', 'Preview not available for this file type') ?></p><button class="btn btn-primary mt-2" onclick="window.location.href=\'./downloadFile.php?file=' + path + '\'"><i class="fa fa-download"></i> <?= __('download_file', 'Download File') ?></button></div>');
-					}
-				}
-
-				// Fullscreen toggle
-				$('#viewer-fullscreen').on('click', function() {
-					const container = $('.document-viewer-container')[0];
-					const icon = $(this).find('i');
-
-					if (!document.fullscreenElement) {
-						container.requestFullscreen().then(() => {
-							icon.removeClass('fa-expand').addClass('fa-compress');
-						});
-					} else {
-						document.exitFullscreen().then(() => {
-							icon.removeClass('fa-compress').addClass('fa-expand');
-						});
-					}
-				});
-
-				// Exit fullscreen handler
-				document.addEventListener('fullscreenchange', function() {
-					const icon = $('#viewer-fullscreen i');
-					if (!document.fullscreenElement) {
-						icon.removeClass('fa-compress').addClass('fa-expand');
-					}
-				});
-
-				// Do not auto-select any document; show viewer only after click
-			});
-		</script>
 
 		<script>
 			// Load evaluation details when view button is clicked using SweetAlert2

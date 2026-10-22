@@ -102,16 +102,6 @@ if ($card_job_id > 0) {
 }
 ?>
 <?php
-require_once __DIR__ . '/special_access_helper.php';
-// System admin, HR department, or anyone granted the 'access_edit_employee' special access
-$can_modify_employee = (
-    ($is_system_admin ?? false) ||
-    ($isDeptHr ?? false) ||
-    user_has_special_access($conDB, $empid ?? '', 'access_edit_employee', $user_role ?? '', $user_type ?? '', $is_system_admin ?? false)
-);
-$card_can_edit = (in_array((string)$emp_status, ['1', '2'], true) && $can_modify_employee);
-$card_can_delete = !empty($is_system_admin);
-
 $card_state = str_replace('status-', '', (string)$status_class); // active | fly | draft | inactive
 // Callers only know active/fly/inactive - Draft (status = 2) is detected here for all of them.
 if ((string)($emp_status ?? '') === '2' && (string)($emp_status_fly ?? '0') !== '1') {
@@ -133,17 +123,6 @@ $card_display_name = getDisplayName($name);
 
         <div class="sr-emp-cover">
             <span class="sr-emp-state"><i class="fa <?= $card_state_meta['icon'] ?>"></i><?= htmlspecialchars($card_state_meta['label']) ?></span>
-            <?php if ($card_can_delete): ?>
-                <div class="btn-group dropdown sr-emp-menu">
-                    <a href="javascript:void(0);" class="dropdown-toggle arrow-none" data-toggle="dropdown" aria-expanded="false" title="<?= __('actions') ?>"><i class="fa fa-ellipsis-v"></i></a>
-                    <div class="dropdown-menu dropdown-menu-right">
-                        <?php if ($card_can_edit): ?>
-                            <a class="dropdown-item" href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" data-edit-employee="<?= htmlspecialchars((string)$emp_id) ?>"><i class="fa fa-pen-to-square mr-2"></i><?= __('edit') ?></a>
-                        <?php endif; ?>
-                        <a class="dropdown-item text-danger deleteAjax" href="javascript:void(0);" data-id="<?= (int)$id ?>" data-tbl="employee" data-file="0"><i class="fa fa-trash-alt mr-2"></i><?= __('delete') ?></a>
-                    </div>
-                </div>
-            <?php endif; ?>
         </div>
 
         <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-emp-avatar<?= $card_is_online ? ' is-online' : '' ?>" title="<?= $card_is_online ? __('online', 'Online') : __('offline', 'Offline') ?>">
@@ -180,9 +159,6 @@ $card_display_name = getDisplayName($name);
 
             <div class="sr-emp-actions">
                 <a href="<?= htmlspecialchars($card_view_url) ?>" class="sr-btn sr-btn-primary sr-btn-sm sr-emp-view"><?= __('view_details') ?> <i class="fa fa-arrow-right"></i></a>
-                <?php if ($card_can_edit): ?>
-                    <a href="edit_employee.php?emp_id=<?= urlencode((string)$emp_id) ?>" data-edit-employee="<?= htmlspecialchars((string)$emp_id) ?>" class="sr-btn sr-btn-sm sr-btn-icon" title="<?= __('edit') ?>"><i class="fa fa-pen-to-square"></i></a>
-                <?php endif; ?>
             </div>
         </div>
     </div>
