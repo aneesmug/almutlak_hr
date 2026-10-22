@@ -4527,7 +4527,7 @@ function __(key, def) {
         // page at a time (like D365 Config) - Save Changes saves the fields of the open sub-tab.
         const GENERAL_SUB_TABS = [
             { key: 'application', icon: 'mdi-application', label: () => __('general_application', 'Application'),
-              names: ['application_name', 'company_name', 'company_name_ar', 'default_language', 'timezone', 'maintenance_mode'] },
+              names: ['application_name', 'company_name', 'company_name_ar', 'default_language', 'arabic_numbers', 'timezone', 'maintenance_mode'] },
             { key: 'sessions', icon: 'mdi-timer-sand', label: () => __('general_sessions', 'Sessions'),
               names: ['session_timeout', 'auto_signout_hours', 'auto_signout_hours_employee'] },
             { key: 'vat', icon: 'mdi-percent', label: () => __('general_vat', 'VAT'),

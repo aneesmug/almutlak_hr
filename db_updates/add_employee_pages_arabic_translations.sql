@@ -772,3 +772,16 @@ INSERT INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUES
 ('adjusted_date_out_of_range', 'ar', 'يجب أن يكون التاريخ المعدل بين %s و %s'),
 ('adjusted_date_confirmed_text', 'ar', 'تم تأكيد تاريخ المباشرة المعدل')
 ON DUPLICATE KEY UPDATE `translation` = IF(HEX(`translation`) REGEXP '^(..)*D[89AB]', `translation`, VALUES(`translation`));
+
+-- ---------------------------------------------------------------------------------------
+-- Batch 3: App Settings > General > Application > "Numbers in Arabic UI"
+-- '1' = Arabic-Indic digits (١٢٣) in the Arabic UI, '0' = normal digits (123).
+-- (settings_handler.php ensure_arabic_numbers_setting() also creates the row.)
+-- ---------------------------------------------------------------------------------------
+INSERT IGNORE INTO `app_settings` (`setting_name`, `setting_value`, `setting_group`, `description`, `input_type`, `options`) VALUES
+('arabic_numbers', '1', 'general', 'Numbers in Arabic UI', 'select', '{"1":"Arabic (١٢٣)","0":"Normal (123)"}');
+
+INSERT INTO `translations` (`lang_key`, `lang_code`, `translation`) VALUES
+('numbers_in_arabic_ui', 'en', 'Numbers in Arabic UI'),
+('numbers_in_arabic_ui', 'ar', 'الأرقام في الواجهة العربية')
+ON DUPLICATE KEY UPDATE `translation` = IF(TRIM(`translation`) = '', VALUES(`translation`), `translation`);

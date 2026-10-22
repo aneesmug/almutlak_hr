@@ -15,6 +15,9 @@
 (function () {
     'use strict';
 
+    // App Settings > General > "Numbers in Arabic UI" = Normal -> data-digits="0": keep 0-9,
+    // still translate month / weekday names and AM/PM.
+    var USE_DIGITS = !(document.currentScript && document.currentScript.getAttribute('data-digits') === '0');
     var DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     var HAS_DIGIT = /[0-9]/;
     var SKIP_TEXT = /(https?:\/\/|www\.|@)/i;
@@ -78,7 +81,7 @@
     function convertNode(node) {
         var text = node.nodeValue;
         if (!text || SKIP_TEXT.test(text)) return;
-        var hasDigit = HAS_DIGIT.test(text), hasName = HAS_NAME.test(text);
+        var hasDigit = USE_DIGITS && HAS_DIGIT.test(text), hasName = HAS_NAME.test(text);
         if (!hasDigit && !hasName) return;
         if (skipElement(node.parentNode)) return;
         var out = hasName ? localizeNames(text) : text;
@@ -130,7 +133,7 @@
         }).observe(document.body, { childList: true, subtree: true, characterData: true });
     }
 
-    window.SRArabicDigits = { convert: function (s) { return toArabic(localizeNames(String(s))); }, toLatin: toLatin, apply: walk };
+    window.SRArabicDigits = { enabled: USE_DIGITS, convert: function (s) { s = localizeNames(String(s)); return USE_DIGITS ? toArabic(s) : s; }, toLatin: toLatin, apply: walk };
 
     // First pass waits until jQuery ready handlers (async in jQuery 3) have run, so
     // DataTables built from the DOM cache Western digits for sorting, search and export.

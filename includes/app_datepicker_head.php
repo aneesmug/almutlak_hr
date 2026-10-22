@@ -39,10 +39,11 @@ if (!function_exists('app_sr_table_scroll_tag')) {
             $rel = trim(substr($scriptDir, strlen($root)), '\\/');
             $prefix = $rel === '' ? '' : str_repeat('../', count(preg_split('~[\\\\/]+~', $rel)));
         }
-        // Arabic UI: displayed numbers switch to Arabic-Indic digits (assets/js/sr_arabic_digits.js).
+        // Arabic UI: Arabic month / weekday names, plus Arabic-Indic digits unless App Settings >
+        // General > "Numbers in Arabic UI" is Normal (data-digits="0") - assets/js/sr_arabic_digits.js.
         $lang = $GLOBALS['current_lang'] ?? ($_SESSION['lang'] ?? 'en');
         $digits = ($lang === 'ar' || !empty($GLOBALS['is_rtl']))
-            ? '<script src="' . $prefix . 'assets/js/sr_arabic_digits.js?v=' . (int) @filemtime($base . '/assets/js/sr_arabic_digits.js') . '"></script>'
+            ? '<script src="' . $prefix . 'assets/js/sr_arabic_digits.js?v=' . (int) @filemtime($base . '/assets/js/sr_arabic_digits.js') . '" data-digits="' . (APP_ARABIC_NUMBERS ? '1' : '0') . '"></script>'
             : '';
         return '<script src="' . $prefix . 'assets/js/sr_table_scroll.js?v=' . (int) @filemtime($base . '/assets/js/sr_table_scroll.js') . '"></script>'
             . $digits
@@ -58,6 +59,16 @@ if (!function_exists('app_sr_swal_theme_tags')) {
         return '<link rel="stylesheet" href="' . $prefix . 'assets/css/sr_swal_theme.css?v=' . (int) @filemtime($base . '/assets/css/sr_swal_theme.css') . '">'
             . '<script src="' . $prefix . 'assets/js/sr_swal_theme.js?v=' . (int) @filemtime($base . '/assets/js/sr_swal_theme.js') . '"></script>';
     }
+}
+
+// App Settings > General > "Numbers in Arabic UI" ('0' = normal digits). Read now: the DB
+// connection may already be gone when the output buffer below is flushed.
+if (!defined('APP_ARABIC_NUMBERS')) {
+    $appArabicNumbersDb = $conDB ?? ($GLOBALS['conDB'] ?? null);
+    $appArabicNumbers = ($appArabicNumbersDb && function_exists('get_setting')) ? get_setting($appArabicNumbersDb, 'arabic_numbers') : null;
+    unset($appArabicNumbersDb);
+    define('APP_ARABIC_NUMBERS', (string) ($appArabicNumbers ?? '1') !== '0');
+    unset($appArabicNumbers);
 }
 
 if (PHP_SAPI !== 'cli' && !defined('APP_DATEPICKER_BUFFERED')) {

@@ -183,6 +183,7 @@ function get_all_settings($conDB) {
     ensure_announcement_smtp_settings($conDB);
     ensure_announcement_recipient_settings($conDB);
     ensure_screen_settings_setting($conDB);
+    ensure_arabic_numbers_setting($conDB);
     zk_ensure_sync_allowed_ip_setting($conDB);
     ensure_theme_config_settings($conDB);
     ensure_d365_settings($conDB);
@@ -555,6 +556,22 @@ function ensure_theme_config_settings($conDB) {
         }
         $stmt->close();
     }
+}
+
+/**
+ * Ensure the "Numbers in Arabic UI" setting exists (App Settings > General > Application).
+ * '1' = Arabic-Indic digits (١٢٣) when the language is Arabic, '0' = normal digits (123).
+ * Read by includes/app_datepicker_head.php to decide whether assets/js/sr_arabic_digits.js loads.
+ */
+function ensure_arabic_numbers_setting($conDB) {
+    $stmt = $conDB->prepare("INSERT IGNORE INTO app_settings (setting_name, setting_value, setting_group, description, input_type, options) VALUES ('arabic_numbers', '1', 'general', 'Numbers in Arabic UI', 'select', ?)");
+    if (!$stmt) {
+        return;
+    }
+    $options = json_encode(['1' => 'Arabic (١٢٣)', '0' => 'Normal (123)'], JSON_UNESCAPED_UNICODE);
+    $stmt->bind_param("s", $options);
+    $stmt->execute();
+    $stmt->close();
 }
 
 /**
