@@ -120,7 +120,7 @@ if ($related) $actions[] = ['label' => $related[0], 'icon' => 'mdi-file-document
 if (!empty($st['payment_reference'])) $actions[] = ['label' => __('payment_proof', 'Payment Proof'), 'icon' => 'mdi-download', 'href' => (string)$st['payment_reference']];
 if ($attachments) {
     $actions[] = ['label' => __('attachments', 'Attachments'), 'icon' => 'mdi-paperclip', 'count' => count($attachments),
-        'onclick' => 'showAttachmentsModal(' . json_encode($attachments) . ', ' . json_encode(__('attachments', 'Attachments')) . ')'];
+        'onclick' => report_attachments_js($attachments, __('attachments', 'Attachments'))];
 }
 
 // ---- Shared report layout (includes/report_layout.php) ----
@@ -169,7 +169,7 @@ include dirname(__DIR__) . '/report_open.php';
                                     <?php if ($attachments): ?>
                                     <div class="detail-item no-print">
                                         <span class="label"><?= __('attachments', 'Attachments') ?></span>
-                                        <span class="value"><button type="button" class="rpt-inline-btn" onclick='showAttachmentsModal(<?= $h(json_encode($attachments)) ?>, <?= $h(json_encode(__('attachments', 'Attachments'))) ?>)'><i class="mdi mdi-paperclip"></i> <?= __('attachments', 'Attachments') ?> (<?= count($attachments) ?>)</button></span>
+                                        <span class="value"><button type="button" class="rpt-inline-btn" onclick="<?= $h(report_attachments_js($attachments, __('attachments', 'Attachments'))) ?>"><i class="mdi mdi-paperclip"></i> <?= __('attachments', 'Attachments') ?> (<?= count($attachments) ?>)</button></span>
                                     </div>
                                     <?php endif; ?>
                                 </div>

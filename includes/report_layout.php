@@ -70,6 +70,7 @@ if (!function_exists('report_head_html')) {
             . '<link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />'
             . (!empty($is_rtl) ? '<link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />' : '')
             . approval_steps_css()
+            . '<link href="assets/css/emp_docs.css?v=' . @filemtime(dirname(__DIR__) . '/assets/css/emp_docs.css') . '" rel="stylesheet" type="text/css" />'
             . '<link href="assets/css/report_layout.css?v=' . $cssV . '" rel="stylesheet" type="text/css" />'
             . '<script src="assets/js/modernizr.min.js"></script>'
             . '<script>window.lang = ' . json_encode($GLOBALS['translations'] ?? []) . ';</script>'
@@ -223,6 +224,44 @@ if (!function_exists('report_card_close_html')) {
     }
 }
 
+/**
+ * Attachments for rptAttachments() (same cards + viewer as view_employee.php Documents tab).
+ * $paths: file paths relative to the app root ("./uploads/..", "assets/..").
+ * Returns [['path', 'name', 'ext', 'icon', 'color', 'size', 'date', 'missing'], ...].
+ */
+if (!function_exists('report_attachment_items')) {
+    function report_attachment_items(array $paths): array
+    {
+        require_once __DIR__ . '/emp_doc_kind.php';
+        $items = [];
+        foreach (array_values(array_filter(array_map('strval', $paths))) as $i => $path) {
+            $ext = strtolower(pathinfo(parse_url($path, PHP_URL_PATH) ?: $path, PATHINFO_EXTENSION));
+            $file = dirname(__DIR__) . '/' . ltrim(preg_replace('~^\./~', '', $path), '/');
+            $size = is_file($file) ? filesize($file) : null;
+            [$icon, $color] = emp_doc_kind('', $ext);
+            $items[] = [
+                'path'    => $path,
+                'name'    => __('document', 'Document') . ' ' . ($i + 1),
+                'ext'     => $ext,
+                'icon'    => $icon,
+                'color'   => $color,
+                'size'    => $size === null ? '' : ($size >= 1048576 ? number_format($size / 1048576, 1) . ' MB' : max(1, round($size / 1024)) . ' KB'),
+                'date'    => $size === null ? '' : date('d M Y', filemtime($file)),
+                'missing' => $size === null,
+            ];
+        }
+        return $items;
+    }
+}
+
+/** onclick JS that opens rptAttachments() for $paths (escape it for the attribute it goes into). */
+if (!function_exists('report_attachments_js')) {
+    function report_attachments_js(array $paths, string $title): string
+    {
+        return 'rptAttachments(' . json_encode(report_attachment_items($paths), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ', ' . json_encode($title, JSON_UNESCAPED_UNICODE) . ')';
+    }
+}
+
 /** Show / Hide button for a body block: .rpt-toggle-section > title + this button, body .rpt-toggle-body[hidden] (printed only while shown). */
 if (!function_exists('report_toggle_button_html')) {
     function report_toggle_button_html(): string
@@ -246,6 +285,14 @@ if (!function_exists('report_scripts_html')) {
             . '<script src="assets/js/jquery.slimscroll.js"></script>'
             . '<script src="assets/js/jquery.core.js"></script>'
             . '<script src="assets/js/jquery.app.js?t=' . time() . '"></script>'
+            . '<script>window.RPT_ATT_T = ' . json_encode([
+                'view' => __('view', 'View'), 'preview' => __('preview', 'Preview'), 'download' => __('download', 'Download'),
+                'open' => __('open_in_new_tab', 'Open in new tab'), 'close' => __('close', 'Close'), 'back' => __('back', 'Back'),
+                'missing' => __('file_not_found', 'File not found'), 'download_file' => __('download_file', 'Download File'),
+                'no_preview' => __('preview_not_available_for_file_type', 'Preview not available for this file type'),
+                'file' => __('file', 'file'), 'files' => __('files', 'files'),
+            ], JSON_UNESCAPED_UNICODE) . ';</script>'
+            . '<script src="assets/js/report_attachments.js?v=' . @filemtime(dirname(__DIR__) . '/assets/js/report_attachments.js') . '"></script>'
             . "<script>\nfunction rptMoreActions() {\n"
             . "    var sub = Array.prototype.map.call(document.querySelectorAll('.rpt-bar-title > *'), function (el) { return el.textContent.trim(); }).join(' \u{00B7} ');\n"
             . "    Swal.fire({\n"

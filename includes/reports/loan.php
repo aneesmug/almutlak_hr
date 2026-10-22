@@ -174,7 +174,7 @@ if (mysqli_num_rows($query) == 1) {
     }
     if ($loan_receipts) {
         $loan_actions[] = ['label' => __('payment_receipts', 'Payment Receipts'), 'icon' => 'mdi-paperclip', 'count' => count($loan_receipts),
-            'onclick' => 'showAttachmentsModal(' . json_encode($loan_receipts) . ', ' . json_encode(__('payment_receipts', 'Payment Receipts')) . ')'];
+            'onclick' => report_attachments_js($loan_receipts, __('payment_receipts', 'Payment Receipts'))];
     }
 
     // ---- Shared report layout (includes/report_layout.php) ----

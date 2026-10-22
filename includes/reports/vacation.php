@@ -560,7 +560,7 @@ if (mysqli_num_rows($query) == 1) {
             'label'   => __('view_attachments', 'View Attachments'),
             'icon'    => 'mdi-paperclip',
             'count'   => count($attachments),
-            'onclick' => 'showAttachmentsModal(' . json_encode($attachments) . ', ' . json_encode(__('attachments')) . ')',
+            'onclick' => report_attachments_js($attachments, __('attachments')),
         ]] : [],
     ];
     include dirname(__DIR__) . '/report_open.php';
@@ -625,7 +625,7 @@ if (mysqli_num_rows($query) == 1) {
                                             <div class="detail-item no-print">
                                                 <span class="label"><?= __('attachments') ?></span>
                                                 <span class="value">
-                                                    <button type="button" class="rpt-inline-btn" onclick='showAttachmentsModal(<?= json_encode($attachments) ?>, "<?= __('attachments') ?>")'>
+                                                    <button type="button" class="rpt-inline-btn" onclick="<?= htmlspecialchars(report_attachments_js($attachments, __('attachments')), ENT_QUOTES) ?>">
                                                         <i class="mdi mdi-paperclip"></i> <?= __('view_attachments') ?> (<?= count($attachments) ?>)
                                                     </button>
                                                 </span>

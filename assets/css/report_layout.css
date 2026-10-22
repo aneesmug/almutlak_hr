@@ -194,3 +194,20 @@ html.app-dark .rpt .vr-step-card, html.app-dark .rpt .vr-badge, html.app-dark .r
     .rpt-sign { break-after: avoid; }
     .rpt-foot { break-before: avoid; }
 }
+
+/* ---------- attachments popup (assets/js/report_attachments.js, cards from emp_docs.css .vd-*) ---------- */
+.rpt-att-swal.swal2-popup { border-radius: 18px; padding: 0 0 18px !important; background: #f5f6fa; }
+.rpt-att-swal .swal2-title { margin: 0; padding: 0; text-align: start; background: #fff; border-bottom: 1px solid #e8ebf1; }
+.rpt-att-head { display: flex; align-items: center; gap: 12px; padding: 16px 56px 14px 20px; }
+.rpt-att-head .docs-head-icon { flex: none; width: 42px; height: 42px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; color: #fff; background: #4f46e5; }
+.rpt-att-head b { display: block; font-size: 16px; font-weight: 800; color: #0f172a; }
+.rpt-att-head small { font-size: 12px; font-weight: 600; color: #64748b; }
+.rpt-att-swal .swal2-html-container { margin: 0 !important; padding: 16px 18px 0 !important; text-align: start; max-height: 70vh; overflow-y: auto; }
+.rpt-att-swal .swal2-close { top: 12px; }
+.vd-view-title b small { font-size: 12px; font-weight: 600; color: #64748b; }
+.vd-btn[disabled] { opacity: .4; cursor: default; }
+html.app-dark .rpt-att-swal.swal2-popup { background: #1b1f27; }
+html.app-dark .rpt-att-swal .swal2-title { background: #242a35; border-color: #323a48; }
+html.app-dark .rpt-att-head b { color: #e5e7eb; }
+.rpt-att-swal .swal2-title { line-height: 1.3; font-size: inherit; }
+.rpt-att-head small { display: block; margin-top: 2px; }
