@@ -211,3 +211,15 @@ html.app-dark .rpt-att-swal .swal2-title { background: #242a35; border-color: #3
 html.app-dark .rpt-att-head b { color: #e5e7eb; }
 .rpt-att-swal .swal2-title { line-height: 1.3; font-size: inherit; }
 .rpt-att-head small { display: block; margin-top: 2px; }
+/* compact cards in the report attachments popup (the Documents tab keeps its full size) */
+.emp-docs.rpt-att .vd-grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.emp-docs.rpt-att .vd-card { border-radius: 12px; }
+.emp-docs.rpt-att .vd-thumb { height: 78px; }
+.emp-docs.rpt-att .vd-thumb-icon { width: 42px; height: 42px; border-radius: 12px; font-size: 19px; }
+.emp-docs.rpt-att .vd-ext { top: 7px; inset-inline-start: 7px; padding: 1px 6px; font-size: 9.5px; }
+.emp-docs.rpt-att .vd-body { padding: 8px 10px 2px; }
+.emp-docs.rpt-att .vd-name { margin-bottom: 3px; font-size: 12.5px; }
+.emp-docs.rpt-att .vd-meta { gap: 2px 8px; font-size: 10.5px; }
+.emp-docs.rpt-att .vd-actions { gap: 5px; padding: 8px 10px 10px; }
+.emp-docs.rpt-att .vd-btn { min-width: 28px; height: 28px; padding: 0 8px; border-radius: 8px; font-size: 12px; }
+.rpt-att-swal .swal2-close:focus { box-shadow: none; }

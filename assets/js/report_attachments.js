@@ -89,7 +89,8 @@
             showConfirmButton: false,
             showCloseButton: true,
             allowOutsideClick: false,
-            width: 'min(900px, 96vw)',
+            // popup grows with the number of files (1 file = small popup)
+            width: 'min(' + [420, 420, 600, 780][Math.min(items.length, 3)] + 'px, 96vw)',
             customClass: { popup: 'rpt-att-swal srs-skip' },
             didOpen: function (popup) {
                 popup.querySelectorAll('.vd-open').forEach(function (btn) {
