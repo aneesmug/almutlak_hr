@@ -4088,6 +4088,7 @@ if (mysqli_num_rows($query) == 1) {
 							+ '<button type="button" class="vd-btn vd-view-close" title="<?= __('close') ?>"><i class="fa fa-xmark"></i></button>'
 							+ '</div></div><div class="vd-view-body">' + body + '</div></div>',
 						showConfirmButton: false,
+						allowOutsideClick: false,
 						width: 'min(1100px, 96vw)',
 						padding: 0,
 						customClass: { popup: 'vd-view-swal srs-skip' },
