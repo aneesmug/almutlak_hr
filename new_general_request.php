@@ -1,7 +1,11 @@
 <?php
+// Create General Request. Saved by includes/ajaxFile/ajaxGeneralRequest.php (action=create_general_request),
+// then view_general_request.php opens so the creator can pick the approval chain.
+// Styling: assets/css/smart_request.css (sr-* design system).
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/session_check.php';
 require_once __DIR__ . '/includes/special_access_helper.php';
+require_once __DIR__ . '/includes/general_request_helpers.php';
 
 // Restrict access to non-employee users only
 if ($user_type == 'employee') {
@@ -21,7 +25,7 @@ if(mysqli_num_rows($query) == 1){
 }
 
 // Get department name
-$dept_query = mysqli_query($conDB, "SELECT `dep_nme` FROM `department` WHERE `id` = '$user_dept'");
+$dept_query = mysqli_query($conDB, "SELECT `dep_nme` FROM `department` WHERE `id` = " . (int)$user_dept . " LIMIT 1");
 $dept_name = 'N/A';
 if ($dept_query && mysqli_num_rows($dept_query) > 0) {
     $dept_row = mysqli_fetch_assoc($dept_query);
@@ -29,11 +33,12 @@ if ($dept_query && mysqli_num_rows($dept_query) > 0) {
 }
 
 // Generate invoice number if not present
-if (!isset($_GET['id'])) {
+if (!isset($_GET['id']) || $_GET['id'] === '') {
     $inv_no = 'GR' . $empid . date("ymdHis");
     header("Location: new_general_request.php?id=$inv_no");
     exit;
 }
+$inv_no = (string)$_GET['id'];
 ?>
 <!doctype html>
 <html lang="<?= $current_lang ?? 'en' ?>" <?= ($is_rtl ?? false) ? 'dir="rtl"' : '' ?>>
@@ -44,31 +49,35 @@ if (!isset($_GET['id'])) {
     <meta content="Anees Afzal" name="author" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
-    
-    <!-- Plugins -->
-    <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="./plugins/switchery/switchery.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-    
+
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/metismenu.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/style_dark.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/smart_request.css?v=<?= @filemtime(__DIR__ . '/assets/css/smart_request.css') ?>" rel="stylesheet" type="text/css" />
     <script src="assets/js/modernizr.min.js"></script>
-    
+
     <style type="text/css">
-        .priority-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 600; }
-        .priority-low { background-color: #36c6d3; color: white; }
-        .priority-medium { background-color: #ffbd4a; color: white; }
-        .priority-high { background-color: #ff8acc; color: white; }
-        .priority-urgent { background-color: #f1556c; color: white; }
-        .item-specs { resize: vertical; min-height: 60px; }
+        /* Item row: Name | Type | Qty | [+][-] , Specifications on the next line */
+        .gr-new .gr-item .sr-addline-grid { grid-template-columns: minmax(0, 6fr) minmax(0, 4fr) minmax(0, 2fr) auto; }
+        .gr-new .sr-addline-grid .g-name, .gr-new .sr-addline-grid .g-type, .gr-new .sr-addline-grid .g-qty { grid-column: auto; }
+        .gr-new .sr-addline-grid .g-full { grid-column: 1 / -1; }
+        .gr-new .sr-addline-grid .g-act { display: flex; gap: 6px; align-self: end; }
+        .gr-new .g-act .sr-btn { width: 38px; height: 38px; padding: 0; justify-content: center; }
+        @media (max-width: 767px) {
+            .gr-new .gr-item .sr-addline-grid { grid-template-columns: minmax(0, 1fr) auto; }
+            .gr-new .sr-addline-grid .g-name, .gr-new .sr-addline-grid .g-type { grid-column: 1 / -1; }
+        }
+        .gr-new .sr-addline textarea { min-height: 60px; resize: vertical; }
+        .gr-new .sr-fsec .sr-addlines { max-height: none; overflow: visible; margin: 0; padding: 14px 14px 0; }
+        .gr-new .sr-fsec .sr-addlines .gr-item:last-child { margin-bottom: 14px; }
+        .gr-new .gr-file-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .gr-new .gr-file-list:empty { display: none; }
+        .gr-new .gr-submit-bar { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
     </style>
-    
+
     <?php if ($is_rtl): ?>
         <link href="assets/css/style_rtl.css" rel="stylesheet" type="text/css" />
     <?php endif; ?>
@@ -94,175 +103,140 @@ if (!isset($_GET['id'])) {
         <!-- Content Page -->
         <div class="content-page">
             <?php include("./includes/topbar.php"); ?>
-            
-            <div class="content">
+
+            <div class="content sr-page gr-new">
                 <div class="container-fluid">
+
+                    <div class="sr-head">
+                        <div>
+                            <h1><?=__('create_general_request', 'Create General Request')?></h1>
+                            <p><?= __('create_general_request_subtitle', 'Ask another department for equipment, supplies or a service.') ?></p>
+                        </div>
+                        <div class="sr-head-actions">
+                            <a href="all_general_requests.php" class="sr-btn"><i class="mdi mdi-arrow-left"></i> <?=__('all_general_requests', 'All General Requests')?></a>
+                        </div>
+                    </div>
+
                     <div class="row">
-                        <div class="col-12">
-                            <div class="card-box">
-                                <h4 class="header-title mb-4">
-                                    <i class="mdi mdi-file-plus mr-2"></i>
-                                    <?=__('create_general_request', 'Create General Request')?>
-                                </h4>
-                                
-                                <form id="generalRequestForm">
-                                    <!-- Hidden Fields -->
-                                    <input type="hidden" name="inv_no" value="<?= htmlspecialchars($_GET['id']) ?>">
-                                    <input type="hidden" name="emp_id" value="<?= $empid ?>">
-                                    <input type="hidden" name="emp_name" value="<?= htmlspecialchars($userwel) ?>">
-                                    <input type="hidden" name="user_dept" value="<?= $user_dept ?>">
-                                    
-                                    <!-- Request Information -->
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('request_number', 'Request Number')?></label>
-                                                <input type="text" class="form-control" value="<?= htmlspecialchars($_GET['id']) ?>" readonly>
+                        <div class="col-xl-8">
+                            <form id="generalRequestForm" class="sr-form" autocomplete="off" novalidate>
+                                <input type="hidden" name="inv_no" value="<?= htmlspecialchars($inv_no, ENT_QUOTES) ?>">
+                                <input type="hidden" name="emp_id" value="<?= htmlspecialchars((string)$empid, ENT_QUOTES) ?>">
+                                <input type="hidden" name="emp_name" value="<?= htmlspecialchars((string)$userwel, ENT_QUOTES) ?>">
+                                <input type="hidden" name="user_dept" value="<?= htmlspecialchars((string)$user_dept, ENT_QUOTES) ?>">
+
+                                <!-- Request details -->
+                                <div class="sr-fsec">
+                                    <div class="sr-fsec-head">
+                                        <span><i class="mdi mdi-file-document"></i> <?= __('request_details', 'Request details') ?></span>
+                                        <span class="sr-chip sr-mono"><i class="mdi mdi-pound"></i><?= htmlspecialchars($inv_no) ?></span>
+                                    </div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <div class="sr-newreq-info mb-0">
+                                                <span><i class="mdi mdi-calendar"></i> <?= __('request_date', 'Request Date') ?>: <b><?= date('d M Y') ?></b></span>
+                                                <span><i class="mdi mdi-account-outline"></i> <?= __('requester_name', 'Requester Name') ?>: <b><?= htmlspecialchars((string)$userwel) ?></b></span>
+                                                <span><i class="mdi mdi-domain"></i> <?= __('requester_department', 'Requester Department') ?>: <b><?= htmlspecialchars((string)$dept_name) ?></b></span>
                                             </div>
                                         </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('request_date', 'Request Date')?></label>
-                                                <input type="text" class="form-control" value="<?= date("d F Y")?>" readonly>
+                                        <div class="sr-fcol c-12">
+                                            <label for="f_request_title"><?= __('request_title', 'Request Title') ?> <span class="text-danger">*</span></label>
+                                            <input type="text" name="request_title" id="f_request_title" class="form-control" maxlength="250" data-required="1" placeholder="<?= htmlspecialchars(__('enter_request_title', 'Enter request title'), ENT_QUOTES) ?>">
+                                        </div>
+                                        <div class="sr-fcol c-6">
+                                            <label for="f_department_to"><?= __('target_department', 'Target Department') ?> <span class="text-danger">*</span></label>
+                                            <select name="department_to" id="f_department_to" class="form-control" data-required="1">
+                                                <option value=""><?= __('select') ?></option>
+                                                <?php foreach (gr_target_departments() as $v => $l): ?>
+                                                    <option value="<?= htmlspecialchars($v, ENT_QUOTES) ?>"><?= htmlspecialchars($l) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="sr-fcol c-6">
+                                            <label for="f_request_category"><?= __('request_category', 'Request Category') ?> <span class="text-danger">*</span></label>
+                                            <select name="request_category" id="f_request_category" class="form-control" data-required="1">
+                                                <option value=""><?= __('select') ?></option>
+                                                <?php foreach (gr_categories() as $v => $l): ?>
+                                                    <option value="<?= htmlspecialchars($v, ENT_QUOTES) ?>"><?= htmlspecialchars($l) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <label><?= __('priority', 'Priority') ?> <span class="text-danger">*</span></label>
+                                            <div class="sr-attach-choice" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
+                                                <?php $pri_icons = ['low' => 'mdi-flag-outline', 'medium' => 'mdi-flag', 'high' => 'mdi-flag', 'urgent' => 'mdi-flag'];
+                                                foreach (gr_priorities() as $v => $p): ?>
+                                                    <label class="sr-choice">
+                                                        <input type="radio" name="priority" value="<?= $v ?>"<?= $v === 'medium' ? ' checked' : '' ?>>
+                                                        <span><i class="mdi <?= $pri_icons[$v] ?>"></i> <?= htmlspecialchars($p[0]) ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
                                             </div>
+                                        </div>
+                                        <div class="sr-fcol c-12">
+                                            <label for="f_description"><?= __('description', 'Description') ?></label>
+                                            <textarea name="description" id="f_description" class="form-control" rows="3" placeholder="<?= htmlspecialchars(__('additional_details', 'Additional details or notes'), ENT_QUOTES) ?>"></textarea>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('requester_name', 'Requester Name')?></label>
-                                                <input type="text" class="form-control" value="<?= htmlspecialchars($userwel) ?>" readonly>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('requester_department', 'Requester Department')?></label>
-                                                <input type="text" class="form-control" value="<?= htmlspecialchars($dept_name) ?>" readonly>
-                                            </div>
+                                <!-- Items -->
+                                <div class="sr-fsec">
+                                    <div class="sr-fsec-head">
+                                        <span><i class="mdi mdi-format-list-bulleted"></i> <?= __('request_items', 'Request Items') ?></span>
+                                        <span class="sr-count" id="grItemCount">0</span>
+                                    </div>
+                                    <div id="grItems" class="sr-addlines"></div>
+                                </div>
+
+                                <!-- Attachments -->
+                                <div class="sr-fsec">
+                                    <div class="sr-fsec-head">
+                                        <span><i class="mdi mdi-paperclip"></i> <?= __('attachments', 'Attachments') ?> <?= __('optional', '(Optional)') ?></span>
+                                    </div>
+                                    <div class="sr-fgrid">
+                                        <div class="sr-fcol c-12">
+                                            <label class="sr-filepick" for="attachments">
+                                                <input type="file" name="attachments[]" id="attachments" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                                                <i class="mdi mdi-cloud-upload"></i>
+                                                <span>
+                                                    <b class="js-file-name"><?= __('choose_files', 'Choose files or drop them here') ?></b>
+                                                    <small><?= __('upload_multiple_files', 'You can upload multiple files (PDF, Images, Word, Excel)') ?></small>
+                                                </span>
+                                            </label>
+                                            <div class="gr-file-list" id="grFileList"></div>
                                         </div>
                                     </div>
+                                </div>
 
-                                    <hr class="my-4">
+                                <div class="gr-submit-bar mb-4">
+                                    <a href="all_general_requests.php" class="sr-btn"><i class="mdi mdi-close"></i> <?= __('cancel') ?></a>
+                                    <button type="submit" class="sr-btn sr-btn-primary" id="submitBtn"><i class="mdi mdi-content-save"></i> <?= __('save_as_draft', 'Save as Draft') ?></button>
+                                </div>
+                            </form>
+                        </div>
 
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('request_title', 'Request Title')?> <span class="text-danger">*</span></label>
-                                                <input type="text" name="request_title" class="form-control" required placeholder="<?=__('enter_request_title', 'Enter request title')?>">
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="form-group">
-                                                <label><?=__('target_department', 'Target Department')?> <span class="text-danger">*</span></label>
-                                                <select name="department_to" class="form-control" required>
-                                                    <option value=""><?=__('select')?></option>
-                                                    <option value="IT"><?=__('it_department', 'IT Department')?></option>
-                                                    <option value="HR"><?=__('hr_department', 'HR Department')?></option>
-                                                    <option value="Transportation"><?=__('transportation_dept', 'Transportation')?></option>
-                                                    <option value="Finance"><?=__('finance_department', 'Finance')?></option>
-                                                    <option value="Maintenance"><?=__('maintenance_dept', 'Maintenance')?></option>
-                                                    <option value="Admin"><?=__('admin_department', 'Admin')?></option>
-                                                    <option value="Other"><?=__('other')?></option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="form-group">
-                                                <label><?=__('priority', 'Priority')?> <span class="text-danger">*</span></label>
-                                                <select name="priority" class="form-control" required>
-                                                    <option value="low"><?=__('low', 'Low')?></option>
-                                                    <option value="medium" selected><?=__('medium', 'Medium')?></option>
-                                                    <option value="high"><?=__('high', 'High')?></option>
-                                                    <option value="urgent"><?=__('urgent', 'Urgent')?></option>
-                                                </select>
-                                            </div>
-                                        </div>
+                        <!-- Side: how it works -->
+                        <div class="col-xl-4">
+                            <div class="sr-sticky">
+                                <div class="sr-card">
+                                    <div class="sr-card-head">
+                                        <h5 class="sr-card-title"><i class="mdi mdi-information-outline"></i> <?= __('how_it_works', 'How it works') ?></h5>
                                     </div>
-
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('request_category', 'Request Category')?> <span class="text-danger">*</span></label>
-                                                <select name="request_category" class="form-control" required>
-                                                    <option value=""><?=__('select')?></option>
-                                                    <option value="Equipment"><?=__('equipment', 'Equipment')?></option>
-                                                    <option value="Service"><?=__('service', 'Service')?></option>
-                                                    <option value="Supplies"><?=__('supplies', 'Supplies')?></option>
-                                                    <option value="Maintenance"><?=__('maintenance', 'Maintenance')?></option>
-                                                    <option value="Support"><?=__('support', 'Support')?></option>
-                                                    <option value="Other"><?=__('other')?></option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label><?=__('description', 'Description')?></label>
-                                                <textarea name="description" class="form-control" rows="3" placeholder="<?=__('additional_details', 'Additional details or notes')?>"></textarea>
-                                            </div>
-                                        </div>
+                                    <div class="sr-card-body">
+                                        <ol class="sr-guide">
+                                            <li><?= __('gr_step_details', 'Fill in the title, target department, category and priority.') ?></li>
+                                            <li><?= __('gr_step_items', 'Add each item you need with its quantity and specifications.') ?></li>
+                                            <li><?= __('gr_step_draft', 'Save the request. It stays a draft until you submit it.') ?></li>
+                                            <li><?= __('gr_step_approvers', 'On the next page, choose the approvers in order and submit for approval.') ?></li>
+                                            <li><?= __('gr_step_delivery', 'Once approved, the target department delivers the items.') ?></li>
+                                        </ol>
                                     </div>
-
-                                    <hr class="my-4">
-                                    
-                                    <h5 class="mb-3">
-                                        <i class="mdi mdi-format-list-bulleted mr-2"></i>
-                                        <?=__('request_items', 'Request Items')?>
-                                    </h5>
-
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered" id="itemsTable">
-                                            <thead class="thead-light">
-                                                <tr>
-                                                    <th width="5%">#</th>
-                                                    <th width="25%"><?=__('item_name', 'Item Name')?> <span class="text-danger">*</span></th>
-                                                    <th width="15%"><?=__('item_type', 'Type/Category')?></th>
-                                                    <th width="10%"><?=__('quantity')?> <span class="text-danger">*</span></th>
-                                                    <th width="35%"><?=__('specifications', 'Specifications')?></th>
-                                                    <th width="10%" class="text-center"><?=__('action')?></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="itemsTableBody">
-                                                <!-- Items will be added here dynamically -->
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    <hr class="my-4">
-
-                                    <!-- Attachments Section -->
-                                    <div class="row">
-                                        <div class="col-md-12">
-                                            <h5 class="mb-3">
-                                                <i class="mdi mdi-paperclip mr-2"></i>
-                                                <?=__('attachments', 'Attachments')?> <?=__('optional', '(Optional)')?>
-                                            </h5>
-                                            <div class="form-group">
-                                                <input type="file" name="attachments[]" id="attachments" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
-                                                <small class="form-text text-muted"><?=__('upload_multiple_files', 'You can upload multiple files (PDF, Images, Word, Excel)')?></small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <hr class="my-4">
-
-                                    <!-- Action Buttons -->
-                                    <div class="row">
-                                        <div class="col-12 text-right">
-                                            <div class="btn-group" role="group">
-                                                <button type="button" class="btn btn-secondary" onclick="window.location.href='all_general_requests.php'">
-                                                    <i class="mdi mdi-close"></i> <?=__('cancel')?>
-                                                </button>
-                                                <button type="submit" class="btn btn-primary" id="submitBtn">
-                                                    <i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </form>
+                                </div>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </div>
 
@@ -276,230 +250,178 @@ if (!isset($_GET['id'])) {
     <script src="assets/js/metisMenu.min.js"></script>
     <script src="assets/js/waves.js"></script>
     <script src="assets/js/jquery.slimscroll.js"></script>
-    <script src="./plugins/select2/js/select2.min.js"></script>
-    <script src="./plugins/bootstrap-select/js/bootstrap-select.js"></script>
-    <script src="./plugins/switchery/switchery.min.js"></script>
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="assets/js/gr_item_suggest.js?v=<?= @filemtime(__DIR__ . '/assets/js/gr_item_suggest.js') ?>"></script>
 
     <script type="text/javascript">
-        let itemCounter = 0;
-
-        // Item types based on department
-        const itemTypesByDepartment = {
-            'IT': ['Laptop', 'Desktop', 'Monitor', 'Keyboard', 'Mouse', 'Printer', 'Printer Ink/Toner', 'Network Equipment', 'Software License', 'Other'],
-            'Transportation': ['Vehicle', 'Mobile Phone', 'SIM Card', 'Fuel Card', 'GPS Device', 'Other'],
-            'HR': ['Stationery', 'Office Supplies', 'Furniture', 'ID Card', 'Badge', 'Other'],
-            'Finance': ['Calculator', 'Receipt Book', 'Document Folder', 'Safe/Locker', 'Other'],
-            'Maintenance': ['Tools', 'Equipment', 'Safety Gear', 'Cleaning Supplies', 'Other'],
-            'Admin': ['Furniture', 'Office Equipment', 'Decoration', 'Other'],
-            'Other': ['Other']
+    $(function () {
+        const T = {
+            select: <?= json_encode(__('select')) ?>,
+            itemName: <?= json_encode(__('item_name', 'Item Name')) ?>,
+            itemNamePh: <?= json_encode(__('enter_item_name', 'Enter item name')) ?>,
+            itemType: <?= json_encode(__('item_type', 'Type/Category')) ?>,
+            quantity: <?= json_encode(__('quantity')) ?>,
+            specs: <?= json_encode(__('specifications', 'Specifications')) ?>,
+            specsPh: <?= json_encode(__('item_specifications', 'Item specifications or requirements')) ?>,
+            item: <?= json_encode(__('item', 'Item')) ?>,
+            remove: <?= json_encode(__('remove', 'Remove')) ?>,
+            addItem: <?= json_encode(__('add_new_item', 'Add New Item')) ?>,
+            pickDeptFirst: <?= json_encode(__('select_target_department_first', 'Select the target department to see item types')) ?>,
+            error: <?= json_encode(__('error')) ?>,
+            success: <?= json_encode(__('success')) ?>,
+            required: <?= json_encode(__('fill_required_fields_validation', 'Please fill all required fields')) ?>,
+            oneItem: <?= json_encode(__('add_at_least_one_item', 'Please add at least one item to the request')) ?>,
+            submitting: <?= json_encode(__('submitting', 'Submitting')) ?>,
+            created: <?= json_encode(__('request_created_successfully', 'Request created successfully')) ?>,
+            nextStep: <?= json_encode(__('gr_next_step', 'Saved as a draft. Next: choose approvers and submit.')) ?>,
+            failed: <?= json_encode(__('request_creation_failed', 'Failed to create request')) ?>,
+            submitError: <?= json_encode(__('request_submission_error', 'An error occurred while submitting the request')) ?>,
+            filesChosen: <?= json_encode(__('files_selected', 'files selected')) ?>
         };
+        const ITEM_TYPES = <?= json_encode(gr_item_types()) ?>;
+        const $form = $('#generalRequestForm');
+        const $items = $('#grItems');
+        const saveBtnHtml = $('#submitBtn').html();
 
-        function getItemTypeOptions(department) {
-            const types = itemTypesByDepartment[department] || itemTypesByDepartment['Other'];
-            let options = '<option value=""><?=__('select')?></option>';
-            types.forEach(type => {
-                options += `<option value="${type}">${type}</option>`;
-            });
-            return options;
+        function esc(str) {
+            return $('<div>').text(str == null ? '' : String(str)).html();
         }
 
-        function addItemRow() {
-            // Validate required fields before adding new row
-            const department = $('select[name="department_to"]').val();
-            const category = $('select[name="request_category"]').val();
-            
-            if (!department || !category) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: '<?=__('required_fields', 'Required Fields')?>',
-                    text: '<?=__('select_department_category_first', 'Please select Target Department and Request Category first')?>',
-                    confirmButtonColor: APP_COLORS.primary
+        function typeOptions(dept) {
+            const types = ITEM_TYPES[dept] || [];
+            let html = '<option value="">' + esc(dept ? T.select : T.pickDeptFirst) + '</option>';
+            types.forEach(function (t) { html += '<option value="' + esc(t.v) + '">' + esc(t.l) + '</option>'; });
+            return html;
+        }
+
+        // Item rows use the same line-card look as the Smart Request "New Request" popup
+        function addItem(focus, $after) {
+            const dept = $('#f_department_to').val();
+            const $row = $(
+                '<div class="sr-addline gr-item">' +
+                    '<div class="sr-addline-head">' +
+                        '<span class="sr-addline-no"></span>' +
+                    '</div>' +
+                    '<div class="sr-addline-grid">' +
+                        '<div class="g-name"><label>' + esc(T.itemName) + ' <span class="text-danger">*</span></label>' +
+                            '<input type="text" class="form-control" data-f="item_name" data-required="1" maxlength="250" autocomplete="off" placeholder="' + esc(T.itemNamePh) + '"></div>' +
+                        '<div class="g-type"><label>' + esc(T.itemType) + '</label>' +
+                            '<select class="form-control" data-f="item_type">' + typeOptions(dept) + '</select></div>' +
+                        '<div class="g-qty"><label>' + esc(T.quantity) + ' <span class="text-danger">*</span></label>' +
+                            '<input type="number" class="form-control" data-f="quantity" data-required="1" value="1" min="1" step="1"></div>' +
+                        '<div class="g-act">' +
+                            '<button type="button" class="sr-btn sr-btn-success gr-add" title="' + esc(T.addItem) + '"><i class="mdi mdi-plus"></i></button>' +
+                            '<button type="button" class="sr-btn sr-btn-danger gr-remove" title="' + esc(T.remove) + '"><i class="mdi mdi-minus"></i></button>' +
+                        '</div>' +
+                        '<div class="g-full"><label>' + esc(T.specs) + '</label>' +
+                            '<textarea class="form-control" data-f="specifications" rows="2" placeholder="' + esc(T.specsPh) + '"></textarea></div>' +
+                    '</div>' +
+                '</div>'
+            );
+            if ($after && $after.length) $after.after($row); else $items.append($row);
+            renumber();
+            if (focus) $row.find('[data-f="item_name"]').trigger('focus');
+        }
+
+        // Keeps names sequential (items[1..n][field]) and the first row non-removable
+        function renumber() {
+            const $rows = $items.children('.gr-item');
+            $rows.each(function (i) {
+                $(this).find('.sr-addline-no').text(i + 1);
+                $(this).find('[data-f]').each(function () {
+                    $(this).attr('name', 'items[' + (i + 1) + '][' + $(this).data('f') + ']');
                 });
-                return false;
-            }
-            
-            itemCounter++;
-            const itemTypeOptions = getItemTypeOptions(department);
-            
-            const row = `
-                <tr data-row-id="${itemCounter}">
-                    <td class="text-center">${itemCounter}</td>
-                    <td><input type="text" name="items[${itemCounter}][item_name]" class="form-control" required placeholder="<?=__('enter_item_name', 'Enter item name')?>"></td>
-                    <td>
-                        <select name="items[${itemCounter}][item_type]" class="form-control">
-                            ${itemTypeOptions}
-                        </select>
-                    </td>
-                    <td><input type="number" name="items[${itemCounter}][quantity]" class="form-control" value="1" min="1" required></td>
-                    <td><textarea name="items[${itemCounter}][specifications]" class="form-control item-specs" placeholder="<?=__('item_specifications', 'Item specifications or requirements')?>"></textarea></td>
-                    <td class="text-center action-cell">
-                        <button type="button" class="btn btn-success btn-sm bbtn addRowBtn" aria-label="Add Row">
-                            <i class="mdi mdi-plus"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-            $('#itemsTableBody').append(row);
-            renumberRows();
-        }
-
-        function renumberRows() {
-            const rows = $('#itemsTableBody tr');
-            rows.each(function(index) {
-                const newIndex = index + 1;
-                $(this).find('td:first').text(newIndex);
-                
-                // Update form field names to be sequential
-                $(this).find('input, select, textarea').each(function() {
-                    let name = $(this).attr('name');
-                    if (name) {
-                        // Replace the old index with new sequential index
-                        name = name.replace(/items\[\d+\]/, `items[${newIndex}]`);
-                        $(this).attr('name', name);
-                    }
-                });
+                $(this).find('.gr-remove').prop('disabled', $rows.length === 1);
             });
-            refreshActionButtons(rows);
+            $('#grItemCount').text($rows.length);
         }
 
-        function refreshActionButtons(rows) {
-            rows.each(function(index) {
-                const isFirst = index === 0;
-                const $cell = $(this).find('td.action-cell');
-                if (!$cell.length) return;
-                if (isFirst) {
-                    // First row: show add button only
-                    $cell.html('<button type="button" class="btn btn-success bbtn btn-sm addRowBtn" aria-label="Add Row"><i class="mdi mdi-plus"></i></button>');
-                } else {
-                    // All other rows: show delete button only
-                    $cell.html(`<button type="button" class="btn btn-danger bbtn btn-sm removeItemBtn" data-row-id="${index + 1}" aria-label="Remove Row"><i class="mdi mdi-minus"></i></button>`);
-                }
+        // Item Name auto-fill from earlier requests; picking one also fills Type and Specifications
+        GRItemSuggest.bind($items, {
+            selector: '[data-f="item_name"]',
+            getDept: function () { return $('#f_department_to').val(); },
+            onPick: function (it, $in) {
+                const $row = $in.closest('.gr-item');
+                const $type = $row.find('[data-f="item_type"]');
+                if (it.type && $type.find('option').filter(function () { return this.value === it.type; }).length) $type.val(it.type);
+                const $specs = $row.find('[data-f="specifications"]');
+                if (it.specs && !$.trim($specs.val())) $specs.val(it.specs);
+                $row.find('[data-f="quantity"]').trigger('focus').trigger('select');
+            }
+        });
+
+        // + adds a row right below this one, - removes this row (the last remaining row stays)
+        $items.on('click', '.gr-add', function () {
+            addItem(true, $(this).closest('.gr-item'));
+        });
+        $items.on('click', '.gr-remove', function () {
+            if ($items.children('.gr-item').length <= 1) return;
+            $(this).closest('.gr-item').remove();
+            renumber();
+        });
+
+        // Target department drives the item type list (keeps the current choice when still valid)
+        $('#f_department_to').on('change', function () {
+            const html = typeOptions($(this).val());
+            $items.find('[data-f="item_type"]').each(function () {
+                const cur = $(this).val();
+                $(this).html(html);
+                if (cur && $(this).find('option').filter(function () { return this.value === cur; }).length) $(this).val(cur);
             });
-        }
-
-        // Update item types when department changes
-        $('select[name="department_to"]').on('change', function() {
-            const department = $(this).val() || 'Other';
-            const itemTypeOptions = getItemTypeOptions(department);
-            
-            $('#itemsTableBody select[name*="[item_type]"]').each(function() {
-                const currentValue = $(this).val();
-                $(this).html(itemTypeOptions);
-                // Try to maintain selection if it exists in new options
-                if ($(this).find(`option[value="${currentValue}"]`).length > 0) {
-                    $(this).val(currentValue);
-                }
-            });
-            
-            // Auto-add first row when both required fields are selected
-            checkAndAddFirstRow();
         });
 
-        // Auto-add first row when category is selected
-        $('select[name="request_category"]').on('change', function() {
-            checkAndAddFirstRow();
-        });
-
-        // Function to check if both fields are selected and add first row if needed
-        function checkAndAddFirstRow() {
-            const department = $('select[name="department_to"]').val();
-            const category = $('select[name="request_category"]').val();
-            const hasRows = $('#itemsTableBody tr').length > 0;
-            
-            if (department && category && !hasRows) {
-                addItemRow();
-            }
-        }
-
-        // Add item button
-        $('#addItemBtn').on('click', function() {
-            addItemRow();
-        });
-
-        // Add row inline button
-        $(document).on('click', '.addRowBtn', function() {
-            addItemRow();
-        });
-
-        // Remove item button
-        $(document).on('click', '.removeItemBtn', function() {
-            const $row = $(this).closest('tr');
-            const rowIndex = $row.index();
-            
-            // Prevent removing first row
-            if (rowIndex === 0) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: '<?=__('warning', 'Warning')?>',
-                    text: '<?=__('cannot_remove_first_item', 'Cannot remove the first item')?>',
-                    confirmButtonColor: APP_COLORS.primary
-                });
-                return;
-            }
-            
-            if ($('#itemsTableBody tr').length > 1) {
-                $row.remove();
-                // Reset counter and renumber all rows sequentially
-                itemCounter = $('#itemsTableBody tr').length;
-                renumberRows();
-            }
-        });
-
-        // Prevent Enter from submitting; use it to add a row instead (except in textarea)
-        $('#generalRequestForm').on('keydown', function(e) {
-            if (e.key === 'Enter' && !$(e.target).is('textarea')) {
-                e.preventDefault();
-                addItemRow();
-            }
-        });
-
-        // Form submission
-        $('#generalRequestForm').on('submit', function(e) {
+        // Enter in an item field adds the next row; never submits the form
+        $form.on('keydown', function (e) {
+            if (e.key !== 'Enter' || $(e.target).is('textarea, button')) return;
             e.preventDefault();
-            
-            // Validate at least one item
-            if ($('#itemsTableBody tr').length === 0) {
-                Swal.fire({
-                    icon: 'error',
-                    title: '<?=__('error')?>',
-                    text: '<?=__('add_at_least_one_item', 'Please add at least one item to the request')?>',
-                    confirmButtonColor: APP_COLORS.primary
-                });
-                return false;
-            }
+            const $cur = $(e.target).closest('.gr-item');
+            if ($cur.length) addItem(true, $cur);
+        });
 
-            // Validate all items have required fields
-            let hasEmptyItem = false;
-            $('#itemsTableBody tr').each(function() {
-                const itemName = $(this).find('input[name*="[item_name]"]').val().trim();
-                const quantity = $(this).find('input[name*="[quantity]"]').val().trim();
-                
-                if (!itemName || !quantity) {
-                    hasEmptyItem = true;
-                    return false;
+        // Multi-file picker: list the chosen files as chips
+        const $pick = $form.find('.sr-filepick'), $file = $('#attachments'), $fname = $pick.find('.js-file-name');
+        const pickText = $fname.text();
+        function showFiles() {
+            const files = $file[0].files || [];
+            $pick.toggleClass('has-file', files.length > 0);
+            $fname.text(files.length ? files.length + ' ' + T.filesChosen : pickText);
+            $('#grFileList').html(Array.prototype.map.call(files, function (f) {
+                return '<span class="sr-chip"><i class="mdi mdi-paperclip"></i>' + esc(f.name) + ' &middot; ' + (f.size / 1048576).toFixed(2) + ' MB</span>';
+            }).join(''));
+        }
+        $file.on('change', showFiles);
+        $pick.on('dragover dragenter', function (e) { e.preventDefault(); $pick.addClass('is-drag'); })
+            .on('dragleave dragend drop', function () { $pick.removeClass('is-drag'); })
+            .on('drop', function (e) {
+                e.preventDefault();
+                const dt = e.originalEvent.dataTransfer;
+                if (dt && dt.files && dt.files.length) { $file[0].files = dt.files; showFiles(); }
+            });
+
+        $form.on('input change', '.is-invalid', function () { $(this).removeClass('is-invalid'); });
+
+        function fail(text) {
+            Swal.fire({ icon: 'error', title: T.error, text: text, allowOutsideClick: false });
+        }
+
+        $form.on('submit', function (e) {
+            e.preventDefault();
+
+            let $bad = $();
+            $form.find('[data-required]').each(function () {
+                if (!String($(this).val() || '').trim() || ($(this).attr('type') === 'number' && parseInt($(this).val(), 10) < 1)) {
+                    $bad = $bad.add(this);
                 }
             });
-            
-            if (hasEmptyItem) {
-                Swal.fire({
-                    icon: 'error',
-                    title: '<?=__('error')?>',
-                    text: '<?=__('all_items_required_fields', 'All items must have name and quantity')?>',
-                    confirmButtonColor: APP_COLORS.primary
-                });
-                return false;
-            }
+            $bad.addClass('is-invalid');
+            if ($items.children('.gr-item').length === 0) { fail(T.oneItem); return; }
+            if ($bad.length) { $bad.first().trigger('focus'); fail(T.required); return; }
 
-            // Disable submit button
-            $('#submitBtn').prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin"></i> <?=__('submitting', 'Submitting')?>...');
+            $('#submitBtn').prop('disabled', true).html('<i class="mdi mdi-loading mdi-spin"></i> ' + esc(T.submitting) + '...');
 
             const formData = new FormData(this);
             formData.append('action', 'create_general_request');
-            // Note: FormData(this) already includes all form inputs including attachments[]
-            // No need to manually append files again
 
             $.ajax({
                 url: './includes/ajaxFile/ajaxGeneralRequest.php',
@@ -507,46 +429,23 @@ if (!isset($_GET['id'])) {
                 data: formData,
                 processData: false,
                 contentType: false,
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: '<?=__('success')?>',
-                            text: response.message || '<?=__('request_created_successfully', 'Request created successfully')?>',
-                            confirmButtonColor: APP_COLORS.primary,
-                            timer: 2000
-                        }).then(function() {
-                            window.location.href = 'view_general_request.php?id=' + response.inv_no;
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: '<?=__('error')?>',
-                            text: response.message || '<?=__('request_creation_failed', 'Failed to create request')?>',
-                            confirmButtonColor: APP_COLORS.primary
-                        });
-                        $('#submitBtn').prop('disabled', false).html('<i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: '<?=__('error')?>',
-                        text: '<?=__('request_submission_error', 'An error occurred while submitting the request')?>',
-                        confirmButtonColor: APP_COLORS.primary
-                    });
-                    $('#submitBtn').prop('disabled', false).html('<i class="mdi mdi-content-save"></i> <?=__('submit_request', 'Submit Request')?>');
+                dataType: 'json'
+            }).done(function (response) {
+                if (response.success) {
+                    Swal.fire({ icon: 'success', title: response.message || T.created, text: T.nextStep, timer: 1800, showConfirmButton: false, allowOutsideClick: false })
+                        .then(function () { window.location.href = 'view_general_request.php?id=' + encodeURIComponent(response.inv_no); });
+                } else {
+                    fail(response.message || T.failed);
+                    $('#submitBtn').prop('disabled', false).html(saveBtnHtml);
                 }
+            }).fail(function () {
+                fail(T.submitError);
+                $('#submitBtn').prop('disabled', false).html(saveBtnHtml);
             });
         });
 
-        // Initialize with one item row
-        $(document).ready(function() {
-            // Don't auto-add row on page load
-            // User must select department and category first
-        });
+        addItem(false);
+    });
     </script>
 </body>
 </html>

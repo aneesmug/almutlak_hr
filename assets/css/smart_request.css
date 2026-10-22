@@ -1287,3 +1287,17 @@ button.sr-open-btn { border: 0; cursor: pointer; }
 .sr-page .att-total { cursor: default; background: linear-gradient(135deg, var(--sr-surface), var(--tone-indigo-bg)); }
 .sr-page .att-total:hover { transform: none; }
 .sr-page .att-total-sub { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--tone-indigo-fg); white-space: nowrap; }
+
+/* General Request: Item Name auto-fill list (assets/js/gr_item_suggest.js). Lives on <body>,
+   fixed-positioned under the input, above SweetAlert2 popups. */
+.gr-suggest {
+    position: fixed; z-index: 2000; margin: 0; padding: 4px; list-style: none; max-height: 280px; overflow-y: auto;
+    background: var(--sr-surface); border: 1px solid var(--sr-border); border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .16); text-align: start;
+}
+.gr-suggest li { padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.gr-suggest li.is-active { background: var(--sr-accent-soft); }
+.gr-suggest-name { font-size: 13px; font-weight: 600; color: var(--sr-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-suggest-name b { color: var(--sr-accent-strong); font-weight: 800; }
+.gr-suggest-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; font-size: 11px; color: var(--sr-muted); }
+.gr-suggest-meta i { margin-inline-end: 3px; }

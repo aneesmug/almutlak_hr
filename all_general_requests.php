@@ -47,18 +47,10 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
     <!-- App favicon -->
     <link rel="shortcut icon" href="<?=get_setting($conDB, 'favicon')?>">
 
-    <!-- Modal -->
-    <link href="./plugins/custombox/css/custombox.min.css" rel="stylesheet">
-
-    <!-- Plugins css -->
-    <link href="./plugins/bootstrap-select/css/bootstrap-select.min.css" rel="stylesheet" />
-    <link href="./plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css" />
-    
     <!-- DataTables -->
     <link href="./plugins/datatables/dataTables.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/buttons.bootstrap4.min.css" rel="stylesheet" type="text/css" />
     <link href="./plugins/datatables/responsive.bootstrap4.min.css" rel="stylesheet" type="text/css" />
-    <link href="./plugins/datatables/select.bootstrap4.min.css" rel="stylesheet" type="text/css" />
 
     <!-- App css -->
     <link href="assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
@@ -111,6 +103,12 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                         <div class="sr-notice tone-red" role="alert">
                             <i class="mdi mdi-alert-circle-outline"></i>
                             <div><?= __('error_request_not_found', 'The requested item was not found or the link is invalid.') ?></div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (isset($_GET['action']) && $_GET['action'] === 'success'): ?>
+                        <div class="sr-notice tone-green" role="status">
+                            <i class="mdi mdi-check-circle-outline"></i>
+                            <div><?= __('request_action_saved', 'Your action on the request was saved successfully.') ?></div>
                         </div>
                     <?php endif; ?>
 
@@ -201,38 +199,40 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
     <script src="assets/js/jquery.core.js"></script>
     <script src="assets/js/jquery.app.js?t=<?= time() ?>"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
     <script type="text/javascript">
         $(document).ready(function(){
             var table = null;
-            var exportTitle = "<?=__('all_general_requests', 'All General Requests')?>";
+            var exportTitle = <?= json_encode(__('all_general_requests', 'All General Requests')) ?>;
             var columnNum = [ 1, 2, 3, 4, 5, 6, 7, 8 ];
 
-            function esc(s) {
-                return String(s === null || s === undefined ? '' : s)
-                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            function esc(str) {
+                return $('<div>').text(str == null ? '' : String(str)).html();
             }
             function initials(name) {
-                return String(name || '').trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+                var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+                if (!parts.length) return '?';
+                return ((parts[0][0] || '') + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
+            }
+            function shortName(name) {
+                var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+                return parts.slice(0, 2).join(' ');
             }
 
-            // Status / priority -> pill tone
+            // Status / priority -> pill tone (tone classes live in smart_request.css)
             var statusObj = {
-                'draft':                { title: '<?=__('draft_status')?>', tone: 'tone-slate' },
-                'pending_approval':     { title: '<?=__('pending_approval')?>', tone: 'tone-amber' },
-                'approved':             { title: '<?=__('approved')?>', tone: 'tone-indigo' },
-                'waiting_for_delivery': { title: '<?=__('waiting_for_delivery', 'Waiting for Delivery')?>', tone: 'tone-sky' },
-                'completed':            { title: '<?=__('completed', 'Completed')?>', tone: 'tone-green' },
-                'rejected':             { title: '<?=__('rejected')?>', tone: 'tone-red' },
-                'cancelled':            { title: '<?=__('cancelled', 'Cancelled')?>', tone: 'tone-slate' }
+                'draft':                { title: <?= json_encode(__('draft_status')) ?>, tone: 'tone-slate' },
+                'pending_approval':     { title: <?= json_encode(__('pending_approval')) ?>, tone: 'tone-amber' },
+                'approved':             { title: <?= json_encode(__('approved')) ?>, tone: 'tone-indigo' },
+                'waiting_for_delivery': { title: <?= json_encode(__('waiting_for_delivery', 'Waiting for Delivery')) ?>, tone: 'tone-sky' },
+                'completed':            { title: <?= json_encode(__('completed', 'Completed')) ?>, tone: 'tone-green' },
+                'rejected':             { title: <?= json_encode(__('rejected')) ?>, tone: 'tone-red' },
+                'cancelled':            { title: <?= json_encode(__('cancelled', 'Cancelled')) ?>, tone: 'tone-slate' }
             };
             var priorityObj = {
-                'low':    { title: '<?=__('low_priority', 'Low')?>', tone: 'tone-sky' },
-                'medium': { title: '<?=__('medium_priority', 'Medium')?>', tone: 'tone-indigo' },
-                'high':   { title: '<?=__('high_priority', 'High')?>', tone: 'tone-amber' },
-                'urgent': { title: '<?=__('urgent_priority', 'Urgent')?>', tone: 'tone-red' }
+                'low':    { title: <?= json_encode(__('low_priority', 'Low')) ?>, tone: 'tone-sky' },
+                'medium': { title: <?= json_encode(__('medium_priority', 'Medium')) ?>, tone: 'tone-indigo' },
+                'high':   { title: <?= json_encode(__('high_priority', 'High')) ?>, tone: 'tone-amber' },
+                'urgent': { title: <?= json_encode(__('urgent_priority', 'Urgent')) ?>, tone: 'tone-red' }
             };
 
             function setStatus(status, redraw) {
@@ -319,10 +319,16 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                         render: function (data, type) {
                             if (type !== 'display') return data;
                             return '<div class="sr-person"><span class="sr-avatar sr-avatar-sm">' + esc(initials(data)) + '</span>'
-                                + '<span class="sr-person-name">' + esc(data) + '</span></div>';
+                                + '<span class="sr-person-name">' + esc(shortName(data)) + '</span></div>';
                         }
                     },
-                    { data: 'created_at', render: function (data, type) { return type === 'display' ? '<span class="sr-date">' + esc(data) + '</span>' : data; } },
+                    {
+                        data: 'created_at',
+                        render: function (data, type, row) {
+                            if (type !== 'display') return data;
+                            return '<div class="sr-date">' + esc(data) + (row.created_ago ? '<small>' + esc(row.created_ago) + '</small>' : '') + '</div>';
+                        }
+                    },
                     {
                         data: 'current_status',
                         render: function (data, type, row) {
@@ -381,14 +387,14 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                 const inv_no = $(this).data('id');
                 
                 Swal.fire({
-                    title: '<?=__('are_you_sure', 'Are you sure?')?>',
-                    text: '<?=__('confirm_delete_request', 'This will permanently delete the request and all its data!')?>',
+                    title: <?= json_encode(__('are_you_sure', 'Are you sure?')) ?>,
+                    text: <?= json_encode(__('confirm_delete_request', 'This will permanently delete the request and all its data!')) ?>,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: APP_COLORS.danger_dark,
                     cancelButtonColor: APP_COLORS.primary,
-                    confirmButtonText: '<?=__('yes_delete_it', 'Yes, delete it!')?>',
-                    cancelButtonText: '<?=__('cancel')?>'
+                    confirmButtonText: <?= json_encode(__('yes_delete_it', 'Yes, delete it!')) ?>,
+                    cancelButtonText: <?= json_encode(__('cancel')) ?>
                 }).then((result) => {
                     if (result.isConfirmed) {
                         $.ajax({
@@ -403,7 +409,7 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                                 if (response.success) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: '<?=__('deleted')?>',
+                                        title: <?= json_encode(__('deleted')) ?>,
                                         text: response.message,
                                         timer: 2000,
                                         showConfirmButton: false
@@ -412,7 +418,7 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: '<?=__('error')?>',
+                                        title: <?= json_encode(__('error')) ?>,
                                         text: response.message
                                     });
                                 }
@@ -420,8 +426,8 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                             error: function() {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: '<?=__('error')?>',
-                                    text: '<?=__('error_occurred', 'An error occurred')?>'
+                                    title: <?= json_encode(__('error')) ?>,
+                                    text: <?= json_encode(__('error_occurred', 'An error occurred')) ?>
                                 });
                             }
                         });
@@ -434,14 +440,14 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                 const inv_no = $(this).data('id');
 
                 Swal.fire({
-                    title: '<?=__('are_you_sure', 'Are you sure?')?>',
-                    text: '<?=__('are_you_sure_cancel_request', 'Are you sure you want to cancel this request?')?>',
+                    title: <?= json_encode(__('are_you_sure', 'Are you sure?')) ?>,
+                    text: <?= json_encode(__('are_you_sure_cancel_request', 'Are you sure you want to cancel this request?')) ?>,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: APP_COLORS.danger_dark,
                     cancelButtonColor: APP_COLORS.primary,
-                    confirmButtonText: '<?=__('yes_cancel_request', 'Yes, Cancel It')?>',
-                    cancelButtonText: '<?=__('keep_request', 'No')?>'
+                    confirmButtonText: <?= json_encode(__('yes_cancel_request', 'Yes, Cancel It')) ?>,
+                    cancelButtonText: <?= json_encode(__('keep_request', 'No')) ?>
                 }).then((result) => {
                     if (result.isConfirmed) {
                         $.ajax({
@@ -456,7 +462,7 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                                 if (response.success) {
                                     Swal.fire({
                                         icon: 'success',
-                                        title: '<?=__('cancelled', 'Cancelled')?>',
+                                        title: <?= json_encode(__('cancelled', 'Cancelled')) ?>,
                                         text: response.message,
                                         timer: 2000,
                                         showConfirmButton: false
@@ -465,7 +471,7 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
-                                        title: '<?=__('error')?>',
+                                        title: <?= json_encode(__('error')) ?>,
                                         text: response.message
                                     });
                                 }
@@ -473,8 +479,8 @@ $gr_default_status = (isset($_GET['status']) && array_key_exists((string)$_GET['
                             error: function() {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: '<?=__('error')?>',
-                                    text: '<?=__('error_occurred', 'An error occurred')?>'
+                                    title: <?= json_encode(__('error')) ?>,
+                                    text: <?= json_encode(__('error_occurred', 'An error occurred')) ?>
                                 });
                             }
                         });

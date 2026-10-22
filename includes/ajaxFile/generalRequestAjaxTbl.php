@@ -134,29 +134,34 @@ if ($query) {
     while ($row = mysqli_fetch_assoc($query)) {
         // Build action buttons
         $invSafe = htmlspecialchars((string)$row['inv_no'], ENT_QUOTES);
-        $actionButtons = "<div class='sr-actions'>
-                            <a href='view_general_request.php?id=".$invSafe."' class='sr-open-btn' title='".__('open')."'><i class='mdi mdi-eye-outline'></i> ".__('open')."</a>
+        $openBtn = "<a href='view_general_request.php?id=".$invSafe."' class='sr-open-btn' title='".__('open')."'><i class='mdi mdi-eye-outline'></i> ".__('open')."</a>";
+        $isOwnDraft = $row['current_status'] == 'draft' && $row['emp_id'] == $emp_id;
+
+        $menuItems = '';
+        // Allow delete only for draft status and creator
+        if ($isOwnDraft) {
+            $menuItems .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('delete')."</a>";
+        }
+        // Creator can self-cancel while pending/approved (soft cancel, keeps history)
+        if (in_array($row['current_status'], ['pending_approval', 'approved'], true) && $row['emp_id'] == $emp_id) {
+            $menuItems .= "<a href='javascript:void(0);' class='dropdown-item text-danger cancelGeneralRequestSelf' data-id='".$invSafe."'><i class='fa fa-ban mr-2 font-18 vertical-middle'></i>".__('cancel_request', 'Cancel Request')."</a>";
+        }
+        // Administrator or special-access grantee can cancel/delete any request
+        if ($canCancelAnyGeneralRequest && !$isOwnDraft) {
+            $menuItems .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash mr-2 font-18 vertical-middle'></i>".__('cancel', 'Cancel')."</a>";
+        }
+
+        // No extra actions - just the Open button (same as the smart requests list)
+        if ($menuItems === '') {
+            $actionButtons = $openBtn;
+        } else {
+            $actionButtons = "<div class='sr-actions'>".$openBtn."
                             <div class='btn-group dropdown'>
                             <a href='javascript: void(0);' class='sr-more-btn dropdown-toggle arrow-none' data-toggle='dropdown' aria-expanded='false'><i class='mdi mdi-dots-vertical'></i></a>
                             <div class='dropdown-menu dropdown-menu-right' x-placement='bottom-end'>
-                                <a href='view_general_request.php?id=".$invSafe."' class='dropdown-item text-dark'><i class='mdi mdi-eye-outline'></i>".__('view')."</a>";
-        
-        // Allow delete only for draft status and creator
-        if ($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash'></i>".__('delete')."</a>";
+                                <a href='view_general_request.php?id=".$invSafe."' class='dropdown-item text-dark'><i class='mdi mdi-eye-outline mr-2'></i>".__('open')."</a>
+                                <div class='dropdown-divider'></div>".$menuItems."</div></div></div>";
         }
-
-        // Creator can self-cancel while pending/approved (soft cancel, keeps history)
-        if (in_array($row['current_status'], ['pending_approval', 'approved'], true) && $row['emp_id'] == $emp_id) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger cancelGeneralRequestSelf' data-id='".$invSafe."'><i class='fa fa-ban'></i>".__('cancel_request', 'Cancel Request')."</a>";
-        }
-
-        // Administrator or special-access grantee can cancel/delete any request
-        if ($canCancelAnyGeneralRequest && !($row['current_status'] == 'draft' && $row['emp_id'] == $emp_id)) {
-            $actionButtons .= "<a href='javascript:void(0);' class='dropdown-item text-danger deleteRequest' data-id='".$invSafe."'><i class='fa fa-trash'></i>".__('cancel', 'Cancel')."</a>";
-        }
-        
-        $actionButtons .= "</div></div></div>";
         
         $data[] = array(
             "id"                     => $row['id'],
@@ -167,6 +172,7 @@ if ($query) {
             "priority"               => $row['priority'],
             "emp_name"               => $row['emp_name'],
             "created_at"             => date("Y-m-d", strtotime($row["created_at"])),
+            "created_ago"            => (($current_lang ?? 'en') === 'ar' && function_exists('timeAgoAr')) ? timeAgoAr($row["created_at"]) : (function_exists('timeAgo') ? timeAgo($row["created_at"]) : ''),
             "current_status"         => $row["current_status"],
             "current_approval_level" => $row["current_approval_level"],
             "user_approval_level"    => $row['user_approval_level'] ?? null,

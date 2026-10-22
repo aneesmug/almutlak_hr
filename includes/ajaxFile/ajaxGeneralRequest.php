@@ -32,7 +32,8 @@ if ($user_type == 'employee' && isset($_POST['action']) && !in_array($_POST['act
     exit;
 }
 
-// DEBUG: Log all incoming POST/FILES for every action
+// DEBUG: Log all incoming POST/FILES for every action (except the per-keystroke item suggestions)
+if (($_POST['action'] ?? '') !== 'item_suggest') {
 $debugLog = __DIR__ . '/../../delivery_debug.log';
 $timestamp = date('Y-m-d H:i:s');
 file_put_contents($debugLog, "\n\n==================== AJAX REQUEST START - {$timestamp} ====================\n", FILE_APPEND);
@@ -45,6 +46,7 @@ if (!empty($_FILES)) {
     file_put_contents($debugLog, "FILES dump: " . json_encode($_FILES, JSON_PRETTY_PRINT) . "\n", FILE_APPEND);
 }
 file_put_contents($debugLog, "==================== AJAX REQUEST END ====================\n", FILE_APPEND);
+}
 
 try {
     // Create General Request
@@ -376,6 +378,42 @@ try {
         }
     }
     // Get employees for select2 dropdown with department info
+    elseif (isset($_POST['action']) && $_POST['action'] === 'item_suggest') {
+        // Item Name auto-fill: names used on earlier general requests (new names are typed freely
+        // and become suggestions once saved). Prefix matches first, then the same target
+        // department, then the most used. Type/specs come from the latest use of each name.
+        $term = trim((string)($_POST['term'] ?? ''));
+        if ($term === '') {
+            echo json_encode(['success' => true, 'items' => []]);
+            exit;
+        }
+        $like = mysqli_real_escape_string($conDB, addcslashes($term, '%_\\'));
+        $dept = mysqli_real_escape_string($conDB, trim((string)($_POST['department'] ?? '')));
+
+        $sql = "SELECT i.`item_name`, COUNT(*) AS `uses`, MAX(i.`id`) AS `last_id`,
+                       SUM(gr.`department_to` = '$dept') AS `dept_uses`
+                FROM `general_request_items` i
+                LEFT JOIN `general_requests` gr ON gr.`inv_no` = i.`request_inv_no`
+                WHERE i.`item_name` LIKE '%$like%' AND TRIM(i.`item_name`) <> ''
+                GROUP BY i.`item_name`
+                ORDER BY (i.`item_name` LIKE '$like%') DESC, `dept_uses` DESC, `uses` DESC, `last_id` DESC
+                LIMIT 10";
+        $res = mysqli_query($conDB, $sql);
+        $rows = [];
+        while ($res && ($r = mysqli_fetch_assoc($res))) {
+            $rows[(int)$r['last_id']] = ['name' => $r['item_name'], 'uses' => (int)$r['uses'], 'type' => '', 'specs' => ''];
+        }
+        if ($rows) {
+            $ids = implode(',', array_keys($rows));
+            $last = mysqli_query($conDB, "SELECT `id`, `item_type`, `specifications` FROM `general_request_items` WHERE `id` IN ($ids)");
+            while ($last && ($l = mysqli_fetch_assoc($last))) {
+                $rows[(int)$l['id']]['type'] = (string)$l['item_type'];
+                $rows[(int)$l['id']]['specs'] = (string)$l['specifications'];
+            }
+        }
+        echo json_encode(['success' => true, 'items' => array_values($rows)]);
+        exit;
+    }
     elseif (isset($_POST['action']) && $_POST['action'] === 'get_employees') {
         $search = mysqli_real_escape_string($conDB, $_POST['search'] ?? '');
         
